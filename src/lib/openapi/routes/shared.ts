@@ -84,8 +84,26 @@ export const errorEnvelope = z
           .string()
           .optional()
           .describe(
-            "Stable machine code for this refusal. Branch on it rather than on `error`, which is prose and may be reworded. Every code the API emits today is enumerated below, grouped by the surface that emits it; four naming conventions coexist and none of them will be renamed, because a code is a wire value a shipped client branches on. Treat an unlisted code the way you would treat an unlisted enum member — as a refusal you do not recognise, not as a malformed response — since the list grows with the surfaces. Three families are outside it on purpose: `assistant.disabled.<surface>` is built from a template so the last segment is open (`assistant.disabled.coach` is the one the native client names); the integration-probe classes (`credentials_rejected`, `rate_limited`, `upstream_error`, `timeout`, `connection_failed` and the per-provider additions) are enumerated in each `/test` operation instead, where the differences can be stated; and a 401 raised by a route checking a credential of its own may carry no code at all. " +
+            "Stable machine code for this refusal. Branch on it rather than on `error`, which is prose and may be reworded. Every code the API emits today is enumerated below, grouped by the surface that emits it; four naming conventions coexist and none of them will be renamed, because a code is a wire value a shipped client branches on. Treat an unlisted code the way you would treat an unlisted enum member — as a refusal you do not recognise, not as a malformed response — since the list grows with the surfaces. Three families are outside it on purpose: `assistant.disabled.<switch>` is built from a template so the last segment is open — it is one of `coach`, `briefing`, `insightStatus`, `documentAi` and `enabled`, and `assistant.disabled.coach` is the one the native client names; the integration-probe classes (`credentials_rejected`, `rate_limited`, `upstream_error`, `timeout`, `connection_failed` and the per-provider additions) are enumerated in each `/test` operation instead, where the differences can be stated; and a 401 raised by a route checking a credential of its own may carry no code at all. " +
               renderErrorCodeCatalogue(),
+          ),
+        capability: z
+          .string()
+          .optional()
+          .describe(
+            "On an AI refusal: the capability that is unavailable, one of the keys of `AiCapabilities` (`coach`, `briefing`, `periodNarrative`, `statusText`, `workoutInsights`, `reactionLines`, `aboutMeQuestions`, `documentAi`, `labsOcr`, `medicationExtract`).",
+          ),
+        reason: z
+          .string()
+          .optional()
+          .describe(
+            "On an AI refusal: the outermost reason, one of `AiUnavailableReason`. The code maps from it: `operator_disabled` → `assistant.disabled.<switch>` (or `module.disabled` with `module` when the operator's module availability closed it), `not_permitted_for_record` → `ai.record.notPermitted`, `module_disabled` and `user_disabled` → `module.disabled` with `module`, `no_provider` → the route's own typed code where it has one, otherwise `ai.provider.none` (422), `consent_required` → `consent.ai.required`, `check_failed` → `ai.unavailable` (503).",
+          ),
+        module: z
+          .string()
+          .optional()
+          .describe(
+            "Beside `module.disabled`: the module that is off. On an AI refusal it is the capability's owning module.",
           ),
       })
       .optional(),
@@ -126,7 +144,7 @@ export const measurementTypeEnum = measurementTypeEnumBase.meta({
 export const measurementSourceEnum = measurementSourceEnumBase.meta({
   id: "MeasurementSource",
   description:
-    "Origin of the measurement. v1.4.23 added APPLE_HEALTH for the iOS HealthKit batch ingest path.",
+    "Origin of the measurement. v1.4.23 added APPLE_HEALTH for the iOS HealthKit batch ingest path. v1.38.x added EXTERNAL for rows pushed in under a narrow `measurements:write` Bearer — a scale, a watch bridge, a home-automation rule. No client may name that value on a write; the server resolves it from the credential.",
 });
 
 export const loginPasswordSchema = loginPasswordSchemaBase.meta({
@@ -514,23 +532,12 @@ export function recordRefusal(...alsoRefusesFor: string[]): RefusalResponse {
   return response;
 }
 
-// ── AI-consent precondition (v1.16.13) ───────────────────────────────
-// The server-managed AI-egress gate requires an active ConsentReceipt
-// (`ai_full`, or the surface-specific `ai_insights_only` / `ai_coach`)
-// before any health snapshot leaves for the operator's global LLM key.
-// Interactive routes surface this as a 403 with
-// `meta.errorCode = "consent.ai.required"`; clients render an inline
-// grant-consent notice and call POST /api/consent/ai (or, on web, POST
-// /api/consent/ai/web) to mint the receipt. BYOK / local / ChatGPT-OAuth
-// chains are the user's own egress and never trip this gate.
-//
-// There is no `consentRequiredResponse` beside this description any more, and
-// the absence is deliberate. Every route that could answer it is also a route
-// the sharing fence can refuse, and OpenAPI allows one response per status, so
-// the two 403s share a single description built by `recordRefusal(...)`. A
-// second exported 403 body would be a second way to write the same operation.
-export const AI_CONSENT_REQUIRED_DESCRIPTION =
-  "AI consent required: no active ConsentReceipt for the server-managed provider. `meta.errorCode` = `consent.ai.required`. Mint a receipt via POST /api/consent/ai before retrying.";
+// ── AI-consent precondition ──────────────────────────────────────────
+// A missing consent receipt is one reason an AI capability is unavailable:
+// the refusal is the capability envelope (`meta.errorCode` =
+// `consent.ai.required`, `meta.reason` = `consent_required`), described once on
+// `ErrorEnvelope` and per capability in `./ai-refusal.ts`. Data routes never
+// answer it.
 
 // ── Module-disabled gate (v1.18.0) ───────────────────────────────────
 // Every module-scoped route runs `requireModuleEnabled(userId, key)`,

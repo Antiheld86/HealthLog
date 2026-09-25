@@ -10,7 +10,9 @@
  * the rollup tier: no provider call, no fabricated value, never a diagnosis.
  *
  * Mirrors `/api/insights/derived`: `apiHandler` wrapper, `requireAuth`, the
- * `insights` module gate, the shared analytics-read budget. `userId` is always
+ * shared analytics-read budget. No module gate: the drift read spans every
+ * vital, and the `insights` module is the AI analysis opt-out, which a
+ * computation does not depend on. `userId` is always
  * narrowed from the session. The labels are mapped client-side from the
  * MeasurementType, so the wire carries the type tokens only.
  */
@@ -18,7 +20,6 @@ import { apiError, apiSuccess } from "@/lib/api-response";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
-import { requireModuleEnabled } from "@/lib/modules/gate";
 import { prisma } from "@/lib/db";
 import { loadBaselineProfile } from "@/lib/insights/derived";
 import { computeCoincidentDeviation } from "@/lib/insights/derived/coincident-deviation";
@@ -31,9 +32,6 @@ export const GET = apiHandler(async () => {
   // v1.37.0 — MANAGE-level read: computed over the whole record, with no
   // provider anywhere on the path.
   const { user } = await requireRecordAuth("manage", "record");
-
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
 
   const rl = await checkAnalyticsReadRateLimit(user.id);
   if (!rl.allowed) {

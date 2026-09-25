@@ -15,6 +15,7 @@
  * chokepoint did no budget work at all, so every generator behind it, not just
  * these two, spent unmetered.
  */
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import { annotate } from "@/lib/logging/context";
 
 import type { CoachMemoryRefreshPayload } from "./coach-memory-shared";
@@ -30,6 +31,19 @@ export async function runCoachMemoryRefresh(
   // not German — the memory prose is model-facing context and English is the
   // fallback body for every locale that has no reviewed one.
   const locale = payload.locale ?? "en";
+
+  // The `coach` capability before any transcript is read. The chat route that
+  // enqueued this admitted the Coach, but the operator, the person's Coach
+  // switch or a consent can change while the job waits. Stored memory stays
+  // as it is; only new model work stops. The chokepoint re-checks per step.
+  const capability = await aiCapabilityForJob(userId, "coach");
+  if (!capability.available) {
+    annotate({
+      action: { name: "coach.memory.refresh.skipped" },
+      meta: { reason: capability.reason },
+    });
+    return;
+  }
 
   let summaryStatus = "error";
   try {

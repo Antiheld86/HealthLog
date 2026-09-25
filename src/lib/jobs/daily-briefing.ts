@@ -40,7 +40,6 @@ export interface DailyBriefingTickSummary {
   suppressedFrequency: number;
   noDigest: number;
   optedOut: number;
-  moduleOff: number;
   noChannel: number;
   outsideWindow: number;
   failed: number;
@@ -74,7 +73,6 @@ export async function runDailyBriefingTick(
     suppressedFrequency: 0,
     noDigest: 0,
     optedOut: 0,
-    moduleOff: 0,
     noChannel: 0,
     outsideWindow: 0,
     failed: 0,
@@ -122,9 +120,6 @@ export async function runDailyBriefingTick(
           break;
         case "opted-out":
           summary.optedOut += 1;
-          break;
-        case "module-off":
-          summary.moduleOff += 1;
           break;
         case "no-channel":
           summary.noChannel += 1;

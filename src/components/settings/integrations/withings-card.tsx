@@ -60,6 +60,7 @@ import {
   IntegrationRedirectGuide,
 } from "./setup-guide-link";
 import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
+import { loadDocument } from "@/lib/navigation/load-document";
 
 export function WithingsCard({
   viewModel,
@@ -542,7 +543,7 @@ export function WithingsCard({
               className="min-h-11 w-full sm:w-auto"
               data-testid="withings-connect"
               onClick={() => {
-                window.location.href = "/api/withings/connect";
+                loadDocument("/api/withings/connect");
               }}
             >
               <Link2 className="h-3.5 w-3.5" />

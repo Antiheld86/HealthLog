@@ -647,7 +647,7 @@
     "typeAudioExposureEvent": "Zdarzenie głośnego słuchania",
     "typeRespiratoryRate": "Częstość oddechów",
     "typeBodyMassIndex": "Wskaźnik masy ciała",
-    "typeLeanBodyMass": "Masa beztłuszczowa",
+    "typeLeanBodyMass": "Szczupła masa ciała",
     "typeWalkingHeartRateAverage": "Tętno przy chodzeniu (śr.)",
     "typeWalkingAsymmetry": "Asymetria chodu",
     "typeWalkingDoubleSupport": "Podwójna podpora chodu",
@@ -745,6 +745,7 @@
     "sourceMcp": "MCP",
     "sourceGoogleHealth": "Google Health",
     "sourceStrava": "Strava",
+    "sourceExternal": "Urządzenie zewnętrzne",
     "bulkDeleteSuccess": "Usunięto pomiary: {count}",
     "bulkDeleteSuccessOne": "Usunięto pomiar",
     "bulkDeleteError": "Błąd podczas usuwania wybranych pomiarów",
@@ -760,6 +761,7 @@
     "typeWaistToHeight": "Stosunek talii do wzrostu",
     "unitScore": "pkt",
     "unitRatio": "stosunek",
+    "unitRating": "poziom",
     "typeWho5Score": "Wynik WHO-5",
     "typeSciScore": "Wynik SCI"
   },
@@ -1311,7 +1313,9 @@
           "rateLimit": "Zbyt wiele żądań — poczekaj chwilę i spróbuj ponownie.",
           "noProvider": "Brak skonfigurowanego dostawcy AI — skonfiguruj go w Ustawieniach.",
           "budget": "Osiągnięto dzienny limit AI — spróbuj jutro.",
-          "network": "Nie udało się połączyć z dostawcą AI — spróbuj ponownie."
+          "network": "Nie udało się połączyć z dostawcą AI — spróbuj ponownie.",
+          "consent": "Odczyt Twojego opisu przez AI wymaga najpierw Twojej zgody.",
+          "unavailable": "Odczyt opisów przez AI jest tu teraz niedostępny."
         }
       },
       "cadence": {
@@ -2443,8 +2447,6 @@
     "bmiEmptyTitle": "Dodaj wzrost, aby obliczyć BMI",
     "bmiEmptyDescription": "BMI wymaga twojego wzrostu. Zapisz go w Ustawieniach → Konto.",
     "bmiEmptyAction": "Otwórz ustawienia konta",
-    "noProviderConfigured": "Połącz dostawcę AI, aby zobaczyć tutaj ocenę swoich pomiarów.",
-    "noProviderAction": "Otwórz ustawienia AI",
     "personalRecord": {
       "badge": "PR",
       "tooltip": "Rekord osobisty: {value} {unit} dnia {date}"
@@ -2568,10 +2570,6 @@
       "emptyDescription": "Wygeneruj dzisiejszy briefing, aby zobaczyć podsumowanie trendów.",
       "emptyAction": "Wygeneruj briefing",
       "loadingLabel": "Przygotowanie briefingu",
-      "noProviderTitle": "Brak połączonego dostawcy AI",
-      "noProviderDescription": "Skieruj HealthLog na model lokalny (Ollama, LM Studio — nic nie opuszcza Twojej sieci) lub podaj własny klucz OpenAI albo Anthropic, a codzienne podsumowanie zamieni Twoje pomiary w zrozumiały opis. Konfiguracja zajmuje około minuty.",
-      "noProviderAction": "Otwórz ustawienia AI",
-      "staleNoProviderHint": "Tego briefingu nie można odświeżyć — nie połączono żadnego dostawcy AI.",
       "refreshFailedHint": "Nie udało się odświeżyć briefingu — pokazujemy poprzedni.",
       "retryAction": "Spróbuj ponownie",
       "failedTitle": "Nie udało się wygenerować briefingu",
@@ -2949,7 +2947,15 @@
       "interrupted": {
         "note": "Ta odpowiedź została przerwana przed ukończeniem.",
         "retry": "Zapytaj ponownie"
-      }
+      },
+      "historyReadOnlyNote": "Coach jest teraz niedostępny, ale nadal możesz czytać i usuwać swoje rozmowy.",
+      "transcriptYou": "Ty",
+      "transcriptCoach": "Coach",
+      "errorConsent": "Coach potrzebuje Twojej zgody na AI, zanim odpowie. Możesz ją wyrazić w Ustawieniach, AI.",
+      "errorNotPermitted": "Coach nie jest dostępny w kartotece, którą ktoś Ci udostępnił.",
+      "errorUnavailable": "Coach nie mógł teraz sprawdzić swoich ustawień. Spróbuj ponownie za chwilę.",
+      "errorOperatorOff": "AI jest wyłączone na tym serwerze, więc Coach nie może odpowiedzieć.",
+      "errorCoachOff": "Coach jest wyłączony. Możesz go ponownie włączyć w Ustawieniach, Moduły."
     },
     "relativeJustNow": "przed chwilą",
     "relativeMinutesAgoOne": "{count} minutę temu",
@@ -4382,7 +4388,15 @@
         "night": "Utrzymujący się podwyższony spoczynek w nocy — możliwe napięcie."
       }
     },
-    "navEcg": "EKG"
+    "navEcg": "EKG",
+    "sectionLoadError": "Nie udało się wczytać tej sekcji.",
+    "aiSetupHint": {
+      "title": "AI jest opcjonalne",
+      "body": "Wszystko tutaj działa bez AI. Jeśli chcesz codzienne podsumowanie, krótkie notatki o pomiarach i Coacha, możesz podłączyć dostawcę AI.",
+      "settingsBody": "HealthLog działa w pełni bez AI. Podłącz dostawcę poniżej, jeśli chcesz codzienne podsumowanie, krótkie notatki o pomiarach i Coacha.",
+      "action": "Skonfiguruj AI",
+      "dismiss": "Nie teraz"
+    }
   },
   "thresholds": {
     "defaultLabel": "Domyślne",
@@ -5059,7 +5073,8 @@
           "TELEGRAM": "Telegram",
           "MCP": "MCP",
           "GOOGLE_HEALTH": "Google Health",
-          "STRAVA": "Strava"
+          "STRAVA": "Strava",
+          "EXTERNAL": "Urządzenie zewnętrzne"
         },
         "deviceLabels": {
           "watch": "Zegarek",
@@ -5781,7 +5796,8 @@
         "deleteConfirmTitle": "Usunąć to przypomnienie?",
         "deleteConfirmBody": "Przestanie się pojawiać. Zapisane wcześniej dane pozostają bez zmian.",
         "deleteConfirmAction": "Usuń",
-        "detail": "Te, których termin nadszedł, pojawiają się tutaj i w Coachu."
+        "detail": "Te, których termin nadszedł, pojawiają się tutaj i w Coachu.",
+        "readOnlyNote": "Coach jest teraz niedostępny, ale nadal możesz czytać i usuwać swoje przypomnienia."
       },
       "aboutMe": {
         "title": "O mnie",
@@ -5828,14 +5844,38 @@
       "consent": {
         "title": "Zgoda na AI",
         "activeSince": "Udzielona {date}. Twoje dane zdrowotne mogą być wysyłane do skonfigurowanego dostawcy na potrzeby funkcji AI.",
-        "withdrawn": "Wycofana. Żadne dane zdrowotne nie są wysyłane do dostawcy AI; funkcje AI pozostają wyłączone.",
+        "withdrawn": "Wycofana. Jeśli żadna inna zgoda tego nie obejmuje, Coach i Insights nie korzystają już z dostępu AI zapewnianego przez ten serwer, a żaden model online nie czyta Twoich dokumentów. Na własnym kluczu lub lokalnym modelu Coach i Insights działają dalej.",
         "withdraw": "Wycofaj zgodę",
-        "confirmBody": "Funkcje AI przestają działać natychmiast. Nic z już zapisanych danych nie zostaje usunięte — użyj sekcji Dane i prywatność, aby wyeksportować lub usunąć swoją historię.",
+        "confirmBody": "Jeśli żadna inna Twoja zgoda ich nie obejmuje, od razu przestają działać: Coach i Insights tam, gdzie korzystają z dostępu AI zapewnianego przez ten serwer, oraz czytanie dokumentów przez model online. Na własnym kluczu lub lokalnym modelu Coach i Insights działają dalej. Jeśli żadna inna zgoda nie obejmuje już Insights, notatki napisane dla Ciebie przez model zostają usunięte: notatki o stanie, codzienne podsumowanie, podsumowania okresu napisane przez model, linie po nowym pomiarze i notatki o treningach. Twoje rozmowy z Coachem, to, co zapamiętał Coach, Twoje plany i podsumowania dokumentów zostają, a Ty możesz je sam przeczytać lub usunąć.",
         "confirmWithdraw": "Wycofaj",
         "regrantHint": "Po ponownym udzieleniu zgody funkcje AI znów będą mogły wysyłać Twoje dane zdrowotne do skonfigurowanego dostawcy.",
         "grant": "Udziel zgody",
         "grantError": "Nie udało się zapisać zgody. Spróbuj ponownie.",
-        "error": "Nie udało się zapisać wycofania. Spróbuj ponownie."
+        "error": "Nie udało się zapisać wycofania. Spróbuj ponownie.",
+        "documentReading": {
+          "title": "Zgoda na odczyt dokumentów",
+          "activeSince": "Udzielona {date}. Dokumenty, zeskanowane wyniki badań i opisy leków mogą być wysyłane do Twojej usługi AI do odczytu.",
+          "confirmBody": "Dokumenty, zeskanowane wyniki badań i opisy leków nie są już wysyłane do odczytu. Nic, co już masz, nie zostaje usunięte."
+        }
+      },
+      "operatorOff": {
+        "allTitle": "AI jest wyłączone na tym serwerze",
+        "allBody": "Osoba prowadząca ten serwer wyłączyła AI. HealthLog nadal działa ze wszystkimi Twoimi danymi; funkcje wymagające AI po prostu się nie wyświetlają.",
+        "someTitle": "Niektóre funkcje AI są wyłączone na tym serwerze",
+        "someBody": "Osoba prowadząca ten serwer wyłączyła: {switches}. Wszystko inne, w tym wszystkie Twoje dane, działa jak zwykle.",
+        "testRefused": "AI jest wyłączone na tym serwerze, więc nie ma czego testować.",
+        "autoRead": "Odczyt dokumentów przez AI jest wyłączony na tym serwerze."
+      },
+      "coachConversations": {
+        "title": "Rozmowy z Coachem",
+        "description": "Otwórz rozmowę, aby ją przeczytać, albo ją usuń.",
+        "more": "Pokaż więcej",
+        "openAll": "Otwórz wszystkie rozmowy"
+      },
+      "coachPlans": {
+        "title": "Plany z Coachem",
+        "description": "Plany uzgodnione z Coachem, do przeczytania lub usunięcia.",
+        "open": "Otwórz plany"
       }
     },
     "dashboard": {
@@ -6072,7 +6112,7 @@
       "title": "Tokeny pomiarów",
       "description": "Utwórz token, aby waga, zegarek lub automatyka domowa mogły dodawać pomiary.",
       "detail": "Token pokazujemy tylko raz.",
-      "scopeNote": "Może wyłącznie dodawać nowe pomiary do Twojej dokumentacji — nie odczyta danych, niczego nie zmieni ani nie usunie i nie utworzy kolejnego tokenu. Pomiary trafiają tak, jakbyś wpisał je ręcznie, więc możesz je poprawić.",
+      "scopeNote": "Może wyłącznie dodawać nowe pomiary do Twojej dokumentacji — nie odczyta danych, niczego nie zmieni ani nie usunie i nie utworzy kolejnego tokenu. Pomiary są oznaczane jako pochodzące z urządzenia zewnętrznego, dzięki czemu później je rozpoznasz, i nadal możesz je poprawić.",
       "createFailed": "Nie udało się utworzyć tokenu. Spróbuj ponownie."
     },
     "tokenMintMovedDescription": "Tokeny wydajemy tam, gdzie działają: powyżej dla pomiarów albo w punkcie końcowym API danego leku dla tego jednego leku.",
@@ -6790,34 +6830,35 @@
     "monitoringTestSuccess": "Wysłano zdarzenie testowe",
     "monitoringTestFailed": "Test monitorowania nie powiódł się",
     "assistant": {
-      "title": "Powierzchnie asystenta",
-      "description": "Każdy przełącznik ukrywa powierzchnię opartą na modelu w całej aplikacji bez usuwania konfiguracji dostawcy.",
+      "title": "Asystent",
+      "description": "Każdy przełącznik zatrzymuje pracę AI, którą obejmuje, i ukrywa jej tekst, a dane i wyniki nadal się wczytują.",
       "master": {
         "title": "Asystent włączony",
-        "description": "Główny wyłącznik dla każdej powierzchni opartej na modelu. Gdy wyłączony, każda opcja podrzędna jest wymuszana na off."
+        "description": "Główny przełącznik wszystkich funkcji AI. Gdy jest wyłączony, nic nie trafia do modelu, a wszystkie przełączniki poniżej są wyłączone."
       },
       "coach": {
         "title": "Coach",
-        "description": "Szuflada czatu, przycisk uruchamiający i mobilny FAB na każdej stronie Insights."
+        "description": "Czat, utrzymanie pamięci Coacha i podpowiedzi AI. Zapisane rozmowy nadal można czytać i usuwać."
       },
       "briefing": {
         "title": "Codzienny briefing",
-        "description": "Karta briefingu, narracja hero strip, siatka rekomendacji i akcja Regeneruj."
+        "description": "Codzienny briefing, jego pierwsze zdania w innych miejscach aplikacji i podsumowania okresów pisane przez model."
       },
       "insightStatus": {
-        "title": "Karty statusu",
-        "description": "Karty statusu na metrykę na każdej podstronie /insights."
+        "title": "Notatki o stanie",
+        "description": "Krótkie notatki, które model pisze do pomiarów i wskaźników, notatki o treningach i linie reakcji. Największa część zużycia tokenów."
       },
-      "correlations": {
-        "title": "Korelacje",
-        "description": "Narracja kafelka korelacji w przeglądzie Insights."
+      "documentAi": {
+        "title": "Czytanie dokumentów",
+        "description": "Czytanie zapisanych dokumentów przez AI, skanowanie wyników badań laboratoryjnych i odczytywanie leków z tekstu. Największa część danych opuszczających serwer."
       }
     },
     "modules": {
       "title": "Dostępność modułów",
       "description": "Wyłącz moduł dla całego serwera.",
       "saveError": "Nie udało się zaktualizować dostępności modułów.",
-      "detail": "Moduł wyłączony tutaj jest nieaktywny dla każdego konta, niezależnie od preferencji użytkownika. Domeny podstawowe (waga, ciśnienie, tętno, leki) są zawsze włączone i nie można ich wyłączyć."
+      "detail": "Moduł wyłączony tutaj jest nieaktywny dla każdego konta, niezależnie od preferencji użytkownika. Domeny podstawowe (waga, ciśnienie, tętno, leki) są zawsze włączone i nie można ich wyłączyć.",
+      "coachFollowsSwitch": "Podlega przełącznikowi Coach w sekcji Asystent."
     },
     "invites": {
       "title": "Zaproszenia",
@@ -8255,6 +8296,7 @@
       "saving": "Zapisywanie…",
       "cancel": "Anuluj",
       "saveError": "Nie udało się zapisać. Spróbuj ponownie.",
+      "emptyHint": "Wybierz krwawienie lub objaw, aby zapisać ten dzień, albo użyj przycisku początku miesiączki powyżej.",
       "intermenstrualBleeding": "Plamienie między okresami",
       "pregnancyTest": "Test ciążowy",
       "progesteroneTest": "Test progesteronu",
@@ -8798,7 +8840,8 @@
       "extractFailed": "Nie udało się odczytać wyniku. Spróbuj wyraźniejszego zdjęcia.",
       "pdfNeedsAnthropic": "Skanowanie PDF wymaga dostawcy wizji Claude; prześlij zamiast tego zdjęcie.",
       "refTextLabel": "Zakres tak jak wydrukowano",
-      "refTextPlaceholder": "np. 3,5 - 5,0"
+      "refTextPlaceholder": "np. 3,5 - 5,0",
+      "aiUnavailable": "Skanowanie wyniku przez AI jest tu teraz niedostępne."
     },
     "loadMoreReadings": "Wczytaj więcej pomiarów",
     "documentsLink": "Dokumenty wyników badań",
@@ -8846,8 +8889,8 @@
       "description": "Czat AI oparty na Twoich danych."
     },
     "insights": {
-      "label": "Insights",
-      "description": "Analizy AI, briefing i korelacje."
+      "label": "Analiza AI",
+      "description": "Briefing, notatki o stanie i notatki o treningach pisane przez model, nigdy Twoje dane ani wyniki."
     },
     "doctorReport": {
       "label": "Raport dla lekarza",
@@ -9031,6 +9074,11 @@
       "mmrv": "MMRV (odra, świnka, różyczka, ospa wietrzna)",
       "hepa-hepb": "WZW typu A i B",
       "hepa-typhoid": "WZW typu A i dur brzuszny"
+    },
+    "renewal": {
+      "overdue": "Dawka przypominająca zaległa od {date}",
+      "dueSoon": "Dawka przypominająca {date}",
+      "current": "Następna dawka przypominająca {date}"
     }
   },
   "illness": {
@@ -9242,6 +9290,7 @@
     "plans": {
       "title": "Plany",
       "pageDescription": "Plany typu „jeśli… to” uzgodnione w rozmowach z Coachem. Potwierdź propozycję, aby Coach ją zapamiętał.",
+      "readOnlyNote": "Coach jest teraz niedostępny, ale nadal możesz czytać i usuwać swoje plany.",
       "proposalTitle": "Propozycja planu",
       "ifThen": "Jeśli {cue}, to {action}.",
       "targetPrefix": "Cel: {target}",
@@ -9878,7 +9927,10 @@
       "uploadedMeta": "Dodano {date} · {size}",
       "share": "Udostępnij",
       "labValuesLink": "Zobacz {count} wyników laboratoryjnych",
-      "visitsLabel": "Należy do wizyty"
+      "visitsLabel": "Należy do wizyty",
+      "vaccinationsLabel": "Szczepienia",
+      "noVisitsToLink": "Nie zapisano jeszcze żadnych wizyt.",
+      "noVaccinationsToLink": "Nie zapisano jeszcze żadnych szczepień."
     },
     "dropOverlay": {
       "title": "Upuść pliki, aby je przesłać",
@@ -9938,7 +9990,9 @@
       "errorNotIndexed": "Najpierw odczytaj dokument, potem wyodrębnij.",
       "errorLocalOcrDisabled": "Najpierw włącz lokalne OCR w ustawieniach AI.",
       "errorProvider": "Nie skonfigurowano dostawcy AI do tego celu.",
-      "errorTextImageOnly": "Lokalne OCR odczytuje tylko obrazy, nie ten plik."
+      "errorTextImageOnly": "Lokalne OCR odczytuje tylko obrazy, nie ten plik.",
+      "errorConsent": "Odczyt dokumentów przez AI wymaga najpierw Twojej zgody.",
+      "errorUnavailable": "Odczyt dokumentów przez AI jest tu teraz niedostępny."
     },
     "summary": {
       "summarise": "Podsumuj",
@@ -10016,6 +10070,11 @@
       "title": "Porozmawiaj o tym dokumencie",
       "openAria": "Zapytaj Coacha o ten dokument",
       "openButton": "Zapytaj Coacha"
+    },
+    "readingConsent": {
+      "body": "Odczyt przez AI wysyła to do Twojej usługi AI poza tym serwerem. Czy HealthLog może wysyłać dokumenty, wyniki badań i opisy leków do odczytu?",
+      "grant": "Zezwól na odczyt",
+      "error": "Nie udało się zapisać zgody. Spróbuj ponownie."
     }
   },
   "selfDescription": {
@@ -10152,8 +10211,7 @@
         "dayInvalid": "Wpisy zawierały datę, której serwer nie mógł zaakceptować. Może się to zdarzyć, gdy zegar lub strefa czasowa po stronie wysyłającej są nieprawidłowe — warto to sprawdzić.",
         "upsertFailed": "Te wpisy dotarły do serwera, ale problem po naszej stronie uniemożliwił ich zapisanie. Nie musisz nic robić.",
         "unknown": "Te wpisy dotarły, ale nie udało się ich zapisać."
-      },
-      "moduleEnableError": "Nie udało się włączyć modułu składników odżywczych. Spróbuj ponownie."
+      }
     },
     "hydration": {
       "referenceMeta": "Zalecane spożycie {value} {unit}/dzień · EFSA"
@@ -10822,7 +10880,9 @@
       "selectAll": "Zaznacz wszystko",
       "searchPlaceholder": "Szukaj",
       "searchNoMatch": "Brak wyników",
-      "remove": "Usuń"
+      "remove": "Usuń",
+      "suggested": "Wokół tej daty",
+      "loadError": "Nie udało się wczytać listy."
     }
   }
 }

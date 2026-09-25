@@ -273,6 +273,7 @@ export function EncounterForm({
 
       <EncounterLinkPickers
         modules={user?.modules}
+        anchor={draft.occurredAt || null}
         documentIds={draft.documentIds}
         labResultIds={draft.labResultIds}
         episodeIds={draft.episodeIds}

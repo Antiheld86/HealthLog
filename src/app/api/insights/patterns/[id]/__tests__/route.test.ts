@@ -69,16 +69,19 @@ describe("PATCH /api/insights/patterns/[id]", () => {
     vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true });
   });
 
-  it("refuses a dismissal when Insights is disabled", async () => {
-    vi.mocked(requireModuleEnabled).mockResolvedValueOnce({
+  it("accepts a dismissal whatever the AI analysis opt-out says (statistics are data)", async () => {
+    vi.mocked(requireModuleEnabled).mockResolvedValue({
       enabled: false,
       response: apiError('Module "insights" is not enabled', 403),
     });
 
     const response = await PATCH(request({ dismissed: true }), params);
 
-    expect(response.status).toBe(403);
-    expect(prisma.correlationPattern.findFirst).not.toHaveBeenCalled();
+    // No such pattern in this fixture: reaching the lookup proves no module
+    // gate stood in front of it.
+    expect(response.status).toBe(404);
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
+    expect(prisma.correlationPattern.findFirst).toHaveBeenCalled();
   });
 
   it("stores the current evidence as the account-scoped dismissal baseline", async () => {

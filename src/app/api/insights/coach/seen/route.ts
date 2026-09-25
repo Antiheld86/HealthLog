@@ -10,15 +10,16 @@
  *
  * No request body — the timestamp is server-minted from `now()` so a
  * client can never backdate the stamp to suppress a future nudge.
+ *
+ * No AI gate: a timestamp on the caller's own row is data, whatever the
+ * Coach's availability.
  */
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { prisma } from "@/lib/db";
-import { requireAssistantSurface } from "@/lib/feature-flags";
 
 export const POST = apiHandler(async () => {
   const { user } = await requireAuth();
-  await requireAssistantSurface("coach");
 
   const seenAt = new Date();
   await prisma.user.update({

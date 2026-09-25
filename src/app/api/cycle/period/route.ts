@@ -180,6 +180,14 @@ async function postPeriod(request: NextRequest): Promise<Response> {
       ...(txResult.moved.priorCycleId
         ? { priorCycleId: txResult.moved.priorCycleId }
         : {}),
+      // A later start folded into this one (the same period, recorded in
+      // the other order): name the row that stopped existing and its date.
+      ...(txResult.moved.absorbedCycleId
+        ? {
+            absorbedCycleId: txResult.moved.absorbedCycleId,
+            absorbedStartDate: txResult.moved.absorbedStartDate,
+          }
+        : {}),
       ...overwriteDetails({
         before: {
           priorEndDate: txResult.moved.priorEndDateBefore,

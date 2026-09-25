@@ -3,7 +3,11 @@
  */
 import { describe, it, expect } from "vitest";
 
-import { buildCalendar, type CalendarDayLogRow } from "../engine-adapter";
+import {
+  buildCalendar,
+  type CalendarDayDTO,
+  type CalendarDayLogRow,
+} from "../engine-adapter";
 import type { CycleProfile, MenstrualCycle } from "@/generated/prisma/client";
 
 function profile(overrides: Partial<CycleProfile> = {}): CycleProfile {
@@ -224,6 +228,112 @@ describe("buildCalendar", () => {
       expect(days.some((d) => d.isFertileWindow)).toBe(true);
       expect(days.some((d) => d.isPredictedOvulation)).toBe(true);
       expect(days.some((d) => d.phase !== null)).toBe(true);
+    });
+  });
+
+  describe("the position of each date in its own cycle (#1004)", () => {
+    // The log sheet used to label every date with TODAY's cycle day, so a
+    // January date opened in September read "Day 2", and it offered the
+    // one-tap period end only when today was a bleeding day. Both answers now
+    // come per date, from the cycle that date actually belongs to.
+    const history = [
+      cycle("2026-01-01", { endDate: "2026-01-28", lengthDays: 28 }),
+      cycle("2026-01-29", { endDate: "2026-02-25", lengthDays: 28 }),
+      cycle("2026-02-26"),
+    ];
+
+    function dayOf(days: CalendarDayDTO[], date: string): CalendarDayDTO {
+      const d = days.find((x) => x.date === date);
+      if (!d) throw new Error(`no grid day for ${date}`);
+      return d;
+    }
+
+    it("counts a historical date from the start of the cycle it sits in", () => {
+      const { days } = buildCalendar(
+        profile(),
+        history,
+        [],
+        [],
+        "2025-12-20",
+        "2026-03-20",
+        "2026-03-10",
+        false,
+      );
+      expect(dayOf(days, "2026-01-26").cycleDay).toBe(26);
+      expect(dayOf(days, "2026-01-29").cycleDay).toBe(1);
+      expect(dayOf(days, "2026-02-27").cycleDay).toBe(2);
+      // Today, in the open cycle: the same count the verdict reports.
+      expect(dayOf(days, "2026-03-10").cycleDay).toBe(13);
+    });
+
+    it("claims no cycle day before the first logged start or after today", () => {
+      const { days } = buildCalendar(
+        profile(),
+        history,
+        [],
+        [],
+        "2025-12-20",
+        "2026-03-20",
+        "2026-03-10",
+        false,
+      );
+      expect(dayOf(days, "2025-12-31").cycleDay).toBeNull();
+      expect(dayOf(days, "2026-03-11").cycleDay).toBeNull();
+    });
+
+    it("offers a period end only inside the first days of a logged cycle", () => {
+      const { days } = buildCalendar(
+        profile(),
+        history,
+        [],
+        [],
+        "2025-12-20",
+        "2026-03-20",
+        "2026-03-10",
+        false,
+      );
+      expect(dayOf(days, "2026-01-01").periodEndable).toBe(true);
+      expect(dayOf(days, "2026-01-05").periodEndable).toBe(true);
+      expect(dayOf(days, "2026-02-01").periodEndable).toBe(true);
+      expect(dayOf(days, "2026-01-26").periodEndable).toBe(false);
+      expect(dayOf(days, "2025-12-31").periodEndable).toBe(false);
+      expect(dayOf(days, "2026-03-11").periodEndable).toBe(false);
+    });
+
+    it("answers the same whichever order the starts were entered in", () => {
+      // A September start entered first, then January: January's own days
+      // count from January, never from September or from today.
+      const { days } = buildCalendar(
+        profile(),
+        [cycle("2026-09-17"), cycle("2026-01-26")],
+        [],
+        [],
+        "2026-01-01",
+        "2026-02-28",
+        "2026-09-24",
+        false,
+      );
+      expect(dayOf(days, "2026-01-26").cycleDay).toBe(1);
+      expect(dayOf(days, "2026-01-28").cycleDay).toBe(3);
+      expect(dayOf(days, "2026-01-28").periodEndable).toBe(true);
+      expect(dayOf(days, "2026-01-25").cycleDay).toBeNull();
+    });
+
+    it("stops counting an open cycle where the verdict stops", () => {
+      // One start in January and nothing since: by August the count is no
+      // longer an observed cycle day, the same ceiling the ring applies.
+      const { days } = buildCalendar(
+        profile(),
+        [cycle("2026-01-01")],
+        [],
+        [],
+        "2026-01-01",
+        "2026-09-24",
+        "2026-09-24",
+        false,
+      );
+      expect(dayOf(days, "2026-01-05").cycleDay).toBe(5);
+      expect(dayOf(days, "2026-08-01").cycleDay).toBeNull();
     });
   });
 });

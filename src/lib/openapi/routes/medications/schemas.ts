@@ -911,12 +911,14 @@ export const doseHistoryQuery = z.object({
     .datetime({ offset: true })
     .optional()
     .describe(
-      "Window start (inclusive). Defaults to 90 days before `to`; clamped to the medication's `createdAt` and a 366-day span floor.",
+      "Window start (inclusive). Defaults to 90 days before `to`; clamped to a 366-day span floor. Recorded doses are returned from this instant; expected slots are not minted before the medication's `createdAt`.",
     ),
   to: z.iso
     .datetime({ offset: true })
     .optional()
-    .describe("Window end (inclusive). Defaults to now. Must be ≥ `from`."),
+    .describe(
+      "Window end (inclusive). Defaults to now. Must be ≥ `from`. A dose recorded ahead of its slot (the slot's time within a day after `to`) is still returned.",
+    ),
 });
 
 const doseHistoryRow = z
@@ -982,8 +984,16 @@ const doseHistoryRow = z
 
 export const doseHistoryResponse = z
   .object({
-    from: z.iso.datetime({ offset: true }),
-    to: z.iso.datetime({ offset: true }),
+    from: z.iso
+      .datetime({ offset: true })
+      .describe(
+        "Start of the window recorded doses were read over: the requested `from` after the span clamp.",
+      ),
+    to: z.iso
+      .datetime({ offset: true })
+      .describe(
+        "End of the window recorded doses were read over: the requested `to`, or the slot time of a dose recorded ahead of its slot when that lies later (at most one day after `to`).",
+      ),
     family: z
       .enum(["daily", "weekly", "one_shot", "none"])
       .describe("Cadence family the window's slots were minted under."),

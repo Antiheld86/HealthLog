@@ -21,6 +21,7 @@ import { isUrgentPayload } from "@/lib/notifications/types";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import { loadDailyDigest } from "@/lib/daily/load-digest";
 import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
+import { DIGEST_AI_AVAILABLE } from "@/__tests__/helpers/ai-capability-fixtures";
 
 // 06:00Z → 08:00 in Europe/Berlin (summer) → inside the morning window AND the
 // fixed fallback hour. The tz-window cases move only this instant.
@@ -31,6 +32,7 @@ const AFTER_WINDOW = new Date("2026-07-16T12:30:00Z"); // 14:30 Berlin
 function makeDigest(over: Partial<DailyDigest> = {}): DailyDigest {
   return {
     generatedAt: "2026-07-16T06:00:00.000Z",
+    ai: DIGEST_AI_AVAILABLE,
     phase: "final",
     sleepPending: false,
     score: { value: 82, band: "good", delta: 1 },
@@ -80,7 +82,6 @@ function makeDeps(
   return {
     dispatch,
     loadDigest: async () => makeDigest(),
-    isModuleEnabled: async () => true,
     ...over,
   } as DailyBriefingDispatchDeps & { dispatch: ReturnType<typeof vi.fn> };
 }
@@ -251,17 +252,27 @@ describe("maybeDispatchDailyBriefing", () => {
     expect(deps.dispatch).not.toHaveBeenCalled();
   });
 
-  it("insights module off → no dispatch", async () => {
+  it("AI analysis off: the push still goes out with the deterministic line", async () => {
+    // The digest the loader returns when the briefing capability is
+    // unavailable: no lead, no top signal, the score floor as the line.
     const prisma = makePrisma({});
-    const deps = makeDeps({ isModuleEnabled: async () => false });
+    const deps = makeDeps({
+      loadDigest: async () =>
+        makeDigest({
+          briefingLead: null,
+          topSignal: null,
+          line: "Your health score today is 82.",
+        }),
+    });
     const result = await maybeDispatchDailyBriefing(
       prisma,
       "u1",
       IN_WINDOW,
       deps,
     );
-    expect(result).toBe("module-off");
-    expect(deps.dispatch).not.toHaveBeenCalled();
+    expect(result).toBe("sent");
+    const payload = JSON.stringify(deps.dispatch.mock.calls[0]);
+    expect(payload).toContain("Your health score today is 82.");
   });
 
   it("frequency cap: an ok ledger row earlier the SAME local day suppresses the second push", async () => {

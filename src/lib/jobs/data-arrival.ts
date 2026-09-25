@@ -32,6 +32,7 @@ import type { Job } from "pg-boss";
 import { invalidateUserDashboardSnapshot } from "@/lib/cache/invalidate";
 import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { annotate } from "@/lib/logging/context";
+import { aiWorkNotRuledOut } from "@/lib/jobs/ai-job-candidates";
 import { withBackgroundEvent } from "@/lib/logging/background";
 
 import { DATA_ARRIVAL_QUEUE } from "@/lib/arrivals/emit-shared";
@@ -212,7 +213,19 @@ export async function runDataArrival(
       // once-per-workout key, duration floor, hard daily cap, input hash and
       // token-ledger reservation bound the spend — none of which belong in the
       // spine, which is why only the generator-free enqueue is imported here.
-      if (arrival.refId) {
+      if (!arrival.refId) {
+        // A workout arrival with no referent cannot address a paragraph. The
+        // seams always carry one; annotating rather than guessing keeps a
+        // future seam that forgets it visible.
+        actions.push("workout_no_ref");
+      } else if (
+        !(await aiWorkNotRuledOut(arrival.userId, "workoutInsights"))
+      ) {
+        // Nothing is enqueued that a switch or a module already rules out.
+        // The workout itself is data and already stored; only the paragraph
+        // about it is withheld. The job resolves the full capability itself.
+        actions.push("workout_insight_unavailable");
+      } else {
         const insight = await enqueueWorkoutInsight({
           userId: arrival.userId,
           workoutId: arrival.refId,
@@ -221,11 +234,6 @@ export async function runDataArrival(
           throw new Error("Workout insight enqueue failed");
         }
         actions.push("workout_insight_enqueued");
-      } else {
-        // A workout arrival with no referent cannot address a paragraph. The
-        // seams always carry one; annotating rather than guessing keeps a
-        // future seam that forgets it visible.
-        actions.push("workout_no_ref");
       }
       break;
 
@@ -237,7 +245,15 @@ export async function runDataArrival(
       break;
   }
 
-  if (reactionClaim !== "unchanged") {
+  if (
+    reactionClaim !== "unchanged" &&
+    !(await aiWorkNotRuledOut(arrival.userId, "reactionLines"))
+  ) {
+    // The marker is the feature and is written above; the line is garnish a
+    // model writes, and a switch or a module already rules it out. The job
+    // resolves the full capability itself.
+    actions.push("line_unavailable");
+  } else if (reactionClaim !== "unchanged") {
     // A fresh marker and a strictly newer replacement both need a line. The
     // replacement transaction cleared the old generation owner first, and the
     // enqueue key includes this arrival revision so an older in-flight job

@@ -48,9 +48,11 @@ vi.mock("@/lib/ai/server-provider-health", () => ({
   readServerProviderHealth: vi.fn(),
 }));
 
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: vi.fn(),
-}));
+vi.mock("@/lib/feature-flags", async () =>
+  (
+    await import("@/__tests__/helpers/assistant-switches-mock")
+  ).mockAssistantSwitches(vi.fn()),
+);
 
 vi.mock("@/lib/sharing/provider-work-authority", () => ({
   providerWorkAuthorityForRecord: vi.fn(() => ({ origin: "owner" })),
@@ -100,7 +102,7 @@ beforeEach(() => {
     coach: true,
     briefing: true,
     insightStatus: true,
-    correlations: true,
+    documentAi: true,
   });
   vi.mocked(providerCredentialPolicy).mockReturnValue("personal");
   vi.mocked(hasActiveConsentForSurface).mockResolvedValue(false);
@@ -505,18 +507,53 @@ describe("GET /api/user/ai-provider — the shared-provider offer", () => {
     },
   );
 
-  it("never offers when the operator switched the assistant surfaces off", async () => {
+  it("never offers when the operator switched off everything the consent would unlock", async () => {
     serverManaged();
     vi.mocked(readServerProviderHealth).mockResolvedValue("healthy");
     vi.mocked(getAssistantFlags).mockResolvedValue({
       enabled: true,
       coach: false,
-      briefing: true,
+      briefing: false,
       insightStatus: true,
-      correlations: true,
+      documentAi: false,
     });
     await expect(read()).resolves.toMatchObject({
       serverProviderHealth: "healthy",
+      serverProviderOffer: false,
+    });
+  });
+
+  it.each(["coach", "briefing", "documentAi"] as const)(
+    "still offers while the operator keeps %s on",
+    async (open) => {
+      serverManaged();
+      vi.mocked(readServerProviderHealth).mockResolvedValue("healthy");
+      vi.mocked(getAssistantFlags).mockResolvedValue({
+        enabled: true,
+        coach: false,
+        briefing: false,
+        insightStatus: false,
+        documentAi: false,
+        [open]: true,
+      });
+      await expect(read()).resolves.toMatchObject({
+        serverProviderOffer: true,
+      });
+    },
+  );
+
+  it("reports no AI available while the operator's master switch is off, whatever is configured", async () => {
+    serverManaged();
+    vi.mocked(getAssistantFlags).mockResolvedValue({
+      enabled: false,
+      coach: false,
+      briefing: false,
+      insightStatus: false,
+      documentAi: false,
+    });
+    await expect(read()).resolves.toMatchObject({
+      aiAvailable: false,
+      managedBy: "server",
       serverProviderOffer: false,
     });
   });

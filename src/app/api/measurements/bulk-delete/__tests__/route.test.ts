@@ -37,7 +37,10 @@ vi.mock("@/lib/idempotency", () => ({
 vi.mock("@/lib/cache/invalidate", () => ({
   invalidateUserMeasurements: vi.fn(),
 }));
-vi.mock("@/lib/insights/comprehensive-generate", () => ({
+// The status re-warm the shared post-mutation tail fires. Mocked at the
+// module the tail imports it from; a mock anywhere else is never called, and
+// the real one runs the AI capability loader against this file's stub db.
+vi.mock("@/lib/insights/status-invalidation", () => ({
   invalidateStatusInsightsForTypes: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/rollups/measurement-rollups", async () => {
@@ -68,7 +71,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
-import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
+import { invalidateStatusInsightsForTypes } from "@/lib/insights/status-invalidation";
 import { recomputeBucketsForMeasurement } from "@/lib/rollups/measurement-rollups";
 
 const SESSION_OK = {
@@ -149,6 +152,12 @@ describe("POST /api/measurements/bulk-delete", () => {
 
     // 4 rows in, 3 distinct (type, day) recomputes out.
     expect(recomputeBucketsForMeasurement).toHaveBeenCalledTimes(3);
+    // And one status re-warm over the distinct types.
+    expect(invalidateStatusInsightsForTypes).toHaveBeenCalledTimes(1);
+    expect(invalidateStatusInsightsForTypes).toHaveBeenCalledWith("user-1", [
+      "WEIGHT",
+      "PULSE",
+    ]);
   });
 
   it("is a no-op (deleted: 0) when no id is owned — no rollup, no invalidate", async () => {
@@ -163,6 +172,7 @@ describe("POST /api/measurements/bulk-delete", () => {
     expect(body.data.deleted).toBe(0);
     expect(invalidateUserMeasurements).not.toHaveBeenCalled();
     expect(recomputeBucketsForMeasurement).not.toHaveBeenCalled();
+    expect(invalidateStatusInsightsForTypes).not.toHaveBeenCalled();
   });
 
   it("rejects a batch over the 200-id cap with 422", async () => {

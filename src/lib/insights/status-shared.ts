@@ -4,8 +4,7 @@
  * Every `src/lib/insights/*-status.ts` generator carried byte-identical
  * copies of `round`, `normalizeSummaryText`, `normalizeLocale`, and (in
  * six of seven) `summarizeSeries`, plus an identical "parse the model's
- * `{summary}` envelope" block and an identical `prisma.auditLog.create`
- * persist block. This module is the single source of truth so a change
+ * `{summary}` envelope" block and an identical persist block. This module is the single source of truth so a change
  * to the rounding precision, the chart-token scrub, or the cache-row
  * shape lands once rather than seven times.
  *
@@ -14,12 +13,12 @@
  * reader's own language in an explicit output directive, so the reader's
  * locale must survive the whole pipeline rather than being collapsed to a
  * binary on the way in. The
- * medication-compliance generator writes a richer cache `details` shape
- * (it carries a per-medication array), so it shares `round`,
- * `normalizeSummaryText`, `normalizeLocale`, and `parseSummaryFromContent`
- * but keeps its own `auditLog.create`.
+ * medication-compliance generator stores per-medication lines next to its
+ * summary, so it shares `round`, `normalizeSummaryText`, `normalizeLocale`,
+ * and `parseSummaryFromContent` but writes its note through `writeStatusNote`
+ * directly.
  */
-import { prisma } from "@/lib/db";
+import { writeStatusNote } from "@/lib/insights/status-cache";
 import { locales, type Locale } from "@/lib/i18n/config";
 import { extractJsonObject } from "@/lib/ai/json-extract";
 import { stripChartTokens } from "@/lib/insights/chart-tokens";
@@ -306,62 +305,37 @@ export function parseSummaryFromContent(content: string): string {
 }
 
 /**
- * Persist one status assessment cache row in the standard text-only
- * shape (`{ dateKey, locale, text, providerType, model, tokensUsed }`).
- * Returns the row's `createdAt` ISO string. The medication-compliance
- * generator writes a richer `details` shape (per-medication array) and
- * keeps its own `auditLog.create` call.
+ * Store one status note (`InsightStatusCache`, encrypted) for today and return
+ * when it was written. The medication-compliance generator also stores its
+ * per-medication lines and goes through `writeStatusNote` directly.
  */
 export async function persistStatusInsight(args: {
   userId: string;
   cacheAction: string;
   todayKey: string;
-  locale: SupportedLocale;
   text: string;
-  providerType: string;
-  model: string;
-  tokensUsed: number | null;
   /**
-   * v1.16.8 — fingerprint of the data snapshot this assessment was
-   * generated from (see `snapshot-hash.ts`). The regeneration gate
-   * compares the fresh snapshot's hash against this and skips the
-   * provider call when nothing changed.
+   * Fingerprint of the data snapshot this note was written from (see
+   * `snapshot-hash.ts`). The regeneration gate compares the next snapshot's
+   * hash against it and skips the provider call when nothing changed.
    */
   snapshotHash?: string;
   /**
-   * v1.18.11 (P6) — cheap fingerprint of the SALIENT INPUTS (per-type
-   * count + newest measuredAt) for slow-moving metrics. The input gate
-   * compares a freshly probed fingerprint against this BEFORE the heavy
-   * snapshot build, so a no-change day for weight/BMI skips the whole
-   * gather (not just the provider call). Absent on metrics that don't
-   * opt into the input gate.
+   * Cheap fingerprint of the SALIENT INPUTS (per-type count + newest
+   * measuredAt) for slow-moving metrics. The input gate compares a freshly
+   * probed fingerprint against it BEFORE the heavy snapshot build.
    */
   inputHash?: string;
 }): Promise<string> {
-  const created = await prisma.auditLog.create({
-    data: {
-      userId: args.userId,
-      action: args.cacheAction,
-      details: JSON.stringify({
-        dateKey: args.todayKey,
-        locale: args.locale,
-        text: args.text,
-        providerType: args.providerType,
-        model: args.model,
-        tokensUsed: args.tokensUsed,
-        statusKind: "generated",
-        retryable: false,
-        // Freshness is defined by the user's calendar day. Keeping the
-        // boundary in the payload makes expiry explicit without inventing a
-        // UTC timestamp for a day key that belongs to another timezone.
-        expiresAfterDateKey: args.todayKey,
-        ...(args.snapshotHash ? { snapshotHash: args.snapshotHash } : {}),
-        ...(args.inputHash ? { inputHash: args.inputHash } : {}),
-      }),
-    },
-    select: { createdAt: true },
+  const generatedAt = await writeStatusNote({
+    userId: args.userId,
+    cacheAction: args.cacheAction,
+    todayKey: args.todayKey,
+    text: args.text,
+    snapshotHash: args.snapshotHash,
+    inputHash: args.inputHash,
   });
-  return created.createdAt.toISOString();
+  return generatedAt.toISOString();
 }
 
 /**

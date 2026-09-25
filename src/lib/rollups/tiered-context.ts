@@ -33,12 +33,13 @@ import type {
   MeasurementType,
   RollupGranularity,
 } from "@/generated/prisma/client";
-import { isNearUtc, userDayKey } from "@/lib/tz/format";
+import { isNearUtc, isValidTimezone } from "@/lib/tz/format";
 import {
   ensureUserRollupsFresh,
   readRollupBuckets,
 } from "./measurement-rollups";
 import { probeRollupCoverage } from "./measurement-coverage";
+import { readDayAggregates } from "@/lib/measurements/day-aggregates";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -112,7 +113,7 @@ export interface TieredSeries {
 export interface BuildTieredSeriesOptions {
   /**
    * The user's IANA timezone. REQUIRED — the raw 0–14d band keys its
-   * daily fold on the user's local calendar day (`userDayKey`) so a
+   * daily fold on the user's local calendar day so a
    * late-evening reading lands on the right day across DST boundaries
    * and for non-UTC users. The coarser DAY/WEEK/MONTH/YEAR bands read
    * straight from the rollup table, whose `bucketStart` is UTC-anchored
@@ -244,8 +245,8 @@ function extractAnomalies(
 }
 
 /**
- * Read the raw 0–14d daily points for one type, folding same-day rows.
- * Days are keyed on the user's local calendar via `userDayKey(tz)`, so a
+ * Read the 0–14d daily points for one type, folding same-day rows.
+ * Days are keyed on the user's local calendar in `tz`, so a
  * 23:30-local reading folds onto its local day rather than the UTC day —
  * correct across DST transitions and for non-UTC users.
  */
@@ -256,26 +257,19 @@ async function readRecentDaily(
   tz: string,
 ): Promise<TieredRawPoint[]> {
   const since = new Date(now - TIERED_BANDS.rawDays * DAY_MS);
-  const rows = await prisma.measurement.findMany({
-    where: { userId, type, measuredAt: { gte: since }, deletedAt: null },
-    select: { value: true, measuredAt: true },
-    orderBy: { measuredAt: "asc" },
+  // Folded per local day in SQL: one row per day however densely the type
+  // is sampled, never the raw stream (#1023).
+  const days = await readDayAggregates({
+    userId,
+    type,
+    since,
+    timeZone: tz,
   });
-  const byDay = new Map<string, { sum: number; count: number }>();
-  for (const r of rows) {
-    const key = userDayKey(r.measuredAt, tz);
-    const entry = byDay.get(key) ?? { sum: 0, count: 0 };
-    entry.sum += r.value;
-    entry.count += 1;
-    byDay.set(key, entry);
-  }
-  return [...byDay.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([date, { sum, count }]) => ({
-      date,
-      value: round(sum / count),
-      count,
-    }));
+  return days.map((d) => ({
+    date: d.day,
+    value: round(d.sum / d.n),
+    count: d.n,
+  }));
 }
 
 /**
@@ -406,7 +400,12 @@ async function readBand(
   // straight to the live path keyed in their zone. The coarser bands stay
   // on the UTC-anchored rollups — a few hours of offset moves bucket
   // MEMBERSHIP at week/month/year grain by at most one edge reading.
-  if (granularity === "DAY" && tz && !isNearUtc(tz, new Date(now))) {
+  if (
+    granularity === "DAY" &&
+    tz &&
+    isValidTimezone(tz) &&
+    !isNearUtc(tz, new Date(now))
+  ) {
     return readBandLive(userId, type, granularity, from, to, tz);
   }
   // `readRollupBuckets` never throws — an empty / missing partition yields

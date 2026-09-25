@@ -9,9 +9,13 @@
  *
  * Ownership: every query is scoped `where: { userId, ... }`, so a caller can
  * only ever see / create their own reminders. The owner is always narrowed from
- * the session, never the body. Coach-gated by the same
- * `requireModuleEnabled(userId, "coach")` kill-switch as the rest of the Coach
- * management stack.
+ * the session, never the body.
+ *
+ * GET is not gated on the Coach. A reminder is the person's own stored record:
+ * reading it never depends on the Coach being available, the same rule as the
+ * stored facts, conversations and plans (a Coach switched off by the operator
+ * or hidden by the person must not lock them out of what it kept). POST is
+ * Coach use and stays gated by `requireModuleEnabled(userId, "coach")`.
  *
  * `?status=` optionally filters (one status, or a comma set like `due,surfaced`
  * for the in-app tile). Omitted returns the non-terminal set (proposed / active
@@ -77,11 +81,9 @@ export const GET = apiHandler(async (req: Request) => {
   // the delegate's own ledger while the page shows another person's record,
   // which is the failure mode this whole mode system exists to prevent.
   //
-  // The module gate below resolves against the record, so the surface exists
-  // for a delegate only where the OWNER switched the Coach on.
+  // No Coach gate: the ledger is readable whatever the Coach's state, for the
+  // owner and for a delegate with a read grant alike, like the mood note.
   const { user } = await requireRecordAuth("read", "record");
-  const gate = await requireModuleEnabled(user.id, "coach");
-  if (!gate.enabled) return gate.response;
 
   const url = new URL(req.url);
   const parsed = coachRemindersListQuerySchema.safeParse({

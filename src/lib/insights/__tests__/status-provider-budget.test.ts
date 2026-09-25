@@ -64,7 +64,21 @@ const { resolveProviderChain, resolveProvider } = vi.hoisted(() => ({
   resolveProviderChain: vi.fn(),
   resolveProvider: vi.fn(),
 }));
-vi.mock("@/lib/ai/provider", () => ({ resolveProviderChain, resolveProvider }));
+vi.mock("@/lib/ai/provider", () => ({
+  resolveProviderChain,
+  resolveProvider,
+  probeProviderPresence: vi.fn(async () => true),
+}));
+
+// The capability re-check at the wire. Available by default so the budget is
+// what these tests isolate; one test below flips it.
+const { aiCapabilityForRecord } = vi.hoisted(() => ({
+  aiCapabilityForRecord: vi.fn(),
+}));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord,
+  aiCapabilityToServe: aiCapabilityForRecord,
+}));
 
 const { runRawCompletionWithFallback } = vi.hoisted(() => ({
   runRawCompletionWithFallback: vi.fn(),
@@ -74,15 +88,16 @@ vi.mock("@/lib/ai/provider-runner", () => ({
   runRawCompletionWithFallback,
 }));
 
-// Consent gate is exercised by its own suite; keep it open here so the budget
-// behaviour is what these tests isolate.
-vi.mock("@/lib/ai/consent-guard", () => ({
-  chainRequiresServerManagedConsent: vi.fn(() => false),
-  hasActiveConsentForSurface: vi.fn(async () => true),
-}));
+// The wire re-check for the resolved chain (`aiEgressRefusal`). Its own rule
+// (capability + receipt for an operator-held entry) is pinned in egress.test.ts;
+// here it passes by default so the budget is what these tests isolate, and
+// the refusal test below flips it.
+const { aiEgressRefusal } = vi.hoisted(() => ({ aiEgressRefusal: vi.fn() }));
+vi.mock("@/lib/ai/capabilities/egress", () => ({ aiEgressRefusal }));
 
 import { runStatusCompletion } from "../status-provider";
 import { annotate } from "@/lib/logging/context";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 import { OPERATOR_COST_CAP, USER_PLAN_CAP } from "@/lib/ai/coach/budget";
 
 const OPERATOR_CHAIN = [{ providerType: "admin-openai", instance: {} }];
@@ -94,7 +109,7 @@ function completionArgs(overrides: Record<string, unknown> = {}) {
     cacheAction: "status:test",
     systemPrompt: "system",
     userPrompt: "user",
-    consentSurface: "insights" as const,
+    capability: "statusText" as const,
     ...overrides,
   };
 }
@@ -113,6 +128,97 @@ beforeEach(() => {
   ledgerOperator = 0;
   resolveProviderChain.mockResolvedValue(OPERATOR_CHAIN);
   resolveProvider.mockResolvedValue({ type: "none" });
+  aiCapabilityForRecord.mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
+  aiEgressRefusal.mockResolvedValue(null);
+});
+
+describe("runStatusCompletion — capability at the wire", () => {
+  it("returns none with the capability's reason and never resolves the chain when the capability is unavailable", async () => {
+    aiCapabilityForRecord.mockResolvedValue({
+      available: false,
+      reason: "user_disabled",
+      onDeviceAllowed: false,
+    });
+
+    const outcome = await runStatusCompletion(
+      completionArgs({ capability: "periodNarrative" }) as never,
+    );
+
+    expect(outcome).toEqual({ kind: "none", reason: "user_disabled" });
+    expect(aiCapabilityForRecord).toHaveBeenCalledWith("u1", "periodNarrative");
+    expect(resolveProviderChain).not.toHaveBeenCalled();
+    expect(resolveProvider).not.toHaveBeenCalled();
+    expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
+    // Nothing reserved against the day's ledger either.
+    expect(ledgerTotal).toBe(0);
+  });
+
+  it("re-checks exactly the resolved chain and refuses before any budget or provider work", async () => {
+    resolveProviderChain.mockResolvedValue([
+      { providerType: "anthropic", instance: {} },
+      { providerType: "admin-openai", instance: {} },
+    ]);
+    aiEgressRefusal.mockResolvedValue(
+      new AiUnavailableError("coach", "consent_required"),
+    );
+
+    const outcome = await runStatusCompletion(
+      completionArgs({ capability: "coach" }) as never,
+    );
+
+    expect(outcome).toEqual({ kind: "none", reason: "consent_required" });
+    expect(aiEgressRefusal).toHaveBeenCalledWith("coach", "u1", [
+      "anthropic",
+      "admin-openai",
+    ]);
+    expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
+    expect(ledgerTotal).toBe(0);
+    expect(annotate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: { name: "insights.status.capability_unavailable" },
+        meta: expect.objectContaining({
+          reason: "consent_required",
+          at: "wire",
+        }),
+      }),
+    );
+  });
+
+  it("drops a reply whose consent was withdrawn while the call was in flight", async () => {
+    mockProviderReply(40);
+    // Open when the request leaves; withdrawn by the time the reply is back.
+    aiEgressRefusal
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(
+        new AiUnavailableError("statusText", "consent_required"),
+      );
+
+    const outcome = await runStatusCompletion(completionArgs() as never);
+
+    expect(outcome).toEqual({ kind: "none", reason: "consent_required" });
+    // Re-checked against the provider that actually answered.
+    expect(aiEgressRefusal).toHaveBeenLastCalledWith("statusText", "u1", [
+      "admin-openai",
+    ]);
+    // The tokens were spent upstream and stay on the ledger.
+    expect(ledgerTotal).toBe(40);
+    expect(annotate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({ at: "reply" }),
+      }),
+    );
+  });
+
+  it("returns none with reason no_provider when the chain is empty", async () => {
+    resolveProviderChain.mockResolvedValue([]);
+    const outcome = await runStatusCompletion(completionArgs() as never);
+    expect(outcome).toEqual({ kind: "none", reason: "no_provider" });
+    expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
+  });
 });
 
 describe("runStatusCompletion — ledger accounting", () => {

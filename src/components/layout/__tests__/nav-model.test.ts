@@ -90,7 +90,7 @@ describe("nav-model utility tail (N-1 — one shared list)", () => {
 
 describe("visibleNavDestinations module gate", () => {
   it("includes Cycle (between Mood and Medications) only when its module is enabled", () => {
-    // v1.18.0 — cycle is `requiresModule: "cycle"` and reads the delegated
+    // v1.18.0 — cycle is owned by `cycle` in the surface map and reads the delegated
     // `cycle` key from the same resolved module map every other gate uses.
     // v1.19.1 (S4) — cycle sits in the head block, after Mood and before the
     // fixed Medications → … → Achievements spine.
@@ -102,15 +102,12 @@ describe("visibleNavDestinations module gate", () => {
     expect(on.indexOf("/cycle")).toBeLessThan(on.indexOf("/medications"));
   });
 
-  it("drops a module-gated entry (mood / labs / coach / achievements / insights / medications) when its module is disabled", () => {
+  it("drops a module-gated entry (mood / labs / coach / achievements / medications) when its module is disabled", () => {
     const disabled = visibleNavDestinations({
       mood: false,
       labs: false,
       coach: false,
       achievements: false,
-      // v1.18.0 — Insights is now `requiresModule: "insights"`, so the
-      // top-level /insights entry drops when the module is off.
-      insights: false,
       // v1.18.1 (D3) — medications graduated to a toggleable module.
       medications: false,
     }).map((d) => d.href);
@@ -118,8 +115,14 @@ describe("visibleNavDestinations module gate", () => {
     expect(disabled).not.toContain("/labs");
     expect(disabled).not.toContain("/coach");
     expect(disabled).not.toContain("/achievements");
-    expect(disabled).not.toContain("/insights");
     expect(disabled).not.toContain("/medications");
+  });
+
+  it("keeps Insights with AI analysis off: the insights key owns no destination", () => {
+    const hrefs = visibleNavDestinations({ insights: false }).map(
+      (d) => d.href,
+    );
+    expect(hrefs).toContain("/insights");
   });
 
   it("keeps every module-gated entry when its module is enabled", () => {

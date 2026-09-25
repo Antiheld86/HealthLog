@@ -44,6 +44,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useNavModules } from "@/hooks/use-nav-modules";
 import { apiPost } from "@/lib/api/api-fetch";
 import { queryKeys } from "@/lib/query-keys";
 import { OnboardingTour } from "./tour";
@@ -217,6 +218,7 @@ interface TourLauncherProps {
 
 export function TourLauncher({ ready = true }: TourLauncherProps) {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const navModules = useNavModules();
   const queryClient = useQueryClient();
   const pathname = usePathname();
 
@@ -350,9 +352,12 @@ export function TourLauncher({ ready = true }: TourLauncherProps) {
 
   if (showTour !== true) return null;
 
-  // The resolved module map gates which stops appear (default-on) and
-  // keeps the "Schritt n/total" counter honest.
-  const modules = user?.modules;
+  // The module map the nav reads gates which stops appear (default-on) and
+  // keeps the "Schritt n/total" counter honest. It folds the Coach
+  // capability in: with no provider or no consent the Coach module is on
+  // but `/coach` redirects, so the raw `user.modules` would keep a stop the
+  // tour can never stand on.
+  const modules = navModules;
   // v1.18.6 — resume the full tour from the persisted checkpoint.
   const resumeFromStopId = user?.onboardingTourProgress?.lastStopId ?? null;
 

@@ -11,7 +11,7 @@
  * about recent news, and it stops being made rather than being made about a
  * years-old draw. Neutral framing only — a delta is not a diagnosis.
  *
- * Mirrors `/api/insights/derived`: `apiHandler`, `requireAuth`, the `insights`
+ * Mirrors `/api/insights/derived`: `apiHandler`, `requireAuth`, the `labs`
  * module gate, the shared analytics-read budget. `userId` is narrowed from the
  * session; soft-deleted rows (`deletedAt`) are filtered out.
  */
@@ -30,7 +30,10 @@ export const GET = apiHandler(async () => {
   // provider anywhere on the path.
   const { user } = await requireRecordAuth("manage", "record");
 
-  const m = await requireModuleEnabled(user.id, "insights");
+  // Lab deltas belong to labs: with the labs module off the card hides like
+  // every other labs surface. Not an AI read, so the `insights` module (the
+  // AI analysis opt-out) does not gate it.
+  const m = await requireModuleEnabled(user.id, "labs");
   if (!m.enabled) return m.response;
 
   const rl = await checkAnalyticsReadRateLimit(user.id);

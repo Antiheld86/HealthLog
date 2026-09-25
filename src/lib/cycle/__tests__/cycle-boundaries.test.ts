@@ -9,8 +9,11 @@
  */
 import { describe, it, expect } from "vitest";
 
-import { bleedOpensCycle } from "../cycle-boundaries";
-import { HARD_CYCLE_MIN } from "../types";
+import {
+  bleedOpensCycle,
+  isSamePeriodStartedEarlier,
+} from "../cycle-boundaries";
+import { HARD_CYCLE_MIN, PERIOD_MAX } from "../types";
 import { addDays } from "../day-math";
 
 const DAY = "2026-06-01";
@@ -63,5 +66,25 @@ describe("bleedOpensCycle", () => {
     // Never happens through the resolver (it queries `startDate <= date`), but
     // a negative gap must not read as a large one.
     expect(bleedOpensCycle("HEAVY", false, addDays(DAY, 10), DAY)).toBe(false);
+  });
+});
+
+describe("isSamePeriodStartedEarlier", () => {
+  it("reads a start a few days later as the same period entered out of order", () => {
+    expect(isSamePeriodStartedEarlier(DAY, addDays(DAY, 1))).toBe(true);
+    expect(isSamePeriodStartedEarlier(DAY, addDays(DAY, PERIOD_MAX - 1))).toBe(
+      true,
+    );
+  });
+
+  it("does not reach past the longest period the engine accepts", () => {
+    expect(isSamePeriodStartedEarlier(DAY, addDays(DAY, PERIOD_MAX))).toBe(
+      false,
+    );
+  });
+
+  it("never folds the same day or an earlier start", () => {
+    expect(isSamePeriodStartedEarlier(DAY, DAY)).toBe(false);
+    expect(isSamePeriodStartedEarlier(DAY, addDays(DAY, -3))).toBe(false);
   });
 });

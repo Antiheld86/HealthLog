@@ -1,5 +1,6 @@
 "use client";
 
+import { useAiProviderState } from "@/hooks/use-ai-capability";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -109,15 +110,6 @@ interface NotificationChannel {
 
 interface NotificationsPreferences {
   channels?: NotificationChannel[];
-}
-
-interface AiProviderStatus {
-  /**
-   * True iff any provider can serve the user — personal key, local
-   * model, OAuth sign-in, or the operator's shared key. Mirrors the
-   * `insights` checklist row's `done` predicate.
-   */
-  aiAvailable?: boolean;
 }
 
 function readDismissedSet(): Set<ChecklistItemId> {
@@ -270,19 +262,11 @@ export function GettingStartedChecklist() {
     enabled: checklistRelevant,
   });
 
-  // v1.28 — the "Turn on insights" row self-satisfies from real provider
-  // state. `/api/user/ai-provider` reports `aiAvailable` presence-only
-  // (personal key OR local model OR OAuth OR the operator's shared key),
-  // so connecting a provider — or landing on a shared-key deployment —
-  // flips the row done with no client-side credential handling. Gated on
-  // `checklistRelevant` so it only fetches while the card can render.
-  const { data: aiProviderData } = useQuery<AiProviderStatus>({
-    queryKey: queryKeys.userAiProvider(),
-    queryFn: async () => {
-      return apiGet("/api/user/ai-provider");
-    },
-    enabled: checklistRelevant,
-  });
+  // The AI row reads the provider state `/api/auth/me` already carries:
+  // present only while AI can be set up from here (`canConfigure`), done once
+  // any provider is configured (a personal key, a local model, an OAuth
+  // sign-in or the operator's shared key). No request of its own.
+  const aiProvider = useAiProviderState();
 
   // v1.5 perf audit: skip these two fetches once the card can't render at
   // all (`checklistRelevant`, same gate the meds/AI queries above use).
@@ -351,7 +335,8 @@ export function GettingStartedChecklist() {
   const notificationsConfigured = (notificationsData?.channels ?? []).some(
     (channel) => channel?.enabled === true,
   );
-  const insightsConfigured = aiProviderData?.aiAvailable === true;
+  const insightsConfigured = aiProvider.configured;
+  const aiConfigurable = aiProvider.canConfigure;
 
   const items = useMemo(
     () =>
@@ -366,6 +351,7 @@ export function GettingStartedChecklist() {
         dataSourceConnected,
         notificationsConfigured,
         insightsConfigured,
+        aiConfigurable,
         dismissedIds,
         upcomingVisitCount: upcomingVisitCount ?? 0,
         managedProfileCount,
@@ -387,6 +373,7 @@ export function GettingStartedChecklist() {
       dataSourceConnected,
       notificationsConfigured,
       insightsConfigured,
+      aiConfigurable,
       dismissedIds,
       upcomingVisitCount,
       managedProfileCount,

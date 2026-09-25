@@ -71,7 +71,7 @@ describe("GET /api/feature-flags", () => {
           coach: boolean;
           briefing: boolean;
           insightStatus: boolean;
-          correlations: boolean;
+          documentAi: boolean;
         };
       };
       error: null;
@@ -83,7 +83,7 @@ describe("GET /api/feature-flags", () => {
       coach: true,
       briefing: true,
       insightStatus: true,
-      correlations: true,
+      documentAi: true,
     });
   });
 
@@ -94,7 +94,7 @@ describe("GET /api/feature-flags", () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
 
     const res = await GET(req());
@@ -109,7 +109,7 @@ describe("GET /api/feature-flags", () => {
       coach: false,
       briefing: false,
       insightStatus: false,
-      correlations: false,
+      documentAi: false,
     });
   });
 
@@ -120,7 +120,7 @@ describe("GET /api/feature-flags", () => {
       assistantCoachEnabled: false,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: false,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
 
     const res = await GET(req());
@@ -135,7 +135,7 @@ describe("GET /api/feature-flags", () => {
       coach: false,
       briefing: true,
       insightStatus: false,
-      correlations: true,
+      documentAi: true,
     });
   });
 
@@ -144,5 +144,28 @@ describe("GET /api/feature-flags", () => {
     FIND.mockResolvedValue(null);
     const res = await GET(req());
     expect(res.headers.get("Cache-Control")).toBe("private, max-age=60");
+  });
+
+  it("announces itself deprecated and names its successor", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    FIND.mockResolvedValue(null);
+    const res = await GET(req());
+    expect(res.headers.get("Deprecation")).toBe("true");
+    expect(res.headers.get("Link")).toBe(
+      '</api/auth/me>; rel="successor-version"',
+    );
+  });
+
+  it("answers every switch off when the switches cannot be read", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    FIND.mockRejectedValue(new Error("db down"));
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { assistant: Record<string, boolean> };
+    };
+    expect(Object.values(body.data.assistant).every((v) => v === false)).toBe(
+      true,
+    );
   });
 });

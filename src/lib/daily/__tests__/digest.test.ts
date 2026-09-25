@@ -28,6 +28,10 @@ import {
   sameTimeBaselineItemKey,
   tensionWindowItemKey,
 } from "@/lib/daily/priority-item-key";
+import {
+  aiUnavailable,
+  DIGEST_AI_AVAILABLE,
+} from "@/__tests__/helpers/ai-capability-fixtures";
 
 const t = getServerTranslator("en").t;
 const NOW = new Date("2026-07-16T09:00:00.000Z");
@@ -64,6 +68,7 @@ const briefing: DailyBriefing = {
 function input(over: Partial<DailyDigestInput> = {}): DailyDigestInput {
   return {
     now: NOW,
+    ai: DIGEST_AI_AVAILABLE,
     // NOW is 09:00Z on 2026-07-16; UTC profile day ends at next midnight.
     todayEndExclusive: new Date("2026-07-17T00:00:00.000Z"),
     modules: {},
@@ -766,13 +771,25 @@ describe("buildDailyDigest — coach check-in (S3)", () => {
     expect(checkin(d)).toBeUndefined();
   });
 
-  it("does NOT emit a check-in when the coach module is off", () => {
-    const d = buildDailyDigest(
-      input({ modules: { coach: false }, coachPlans: [plan()] }),
-      t,
-    );
-    expect(checkin(d)).toBeUndefined();
-  });
+  it.each([
+    "operator_disabled",
+    "module_disabled",
+    "user_disabled",
+    "no_provider",
+    "consent_required",
+  ] as const)(
+    "does NOT emit a check-in while the coach capability is %s",
+    (reason) => {
+      const d = buildDailyDigest(
+        input({
+          ai: { ...DIGEST_AI_AVAILABLE, coach: aiUnavailable(reason) },
+          coachPlans: [plan()],
+        }),
+        t,
+      );
+      expect(checkin(d)).toBeUndefined();
+    },
+  );
 
   it("emits none when there are no standing plans", () => {
     const d = buildDailyDigest(input({ coachPlans: [] }), t);
@@ -862,12 +879,13 @@ describe("S12 — the milestone reward card", () => {
     expect(milestone(buildDailyDigest(input(), t))).toBeUndefined();
   });
 
-  it("is suppressed when the insights module is off (module-gated)", () => {
+  it("is data: the AI analysis opt-out (insights module off) does not hide it", () => {
     const d = buildDailyDigest(
       input({ milestone: RECORD_MILESTONE, modules: { insights: false } }),
       t,
     );
-    expect(milestone(d)).toBeUndefined();
+    expect(milestone(d)).toBeDefined();
+    expect(milestone(d)?.moduleKey).toBeUndefined();
   });
 
   it("sits just below an overdue dose and above ambient items", () => {
@@ -936,7 +954,7 @@ describe("buildDailyDigest — S11 tension_window item", () => {
     expect(tension(d)).toBeUndefined();
   });
 
-  it("stays silent when the insights module is off", () => {
+  it("is data: the AI analysis opt-out (insights module off) does not hide it", () => {
     const d = buildDailyDigest(
       input({
         modules: { insights: false },
@@ -944,7 +962,7 @@ describe("buildDailyDigest — S11 tension_window item", () => {
       }),
       t,
     );
-    expect(tension(d)).toBeUndefined();
+    expect(tension(d)).toBeDefined();
   });
 
   it("yields the bounded rail to time-sensitive actions first", () => {
@@ -1042,12 +1060,12 @@ describe("buildDailyDigest — same_time_baseline item", () => {
     expect(sameTimeItem(buildDailyDigest(input({}), t))).toBeUndefined();
   });
 
-  it("stays silent when the insights module is off", () => {
+  it("is data: the AI analysis opt-out (insights module off) does not hide it", () => {
     const d = buildDailyDigest(
       input({ modules: { insights: false }, sameTime: sameTime() }),
       t,
     );
-    expect(sameTimeItem(d)).toBeUndefined();
+    expect(sameTimeItem(d)).toBeDefined();
   });
 
   it("uses a different sentence when today is ahead", () => {
@@ -1131,7 +1149,8 @@ describe("buildDailyDigest — ecg_new_recording (S10)", () => {
     const item = ecgItem(d);
     expect(item).toBeDefined();
     expect(item?.status).toBe("info");
-    expect(item?.moduleKey).toBe("insights");
+    // Device data: no module owns it.
+    expect(item?.moduleKey).toBeUndefined();
     // Single action, deep-linking the ECG viewer.
     expect(item?.actions).toHaveLength(1);
     expect(item?.actions[0].intent).toBe("ecg.view");
@@ -1182,7 +1201,7 @@ describe("buildDailyDigest — ecg_new_recording (S10)", () => {
     expect(ecgItem(d)).toBeUndefined();
   });
 
-  it("does not emit when the insights module is off", () => {
+  it("is device data: the AI analysis opt-out (insights module off) does not hide it", () => {
     const d = buildDailyDigest(
       input({
         modules: { insights: false },
@@ -1193,7 +1212,7 @@ describe("buildDailyDigest — ecg_new_recording (S10)", () => {
       }),
       t,
     );
-    expect(ecgItem(d)).toBeUndefined();
+    expect(ecgItem(d)).toBeDefined();
   });
 
   it("emits nothing when there is no recent recording", () => {
@@ -1273,4 +1292,28 @@ describe("buildDailyDigest — dismiss filtering never touches actionable kinds"
       d.worthALook.find((i) => i.kind === "dose_window")?.itemKey,
     ).toBeUndefined();
   });
+});
+
+describe("buildDailyDigest — AI text follows its capability", () => {
+  it.each([
+    "operator_disabled",
+    "user_disabled",
+    "no_provider",
+    "consent_required",
+  ] as const)(
+    "drops the briefing lead and top signal while briefing is %s",
+    (reason) => {
+      const d = buildDailyDigest(
+        input({
+          ai: { ...DIGEST_AI_AVAILABLE, briefing: aiUnavailable(reason) },
+        }),
+        t,
+      );
+      expect(d.briefingLead).toBeNull();
+      expect(d.topSignal).toBeNull();
+      // The push line falls to the deterministic floor, never to model text.
+      expect(d.line).toBe("Your health score today is 82.");
+      expect(d.ai.briefing.reason).toBe(reason);
+    },
+  );
 });

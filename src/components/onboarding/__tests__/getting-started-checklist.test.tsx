@@ -24,12 +24,24 @@ import {
   type OnboardingStateDto,
 } from "@/lib/onboarding/needs";
 
+import type { AiProviderState } from "@/lib/ai/capabilities/types";
+
 let currentUser: AuthUser | null = null;
 /** Every `enabled` flag the component asked for, keyed by its query key. */
 const enabledByKey = new Map<string, boolean>();
 
 vi.mock("@/hooks/use-auth", () => ({
   useAccountOnceMounted: () => currentUser,
+}));
+
+/** `ai.provider` from `/api/auth/me`, read through `useAiProviderState`. */
+let providerState: AiProviderState = {
+  configured: true,
+  managedBy: "user",
+  canConfigure: true,
+};
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiProviderState: () => providerState,
 }));
 
 vi.mock("@/lib/queries/use-dashboard-snapshot", () => ({
@@ -40,7 +52,6 @@ vi.mock("@/lib/queries/use-dashboard-snapshot", () => ({
 
 const RESPONSES: Record<string, unknown> = {
   '["medications"]': [{ id: "m1" }, { id: "m2" }, { id: "m3" }],
-  '["user","ai-provider"]': { aiAvailable: true },
   '["integrations","status"]': {
     integrations: [{ integration: "whoop", connected: true }],
   },
@@ -121,13 +132,24 @@ describe("<GettingStartedChecklist> — rows for an established account", () => 
     expect(html).toContain("5 of 6 done");
   });
 
+  it("leaves the AI row out when AI cannot be set up here", () => {
+    // The operator switched AI off, or the record belongs to somebody else:
+    // the list never carries a to-do nobody on this screen can finish.
+    providerState = { configured: false, managedBy: null, canConfigure: false };
+    currentUser = user();
+    const html = render();
+    expect(html).toContain("4 of 5 done");
+    providerState = { configured: true, managedBy: "user", canConfigure: true };
+  });
+
   it("keeps the supporting queries enabled while the card can render", () => {
     currentUser = user();
     render();
     expect(enabledByKey.get('["medications"]')).toBe(true);
     expect(enabledByKey.get('["integrations","status"]')).toBe(true);
     expect(enabledByKey.get('["notifications","preferences"]')).toBe(true);
-    expect(enabledByKey.get('["user","ai-provider"]')).toBe(true);
+    // The AI row reads `/api/auth/me`; it asks for nothing of its own.
+    expect(enabledByKey.has('["user","ai-provider"]')).toBe(false);
   });
 
   it("still fetches nothing for a record that never entered the flow and is long past five readings", () => {

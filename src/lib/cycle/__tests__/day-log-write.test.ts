@@ -17,6 +17,8 @@ const db = vi.hoisted(() => {
       findUnique: vi.fn(),
       upsert: vi.fn(),
       update: vi.fn(),
+      // An opened cycle re-attributes the days it now owns.
+      updateMany: vi.fn(async () => ({ count: 0 })),
     },
     // The write path asks whether the logged day opens a cycle. These cases
     // are about the encryption columns, so the fake answers "no cycles on

@@ -27,10 +27,6 @@ vi.mock("@/lib/rollups/measurement-read-wmy", () => ({
   readTieredRollupSeries: mocks.readTieredRollupSeries,
 }));
 
-vi.mock("@/lib/rollups/measurement-rollups", () => ({
-  recomputeUserRollups: vi.fn(),
-}));
-
 import { readDailySeries } from "../daily-series-read";
 
 const DAY_MS = 86_400_000;
@@ -39,46 +35,24 @@ beforeEach(() => {
   mocks.findMany.mockReset();
   mocks.queryRaw.mockReset();
   mocks.readTieredRollupSeries.mockReset();
-  // Default DAY-rollup read returns enough rows (≥ SUSPICIOUS_ROW_FLOOR)
-  // so the short-window path resolves without the coverage probe / live
-  // query firing.
-  mocks.findMany.mockResolvedValue([
-    {
+  // The daily path folds live, one row per local day.
+  mocks.queryRaw.mockResolvedValue(
+    ["2026-06-01", "2026-06-02", "2026-06-03"].map((d, i) => ({
       type: "WEIGHT",
-      source: "MANUAL",
-      bucketStart: new Date("2026-06-01T00:00:00.000Z"),
-      mean: 81,
-      count: 1,
-      sumValue: null,
-      minValue: 81,
-      maxValue: 81,
-    },
-    {
-      type: "WEIGHT",
-      source: "MANUAL",
-      bucketStart: new Date("2026-06-02T00:00:00.000Z"),
-      mean: 82,
-      count: 1,
-      sumValue: null,
-      minValue: 82,
-      maxValue: 82,
-    },
-    {
-      type: "WEIGHT",
-      source: "MANUAL",
-      bucketStart: new Date("2026-06-03T00:00:00.000Z"),
-      mean: 80,
-      count: 1,
-      sumValue: null,
-      minValue: 80,
-      maxValue: 80,
-    },
-  ]);
+      bucket_start: new Date(`${d}T00:00:00.000Z`),
+      avg: 80 + i,
+      cnt: 1,
+      min_value: 80 + i,
+      max_value: 80 + i,
+    })),
+  );
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+const TZ = "Europe/Berlin";
 
 describe("readDailySeries — long-range tier step-up", () => {
   it("routes a multi-year window through the tiered reader and returns its whole-history rows", async () => {
@@ -109,6 +83,7 @@ describe("readDailySeries — long-range tier step-up", () => {
       from,
       to,
       priorityJson: null,
+      timeZone: TZ,
     });
 
     expect(mocks.readTieredRollupSeries).toHaveBeenCalledTimes(1);
@@ -119,8 +94,8 @@ describe("readDailySeries — long-range tier step-up", () => {
     // Whole-history coverage: the earliest 2017 bucket survives.
     expect(result[0].measuredAt).toBe("2017-01-01T00:00:00.000Z");
     expect(result).toHaveLength(2);
-    // The DAY-rollup path was NOT consulted for the long window.
-    expect(mocks.findMany).not.toHaveBeenCalled();
+    // The daily path was NOT consulted for the long window.
+    expect(mocks.queryRaw).not.toHaveBeenCalled();
   });
 
   it("falls through to the daily path on a tiered coverage miss (no silent empty)", async () => {
@@ -134,11 +109,11 @@ describe("readDailySeries — long-range tier step-up", () => {
       from,
       to,
       priorityJson: null,
+      timeZone: TZ,
     });
 
     expect(mocks.readTieredRollupSeries).toHaveBeenCalledTimes(1);
-    // Daily DAY-rollup read still ran as the fallback.
-    expect(mocks.findMany).toHaveBeenCalled();
+    expect(mocks.queryRaw).toHaveBeenCalled();
     expect(result).toHaveLength(3);
   });
 
@@ -146,56 +121,25 @@ describe("readDailySeries — long-range tier step-up", () => {
     const to = new Date("2026-06-21T00:00:00.000Z");
     const from = new Date(to.getTime() - 90 * DAY_MS);
 
-    await readDailySeries({
-      userId: "u",
-      type: "WEIGHT",
-      from,
-      to,
-      priorityJson: null,
-    });
-
-    expect(mocks.readTieredRollupSeries).not.toHaveBeenCalled();
-    expect(mocks.findMany).toHaveBeenCalled();
-  });
-});
-
-describe("readDailySeries — rollup read throw falls back to live SQL (F-DB-2)", () => {
-  it("a rollup-table throw on a normal window degrades to the live date_trunc aggregate, not a 500", async () => {
-    const to = new Date("2026-06-21T00:00:00.000Z");
-    const from = new Date(to.getTime() - 90 * DAY_MS);
-
-    // The primary rollup read throws (statement_timeout / deadlock / reset).
-    mocks.findMany
-      .mockReset()
-      .mockRejectedValue(new Error("statement timeout"));
-    // Live fallback serves the tile.
-    mocks.queryRaw.mockResolvedValueOnce([
-      {
-        type: "WEIGHT",
-        bucket_start: new Date("2026-06-10T00:00:00.000Z"),
-        avg: 80.5,
-        cnt: 2,
-        min_value: 79.8,
-        max_value: 81.2,
-      },
-    ]);
-
     const result = await readDailySeries({
       userId: "u",
       type: "WEIGHT",
       from,
       to,
       priorityJson: null,
+      timeZone: TZ,
     });
 
-    // The read did NOT throw — it fell through to live SQL and served a row.
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ type: "WEIGHT", value: 80.5, count: 2 });
-    // The live fallback must carry the min/max spread the rollup path emits —
-    // otherwise a rollup-cold account silently loses the chart's spread band
-    // for the same underlying data.
-    expect(result[0]).toMatchObject({ minValue: 79.8, maxValue: 81.2 });
-    expect(mocks.queryRaw).toHaveBeenCalled();
+    expect(mocks.readTieredRollupSeries).not.toHaveBeenCalled();
+    // The daily series never reads the UTC-day DAY rollup (#1026).
+    expect(mocks.findMany).not.toHaveBeenCalled();
+    expect(result[0]).toMatchObject({
+      type: "WEIGHT",
+      value: 80,
+      count: 1,
+      minValue: 80,
+      maxValue: 80,
+    });
   });
 
   it("a tiered-reader throw on a long window falls through to the daily path", async () => {
@@ -209,11 +153,10 @@ describe("readDailySeries — rollup read throw falls back to live SQL (F-DB-2)"
       from,
       to,
       priorityJson: null,
+      timeZone: TZ,
     });
 
-    // The daily DAY-rollup read still ran as the fallback (the default findMany
-    // returns 3 rows), so the throw did not 500 the read.
-    expect(mocks.findMany).toHaveBeenCalled();
+    expect(mocks.queryRaw).toHaveBeenCalled();
     expect(result).toHaveLength(3);
   });
 });

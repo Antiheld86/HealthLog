@@ -16,6 +16,7 @@ import type {
 } from "@/lib/ai/schema";
 import { queryKeys, refetchInactiveDailyReads } from "@/lib/query-keys";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import type { BriefingFailureClass } from "@/lib/insights/briefing-failure-marker";
 
 /**
@@ -245,9 +246,21 @@ export function nextAdvisorPollInterval(
  * regenerate quota is exhausted, which deserves a "try again later"
  * hint rather than the success toast the old lump produced. `empty` now
  * means only the transient 503 surface (provider chain unavailable).
+ *
+ * `unavailable` (403) is the server refusing the briefing capability: the
+ * operator's switch, the person's opt-out, or a consent the chain needs. The
+ * web only asks while `/api/auth/me` says the capability is available, so this
+ * is the backstop for the moment between a switch flipping and `/me`
+ * refreshing. It settles like the other expected refusals instead of
+ * throwing, so the briefing card never turns into an error.
  */
 export type AdvisorFetchOutcome =
-  "fresh" | "empty" | "rate-limited" | "timeout" | "no-provider";
+  | "fresh"
+  | "empty"
+  | "rate-limited"
+  | "timeout"
+  | "no-provider"
+  | "unavailable";
 
 interface AdvisorFetchResult {
   payload: InsightAdvisorPayload | null;
@@ -315,6 +328,9 @@ export async function fetchAdvisor(
     }
     if (res.status === 503) {
       return { payload: null, outcome: "empty" };
+    }
+    if (res.status === 403) {
+      return { payload: null, outcome: "unavailable" };
     }
     throw new Error(`HTTP ${res.status}`);
   }
@@ -385,24 +401,6 @@ export interface UseInsightsAdvisorResult {
    */
   regenerateSettling: boolean;
   /**
-   * v1.15.20 — the outcome of the last settled READ. Lets surfaces
-   * distinguish "no briefing yet, a generate could help" (`empty` /
-   * `timeout`) from "no provider configured, generating is futile"
-   * (`no-provider`) and render a connect-AI hint instead of a dead
-   * regenerate CTA.
-   */
-  readOutcome: AdvisorFetchOutcome | null;
-  /**
-   * v1.18.9 (#4) — false when the GET reported no usable AI provider. The
-   * read path still serves the last cached briefing (no provider is
-   * needed to read the cache), so this is the ONLY honest signal that a
-   * shown-but-stale briefing can never refresh. Surfaces pair it with the
-   * relative-age line to add a discreet connect-provider hint. Defaults
-   * true (no hint) when the field is absent — a pre-field cached payload
-   * or an unsettled query.
-   */
-  hasProvider: boolean;
-  /**
    * v1.25 — true when the GET reported the last generation attempt failed.
    * Pairs a shown-but-held briefing with a discreet "couldn't refresh" hint,
    * and swaps the generic empty state for a "couldn't generate — retry" one
@@ -427,10 +425,17 @@ export interface UseInsightsAdvisorResult {
 /**
  * Read-only consumer for the advisor payload. Use this on surfaces that
  * just want to render the cached insight (e.g. dashboard preview).
+ *
+ * The read only fires while the `briefing` capability on `/api/auth/me` is
+ * available, whatever the caller passes: every consumer (the overview, the
+ * tab strip) gets the same gate, and none can re-enable the read behind the
+ * other's back. While `/me` loads the capability reads unavailable, so the
+ * first paint never fires a request only to have it refused.
  */
 export function useInsightsAdvisorQuery(
   enabled: boolean,
 ): UseInsightsAdvisorResult {
+  const briefing = useAiCapability("briefing");
   const queryClient = useQueryClient();
   // Refs #786 — settling state for a timed-out force regenerate (see the
   // contract comment above `AdvisorSettleState`). `settleOutcome` carries the
@@ -445,7 +450,7 @@ export function useInsightsAdvisorQuery(
     // outcome) so the read path can surface WHY a payload is missing
     // (`no-provider` → connect-AI hint instead of a dead regenerate CTA).
     queryFn: () => fetchAdvisor(),
-    enabled,
+    enabled: enabled && briefing.available,
     // 24h cache window matches the server-side `insightsCachedAt` TTL.
     staleTime: 60 * 60 * 1000,
     retry: false,
@@ -577,11 +582,6 @@ export function useInsightsAdvisorQuery(
     // outcome ("timeout" while settling is an interim state, not a result).
     regenerateOutcome: settleOutcome ?? mutation.data?.outcome ?? null,
     regenerateSettling: settling !== null,
-    readOutcome: query.data?.outcome ?? null,
-    // Absent field (pre-v1.18.9 cached payload, or query still settling) →
-    // assume a provider is present so a transient unknown never flashes a
-    // false "no provider" hint.
-    hasProvider: query.data?.payload?.hasProvider ?? true,
     // Absent (pre-field cached payload or unsettled query) → not failed, so a
     // transient unknown never flashes a false "couldn't refresh" hint.
     generationFailed: query.data?.payload?.generationFailed ?? false,

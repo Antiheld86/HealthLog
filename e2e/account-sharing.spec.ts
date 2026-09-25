@@ -64,6 +64,7 @@
  */
 import type { BrowserContext, Page } from "@playwright/test";
 
+import { aiBlockAvailable, serveAiBlock } from "./setup/ai-capabilities";
 import { expect, test } from "./setup/test";
 import {
   DELEGATE_STORAGE_STATE_PATH,
@@ -303,10 +304,15 @@ test.describe("account sharing", () => {
     // delegate, in their OWN record, is offered the Coach launcher like anyone
     // else. Without this line the later "it is gone" check would also pass on
     // a build where the launcher had stopped rendering for everybody.
+    // The launcher follows the `coach` capability, which needs a provider the
+    // suite cannot reach, so the capability reads available for this one
+    // look; the shared-record check below reads the real payload again.
+    await serveAiBlock(page, aiBlockAvailable());
     await page.goto("/");
     await expect(page.locator('[data-slot="coach-fab"]')).toBeVisible({
       timeout: 10_000,
     });
+    await page.unroute("**/api/auth/me");
 
     // Back to where the rest of this journey happens. The check above leaves
     // the browser on the dashboard, and Accept lives on the access page.
@@ -369,8 +375,12 @@ test.describe("account sharing", () => {
     // needs to and a fast one moves on immediately.
     await page.goto("/");
     // Gate on rendered content first (the dashboard must actually mount and
-    // populate the query cache before there is anything to persist).
-    await expect(page.locator('[data-slot="coach-fab"]')).toBeVisible({
+    // populate the query cache before there is anything to persist). The
+    // tile strip, not the Coach launcher: the launcher follows the `coach`
+    // capability, which needs a provider this suite does not have.
+    await expect(
+      page.locator('[data-slot="dashboard-tile-strip"]'),
+    ).toBeVisible({
       timeout: 10_000,
     });
     await expect

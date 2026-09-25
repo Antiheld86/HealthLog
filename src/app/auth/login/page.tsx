@@ -25,6 +25,7 @@ import { isDashboardSnapshotEnabled } from "@/lib/dashboard/snapshot-flag";
 import { prefetchDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
 import { clearOfflineCachesForSessionEnd } from "@/lib/pwa/query-persister";
 import { sanitizeSameOriginPath } from "@/lib/url-safety";
+import { loadDocument } from "@/lib/navigation/load-document";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -97,7 +98,7 @@ export default function LoginPage() {
 
   function handleOidcLogin() {
     const params = new URLSearchParams({ next: getRedirectTarget() });
-    window.location.href = `/api/auth/oidc/login?${params}`;
+    loadDocument(`/api/auth/oidc/login?${params}`);
   }
 
   function getRedirectTarget(): string {
@@ -126,7 +127,7 @@ export default function LoginPage() {
     // page always requires a fresh interactive login here (no ambient one-click
     // pass), which is exactly what the completion route's freshness rule needs.
     if (isNativeHandoff) {
-      window.location.href = "/api/auth/native/complete";
+      loadDocument("/api/auth/native/complete");
       return;
     }
     // Start the new session from an empty in-memory cache. The root

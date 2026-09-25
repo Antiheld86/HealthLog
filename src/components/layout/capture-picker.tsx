@@ -19,7 +19,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { sheetBodyHasUnsavedInput } from "@/components/dashboard/quick-entry-sheets";
 import { useTranslations } from "@/lib/i18n/context";
+import { isSurfaceVisible, type SurfaceModuleMap } from "@/lib/modules/surface";
 import type { ShareDomain } from "@/lib/sharing/scope";
+import { useAuth } from "@/hooks/use-auth";
 import {
   useRecordCapabilities,
   type RecordCapabilities,
@@ -106,15 +108,25 @@ export function admittedCaptureKind(
 }
 
 /**
- * The capture kinds to offer, given what the record allows. Exported pure so
- * the delegation rule can be pinned without opening a sheet: an SSR test
- * cannot tap the button that opens it.
+ * The capture kinds to offer, given what the record allows and which of its
+ * modules are on. Exported pure so both rules can be pinned without opening a
+ * sheet: an SSR test cannot tap the button that opens it.
+ *
+ * A kind whose module is off (`capture:<kind>` in the surface map) is not
+ * offered: a Mood entry with the mood module off would post to a route that
+ * refuses it. An absent module map (the account still loading) offers every
+ * kind the record allows, the gate's default-on contract.
  */
 export function visibleCaptureKinds(
   caps: Pick<RecordCapabilities, "canWriteDomain">,
   kinds: ReadonlyArray<CaptureKind>,
+  modules?: SurfaceModuleMap | null,
 ): CaptureKind[] {
-  return kinds.filter((kind) => caps.canWriteDomain(CAPTURE_KIND_DOMAIN[kind]));
+  return kinds.filter(
+    (kind) =>
+      caps.canWriteDomain(CAPTURE_KIND_DOMAIN[kind]) &&
+      isSurfaceVisible(`capture:${kind}`, modules),
+  );
 }
 
 interface CapturePickerProps {
@@ -127,7 +139,12 @@ interface CapturePickerProps {
 export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
   const { t } = useTranslations();
   const capabilities = useRecordCapabilities();
-  const offered = visibleCaptureKinds(capabilities, CAPTURE_KIND_ORDER);
+  const { user } = useAuth();
+  const offered = visibleCaptureKinds(
+    capabilities,
+    CAPTURE_KIND_ORDER,
+    user?.modules,
+  );
   const [kind, setKind] = useState<CaptureKind | null>(null);
   // Re-derived on every render, never latched: the offer can shrink under a
   // sheet that is already open. See `admittedCaptureKind`.

@@ -46,6 +46,7 @@
  */
 import type { MeasurementType } from "@/generated/prisma/client";
 import { PersonalRecordDirection } from "@/generated/prisma/client";
+import { weightTargetPosition } from "@/lib/targets/weight-trend";
 
 /**
  * v1.34 — the user-goal facts the resolver needs for the goal-dependent
@@ -78,11 +79,11 @@ export function resolveWeightGoalDirection(
   target: { min: number; max: number } | null,
   latestWeightKg: number | null,
 ): "lower" | "higher" | null {
-  if (!target || latestWeightKg === null || !Number.isFinite(latestWeightKg)) {
-    return null;
-  }
-  if (latestWeightKg > target.max) return "lower";
-  if (latestWeightKg < target.min) return "higher";
+  // Same placement the weight tile's trend colour reads, so a record and an
+  // arrow can never disagree about which side of the target a person is on.
+  const position = weightTargetPosition(target, latestWeightKg);
+  if (position === "above") return "lower";
+  if (position === "below") return "higher";
   return null;
 }
 

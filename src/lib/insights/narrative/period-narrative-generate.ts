@@ -32,6 +32,7 @@ import { annotate } from "@/lib/logging/context";
 import { AI_BUDGETS, REFERENCE_AI_SEED } from "@/lib/ai/ai-budgets";
 import { dayRotatedSeed } from "@/lib/ai/prompts/opener-archetype";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import {
   buildPeriodNarrativeContext,
   type NarrativePeriod,
@@ -315,15 +316,19 @@ export async function generatePeriodNarrative(
   const runCompletion = options.runCompletion ?? runStatusCompletion;
   const period = options.period;
 
-  // Freshness short-circuit — a recently-generated row is served as-is.
+  // Freshness short-circuit — a recently-generated row is served as-is, as
+  // long as a reader may serve it. A model-written row whose capability has
+  // since become unavailable is hidden on read, so it counts as missing here
+  // and the deterministic narrative below takes its place.
   if (!force) {
     const existing = await prisma.insightNarrative.findUnique({
       where: { userId_period_locale: { userId, period, locale } },
-      select: { updatedAt: true },
+      select: { updatedAt: true, providerType: true },
     });
     if (
       existing &&
-      now.getTime() - existing.updatedAt.getTime() < NARRATIVE_FRESH_MS
+      now.getTime() - existing.updatedAt.getTime() < NARRATIVE_FRESH_MS &&
+      (await narrativeServable(userId, existing.providerType))
     ) {
       return { status: "cached" };
     }
@@ -347,7 +352,7 @@ export async function generatePeriodNarrative(
   const completion = await runCompletion({
     userId,
     cacheAction: `insights.narrative.${period}.${locale}`,
-    consentSurface: "insights",
+    capability: "periodNarrative",
     systemPrompt: buildNarrativeSystemPrompt(locale),
     userPrompt: buildNarrativeUserPrompt(context, bodyLocale),
     temperature: AI_BUDGETS.narrative.temperature,
@@ -418,9 +423,10 @@ export async function generatePeriodNarrative(
     });
   };
 
-  // No usable provider → compose the deterministic, non-causal fallback from
-  // the same structured context, so the retrospective card is never empty for
-  // an active account (iOS H2). A later AI warm overwrites this row in place.
+  // No usable provider, or the `periodNarrative` capability is unavailable for
+  // any other reason → compose the deterministic, non-causal fallback from the
+  // same structured context, so the retrospective card is never empty for an
+  // active account (iOS H2). A later AI warm overwrites this row in place.
   if (completion.kind === "none") {
     const text = buildDeterministicNarrative(context, bodyLocale);
     await persist(text, DETERMINISTIC_PROVIDER_TYPE);
@@ -453,7 +459,7 @@ export async function generatePeriodNarrative(
     const retry = await runCompletion({
       userId,
       cacheAction: `insights.narrative.${period}.${locale}`,
-      consentSurface: "insights",
+      capability: "periodNarrative",
       systemPrompt: buildNarrativeSystemPrompt(locale),
       userPrompt:
         buildNarrativeUserPrompt(context, bodyLocale) +
@@ -500,7 +506,8 @@ export interface NarrativeRead {
 
 /**
  * Read the latest narrative for `(userId, period, locale)`, decrypting the
- * prose. Null when none was ever generated. This is the stale-while-revalidate
+ * prose. Null when none was ever generated, or when it is model-written and
+ * `periodNarrative` is unavailable for the record. This is the stale-while-revalidate
  * source: it returns whatever was last produced, regardless of age, so the
  * surface renders prior prose immediately while a refresh warms out of band.
  */
@@ -514,6 +521,15 @@ export async function readPeriodNarrative(
     where: { userId_period_locale: { userId, period, locale } },
   });
   if (!row) return null;
+  // Model-written prose is never served while the capability is unavailable,
+  // whatever the reason. The deterministic narrative is data and always is.
+  if (!(await narrativeServable(userId, row.providerType))) {
+    annotate({
+      action: { name: "insights.narrative.hidden" },
+      meta: { period, locale },
+    });
+    return null;
+  }
 
   let text: string;
   try {
@@ -545,6 +561,20 @@ export async function readPeriodNarrative(
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────
+
+/**
+ * Whether a stored narrative may be served: always for the deterministic
+ * narrative, and for model-written prose only while `periodNarrative` is
+ * available for the record, answered from the record's own state whoever is
+ * reading.
+ */
+async function narrativeServable(
+  userId: string,
+  providerType: string | null,
+): Promise<boolean> {
+  if (providerType === DETERMINISTIC_PROVIDER_TYPE) return true;
+  return (await aiCapabilityToServe(userId, "periodNarrative")).available;
+}
 
 /** Prisma `Bytes` ↔ ciphertext, mirroring the CoachMessage helper. */
 function encryptToBytes(plaintext: string): Uint8Array<ArrayBuffer> {

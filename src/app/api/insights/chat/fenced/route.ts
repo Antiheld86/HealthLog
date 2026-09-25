@@ -7,13 +7,15 @@
  * route via `@/lib/documents/fenced-chat` so the two cannot drift.
  *
  * THE FENCE (see `fenced-chat.ts` for the full posture): NO tools, NO health
- * snapshot; every document fenced as untrusted DATA; per-document egress consent;
+ * snapshot; every document fenced as untrusted DATA; the `coach` and
+ * `documentAi` capabilities, re-checked for the picked provider;
  * numeric grounding over the LIVE attachment union only. A plain tool
  * conversation 404s here (`documentScoped: true` in the fetch), so a fenced turn
  * can never be appended into a tool thread's history.
  */
 import { type NextRequest } from "next/server";
 
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
 import { apiHandler, requireAuth, HttpError } from "@/lib/api-handler";
 import {
   apiError,
@@ -55,6 +57,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   const gate = await requireModuleEnabled(userId, "inboundDocuments");
   if (!gate.enabled) return gate.response;
+
+  // A fenced turn is a Coach turn that reads documents: both capabilities must
+  // be open. The provider and the consent receipt are answered by the pick,
+  // for the provider actually used (a missing provider stays an SSE frame).
+  await requireAiCapability("coach", { pickDecides: true });
+  await requireAiCapability("documentAi", { pickDecides: true });
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,
@@ -224,5 +232,6 @@ export const POST = apiHandler(async (request: NextRequest) => {
     contractLocale,
     locale,
     signal: request.signal,
+    alsoRequires: ["coach"],
   });
 });

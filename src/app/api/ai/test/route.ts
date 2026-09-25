@@ -23,6 +23,23 @@ import {
   resolveDailyCap,
 } from "@/lib/ai/coach/budget";
 import { aiTestOverrideSchema } from "@/lib/validations/ai-provider";
+import {
+  AI_PROVIDER_NONE_ERROR_CODE,
+  AI_UNAVAILABLE_ERROR_CODE,
+} from "@/lib/ai/capabilities/types";
+import { loadAssistantSwitches } from "@/lib/feature-flags";
+
+/**
+ * The master switch's refusal code. The connection test sends a fixed prompt
+ * and no health data, so it belongs to no capability; it answers to the
+ * operator's master switch alone, under the `assistant.disabled.<switch>`
+ * template with the master's own name (`enabled`) as the last segment.
+ */
+const MASTER_SWITCH = "enabled";
+const AI_TEST_MASTER_DISABLED_CODE = `assistant.disabled.${MASTER_SWITCH}`;
+
+/** The daily AI budget refusal's code. */
+const AI_TEST_BUDGET_CODE = "ai.budget.exceeded";
 
 /**
  * Output ceiling of the probe below. Mirrors the `maxTokens` on the completion
@@ -49,6 +66,27 @@ export const dynamic = "force-dynamic";
 export const POST = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
   annotate({ action: { name: "ai.test" } });
+
+  // With the operator's master switch off no AI call leaves this server, and
+  // the connection test is an AI call. A switch set that could not be read
+  // fails closed, like every capability does.
+  // (403, not the usual 503 for `ai.unavailable`: this route never answers
+  // 5xx, because a proxy rewrites a 5xx into an HTML page the settings form
+  // cannot parse. See the catch below.)
+  const switches = await loadAssistantSwitches();
+  if (switches === null) {
+    return apiError("AI is unavailable right now", 403, {
+      errorCode: AI_UNAVAILABLE_ERROR_CODE,
+      reason: "check_failed",
+    });
+  }
+  if (!switches.enabled) {
+    annotate({ action: { name: "ai.test.operator_disabled" } });
+    return apiError("AI is turned off on this server", 403, {
+      errorCode: AI_TEST_MASTER_DISABLED_CODE,
+      reason: "operator_disabled",
+    });
+  }
 
   const rl = await checkRateLimit(`ai-test:${user.id}`, 5, 60_000);
   if (!rl.allowed) return apiError("Too many test requests", 429);
@@ -96,7 +134,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   if (provider.type === "none") {
-    return apiError("No AI provider configured", 422);
+    return apiError("No AI provider configured", 422, {
+      errorCode: AI_PROVIDER_NONE_ERROR_CODE,
+      reason: "no_provider",
+    });
   }
 
   // Meter the probe on the same daily ledger every other AI surface writes to,
@@ -123,7 +164,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
   );
   if (!reservation.allowed) {
     annotate({ action: { name: "ai.test.budget_exceeded" } });
-    return apiError("Daily AI budget exhausted", 429);
+    return apiError("Daily AI budget exhausted", 429, {
+      errorCode: AI_TEST_BUDGET_CODE,
+    });
   }
 
   try {

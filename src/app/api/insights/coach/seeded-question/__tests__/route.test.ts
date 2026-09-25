@@ -15,10 +15,12 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-vi.mock("@/lib/modules/gate", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/modules/gate")>()),
-  requireModuleEnabled: vi.fn().mockResolvedValue({ enabled: true }),
-  resolveModuleMap: vi.fn().mockResolvedValue({}),
+// The `coach` capability decides whether an opener is served at all; pinned
+// here so the route test does not depend on the capability loader's reads.
+const AVAILABLE = { available: true, reason: null, onDeviceAllowed: true };
+const getAiCapability = vi.fn();
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  getAiCapability: (...args: unknown[]) => getAiCapability(...args),
 }));
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
@@ -81,6 +83,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   findUniqueMock.mockResolvedValue({ notificationPrefs: null });
+  getAiCapability.mockResolvedValue(AVAILABLE);
 });
 
 describe("GET /api/insights/coach/seeded-question", () => {
@@ -117,7 +120,24 @@ describe("GET /api/insights/coach/seeded-question", () => {
       score: 58,
       band: "yellow",
     });
+    expect(getAiCapability).toHaveBeenCalledWith("coach");
+    expect((body.data as { ai?: unknown }).ai).toEqual(AVAILABLE);
   });
+
+  it.each(["operator_disabled", "user_disabled", "no_provider"] as const)(
+    "answers { signal: null, ai } for %s without running the detector",
+    async (reason) => {
+      const ai = { available: false, reason, onDeviceAllowed: false };
+      getAiCapability.mockResolvedValue(ai);
+      const res = await callGet(makeReq());
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        data: { signal: unknown; ai: unknown };
+      };
+      expect(body.data).toEqual({ signal: null, ai });
+      expect(detectDerivedBriefingSignals).not.toHaveBeenCalled();
+    },
+  );
 
   it("returns { signal: null } when nothing crosses the gate (neutral fallback)", async () => {
     vi.mocked(detectDerivedBriefingSignals).mockResolvedValue(null);

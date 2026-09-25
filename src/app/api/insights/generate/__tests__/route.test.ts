@@ -23,13 +23,12 @@ vi.mock("@/lib/api-handler", () => ({
   })),
 }));
 
-// v1.4.31 — `requireAssistantSurface()` is gated near the top of
-// the handler. The test mocks the apiHandler wrapper itself out, so
-// flag reads need a deterministic mock at the module boundary.
-vi.mock("@/lib/feature-flags", () => ({
-  requireAssistantSurface: vi.fn(async () => undefined),
-  AssistantDisabledError: class extends Error {},
-}));
+// The `briefing` capability is required near the top of both handlers.
+// The test mocks the apiHandler wrapper itself out, so the gate needs a
+// deterministic mock at the module boundary: available by default, and a
+// refusal where a test says so.
+const requireAiCapability = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/ai/capabilities/gate", () => ({ requireAiCapability }));
 
 const selfContextText = vi.hoisted(() => vi.fn<() => Promise<string | null>>());
 
@@ -172,9 +171,15 @@ import {
   FeaturesPayloadTooLargeError,
 } from "@/lib/insights/features";
 import { annotate } from "@/lib/logging/context";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  requireAiCapability.mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
   // The B5b fallback runner caches "last working provider" per user
   // across calls; tests that assert single-provider error mapping
   // need a fresh cache so the previous test's success doesn't reorder
@@ -980,5 +985,50 @@ describe("GET /api/insights/generate — read-only advisor read", () => {
     );
     const body = (await res.json()) as { data: { hasProvider: boolean } };
     expect(body.data.hasProvider).toBe(true);
+  });
+});
+
+describe("the briefing capability", () => {
+  it.each([
+    ["operator_disabled", 403, "assistant.disabled.briefing"],
+    ["user_disabled", 403, "module.disabled"],
+    ["consent_required", 403, "consent.ai.required"],
+    ["no_provider", 422, "ai.provider.none"],
+  ] as const)(
+    "GET refuses with the envelope for %s before reading the cache or warming",
+    async (reason, status, errorCode) => {
+      requireAiCapability.mockRejectedValue(
+        new AiUnavailableError("briefing", reason),
+      );
+
+      const refused = await (
+        GET as unknown as (req: Request) => Promise<Response>
+      )(new Request("http://localhost/api/insights/generate")).catch(
+        (err: unknown) => err,
+      );
+
+      expect(refused).toBeInstanceOf(AiUnavailableError);
+      expect((refused as AiUnavailableError).status).toBe(status);
+      expect((refused as AiUnavailableError).meta.errorCode).toBe(errorCode);
+      expect(requireAiCapability).toHaveBeenCalledWith("briefing");
+      // Stored briefing text is never read, and nothing is warmed.
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(enqueueForceWarm).not.toHaveBeenCalled();
+    },
+  );
+
+  it("POST refuses before any read or provider work", async () => {
+    requireAiCapability.mockRejectedValue(
+      new AiUnavailableError("briefing", "operator_disabled"),
+    );
+
+    const refused = await POST(jsonRequest({ force: true }) as never).catch(
+      (err: unknown) => err,
+    );
+
+    expect(refused).toBeInstanceOf(AiUnavailableError);
+    expect(requireAiCapability).toHaveBeenCalledWith("briefing");
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
   });
 });

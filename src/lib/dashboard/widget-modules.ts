@@ -13,83 +13,67 @@
  * imports), so this file stays browser-bundle-safe.
  */
 import type { ModuleKey } from "@/lib/modules/registry";
+import { isSurfaceVisible, surfaceModulesOfKind } from "@/lib/modules/surface";
 
 /**
- * Dashboard widget id → toggleable module key. When the user disables the
- * module, the matching widget is forced invisible on both the web `layout`
- * and the iOS `layoutCatalogue`, so the tile/chart never paints. Only the
- * toggleable surfaces appear here; CORE widgets (weight / bp / pulse /
- * bodyFat / bpInTarget and the vital-derived HealthKit metrics) carry NO
- * entry and are never hidden.
+ * Dashboard widget id → toggleable module key. A widget whose module is off
+ * is forced invisible on both the web `layout` and the iOS
+ * `layoutCatalogue`. CORE widgets carry no entry and are never hidden.
  *
- * v1.18.1 (D3) — `medications` graduated from CORE to a toggleable module,
- * so the medication tile now gates off it like the other toggleable widgets.
+ * A view of the one surface map (`widget:*` in `@/lib/modules/surface`), so
+ * the dashboard, the Settings list and every other surface answer from the
+ * same declaration.
  */
-export const WIDGET_MODULE_BY_ID: Partial<Record<string, ModuleKey>> = {
-  mood: "mood",
-  sleep: "sleep",
-  glucose: "glucose",
-  achievements: "achievements",
-  recentWorkouts: "workouts",
-  medications: "medications",
-  // v1.18.0 B1 — recovery-domain HealthKit widgets belong to the recovery
-  // module; the per-night breathing-disturbance widget belongs to sleep.
-  cardioRecovery: "recovery",
-  sixMinuteWalk: "recovery",
-  stairAscentSpeed: "recovery",
-  stairDescentSpeed: "recovery",
-  breathingDisturbances: "sleep",
-  // v1.29 — fluid-intake strip tile, nutrients-store-backed (see
-  // `SUMMARY_TYPE_MODULE.NUTRIENT_WATER` below).
-  waterIntake: "nutrients",
-};
+export const WIDGET_MODULE_BY_ID: Partial<Record<string, ModuleKey>> =
+  surfaceModulesOfKind("widget");
 
 /**
- * Slim-summary keys that belong to a toggleable module. When the module
- * is off the key is stripped from `tiles.summaries` /
- * `tiles.lastSeenByType` (so `metricStates` and the client data-floor
- * gates also drop it) before the snapshot leaves the server. Core vital
- * types are absent here and always pass through.
+ * Summary keys that belong to a toggleable module. When the module is off the
+ * key is stripped from `tiles.summaries` / `tiles.lastSeenByType` (so
+ * `metricStates` and the client data-floor gates drop it too) before the
+ * snapshot leaves the server. Core vital types are absent and always pass.
  *
- * v1.29 — widened from `Partial<Record<MeasurementType, ModuleKey>>` to
- * `Partial<Record<string, ModuleKey>>` so the synthetic `NUTRIENT_WATER`
- * key (a `NutrientIntakeDay`-derived summary, not a real
- * `MeasurementType` — the abandoned `feat/water` branch's parallel
- * `WATER_INTAKE` enum value is deliberately NOT added) can ride the same
- * gate without widening the `MeasurementType` enum itself.
+ * Keyed by string rather than `MeasurementType` because two keys are
+ * synthetic (`NUTRIENT_WATER`, `MOOD_ENTRY`: day totals derived from other
+ * stores). A view of `summary:*` in `@/lib/modules/surface`.
  */
-export const SUMMARY_TYPE_MODULE: Partial<Record<string, ModuleKey>> = {
-  SLEEP_DURATION: "sleep",
-  BLOOD_GLUCOSE: "glucose",
-  // v1.18.0 B1 — recovery-domain HealthKit metrics. The recovery page +
-  // its tiles are the recovery module's surface; when it is off these
-  // device-native signals must drop from the dashboard snapshot too.
-  CARDIO_RECOVERY: "recovery",
-  SIX_MINUTE_WALK_DISTANCE: "recovery",
-  STAIR_ASCENT_SPEED: "recovery",
-  STAIR_DESCENT_SPEED: "recovery",
-  // The HRV fallback series. `METRIC_STATUS_MODULE_OWNERS` already owns this
-  // type for the metric-status / MCP reads, for the reason stated there: a
-  // fallback path must not serve the recovery data the primary type refuses.
-  // The dashboard snapshot gates off THIS map instead, and the entry was
-  // missing — harmless only while the dashboard HRV tile read SDNN alone.
-  // Now that the tile falls back to RMSSD (`pickHrvSummary`), the omission
-  // would hand a recovery-off account a tile built from recovery-owned rows.
-  // `HEART_RATE_VARIABILITY` stays deliberately ungated: SDNN is a plain
-  // vital, and it is what the tile shows whenever the account has it.
-  HRV_RMSSD: "recovery",
-  // Per-night breathing-disturbance index is a sleep-page signal.
-  BREATHING_DISTURBANCES: "sleep",
-  // v1.29 — fluid-intake dashboard tile summary, derived server-side from
-  // `NutrientIntakeDay` (nutrient="water", summed across sources). Gated
-  // on the `nutrients` module like the rest of that store's surfaces.
-  NUTRIENT_WATER: "nutrients",
-  // Mood is a `MoodEntry`-derived summary, not a `MeasurementType`, so it
-  // rides the same synthetic-key route as `NUTRIENT_WATER`. Gated on the
-  // `mood` module: turning the module off must drop the dashboard card on
-  // every client, not just hide the web widget.
-  MOOD_ENTRY: "mood",
-};
+export const SUMMARY_TYPE_MODULE: Partial<Record<string, ModuleKey>> =
+  surfaceModulesOfKind("summary");
+
+/**
+ * Force every widget whose owning module is off, and every id in `alsoHide`,
+ * to invisible (both `visible` and `tileVisible`). Order is kept so a
+ * re-enable restores the saved position.
+ *
+ * A projection for RENDERING only. The stored `dashboardWidgetsJson` is never
+ * written through this: `GET /api/dashboard/widgets` returns the stored
+ * layout as saved, because Settings edits and re-saves exactly that value,
+ * and a masked read saved back would switch the widget off for good. The
+ * dashboard snapshot applies it server-side; the dashboard's legacy (no
+ * snapshot) path applies it in the browser, so both feeds paint the same.
+ */
+export function hideModuleWidgets<
+  L extends {
+    widgets: ReadonlyArray<{
+      id: string;
+      visible: boolean;
+      tileVisible?: boolean;
+    }>;
+  },
+>(
+  layout: L,
+  modules: Partial<Record<ModuleKey, boolean>> | null | undefined,
+  alsoHide: ReadonlySet<string> = new Set(),
+): L {
+  return {
+    ...layout,
+    widgets: layout.widgets.map((w) =>
+      isSurfaceVisible(`widget:${w.id}`, modules) && !alsoHide.has(w.id)
+        ? w
+        : { ...w, visible: false, tileVisible: false },
+    ),
+  };
+}
 
 /**
  * The summary types a module map turns off. Lifted out of

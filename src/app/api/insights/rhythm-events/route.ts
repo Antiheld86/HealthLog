@@ -21,13 +21,12 @@
  *
  * Follows the `metric-status` / `derived` route precedent: `apiHandler`
  * wrapper, cookie OR Bearer auth, `userId` narrowed from the session
- * (never a query field), the `insightStatus` assistant-surface gate (no AI
- * provider call — this is a pure DB read).
+ * (never a query field). No AI gate and no module gate: this is a pure DB
+ * read of device data.
  */
 import { apiSuccess } from "@/lib/api-response";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
-import { requireModuleEnabled } from "@/lib/modules/gate";
 import { prisma } from "@/lib/db";
 import { EVENT_MEASUREMENT_TYPES } from "@/lib/validations/measurement";
 import type { MeasurementType } from "@/generated/prisma/client";
@@ -46,9 +45,9 @@ export const GET = apiHandler(async () => {
   // v1.37.0 — MANAGE-level read: computed over the whole record, with no
   // provider anywhere on the path.
   const { user } = await requireRecordAuth("manage", "record");
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-  // A pure read of the device's own verdicts, so no assistant-surface gate.
+  // A pure read of the device's own verdicts: no AI gate and no module gate.
+  // The `insights` module is the AI analysis opt-out, and nothing here was
+  // written by a model.
 
   const rows = await prisma.measurement.findMany({
     where: {

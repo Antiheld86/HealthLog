@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Droplets } from "lucide-react";
 
@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 import { CycleRing } from "./cycle-ring";
 import { PHASE_HUE } from "./phase-tokens";
-import { localYmd, useCycleCalendar } from "./use-cycle";
+import { useCycleRingCalendar } from "./use-cycle";
 
 /**
  * v1.15.3 — the compact cycle ring as a WELLNESS-STRIP element.
@@ -36,22 +36,12 @@ import { localYmd, useCycleCalendar } from "./use-cycle";
  * strip (no gap, no placeholder).
  */
 
-/** YYYY-MM-DD for `n` days from now in the local tz (shares `localYmd`). */
-function shiftToday(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return localYmd(d);
-}
-
 export function CycleRingTile({ className }: { className?: string }) {
   const { t } = useTranslations();
 
   // Mirror the cycle-view + summary-card window so the cache key is shared —
   // no extra request when the user opens the cycle page in the same session.
-  const from = useMemo(() => shiftToday(-90), []);
-  const to = useMemo(() => shiftToday(180), []);
-
-  const calendar = useCycleCalendar(from, to);
+  const calendar = useCycleRingCalendar();
   // The server already resolved the ring: cycle day, phase, and the arc
   // proportions (including the profile-derived idealized ring a low-data
   // tracker gets). The tile renders it.

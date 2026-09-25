@@ -56,6 +56,7 @@ import {
   type InsightStatusMetric,
   type InsightStatusGeneratePayload,
 } from "@/lib/jobs/insight-status-generate-shared";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import {
   mayDispatchProviderWork,
   withProviderWorkAuthority,
@@ -115,6 +116,19 @@ async function dispatchInsightStatusGenerate(
   payload: InsightStatusGeneratePayload,
   generators: Record<InsightStatusMetric, StatusGenerator> = GENERATORS,
 ): Promise<void> {
+  // The capability, under the job's own authority, before any generator
+  // builds a snapshot. The route that enqueued this checked it too, but a
+  // switch, the AI analysis opt-out or a consent can change while the job
+  // waits in the queue.
+  const capability = await aiCapabilityForJob(payload.userId, "statusText");
+  if (!capability.available) {
+    annotate({
+      action: { name: "insights.status.generate.skipped" },
+      meta: { metric: payload.metric, reason: capability.reason },
+    });
+    return;
+  }
+
   // v1.8.7.1 — a `metric:<METRIC_ID>` scope routes to the generic
   // HealthKit-metric generator rather than one of the seven specialised
   // ones. The generic generator applies its own empty-data guard, so a

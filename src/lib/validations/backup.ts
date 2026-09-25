@@ -949,7 +949,11 @@ const appSettingsBackupSchema = z
     assistantCoachEnabled: z.boolean(),
     assistantBriefingEnabled: z.boolean(),
     assistantInsightStatusEnabled: z.boolean(),
-    assistantCorrelationsEnabled: z.boolean(),
+    // Optional: a backup written before the switch existed carries none, and
+    // restores it at its default. A backup from before the Correlations switch
+    // was retired still carries that key; `passthrough` keeps it harmless and
+    // the restore writes nothing for it.
+    assistantDocumentAiEnabled: z.boolean().optional(),
     moduleAvailabilityJson: z.unknown().nullable(),
     documentMaxFileBytes: z.number().int(),
     documentQuotaBytes: z.string().regex(/^\d+$/),

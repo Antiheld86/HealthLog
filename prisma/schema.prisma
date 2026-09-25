@@ -860,6 +860,9 @@ model User {
   // v1.11.0 W3 — one durable period-narrative row per (period, locale).
   // Delete/regenerate-clean; the generated prose is AES-256-GCM at rest.
   insightNarratives                         InsightNarrative[]
+  // v1.39.0 — the per-metric status notes, one encrypted row per
+  // (metric, locale). A regenerable cache; it used to live in `audit_logs`.
+  insightStatusCaches                       InsightStatusCache[]
   // v1.31.0 — the data-arrival spine's durable per-day reaction marker. One
   // row per (kind, local day); the unique index IS the once-per-kind-per-day
   // claim every reaction surface reads. Retained 14 days.
@@ -1738,6 +1741,21 @@ enum MeasurementSource {
   // mirrors this exact spelling so the `/api/sync/changes` delta feed decodes
   // the rows. Feeds Workout rows only — Strava exposes no daily metrics.
   STRAVA
+  // v1.38.x — measurements pushed in through a `measurements:write` Bearer
+  // token: a home-automation bridge, a smart scale's own uploader, any
+  // third-party sender the user pointed at their own record. Like TELEGRAM
+  // and MCP this is a user-driven write rather than a server-owned
+  // integration, but it does not enter through the cookie/Bearer client
+  // write path, so it carries its own source label — a hand-typed reading
+  // and a bridged one were otherwise indistinguishable after the fact. Its
+  // own value also gives those writes an isolated idempotency namespace
+  // `(userId, type, EXTERNAL, externalId)`. No client may NAME it: the batch
+  // + single-POST surfaces refuse any body that asserts a source under this
+  // scope, and the value is resolved server-side. Unlike the server-owned
+  // sources above the rows stay value-editable, since the hardware is the
+  // user's own. iOS DTO must mirror this exact spelling so the
+  // /api/sync/changes delta feed decodes the rows.
+  EXTERNAL
 
   @@map("measurement_source")
 }
@@ -4751,24 +4769,24 @@ model AppSettings {
   // 32 chars) plus headroom.
   defaultUserTimezone String? @map("default_user_timezone") @db.VarChar(64)
 
-  // v1.4.31 — Assistant-surface operator feature flags. The master
-  // gates every LLM-driven surface app-wide; four sub-flags carve
-  // the visibility cut per surface (Coach drawer + chat, Daily
-  // Briefing + advisor, per-metric status cards, correlation
-  // narration). Defaults preserve the
-  // v1.4.30 behaviour (every surface visible) so upgrades require
-  // no admin action. The runtime resolver in
-  // `src/lib/feature-flags/index.ts` forces every sub-flag false
-  // when the master is off. Locked per
-  // `.planning/RESPONSE-TO-IOS-TEAM-2026-05-16.md` §3 R5: the same
-  // flag matrix gates server-routed AND iOS on-device surfaces, so
-  // operators can opt out of every assistant surface regardless of
-  // where the model runs.
+  // The operator's assistant switches. The master stops every AI capability
+  // (model calls and model-written text alike); the four sub-switches each
+  // cover a cost or egress profile: the Coach, the daily briefing and period
+  // narratives, per-reading status notes (status text, workout notes, reaction
+  // lines) and reading documents (the document vault, lab scans, medication
+  // extraction). They never gate data: a switch that is off hides and stops AI
+  // work, and every measurement, score and statistic keeps loading. Resolved
+  // with every other AI layer in `src/lib/ai/capabilities/`, and published per
+  // record on `GET /api/auth/me` as `ai`. Defaults keep every capability on so
+  // an upgrade needs no admin action.
+  //
+  // The Coach switch is also the operator's only Coach switch: the Coach key in
+  // `moduleAvailabilityJson` was folded into it (migration 0343) and is ignored.
   assistantEnabled              Boolean @default(true) @map("assistant_enabled")
   assistantCoachEnabled         Boolean @default(true) @map("assistant_coach_enabled")
   assistantBriefingEnabled      Boolean @default(true) @map("assistant_briefing_enabled")
   assistantInsightStatusEnabled Boolean @default(true) @map("assistant_insight_status_enabled")
-  assistantCorrelationsEnabled  Boolean @default(true) @map("assistant_correlations_enabled")
+  assistantDocumentAiEnabled    Boolean @default(true) @map("assistant_document_ai_enabled")
 
   // v1.18.0 — operator-level server-wide module availability. A DISABLED
   // allowlist mirroring the per-user `User.modulePreferencesJson`: absent /
@@ -6722,6 +6740,55 @@ model InsightNarrative {
   @@map("insight_narratives")
 }
 
+// v1.39.0 — the per-metric status notes ("Status notes"): what a model wrote
+// about one metric for one person in one language, and the fingerprints that
+// let the next run skip the model when nothing changed.
+//
+// One row per (user, metric, locale), upserted in place. Until v1.39.0 these
+// notes were appended to `audit_logs` as plaintext JSON, one row per metric per
+// day, mixed with the security trail; migration 0344 dropped those rows, so the
+// first night after the upgrade regenerates every note once.
+//
+// A regenerable cache, not a record: excluded from backups, deleted by "Delete
+// All Data", purged when the person withdraws AI consent, and never served
+// while the `statusText` capability is unavailable.
+model InsightStatusCache {
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  /// The status scope: `weight`, `blood-pressure`, `general`, …, or a prefixed
+  /// generic scope (`metric:<ID>`, `derived-score:<ID>`, `biomarker:<id>`).
+  metric         String
+  /// The UI locale the note was written in.
+  locale         String
+  /// AES-256-GCM ciphertext of the note. Null while the row only carries a
+  /// negative-cache window (a generation that stalled before any note existed).
+  textEncrypted  Bytes?    @map("text_encrypted")
+  /// AES-256-GCM ciphertext of per-item notes as JSON, for a card that carries
+  /// them (medication compliance: one line per medication). Null otherwise.
+  itemsEncrypted Bytes?    @map("items_encrypted")
+  /// Cheap fingerprint of the salient inputs (count + newest reading).
+  inputHash      String?   @map("input_hash")
+  /// Fingerprint of the full data snapshot the note was written from.
+  snapshotHash   String?   @map("snapshot_hash")
+  /// The person's local YYYY-MM-DD the note counts as current for.
+  dateKey        String    @map("date_key")
+  /// When the note was written, or last re-dated by an unchanged-data run.
+  generatedAt    DateTime? @map("generated_at")
+  /// Negative cache: while in the future, a read does not enqueue another
+  /// generation. Cleared when a note is written.
+  retryAt        DateTime? @map("retry_at")
+  /// Why the last generation served the deterministic line instead of a note:
+  /// `timeout` | `error` | `screened`. Set together with `retryAt`.
+  negativeReason String?   @map("negative_reason")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, metric, locale])
+  @@map("insight_status_caches")
+}
+
 // ─── Data-arrival spine (v1.31.0) ─────────────────────────────
 //
 // One row per (user, arrival kind, local day). The row is written by the
@@ -7061,9 +7128,14 @@ model MenstrualCycle {
 
   /// Per-row IANA timezone the date strings are anchored to (NULL =
   /// legacy Europe/Berlin), mirroring MoodEntry.tz.
-  tz          String?
-  syncVersion Int       @default(0) @map("sync_version")
-  deletedAt   DateTime? @map("deleted_at")
+  tz             String?
+  syncVersion    Int       @default(0) @map("sync_version")
+  deletedAt      DateTime? @map("deleted_at")
+  /// The start that folded this one in (a start logged a few days earlier is
+  /// the same period entered out of order). Set only on the soft-deleted,
+  /// folded row; removing the absorbing start restores every row naming it
+  /// (`removeCycleStartedOn`). Cleared when the row is live again.
+  absorbedIntoId String?   @map("absorbed_into_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

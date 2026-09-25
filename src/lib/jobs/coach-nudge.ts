@@ -13,9 +13,14 @@
  *   1. Operator kill-switch via `getAssistantFlags().coach` — the
  *      master assistant switch forces this off too.
  *   2. Per-user `disableCoach: false` — no Coach surface, no nudge.
- *   3. A working provider (`userRowHasProviderCredential`, including
- *      the operator's shared key) — a nudge into a Coach that cannot
- *      answer is worse than silence.
+ *   3. The `coach` capability for the user (`aiCapabilityForJob`): the
+ *      operator's switches, the person's Coach switch, provider-work
+ *      authority and one provider-presence definition (the operator's
+ *      shared key and the central Codex included). A nudge into a Coach
+ *      that cannot answer is worse than silence. The one reason that does
+ *      not stop the nudge is a missing consent receipt: the deterministic
+ *      template needs no model, and the Coach it invites the user into asks
+ *      for consent itself.
  *   4. Per-user opt-out: `notificationPrefs.coach.nudgesEnabled`
  *      (default ON; Settings → Notifications). v1.16.5 adds per-group
  *      toggles underneath (medication / vitals / routine) — a disabled
@@ -78,7 +83,8 @@
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import { getAssistantFlags } from "@/lib/feature-flags";
-import { userRowHasProviderCredential } from "@/lib/ai/provider";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
+import { annotate } from "@/lib/logging/context";
 import {
   getEffectiveRange,
   type ThresholdOverridesJson,
@@ -201,6 +207,12 @@ export interface CoachNudgeSummary {
   persisted: number;
   skippedOptedOut: number;
   skippedNoProvider: number;
+  /**
+   * The `coach` capability is unavailable for a reason other than a missing
+   * provider or consent (operator switch, Coach switch, authority, a failed
+   * check).
+   */
+  skippedUnavailable: number;
   skippedRecentNudge: number;
   /**
    * v1.25.0 — anti-nag: the user talked to the Coach within the last ~24 h,
@@ -806,6 +818,7 @@ export async function runCoachNudgeTick(
     persisted: 0,
     skippedOptedOut: 0,
     skippedNoProvider: 0,
+    skippedUnavailable: 0,
     skippedRecentNudge: 0,
     skippedRecentEngagement: 0,
     skippedNoTrigger: 0,
@@ -818,8 +831,7 @@ export async function runCoachNudgeTick(
   const flags = await getAssistantFlags();
   if (!flags.coach) return summary;
 
-  // Gate 2 — per-user Coach opt-out, plus the credential-presence
-  // columns gate 3 needs (evaluated locally, never decrypted).
+  // Gate 2 — per-user Coach opt-out.
   const users = await prisma.user.findMany({
     where: { disableCoach: false },
     select: {
@@ -834,27 +846,9 @@ export async function runCoachNudgeTick(
       gender: true,
       thresholdsJson: true,
       timezone: true,
-      aiProvider: true,
-      aiProviderChain: true,
-      aiAnthropicKeyEncrypted: true,
-      aiLocalKeyEncrypted: true,
-      aiOpenaiKeyEncrypted: true,
-      aiBaseUrl: true,
-      aiModel: true,
-      aiCompatBaseUrl: true,
-      aiCompatModel: true,
-      codexConnectionStatus: true,
-      codexAccessTokenEncrypted: true,
-      codexRefreshTokenEncrypted: true,
     },
   });
   if (users.length === 0) return summary;
-
-  const settings = await prisma.appSettings.findUnique({
-    where: { id: "singleton" },
-    select: { adminAiKeyEncrypted: true },
-  });
-  const adminKeyConfigured = !!settings?.adminAiKeyEncrypted;
 
   for (const user of users) {
     summary.candidatesScanned += 1;
@@ -873,9 +867,16 @@ export async function runCoachNudgeTick(
         continue;
       }
 
-      // Gate 3 — a Coach without a provider cannot answer the nudge.
-      if (!userRowHasProviderCredential(user, adminKeyConfigured)) {
-        summary.skippedNoProvider += 1;
+      // Gate 3 — the `coach` capability. A Coach that cannot answer gets no
+      // nudge; a missing consent receipt alone still gets the template.
+      const coach = await aiCapabilityForJob(user.id, "coach");
+      if (!coach.available && coach.reason !== "consent_required") {
+        if (coach.reason === "no_provider") summary.skippedNoProvider += 1;
+        else summary.skippedUnavailable += 1;
+        annotate({
+          action: { name: "coach.nudge.skipped" },
+          meta: { reason: coach.reason },
+        });
         continue;
       }
 

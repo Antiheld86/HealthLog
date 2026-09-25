@@ -21,6 +21,7 @@ import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
+import { loadDocument } from "@/lib/navigation/load-document";
 
 /**
  * Settings → Advanced.
@@ -225,7 +226,7 @@ function AccountDeleteCard() {
       // Leave `deleting` set so the confirm button keeps its pending
       // state through the redirect — the row is gone, nothing to undo.
       setTimeout(() => {
-        window.location.href = "/auth/login";
+        loadDocument("/auth/login");
       }, 1_500);
     } catch {
       setMsg(t("settings.deleteAccountFailed"));

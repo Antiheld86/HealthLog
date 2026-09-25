@@ -1,52 +1,58 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 
+import { ModuleDisabledNotice } from "@/components/layout/module-disabled-notice";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
+import { useTranslations } from "@/lib/i18n/context";
 import type { ModuleKey } from "@/lib/modules/registry";
 
 /**
- * v1.25.11 (#148) — client gate for an Appearance subpage
- * (`/settings/layout/<module>`).
+ * Client gate for an Appearance subpage (`/settings/layout/<module>`).
  *
- * A module's subpage may be reached by direct URL even when the user has the
- * module turned off. This wrapper fails OPEN: it renders the section unless the
- * resolved `useAuth().user.modules` map has the gate key explicitly `false`,
- * in which case it bounces back to the hub (`/settings/layout`).
+ * The subpage is a real URL a person can land on (a bookmark, the hub's own
+ * link, a link somebody sent) with its module switched off. It answers in
+ * place with the module notice, like every module page (`ModulePageGate`),
+ * rather than bouncing to the hub, which dropped the reader somewhere else
+ * without saying why. The notice names the reason from `moduleAccess` and
+ * offers Settings, Modules only when the record's own switch is off.
  *
- * The gate is hydration-stable: `useMounted()` returns `false` during SSR AND
- * the first client paint, so the first render ALWAYS shows the section
- * (matching the server HTML); the real check applies once, after hydration, as
- * an ordinary client update. The redirect is a client-only effect, so it never
- * diverges the initial render and cannot trigger a React #418 mismatch.
+ * Fails OPEN and is hydration-stable: `useMounted()` is `false` during SSR
+ * and the first client paint, so the first render always shows the section
+ * (matching the server HTML); the module check applies once, after
+ * hydration, as an ordinary client update.
  *
- * Groups with no `moduleGate` (dashboard / insights / vorsorge) pass
- * `moduleGate={undefined}` and always render.
+ * Groups the surface map gives no owner (dashboard / insights / vorsorge)
+ * pass `moduleKey={undefined}` and always render.
  */
 export function LayoutModuleGate({
-  moduleGate,
+  moduleKey,
   children,
 }: {
-  moduleGate?: ModuleKey;
+  moduleKey?: ModuleKey;
   children: React.ReactNode;
 }) {
   const hydrated = useMounted();
   const { user } = useAuth();
-  const router = useRouter();
+  const { t } = useTranslations();
 
   const disabled =
-    hydrated &&
-    moduleGate !== undefined &&
-    user?.modules?.[moduleGate] === false;
+    hydrated && moduleKey !== undefined && user?.modules?.[moduleKey] === false;
 
-  React.useEffect(() => {
-    if (disabled) {
-      router.replace("/settings/layout");
-    }
-  }, [disabled, router]);
-
-  if (disabled) return null;
-  return <>{children}</>;
+  if (!disabled || moduleKey === undefined) return <>{children}</>;
+  return (
+    <ModuleDisabledNotice
+      moduleKey={moduleKey}
+      action={
+        <Button asChild size="sm">
+          <Link href="/settings/modules" data-slot="module-off-open-settings">
+            {t("moduleOff.openModules")}
+          </Link>
+        </Button>
+      }
+    />
+  );
 }

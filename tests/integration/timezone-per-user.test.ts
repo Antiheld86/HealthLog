@@ -28,6 +28,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 process.env.ENCRYPTION_KEY ??=
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
+import { invalidateServerDefaultTimezone } from "@/lib/tz/resolver";
 import { cookieJar, headerJar } from "./mock-next-headers";
 import { getPrismaClient, truncateAllTables } from "./setup";
 
@@ -164,6 +165,36 @@ describe("per-user timezone — Pacific/Auckland end-to-end", () => {
       data: { timezone?: string } | null;
     };
     expect(body.data?.timezone).toBe("Pacific/Auckland");
+  });
+
+  // A stored zone the server cannot use falls back to the instance
+  // default for every server-side day cut. `/api/auth/me` reports that
+  // same resolved zone, so a client (the charts' day buckets among them)
+  // never cuts days in a different zone than the server did.
+  it("GET /api/auth/me reports the resolved zone when the stored one is unusable", async () => {
+    const user = await seedAucklandUser();
+    const prisma = getPrismaClient();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { timezone: "" },
+    });
+    await prisma.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", defaultUserTimezone: "Asia/Kolkata" },
+      update: { defaultUserTimezone: "Asia/Kolkata" },
+    });
+    invalidateServerDefaultTimezone();
+    try {
+      const { GET } = await import("@/app/api/auth/me/route");
+      const res = await GET();
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        data: { timezone?: string } | null;
+      };
+      expect(body.data?.timezone).toBe("Asia/Kolkata");
+    } finally {
+      invalidateServerDefaultTimezone();
+    }
   });
 
   it("PUT /api/auth/me/timezone rejects an invalid IANA zone with 422", async () => {

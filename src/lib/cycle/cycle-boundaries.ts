@@ -21,7 +21,7 @@
  */
 import { prisma } from "@/lib/db";
 import { addDays, dayDiff } from "./day-math";
-import { HARD_CYCLE_MIN } from "./types";
+import { HARD_CYCLE_MIN, PERIOD_MAX } from "./types";
 import type {
   FlowLevel,
   Prisma,
@@ -46,6 +46,27 @@ export interface MovedAnchors {
   priorLengthAfter?: number | null;
   openedEndDateBefore?: string | null;
   openedEndDateAfter?: string | null;
+  /**
+   * A cycle that started a few days AFTER the opened date and was folded into
+   * it: the period began earlier than first recorded, not twice.
+   */
+  absorbedCycleId?: string;
+  absorbedStartDate?: string;
+}
+
+/**
+ * Whether a cycle starting at `laterStart` is the same period as one starting
+ * at `date`, just recorded late: it begins within a maximum-length period
+ * after `date`. Two starts that close together are one period entered out of
+ * order, never two cycles, and keeping both leaves a one- or two-day cycle
+ * that corrupts every length after it.
+ */
+export function isSamePeriodStartedEarlier(
+  date: string,
+  laterStart: string,
+): boolean {
+  const gap = dayDiff(laterStart, date);
+  return gap > 0 && gap < PERIOD_MAX;
 }
 
 /**
@@ -71,6 +92,30 @@ export async function openCycleAt(
 ): Promise<{ cycleId: string; moved: MovedAnchors }> {
   const moved: MovedAnchors = {};
 
+  // A start recorded a few days after this date is the same period, entered
+  // in the other order (day two first, day one remembered later). Fold it
+  // into the start being opened instead of leaving a cycle a day or two long
+  // in front of it. What that row knew beyond its start carries over below.
+  const following = await db.menstrualCycle.findFirst({
+    where: { userId, deletedAt: null, startDate: { gt: date } },
+    orderBy: { startDate: "asc" },
+    select: {
+      id: true,
+      startDate: true,
+      periodEndDate: true,
+      ovulationDate: true,
+      ovulationConfirmed: true,
+    },
+  });
+  const absorbed =
+    following && isSamePeriodStartedEarlier(date, following.startDate)
+      ? following
+      : null;
+  if (absorbed) {
+    moved.absorbedCycleId = absorbed.id;
+    moved.absorbedStartDate = absorbed.startDate;
+  }
+
   // Close the prior open cycle: its end is the day before this start.
   const prior = await db.menstrualCycle.findFirst({
     where: { userId, deletedAt: null, startDate: { lt: date } },
@@ -93,15 +138,43 @@ export async function openCycleAt(
     });
   }
 
+  const carried = absorbed
+    ? {
+        ...(absorbed.periodEndDate
+          ? { periodEndDate: absorbed.periodEndDate }
+          : {}),
+        ...(absorbed.ovulationDate
+          ? {
+              ovulationDate: absorbed.ovulationDate,
+              ovulationConfirmed: absorbed.ovulationConfirmed,
+            }
+          : {}),
+      }
+    : {};
   const cycle = await db.menstrualCycle.upsert({
     where: { userId_startDate: { userId, startDate: date } },
-    create: { userId, startDate: date, tz, isPredicted: false },
+    create: { userId, startDate: date, tz, isPredicted: false, ...carried },
     update: {
       deletedAt: null,
+      absorbedIntoId: null,
       isPredicted: false,
+      ...carried,
       syncVersion: { increment: 1 },
     },
   });
+
+  // The folded start is soft-deleted and names the start that absorbed it,
+  // so taking this start back (a mis-tap) can give it back.
+  if (absorbed) {
+    await db.menstrualCycle.update({
+      where: { id: absorbed.id },
+      data: {
+        deletedAt: new Date(),
+        absorbedIntoId: cycle.id,
+        syncVersion: { increment: 1 },
+      },
+    });
+  }
 
   // Re-anchor the FOLLOWING neighbour's side of the boundary.
   const next = await db.menstrualCycle.findFirst({
@@ -120,9 +193,56 @@ export async function openCycleAt(
         syncVersion: { increment: 1 },
       },
     });
+  } else if (cycle.endDate != null || cycle.lengthDays != null) {
+    // With nothing after it the cycle is open. A re-tapped start whose row
+    // still carries an end from a successor that no longer exists (the
+    // one-day cycles an earlier rule left in front of a real start, once
+    // that start is folded in) would otherwise stay closed on a stale date.
+    moved.openedEndDateBefore = cycle.endDate;
+    moved.openedEndDateAfter = null;
+    await db.menstrualCycle.update({
+      where: { id: cycle.id },
+      data: { endDate: null, lengthDays: null, syncVersion: { increment: 1 } },
+    });
   }
 
+  // The days between this start and the next one belong to this cycle now.
+  // A start back-filled into the middle of an existing cycle used to leave
+  // them attributed to the cycle before it.
+  await attributeDaysToCycle(
+    db,
+    userId,
+    cycle.id,
+    date,
+    next?.startDate ?? null,
+  );
+
   return { cycleId: cycle.id, moved };
+}
+
+/**
+ * Point every live day-log in `[from, until)` at `cycleId` (open-ended when
+ * `until` is null), bumping `syncVersion` only on rows whose attribution
+ * actually changes so the sync feed does not re-pull untouched days.
+ */
+async function attributeDaysToCycle(
+  db: CycleDb,
+  userId: string,
+  cycleId: string | null,
+  from: string,
+  until: string | null,
+): Promise<void> {
+  await db.cycleDayLog.updateMany({
+    where: {
+      userId,
+      deletedAt: null,
+      date: { gte: from, ...(until ? { lt: until } : {}) },
+      ...(cycleId === null
+        ? { cycleId: { not: null } }
+        : { OR: [{ cycleId: null }, { cycleId: { not: cycleId } }] }),
+    },
+    data: { cycleId, syncVersion: { increment: 1 } },
+  });
 }
 
 /**
@@ -205,6 +325,22 @@ export async function ensureCycleForBleedingDay(
     ) {
       return null;
     }
+    // The same judgement looking forward. A logged start a few days later is
+    // this period entered out of order, and `openCycleAt` folds it in. One
+    // further out but still inside the hard minimum is neither the same
+    // period nor a cycle of its own, so nothing is inferred from the flow.
+    const following = await db.menstrualCycle.findFirst({
+      where: { userId, deletedAt: null, startDate: { gt: date } },
+      orderBy: { startDate: "asc" },
+      select: { startDate: true },
+    });
+    if (
+      following &&
+      dayDiff(following.startDate, date) < HARD_CYCLE_MIN &&
+      !isSamePeriodStartedEarlier(date, following.startDate)
+    ) {
+      return null;
+    }
     const { cycleId } = await openCycleAt(db, userId, date, tz);
     return cycleId;
   });
@@ -216,13 +352,21 @@ export async function ensureCycleForBleedingDay(
  * body behind every way of taking a period start back: deleting the day-log
  * that opened it, clearing that day's flow, and deleting the cycle itself.
  *
+ * A start this one folded in when it was opened (a later start within one
+ * period, see `openCycleAt`) comes back: the earlier start was the mistake,
+ * so the later one was the real first day all along.
+ *
  * Returns null when no live cycle starts on that date.
  */
 export async function removeCycleStartedOn(
   db: CycleDb,
   userId: string,
   date: string,
-): Promise<{ cycleId: string; reanchored: ReanchoredCycle | null } | null> {
+): Promise<{
+  cycleId: string;
+  reanchored: ReanchoredCycle | null;
+  restoredCycleIds: string[];
+} | null> {
   const opened = await db.menstrualCycle.findFirst({
     where: { userId, deletedAt: null, startDate: date },
     select: { id: true },
@@ -233,9 +377,61 @@ export async function removeCycleStartedOn(
     where: { id: opened.id },
     data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
   });
+  // Give back the starts it folded in, before any boundary is re-derived, so
+  // the cycle before this one closes against them rather than reopening.
+  const restored = await db.menstrualCycle.findMany({
+    where: { userId, absorbedIntoId: opened.id, deletedAt: { not: null } },
+    orderBy: { startDate: "asc" },
+    select: { id: true, startDate: true },
+  });
+  for (const row of restored) {
+    await db.menstrualCycle.update({
+      where: { id: row.id },
+      data: {
+        deletedAt: null,
+        absorbedIntoId: null,
+        syncVersion: { increment: 1 },
+      },
+    });
+  }
+  const reanchored = await reanchorAfterRemovedStart(db, userId, date);
+  // The removed cycle's days go back to the cycle before it (or to none).
+  const prior = await db.menstrualCycle.findFirst({
+    where: { userId, deletedAt: null, startDate: { lt: date } },
+    orderBy: { startDate: "desc" },
+    select: { id: true },
+  });
+  await db.cycleDayLog.updateMany({
+    where: { userId, cycleId: opened.id },
+    data: { cycleId: prior?.id ?? null, syncVersion: { increment: 1 } },
+  });
+  // A restored start owns its span again, and its own end is re-derived from
+  // whatever was logged after it while it was folded.
+  for (const row of restored) {
+    const next = await db.menstrualCycle.findFirst({
+      where: { userId, deletedAt: null, startDate: { gt: row.startDate } },
+      orderBy: { startDate: "asc" },
+      select: { startDate: true },
+    });
+    await db.menstrualCycle.update({
+      where: { id: row.id },
+      data: {
+        endDate: next ? addDays(next.startDate, -1) : null,
+        lengthDays: next ? dayDiff(next.startDate, row.startDate) : null,
+      },
+    });
+    await attributeDaysToCycle(
+      db,
+      userId,
+      row.id,
+      row.startDate,
+      next?.startDate ?? null,
+    );
+  }
   return {
     cycleId: opened.id,
-    reanchored: await reanchorAfterRemovedStart(db, userId, date),
+    reanchored,
+    restoredCycleIds: restored.map((row) => row.id),
   };
 }
 

@@ -44,6 +44,25 @@ vi.mock("@/lib/db", () => ({
     auditLog: { deleteMany: vi.fn() },
   },
 }));
+// The `briefing` capability is available in these fixtures; the refusal
+// path has its own test in comprehensive-generate-force.test.ts.
+// The wire re-check (`aiEgressRefusal`) passes in these fixtures; its refusal
+// arm has its own test in comprehensive-budget-refusal.test.ts.
+vi.mock("@/lib/ai/capabilities/egress", () => ({
+  aiEgressRefusal: vi.fn(async () => null),
+}));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: vi.fn(async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  })),
+  aiCapabilityToServe: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
+}));
 vi.mock("@/lib/ai/provider", () => ({
   resolveProviderChain: (...a: unknown[]) => resolveProviderChain(...a),
   resolveProvider: (...a: unknown[]) => resolveProvider(...a),

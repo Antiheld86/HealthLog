@@ -28,13 +28,14 @@
  * mapped kind OR the superset `ai_full` grant satisfies the gate.
  */
 import { latestActiveReceipt } from "@/lib/consent/receipts";
-import { documentAutoReadEnabled } from "@/lib/documents/document-settings";
 import type { ConsentKind } from "@/lib/validations/consent";
 import type { ProviderChainResolved } from "@/lib/ai/provider-runner";
 
 /**
- * The two AI surfaces that egress PHI. Each maps to the consent kind the iOS
- * client collects for it; `ai_full` (the master grant) satisfies either.
+ * The two AI surfaces that egress PHI through a chain. Each maps to the consent
+ * kind the iOS client collects for it; `ai_full` (the master grant) satisfies
+ * either. Reading documents has its own kind (`ai_extraction`), checked by the
+ * capability egress re-check rather than here.
  */
 export type ConsentSurface = "coach" | "insights";
 
@@ -51,7 +52,7 @@ const SERVER_MANAGED_PROVIDER_TYPES: ReadonlySet<string> = new Set([
 
 /**
  * Error thrown when an external-LLM egress on a server-managed key is
- * attempted without an active consent receipt. Mirrors `AssistantDisabledError`
+ * attempted without an active consent receipt. Mirrors the AI capability refusal
  * so the api-handler renders the same 403 envelope shape the iOS client
  * already branches on:
  *
@@ -141,7 +142,11 @@ export async function assertConsentForChain(args: {
  * AI routes call the single resolved provider directly (no runner cascade), so
  * the exact egress is the picked provider. A `local` pick never leaves the
  * machine and stays ungated; EVERY external pick (codex, BYOK openai/anthropic,
- * the operator's admin key) requires an active document-class consent receipt.
+ * the operator's admin key) requires an active extraction receipt
+ * (`ai_extraction` or `ai_full`). The check itself runs through the capability
+ * egress re-check (`aiEgressRefusal` in `@/lib/ai/capabilities/egress`), which
+ * reads the receipt kinds from the capability table; the auto-read toggle is a
+ * trigger, never the consent, so a revoked receipt wins over a toggle left on.
  */
 const LOCAL_ONLY_PROVIDER_TYPES: ReadonlySet<string> = new Set(["local"]);
 
@@ -152,34 +157,4 @@ const LOCAL_ONLY_PROVIDER_TYPES: ReadonlySet<string> = new Set(["local"]);
  */
 export function isExternalDocumentEgress(providerType: string): boolean {
   return !LOCAL_ONLY_PROVIDER_TYPES.has(providerType);
-}
-
-/**
- * Enforce the document-class consent precondition for the provider that will
- * actually receive the document. No-op for a `local` pick (nothing leaves the
- * machine); for any external pick, throw `ConsentRequiredError` unless an active
- * receipt of the surface's mapped kind (or `ai_full`) is on file.
- *
- * ONE relaxation: the per-user `documentsAutoAiRead` opt-in. Flipping it ON is
- * itself the standing consent act (the toggle write also mints an `ai_full`
- * receipt for the audit trail), so the gate short-circuits an external pick when
- * it is ON — that is what removes the per-document friction ("upload and the AI
- * just reads it, no 80 switches"). When it is OFF the branch is inert and the
- * gate behaves exactly as shipped: no external egress without an explicit
- * receipt. The short-circuit is checked BEFORE the receipt read and ONLY for an
- * external pick — a `local` pick is already ungated above, so the toggle can
- * never widen egress that was not already external.
- *
- * Call this AFTER the document provider is picked and BEFORE the first
- * `generateCompletion` on it.
- */
-export async function assertDocumentEgressConsent(args: {
-  userId: string;
-  providerType: string;
-  surface: ConsentSurface;
-}): Promise<void> {
-  if (!isExternalDocumentEgress(args.providerType)) return;
-  if (await documentAutoReadEnabled(args.userId)) return;
-  if (await hasActiveConsentForSurface(args.userId, args.surface)) return;
-  throw new ConsentRequiredError(args.surface);
 }

@@ -101,8 +101,7 @@ export const GET = apiHandler(async () => {
     assistantBriefingEnabled: settings?.assistantBriefingEnabled ?? true,
     assistantInsightStatusEnabled:
       settings?.assistantInsightStatusEnabled ?? true,
-    assistantCorrelationsEnabled:
-      settings?.assistantCorrelationsEnabled ?? true,
+    assistantDocumentAiEnabled: settings?.assistantDocumentAiEnabled ?? true,
   });
 });
 
@@ -145,7 +144,7 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     "assistantCoachEnabled",
     "assistantBriefingEnabled",
     "assistantInsightStatusEnabled",
-    "assistantCorrelationsEnabled",
+    "assistantDocumentAiEnabled",
   ] as const;
   for (const field of booleanFields) {
     if (data[field] !== undefined) {
@@ -320,6 +319,6 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     assistantCoachEnabled: settings.assistantCoachEnabled,
     assistantBriefingEnabled: settings.assistantBriefingEnabled,
     assistantInsightStatusEnabled: settings.assistantInsightStatusEnabled,
-    assistantCorrelationsEnabled: settings.assistantCorrelationsEnabled,
+    assistantDocumentAiEnabled: settings.assistantDocumentAiEnabled,
   });
 });

@@ -4,6 +4,7 @@ import {
   isScopedCredential,
   requireRecordAuth,
 } from "@/lib/api-handler";
+import { EXTERNAL_SOURCE } from "@/lib/measurements/external-source";
 import { MEASUREMENTS_WRITE_SCOPE } from "@/lib/measurements/scopes";
 import { annotate } from "@/lib/logging/context";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
@@ -45,20 +46,21 @@ import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
 import { runSafetyFloorCheck } from "@/lib/illness/safety-floor-check";
 import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
-import { readDailySeries } from "@/lib/measurements/daily-series-read";
+import {
+  readDailySeries,
+  readLiveBuckets,
+} from "@/lib/measurements/daily-series-read";
 import {
   reconstructSleepSessions,
   pickMainNightAndNaps,
 } from "@/lib/analytics/sleep-night";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
-import { buildSourceRankCase } from "@/lib/analytics/source-rank-sql";
 import { NextRequest } from "next/server";
 import type {
   MeasurementType,
   MeasurementSource,
   GlucoseContext,
 } from "@/generated/prisma/client";
-import { Prisma } from "@/generated/prisma/client";
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const { user } = await requireRecordAuth("read", "measurements");
@@ -393,36 +395,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // The route's response is bounded by the `BUCKET_CAP` ceiling per
   // grain (monthly: 24, weekly: 105, daily: 365) so a multi-decade
   // account never paints an unbounded series.
-  // v1.4.36 W1 — rollup-table read for daily aggregates.
-  //
-  // The Insights trends row fires three parallel
-  // `GET /api/measurements?type=…&aggregate=daily&limit=5000` requests
-  // (BP_SYS / BP_DIA / WEIGHT). The legacy `date_trunc('day', …)`
-  // path scanned the measurements table each time — a full year window
-  // on the maintainer's account hit 3 × ~3 s on the v1.4.35 HAR. Reading from
-  // the persistent `measurement_rollups` DAY buckets drops each call
-  // to a small indexed read against the ~5 k-row rollup table.
-  //
-  // Gating:
-  //   - `source=rollup` is an explicit client opt-in (`@/lib/validations/measurement`
-  //     constrains the enum to `["rollup"]`).
-  //   - We require `aggregate=daily` because the rollup populator only
-  //     keeps DAY buckets on the synchronous write hook; the WEEK /
-  //     MONTH paths still depend on the async pg-boss recomputes which
-  //     may lag behind a recent write.
-  //   - `type` is mandatory so the response shape mirrors the per-type
-  //     ask the chart code makes.
-  //   - When the rollup window returns zero rows we fall through to
-  //     the live `date_trunc` path so a brand-new account whose
-  //     populator hasn't caught up still sees a correct chart on its
-  //     first render.
+  // `source=rollup` + `aggregate=daily` — the chart's series read. Windows up
+  // to the DAY cap fold live into the user's local days (#1026); wider
+  // windows step up to the WEEK / MONTH / YEAR rollup tier. `type` is
+  // mandatory so the response mirrors the per-type ask the chart makes.
   if (source === "rollup" && aggregate === "daily" && type && from && to) {
-    // v1.18.6 — the rollup-daily read (per-source collapse + coverage
-    // probe + inline fold + live-SQL fallback) moved to the shared
-    // `readDailySeries` reader so the batched series endpoint
-    // (`/api/measurements/series-batch`) reads through the SAME path
-    // instead of duplicating this SQL. Behaviour is unchanged: the rows
-    // returned here are byte-identical with the pre-extraction branch.
+    // Shared with the batched series endpoint, so both read the same rows.
     const cap = Math.min(limit, BUCKET_CAP.daily);
     const priorityJson = await loadUserSourcePriority(user.id);
     const measurements = await readDailySeries({
@@ -444,94 +422,29 @@ export const GET = apiHandler(async (request: NextRequest) => {
         },
       });
     }
-    // `readDailySeries` already falls back to the live `date_trunc`
-    // aggregate on a rollup-coverage miss, so an empty result here means
-    // the window genuinely holds no rows. Fall through to the shared
-    // live aggregate branch below to keep the response shape identical
-    // for the truly-empty case.
+    // An empty result means the window genuinely holds no rows. Fall
+    // through to the shared live aggregate branch below to keep the
+    // response shape identical for the truly-empty case.
   }
 
   if (aggregate && aggregate !== "raw" && from && to) {
-    const grain: AggregateGrain = aggregate;
+    const grain: Exclude<AggregateGrain, "raw"> = aggregate;
     const cap = Math.min(limit, BUCKET_CAP[grain]);
-    // Postgres `date_trunc` requires the unit argument to be a SQL
-    // literal — it cannot be supplied as a prepared-statement parameter.
-    // The previous `${truncUnit}` (bound) interpolation 500'd in
-    // production for every grain; the grain string is restricted to
-    // the `AggregateGrain` enum upstream via the Zod schema, so
-    // injecting the mapped unit via `Prisma.raw` is safe. The mapping
-    // also fixes the "weekly"/"monthly" passthrough — Postgres expects
-    // the singular forms `week`/`month`.
-    const TRUNC_UNIT: Record<Exclude<AggregateGrain, "raw">, string> = {
-      daily: "day",
-      weekly: "week",
-      monthly: "month",
-    };
-    const truncUnit = TRUNC_UNIT[grain];
-    const truncUnitLiteral = Prisma.raw(`'${truncUnit}'`);
-    // Cumulative HK types (steps, active energy, flights, distance,
-    // daylight) are partial-day increments — averaging across the day
-    // understates the daily total by the per-bucket sample count.
-    // SUM for those; AVG for spot metrics (BP, weight, pulse, BG,
-    // body fat, mood, sleep). See R-A finding 2.
-    const useSum =
-      type != null && CUMULATIVE_HK_TYPES.has(type as MeasurementType);
-    const aggregator = useSum
-      ? Prisma.raw(`SUM(m."value")::double precision`)
-      : Prisma.raw(`AVG(m."value")::double precision`);
-    // v1.11.1 — collapse overlapping sources to the ladder-canonical reading
-    // per (type, bucket) before aggregating, so this cold/uncovered fallback
-    // agrees with the warm rollup path. `canon` picks the winning source for
-    // each (type, bucket) via the per-user rank; the join keeps only its rows.
+    // Buckets are cut at the user's own calendar boundaries (#1026), the
+    // same day the raw list and the chart's short range use. Cumulative
+    // types SUM per bucket, every other type averages; overlapping sources
+    // collapse to the ladder-canonical one first.
     const priorityJson = await loadUserSourcePriority(user.id);
-    const rankRaw = Prisma.raw(
-      buildSourceRankCase(priorityJson, 'm."type"', 'm."source"'),
-    );
-    const typeFilter = type
-      ? Prisma.sql`AND m."type" = ${type}::measurement_type`
-      : Prisma.empty;
-    const buckets = await prisma.$queryRaw<
-      Array<{ type: string; bucket_start: Date; avg: number; cnt: number }>
-    >`
-      WITH canon AS (
-        SELECT DISTINCT ON (m."type", date_trunc(${truncUnitLiteral}, m."measured_at"))
-          m."type"                                          AS t,
-          date_trunc(${truncUnitLiteral}, m."measured_at")  AS d,
-          m."source"                                        AS canon
-        FROM measurements m
-        WHERE m."user_id" = ${user.id}
-          AND m."measured_at" >= ${from}
-          AND m."measured_at" <= ${to}
-          AND m."deleted_at" IS NULL
-          ${typeFilter}
-        ORDER BY m."type", date_trunc(${truncUnitLiteral}, m."measured_at"), (${rankRaw}), m."source"
-      )
-      SELECT
-        m."type"::text AS type,
-        date_trunc(${truncUnitLiteral}, m."measured_at") AS bucket_start,
-        ${aggregator} AS avg,
-        COUNT(*)::int AS cnt
-      FROM measurements m
-      JOIN canon c
-        ON c.t = m."type"
-        AND c.d = date_trunc(${truncUnitLiteral}, m."measured_at")
-        AND c.canon = m."source"
-      WHERE m."user_id" = ${user.id}
-        AND m."measured_at" >= ${from}
-        AND m."measured_at" <= ${to}
-        AND m."deleted_at" IS NULL
-        ${typeFilter}
-      GROUP BY m."type", bucket_start
-      ORDER BY bucket_start ASC
-      LIMIT ${cap}
-    `;
-
-    const measurements = buckets.map((b) => ({
-      type: b.type,
-      value: Number(b.avg),
-      measuredAt: b.bucket_start.toISOString(),
-      count: Number(b.cnt),
-    }));
+    const measurements = await readLiveBuckets({
+      userId: user.id,
+      type: (type as MeasurementType | undefined) ?? null,
+      from,
+      to,
+      cap,
+      priorityJson,
+      grain,
+      timeZone: await resolveUserTimezone(user.id),
+    });
     annotate({
       action: { name: "measurement.list" },
       meta: { total: measurements.length, type, aggregate: grain },
@@ -766,19 +679,29 @@ async function sleepListResponse(
 }
 
 /**
- * Does this body attribute any reading to `APPLE_HEALTH`?
+ * Does this body attribute a source to any reading — any source at all?
  *
- * Read off the raw body rather than the parsed result because the answer has to
- * be the same for the object arm and the array arm, and those parse against
- * different schemas further down. Anything that is not a recognisable
- * measurement shape answers false and falls through to the validation error it
- * has coming — this function decides attribution, not validity.
+ * Read off the RAW body rather than the parsed result, and that is load-bearing
+ * twice over. It has to give the same answer for the object arm and the array
+ * arm, which parse against different schemas further down; and
+ * `createMeasurementSchema.source` carries `.default("MANUAL")`, so after
+ * parsing "said MANUAL" and "said nothing" are the same value and the
+ * distinction this predicate exists to draw is already gone.
+ *
+ * v1.38.x — widened from "names APPLE_HEALTH" to "names anything". Under a
+ * scoped credential the row's source is now resolved by the server, so an
+ * explicit `MANUAL` is an assertion the route would have to override — which
+ * is the silent relabelling the refusal below refuses to do.
+ *
+ * Anything that is not a recognisable measurement shape answers false and
+ * falls through to the validation error it has coming: this function decides
+ * attribution, not validity.
  */
-function namesAppleHealthSource(body: unknown): boolean {
+function namesAnySource(body: unknown): boolean {
   const names = (entry: unknown): boolean =>
     typeof entry === "object" &&
     entry !== null &&
-    (entry as { source?: unknown }).source === "APPLE_HEALTH";
+    (entry as { source?: unknown }).source !== undefined;
   return Array.isArray(body) ? body.some(names) : names(body);
 }
 
@@ -818,16 +741,28 @@ async function postMeasurement(request: NextRequest) {
 
   if (jsonError) return jsonError;
 
-  // A scoped credential may attribute MANUAL and nothing else — the schema's
-  // own default, so only an explicit `APPLE_HEALTH` needs refusing. Checked
-  // before validation branches so the object and array arms share one answer,
-  // and refused rather than rewritten for the reason the batch route gives:
-  // relabelling a client's explicit assertion hands it rows it cannot see.
-  if (scoped && namesAppleHealthSource(body)) {
+  // A scoped credential may attribute nothing: the source of its rows is
+  // `EXTERNAL`, decided here from the credential rather than taken from the
+  // body. Checked before the validation branches so the object and array arms
+  // share one answer, and refused rather than rewritten for the reason the
+  // batch route gives: relabelling a client's explicit assertion hands it rows
+  // it did not ask for and no way to notice.
+  //
+  // v1.38.x — this used to refuse only an explicit `APPLE_HEALTH`, because the
+  // forced value was `MANUAL` and so a body naming `MANUAL` was never actually
+  // overridden. Now that bridge rows carry their own provenance, honouring
+  // such a body would defeat the point (a bridge that kept sending `MANUAL`
+  // would stay indistinguishable from a typed reading) and overriding it
+  // silently is what the paragraph above forbids. Status and `errorCode` are
+  // unchanged, so client error handling is untouched; the documented Home
+  // Assistant payload sends no `source` at all.
+  if (scoped && namesAnySource(body)) {
     annotate({ action: { name: "measurements.create.source-not-permitted" } });
-    return apiError("This credential may only attribute MANUAL readings", 422, {
-      errorCode: "measurement.create.source_not_permitted",
-    });
+    return apiError(
+      "This credential resolves the source itself; omit the field",
+      422,
+      { errorCode: "measurement.create.source_not_permitted" },
+    );
   }
 
   // Batch mode (array of measurements, e.g. combined BP + Pulse)
@@ -879,7 +814,16 @@ async function postMeasurement(request: NextRequest) {
               type: m.type as MeasurementType,
               value: m.value,
               unit: getUnitForType(m.type),
-              source: (m.source ?? "MANUAL") as MeasurementSource,
+              // v1.38.x — the array arm too, not just the single create
+              // below. This is the combined BP + Pulse path a bridge uses for
+              // a two-value reading; missing it here would leave exactly those
+              // rows attributed MANUAL and invisible to the badge and the
+              // source filter. `scoped` already implies `m.source` is
+              // undefined — the refusal above returned otherwise — so this is
+              // the resolution, not an override.
+              source: (scoped
+                ? EXTERNAL_SOURCE
+                : (m.source ?? "MANUAL")) as MeasurementSource,
               measuredAt: m.measuredAt,
               // v1.23 — encrypt the note at rest; the legacy plaintext column is
               // written null for new rows.
@@ -1034,7 +978,13 @@ async function postMeasurement(request: NextRequest) {
         type: type as MeasurementType,
         value,
         unit: getUnitForType(type),
-        source: (source ?? "MANUAL") as MeasurementSource,
+        // v1.38.x — server-resolved under a scoped credential. `source` is
+        // necessarily the schema default here (the refusal above returned on
+        // any body that named one), so nothing a caller asserted is being
+        // discarded.
+        source: (scoped
+          ? EXTERNAL_SOURCE
+          : (source ?? "MANUAL")) as MeasurementSource,
         measuredAt,
         // v1.23 — encrypt the note at rest; legacy plaintext column nulled.
         notes: null,

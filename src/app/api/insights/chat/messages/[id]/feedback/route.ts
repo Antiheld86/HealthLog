@@ -43,7 +43,6 @@ import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { resolveCoachFeedbackAttribution } from "@/lib/ai/feedback-attribution";
-import { requireAssistantSurface } from "@/lib/feature-flags";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -60,11 +59,8 @@ interface RouteContext {
 
 async function handlePost(request: NextRequest, ctx: RouteContext) {
   const { user } = await requireAuth();
-  // v1.4.38 W-C M6 — Coach message feedback is a Coach surface
-  // affordance; gate it on the same operator kill-switch so a
-  // disabled Coach matrix can't be skirted through the feedback
-  // endpoint.
-  await requireAssistantSurface("coach");
+  // Not AI-gated: a rating on a message that already exists is data about
+  // the person's own thread and calls no model.
   const { id: messageId } = await ctx.params;
 
   // Per-user rate limit — same shape as the recommendation feedback

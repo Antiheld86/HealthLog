@@ -253,6 +253,205 @@ describe("a bleeding day opens a cycle", () => {
     expect(may).toEqual({ endDate: null, lengthDays: null });
   });
 
+  it("moves a start earlier when an earlier first day is remembered later (#1004)", async () => {
+    // Day two logged first, day one filled in afterwards. The period began a
+    // day earlier; it did not begin twice. The old rule only looked at the
+    // cycle BEFORE the day and opened a one-day cycle in front of the other.
+    await logDay("2026-05-04", { flow: "HEAVY" });
+    await logDay("2026-06-02", { flow: "HEAVY" });
+    await logDay("2026-06-01", { flow: "HEAVY" });
+
+    const rows = await getPrismaClient().menstrualCycle.findMany({
+      where: { userId: USER_ID, deletedAt: null },
+      orderBy: { startDate: "asc" },
+      select: { startDate: true, endDate: true, lengthDays: true },
+    });
+    expect(rows).toEqual([
+      { startDate: "2026-05-04", endDate: "2026-05-31", lengthDays: 28 },
+      { startDate: "2026-06-01", endDate: null, lengthDays: null },
+    ]);
+  });
+
+  it("lands on the same history whichever order the periods are entered in", async () => {
+    // September first, then January to August, is what a person back-filling
+    // a year does. The result must not depend on it.
+    const starts = [
+      "2026-01-05",
+      "2026-02-03",
+      "2026-03-04",
+      "2026-04-02",
+      "2026-05-01",
+    ];
+    for (const d of [starts[4], ...starts.slice(0, 4)]) {
+      // Day two of each period first, then its first day.
+      const dayTwo = new Date(`${d}T12:00:00Z`);
+      dayTwo.setUTCDate(dayTwo.getUTCDate() + 1);
+      await logDay(dayTwo.toISOString().slice(0, 10), { flow: "MEDIUM" });
+      await logDay(d, { flow: "HEAVY" });
+    }
+    const outOfOrder = await getPrismaClient().menstrualCycle.findMany({
+      where: { userId: USER_ID, deletedAt: null },
+      orderBy: { startDate: "asc" },
+      select: { startDate: true, endDate: true, lengthDays: true },
+    });
+
+    await truncateAllTables(getPrismaClient());
+    await getPrismaClient().user.create({
+      data: {
+        id: USER_ID,
+        username: "cycle-flow",
+        email: "cycle-flow@example.test",
+        gender: "FEMALE",
+        timezone: "UTC",
+      },
+    });
+    await loginAs(USER_ID);
+    for (const d of starts) {
+      await logDay(d, { flow: "HEAVY" });
+    }
+    const inOrder = await getPrismaClient().menstrualCycle.findMany({
+      where: { userId: USER_ID, deletedAt: null },
+      orderBy: { startDate: "asc" },
+      select: { startDate: true, endDate: true, lengthDays: true },
+    });
+
+    expect(outOfOrder).toEqual(inOrder);
+    expect(inOrder.map((r) => r.startDate)).toEqual(starts);
+  });
+
+  it("does not guess a start from a bleed too far before the next period to be its first day", async () => {
+    await logDay("2026-06-15", { flow: "HEAVY" });
+    // Twelve days earlier: too close to be a cycle of its own, too far to be
+    // the same period. Nothing is inferred; the one-tap start still decides.
+    await logDay("2026-06-03", { flow: "HEAVY" });
+
+    expect(await cycleStarts()).toEqual(["2026-06-15"]);
+  });
+
+  it("re-attributes the days a back-filled start now owns", async () => {
+    await logDay("2026-05-01", { flow: "HEAVY" });
+    await logDay("2026-06-05", { basalBodyTempC: 36.4 });
+    // A June start remembered afterwards: 5 June belongs to it, not to May.
+    await logDay("2026-06-01", { flow: "HEAVY" });
+
+    const june = await getPrismaClient().menstrualCycle.findFirstOrThrow({
+      where: { userId: USER_ID, startDate: "2026-06-01", deletedAt: null },
+      select: { id: true },
+    });
+    const day = await getPrismaClient().cycleDayLog.findFirstOrThrow({
+      where: { userId: USER_ID, date: "2026-06-05" },
+      select: { cycleId: true },
+    });
+    expect(day.cycleId).toBe(june.id);
+  });
+
+  it("hands a removed start's days back to the cycle before it", async () => {
+    await logDay("2026-05-04", { flow: "HEAVY" });
+    await logDay("2026-06-01", { flow: "HEAVY" });
+    await logDay("2026-06-05", { basalBodyTempC: 36.4 });
+
+    const start = await getPrismaClient().cycleDayLog.findFirstOrThrow({
+      where: { userId: USER_ID, date: "2026-06-01" },
+      select: { id: true },
+    });
+    const { PATCH } = await import("@/app/api/cycle/day-logs/[id]/route");
+    await PATCH(
+      jsonRequest(`/api/cycle/day-logs/${start.id}`, "PATCH", { flow: null }),
+      { params: Promise.resolve({ id: start.id }) },
+    );
+
+    const may = await getPrismaClient().menstrualCycle.findFirstOrThrow({
+      where: { userId: USER_ID, startDate: "2026-05-04", deletedAt: null },
+      select: { id: true },
+    });
+    const day = await getPrismaClient().cycleDayLog.findFirstOrThrow({
+      where: { userId: USER_ID, date: "2026-06-05" },
+      select: { cycleId: true },
+    });
+    expect(day.cycleId).toBe(may.id);
+  });
+
+  it("repairs a one-day cycle the old rule left, with one tap on the real first day", async () => {
+    // The state the previous rule produced when day two of a period was
+    // logged before day one: a cycle one day long in front of the real one.
+    // Seeded directly, because the current code no longer creates it.
+    const prisma = getPrismaClient();
+    const may = await prisma.menstrualCycle.create({
+      data: {
+        userId: USER_ID,
+        startDate: "2026-05-04",
+        endDate: "2026-05-31",
+        lengthDays: 28,
+      },
+    });
+    const stub = await prisma.menstrualCycle.create({
+      data: {
+        userId: USER_ID,
+        startDate: "2026-06-01",
+        endDate: "2026-06-01",
+        lengthDays: 1,
+      },
+    });
+    const real = await prisma.menstrualCycle.create({
+      data: { userId: USER_ID, startDate: "2026-06-02" },
+    });
+    await prisma.cycleDayLog.createMany({
+      data: [
+        {
+          userId: USER_ID,
+          date: "2026-06-01",
+          flow: "HEAVY",
+          cycleId: stub.id,
+        },
+        {
+          userId: USER_ID,
+          date: "2026-06-02",
+          flow: "MEDIUM",
+          cycleId: real.id,
+        },
+        {
+          userId: USER_ID,
+          date: "2026-06-06",
+          flow: "LIGHT",
+          cycleId: real.id,
+        },
+      ],
+    });
+
+    // What the release note tells the person to do.
+    const { POST } = await import("@/app/api/cycle/period/route");
+    const res = await POST(
+      jsonRequest("/api/cycle/period", "POST", {
+        action: "start",
+        date: "2026-06-01",
+        loggedAt: new Date().toISOString(),
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    const rows = await prisma.menstrualCycle.findMany({
+      where: { userId: USER_ID, deletedAt: null },
+      orderBy: { startDate: "asc" },
+      select: { id: true, startDate: true, endDate: true, lengthDays: true },
+    });
+    expect(rows.map(({ id: _id, ...r }) => r)).toEqual([
+      { startDate: "2026-05-04", endDate: "2026-05-31", lengthDays: 28 },
+      { startDate: "2026-06-01", endDate: null, lengthDays: null },
+    ]);
+    expect(rows[0].id).toBe(may.id);
+    const june = rows[1].id;
+    const days = await prisma.cycleDayLog.findMany({
+      where: { userId: USER_ID, deletedAt: null },
+      orderBy: { date: "asc" },
+      select: { date: true, cycleId: true },
+    });
+    expect(days).toEqual([
+      { date: "2026-06-01", cycleId: june },
+      { date: "2026-06-02", cycleId: june },
+      { date: "2026-06-06", cycleId: june },
+    ]);
+  });
+
   it("gives the record a forecast and a cycle day it never had", async () => {
     // What the person actually sees. Four periods 28 days apart, logged as
     // flow and nothing else, and today inside the last one.

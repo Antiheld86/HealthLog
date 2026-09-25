@@ -11,7 +11,9 @@ import { listTargetsBySource, replaceTargets } from "@/lib/links";
 import type {
   DocumentConditionLinkDto,
   DocumentEncounterLinkDto,
+  DocumentVaccinationLinkDto,
 } from "@/lib/validations/inbound-documents";
+import { resolveCatalogEntry } from "@/lib/vaccinations/vaccine-catalog";
 
 /**
  * Load the condition links for a page of documents in ONE grouped query.
@@ -160,5 +162,89 @@ export async function replaceConditionLinks(
     sourceId: documentId,
     targetKind: "conditionEpisode",
     targetIds: episodeIds,
+  });
+}
+
+/**
+ * Load the VACCINATION links for one or more documents in two grouped
+ * queries: the links through the link service, then the doses' identity so
+ * the client can name each one from its own bundle.
+ *
+ * Tombstoned doses drop out, the same honest default the visit links take.
+ */
+export async function loadDocumentVaccinationLinks(
+  userId: string,
+  documentIds: string[],
+): Promise<Map<string, DocumentVaccinationLinkDto[]>> {
+  const map = new Map<string, DocumentVaccinationLinkDto[]>();
+  if (documentIds.length === 0) return map;
+  const byDocument = await listTargetsBySource(prisma, {
+    userId,
+    sourceKind: "document",
+    sourceIds: documentIds,
+    targetKind: "vaccination",
+  });
+  const doseIds = [
+    ...new Set([...byDocument.values()].flat().map((target) => target.id)),
+  ];
+  if (doseIds.length === 0) return map;
+  const doses = await prisma.vaccinationRecord.findMany({
+    where: { id: { in: doseIds }, userId },
+    select: { id: true, antigenSlug: true, vaccineName: true },
+  });
+  const doseById = new Map(doses.map((dose) => [dose.id, dose]));
+  for (const [documentId, targets] of byDocument) {
+    map.set(
+      documentId,
+      targets.map((target) => {
+        const dose = doseById.get(target.id);
+        return {
+          vaccinationId: target.id,
+          occurredAt: target.date,
+          catalogSlug:
+            resolveCatalogEntry(dose?.antigenSlug ?? null)?.slug ?? null,
+          vaccineName: dose?.vaccineName ?? null,
+        };
+      }),
+    );
+  }
+  return map;
+}
+
+/**
+ * Narrow a client-sent dose-id list to the caller's LIVE doses. Same shape
+ * and same refusal as {@link narrowOwnedEncounterIds}.
+ */
+export async function narrowOwnedVaccinationIds(
+  userId: string,
+  vaccinationIds: string[],
+): Promise<string[] | null> {
+  const unique = [...new Set(vaccinationIds)];
+  if (unique.length === 0) return [];
+  const owned = await prisma.vaccinationRecord.findMany({
+    where: { id: { in: unique }, userId, deletedAt: null },
+    select: { id: true },
+  });
+  if (owned.length !== unique.length) return null;
+  return unique;
+}
+
+/**
+ * Replace-set a document's vaccination links through the link service, in
+ * the `document → vaccination` direction of the table the dose's own form
+ * writes.
+ */
+export async function replaceVaccinationLinks(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  documentId: string,
+  vaccinationIds: string[],
+): Promise<void> {
+  await replaceTargets(tx, {
+    userId,
+    sourceKind: "document",
+    sourceId: documentId,
+    targetKind: "vaccination",
+    targetIds: vaccinationIds,
   });
 }

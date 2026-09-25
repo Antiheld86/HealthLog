@@ -146,6 +146,46 @@ export const E2E_MEDICATION = {
 } as const;
 
 /**
+ * The module-surfaces journey's own account (`modules-off.spec.ts`).
+ *
+ * It switches mood and medications off and on again, and those switches are
+ * read by every surface of the account. On the shared account a parallel spec
+ * reading a mood chart or the add menu would see them flip underneath it, so
+ * the journey gets a record nobody else reads.
+ */
+export const E2E_MODULES = {
+  email: "e2e-modules@healthlog.test",
+  username: "e2e-modules",
+  password: "Qm4!Vr8tK2wZp7Ls",
+  role: "USER",
+} as const;
+
+export const MODULES_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateModules.json",
+);
+
+/**
+ * The AI-optional journeys' own account (`ai-optional-*.spec.ts`).
+ *
+ * The consent journey gives it a provider, a stored briefing and an AI
+ * consent, then withdraws the consent; the Coach-memory journey hides its
+ * Coach and deletes a stored conversation. Both change what every AI surface
+ * of the account shows, so they run on a record nobody else reads.
+ */
+export const E2E_AI_OPTIONAL = {
+  email: "e2e-ai-optional@healthlog.test",
+  username: "e2e-ai-optional",
+  password: "Rw5!Nc9pT3xLq6Zb",
+  role: "USER",
+} as const;
+
+export const AI_OPTIONAL_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateAiOptional.json",
+);
+
+/**
  * The notification-dispatch journey's own account.
  *
  * It has one, rather than borrowing the shared fixture, because the journey's
@@ -724,6 +764,51 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       ],
     );
 
+    // The module-surfaces journey's account. Its module switches are set by
+    // `e2e/setup/modules-fixture.ts` before every test.
+    await pool.query(
+      `INSERT INTO users
+        (id, username, email, password_hash, role, created_at, updated_at,
+         onboarding_completed_at, onboarding_tour_completed)
+       VALUES ($1, $2, $3, $4, 'USER', $5, $5, $5, true)
+       ON CONFLICT (username) DO UPDATE SET
+         email = EXCLUDED.email,
+         password_hash = EXCLUDED.password_hash,
+         updated_at = EXCLUDED.updated_at,
+         onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+         onboarding_tour_completed = EXCLUDED.onboarding_tour_completed`,
+      [
+        cuid(),
+        E2E_MODULES.username,
+        E2E_MODULES.email,
+        await hashPassword(E2E_MODULES.password),
+        now,
+      ],
+    );
+
+    // The AI-optional journeys' account. Its provider, stored briefing,
+    // consent and Coach rows are set by `e2e/setup/ai-optional-fixture.ts`
+    // before each journey.
+    await pool.query(
+      `INSERT INTO users
+        (id, username, email, password_hash, role, created_at, updated_at,
+         onboarding_completed_at, onboarding_tour_completed)
+       VALUES ($1, $2, $3, $4, 'USER', $5, $5, $5, true)
+       ON CONFLICT (username) DO UPDATE SET
+         email = EXCLUDED.email,
+         password_hash = EXCLUDED.password_hash,
+         updated_at = EXCLUDED.updated_at,
+         onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+         onboarding_tour_completed = EXCLUDED.onboarding_tour_completed`,
+      [
+        cuid(),
+        E2E_AI_OPTIONAL.username,
+        E2E_AI_OPTIONAL.email,
+        await hashPassword(E2E_AI_OPTIONAL.password),
+        now,
+      ],
+    );
+
     // The notification-dispatch journey's account. Seeded like the others;
     // its channels, devices, ledger rows and preferences are reset by
     // `e2e/setup/notification-fixture.ts` before every test, because the
@@ -1223,7 +1308,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
      * Log one account in, clearing the login bucket first.
      *
      * The ceiling is FIVE attempts per IP per quarter-hour and this setup now
-     * signs in seventeen times, so clearing once before the batch is no longer
+     * signs in eighteen times, so clearing once before the batch is no longer
      * enough — the sixth would be answered by the fixture's own 429 rather
      * than by the product. Only the auth surfaces' buckets are touched, and
      * only between logins this setup is itself performing.
@@ -1256,6 +1341,12 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     // The notification-dispatch journey's jar. Its own account, so its own
     // login — see `E2E_NOTIFY` for why the ledger counts need one.
     await capture(E2E_NOTIFY, NOTIFY_STORAGE_STATE_PATH);
+
+    // The module-surfaces journey's jar — see `E2E_MODULES`.
+    await capture(E2E_MODULES, MODULES_STORAGE_STATE_PATH);
+
+    // The AI-optional journeys' jar — see `E2E_AI_OPTIONAL`.
+    await capture(E2E_AI_OPTIONAL, AI_OPTIONAL_STORAGE_STATE_PATH);
 
     await capture(E2E_SCOPE_DELEGATE, SCOPE_DELEGATE_STORAGE_STATE_PATH);
     await capture(E2E_SCOPE_DELEGATE, SCOPE_A11Y_STORAGE_STATE_PATH);

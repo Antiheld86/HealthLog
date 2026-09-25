@@ -22,12 +22,9 @@ vi.mock("@/lib/api-handler", () => ({
   },
 }));
 
-const { requireModuleEnabled, requireAssistantSurface } = vi.hoisted(() => ({
-  requireModuleEnabled: vi.fn(async () => ({ enabled: true })),
-  requireAssistantSurface: vi.fn(async () => undefined),
+vi.mock("@/lib/modules/gate", () => ({
+  isModuleEnabled: vi.fn(async () => true),
 }));
-vi.mock("@/lib/modules/gate", () => ({ requireModuleEnabled }));
-vi.mock("@/lib/feature-flags", () => ({ requireAssistantSurface }));
 
 vi.mock("@/lib/api-response", () => ({
   apiError: (error: string, status: number, meta?: unknown) => ({
@@ -132,8 +129,6 @@ function listReq(qs = ""): Request {
 describe("GET /api/insights/chat — q search param", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireModuleEnabled.mockResolvedValue({ enabled: true });
-    requireAssistantSurface.mockResolvedValue(undefined);
     listConversations.mockResolvedValue({
       conversations: [],
       nextCursor: null,

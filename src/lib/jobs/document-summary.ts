@@ -23,9 +23,10 @@
  */
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
 import {
-  assertDocumentEgressConsent,
-  ConsentRequiredError,
-} from "@/lib/ai/consent-guard";
+  aiCapabilityForJob,
+  aiCapabilityForRecord,
+} from "@/lib/ai/capabilities/gate";
+import { PICK_DECIDED_REASONS } from "@/lib/ai/capabilities/types";
 import {
   buildDateKey,
   reconcileSpend,
@@ -135,37 +136,59 @@ export async function runDocumentSummaryJob(
     return;
   }
 
-  // Resolve the DOCUMENT-order vision provider (local-first, codex last). No
-  // vision-capable provider configured → graceful no-op (unlike the index job,
-  // there is no local text-layer fallback for a descriptive summary).
-  const { pick } = await resolveDocumentVisionProvider(userId);
-  if (!pick) {
-    await markSummaryState(userId, documentId, "UNAVAILABLE");
+  // The `documentAi` capability before a provider is picked or the document is
+  // decrypted: the operator's switches (the master and "Reading documents")
+  // and the vault module. A switch turned off means this job was never to run
+  // at all, so only the PENDING it was meant to resolve goes back to NONE; a
+  // recorded UNAVAILABLE or WITHHELD is an earlier real attempt and stays.
+  // Whether there is a provider and whether sending to it needs a receipt is
+  // the pick's to answer (the document order differs from the chain order the
+  // presence probe reads), so those two reasons wait for the pick below.
+  const capability = await aiCapabilityForJob(userId, "documentAi");
+  if (
+    capability.reason !== null &&
+    !PICK_DECIDED_REASONS.has(capability.reason)
+  ) {
+    await prisma.inboundDocument.updateMany({
+      where: {
+        id: documentId,
+        userId,
+        deletedAt: null,
+        summaryState: "PENDING",
+      },
+      data: { summaryState: "NONE" },
+    });
     annotate({
       action: { name: "documents.summary.autoSkipped" },
-      meta: { documentId, reason: "no-provider" },
+      meta: {
+        documentId,
+        reason: "unavailable",
+        capability_reason: capability.reason,
+      },
     });
     return;
   }
 
-  // Re-assert egress consent for the picked provider. A local pick is ungated;
-  // an external pick is authorised by the `documentsAutoAiRead` opt-in checked
-  // above (the toggle short-circuits the gate). Belt-and-braces: a consent race
-  // (opt-out flipped mid-flight) resolves to a no-op, never an egress.
-  try {
-    await assertDocumentEgressConsent({
-      userId,
-      providerType: pick.providerType,
-      surface: "insights",
-    });
-  } catch (err) {
+  // Resolve the DOCUMENT-order vision provider (local-first, codex last) and
+  // re-check the wire for exactly that pick: the capability again and the
+  // extraction receipt an external pick needs (`ai_extraction` or `ai_full`;
+  // the auto-read toggle mints one but is not one, so a revoke mid-flight wins).
+  // No pick → an attempt that could not run, recorded as UNAVAILABLE (unlike
+  // the index job, there is no local text-layer fallback for a summary).
+  const { pick, withheld } = await resolveDocumentVisionProvider(userId);
+  if (!pick) {
     await markSummaryState(userId, documentId, "UNAVAILABLE");
     annotate({
       action: { name: "documents.summary.autoSkipped" },
       meta: {
         documentId,
         reason:
-          err instanceof ConsentRequiredError ? "consent" : "consent-error",
+          withheld === null
+            ? "no-provider"
+            : withheld.reason === "consent_required"
+              ? "consent"
+              : "unavailable",
+        capability_reason: withheld?.reason ?? null,
       },
     });
     return;
@@ -316,6 +339,21 @@ export async function enqueueDocumentSummary(
       annotate({
         action: { name: "documents.summary.autoSkipped" },
         meta: { documentId, reason: "opt-out" },
+      });
+      return { enqueued: false };
+    }
+    // Nothing is queued that the capability already refuses (a switch or the
+    // vault module off): the document stays NONE and the view offers the
+    // manual action, exactly as with the opt-in off. A missing provider or
+    // receipt is the job's pick to decide.
+    const capability = await aiCapabilityForRecord(userId, "documentAi");
+    if (
+      capability.reason !== null &&
+      !PICK_DECIDED_REASONS.has(capability.reason)
+    ) {
+      annotate({
+        action: { name: "documents.summary.autoSkipped" },
+        meta: { documentId, reason: capability.reason },
       });
       return { enqueued: false };
     }

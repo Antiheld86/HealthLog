@@ -40,6 +40,7 @@ import {
   getClientIp,
   sanitiseZodIssues,
 } from "@/lib/api-response";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { hashQueryTokens } from "@/lib/documents/content-index";
@@ -446,10 +447,21 @@ async function processUpload(
 
   // Summarise the freshly stored document in the background — but ONLY when the
   // `documentsAutoAiRead` opt-in is ON (the job re-checks it and the egress
-  // consent, and no-ops otherwise). The persisted summary shows on the detail
+  // consent, and no-ops otherwise) and the `documentAi` capability is open for
+  // this record. The upload itself never depends on AI: the document is stored
+  // above whatever the capability says, and the index job still runs its
+  // provider-free text-layer path. The persisted summary shows on the detail
   // view. Same fire-and-forget contract: the upload never blocks on or fails
   // because of it. Only fresh inserts reach here (a duplicate returns early).
-  void enqueueDocumentSummary(user.id, document.id);
+  const documentAi = await getAiCapability("documentAi");
+  if (documentAi.available) {
+    void enqueueDocumentSummary(user.id, document.id);
+  } else {
+    annotate({
+      action: { name: "documents.summary.enqueueSkipped" },
+      meta: { documentId: document.id, reason: documentAi.reason },
+    });
+  }
 
   const [links, visitLinks] = await Promise.all([
     loadConditionLinks(user.id, [document.id]),

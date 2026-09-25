@@ -12,8 +12,8 @@
  * an upsert, so a repeat dismiss of the same instance is a no-op rather than
  * a conflict. `userId` is narrowed from `requireAuth()` only; the body never
  * carries one. Cookie OR Bearer, mirroring the digest GET route's own auth
- * policy, and gated on the same `insights` module (the daily rail's host
- * surface).
+ * policy. Like the digest GET it carries no module gate: the rail is data,
+ * and the `insights` module is the AI analysis opt-out.
  */
 import type { NextRequest } from "next/server";
 
@@ -28,7 +28,6 @@ import { annotate } from "@/lib/logging/context";
 import { prisma } from "@/lib/db";
 import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import { isScoreNoticeItemKey } from "@/lib/daily/priority-item";
-import { requireModuleEnabled } from "@/lib/modules/gate";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { dismissPriorityItemSchema } from "@/lib/validations/daily";
 
@@ -40,9 +39,6 @@ const DISMISS_WINDOW_MS = 60_000;
 
 export const POST = apiHandler(async (req: NextRequest) => {
   const { user } = await requireAuth();
-  const gate = await requireModuleEnabled(user.id, "insights");
-  if (!gate.enabled) return gate.response;
-
   const rl = await checkRateLimit(
     `daily-digest-dismiss:${user.id}`,
     DISMISS_RATE_LIMIT,

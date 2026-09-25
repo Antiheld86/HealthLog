@@ -32,9 +32,6 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-// v1.4.39.2 — the rollup branch's coverage-mismatch fallback may call
-// `recomputeUserRollups` inline. Mock it so tests can assert whether
-// the inline fold fired without exercising the real populator.
 vi.mock("@/lib/rollups/measurement-rollups", async () => {
   const actual = await vi.importActual<
     typeof import("@/lib/rollups/measurement-rollups")
@@ -66,7 +63,7 @@ vi.mock("next/headers", () => ({
 import { GET } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
-import { recomputeUserRollups } from "@/lib/rollups/measurement-rollups";
+import { invalidateUserTimezone } from "@/lib/tz/resolver";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -221,318 +218,50 @@ describe("GET /api/measurements — all-time semantics (SD-H1)", () => {
     expect(months.size).toBe(24);
   });
 
-  it("source=rollup + aggregate=daily reads measurement_rollups without firing the heavy date_trunc query", async () => {
-    // v1.4.36 W1 — Insights trends row routes the three daily chart
-    // fetches through the persistent DAY buckets via `source=rollup`.
-    // The heavy `date_trunc` $queryRaw must NOT fire on the happy
-    // path where the rollup has rows for the requested window.
-    const buckets = Array.from({ length: 30 }, (_, i) => ({
-      type: "WEIGHT",
-      bucketStart: new Date(Date.UTC(2026, 3, 16 + i, 0, 0, 0)),
-      mean: 81 + i * 0.05,
-      count: 5,
-      // v1.11.1 — single source per day → collapse is identity.
-      source: "APPLE_HEALTH",
-    }));
-    vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue(
-      buckets as never,
-    );
+  it("source=rollup + aggregate=daily folds live in the user's zone, never the UTC-day rollup (#1026)", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      timezone: "Asia/Kolkata",
+      sourcePriorityJson: null,
+    } as never);
+    // The resolver caches per user; drop what earlier cases left behind.
+    invalidateUserTimezone("user-1");
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      {
+        type: "ACTIVITY_STEPS",
+        bucket_start: new Date("2026-05-09T18:30:00.000Z"),
+        avg: 8123,
+        cnt: 96,
+        min_value: 0,
+        max_value: 400,
+      },
+    ] as never);
 
     const res = await GET(
       getRequest(
-        "type=WEIGHT&from=2026-04-15T00:00:00Z&to=2026-05-15T00:00:00Z&aggregate=daily&source=rollup&limit=5000",
+        "type=ACTIVITY_STEPS&from=2026-04-15T00:00:00Z&to=2026-05-15T00:00:00Z&aggregate=daily&source=rollup&limit=5000",
       ),
     );
+
     expect(res.status).toBe(200);
     const json = (await res.json()) as {
       data: {
-        measurements: Array<{ type: string; value: number; count: number }>;
-        meta: { aggregate?: string };
+        measurements: Array<{
+          measuredAt: string;
+          value: number;
+          minValue?: number;
+        }>;
       };
     };
-    expect(prisma.measurementRollup.findMany).toHaveBeenCalledTimes(1);
-    expect(prisma.$queryRaw).not.toHaveBeenCalled();
-    expect(json.data.measurements.length).toBe(30);
-    // First bucket reflects the rollup mean — round-trip-stable.
-    expect(json.data.measurements[0].type).toBe("WEIGHT");
-    expect(json.data.measurements[0].value).toBeCloseTo(81, 5);
-    expect(json.data.measurements[0].count).toBe(5);
-    expect(json.data.meta.aggregate).toBe("daily");
-  });
-
-  it("source=rollup cumulative path reads sum_value directly (v1.4.39 W-SUM)", async () => {
-    // ACTIVITY_STEPS rollup row with sum_value populated. The route
-    // must consume sumValue directly — NOT reconstruct from mean *
-    // count. Use a sum that is NOT mean × count so the test
-    // distinguishes the two paths.
-    const buckets = Array.from({ length: 3 }, (_, i) => ({
-      type: "ACTIVITY_STEPS",
-      bucketStart: new Date(Date.UTC(2026, 4, 1 + i, 0, 0, 0)),
-      mean: 2000, // would yield 10000 if multiplied by count=5
-      count: 5,
-      sumValue: 11000 + i * 250, // distinct from mean × count
-      source: "APPLE_HEALTH",
-    }));
-    vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue(
-      buckets as never,
-    );
-
-    const res = await GET(
-      getRequest(
-        "type=ACTIVITY_STEPS&from=2026-05-01T00:00:00Z&to=2026-05-05T00:00:00Z&aggregate=daily&source=rollup&limit=5000",
-      ),
-    );
-    expect(res.status).toBe(200);
-    const json = (await res.json()) as {
-      data: { measurements: Array<{ value: number }> };
-    };
-    expect(prisma.$queryRaw).not.toHaveBeenCalled();
-    expect(json.data.measurements.map((m) => m.value)).toEqual([
-      11000, 11250, 11500,
-    ]);
-  });
-
-  it("source=rollup cumulative path falls back to mean*count when sum_value is NULL (v1.4.39 W-SUM)", async () => {
-    // Pre-v1.4.39 row — boot-backfill hasn't converged yet. The
-    // route falls back to mean × count so the chart never paints
-    // a hole during the convergence window.
-    const buckets = [
-      {
-        type: "ACTIVITY_STEPS",
-        bucketStart: new Date(Date.UTC(2026, 4, 1)),
-        mean: 2000,
-        count: 5,
-        sumValue: null,
-        source: "APPLE_HEALTH",
-      },
-    ];
-    vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue(
-      buckets as never,
-    );
-
-    const res = await GET(
-      getRequest(
-        "type=ACTIVITY_STEPS&from=2026-05-01T00:00:00Z&to=2026-05-05T00:00:00Z&aggregate=daily&source=rollup&limit=5000",
-      ),
-    );
-    const json = (await res.json()) as {
-      data: { measurements: Array<{ value: number }> };
-    };
-    expect(json.data.measurements[0].value).toBe(10000);
-  });
-
-  it("falls back to live date_trunc when source=rollup returns zero buckets", async () => {
-    // Empty rollup ⇒ heavy aggregate runs so brand-new accounts still
-    // see a correct chart on their first render.
-    vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue([] as never);
-    const liveBuckets = Array.from({ length: 7 }, (_, i) => ({
-      type: "WEIGHT",
-      bucket_start: new Date(Date.UTC(2026, 4, 8 + i, 0, 0, 0)),
-      avg: 81 + i * 0.05,
-      cnt: 2,
-    }));
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(liveBuckets as never);
-
-    const res = await GET(
-      getRequest(
-        "type=WEIGHT&from=2026-05-08T00:00:00Z&to=2026-05-15T00:00:00Z&aggregate=daily&source=rollup&limit=5000",
-      ),
-    );
-    expect(res.status).toBe(200);
-    expect(prisma.measurementRollup.findMany).toHaveBeenCalledTimes(1);
-    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
-    const json = (await res.json()) as {
-      data: { measurements: Array<unknown> };
-    };
-    expect(json.data.measurements.length).toBe(7);
-  });
-
-  it("source=rollup folds the partition inline and re-reads when the rollup is under-converged (v1.4.39.2)", async () => {
-    // The maintainer's pre-fix production trace: 30-day BP_SYS window returned
-    // `total: 2` from the rollup branch even though `measurements`
-    // carried ~30 distinct days. The chart tripped its `< 3 daily
-    // points` empty-state because the route short-circuited on
-    // `rollupRows.length > 0` and never reconciled with the live
-    // table. The coverage-mismatch fallback runs an inline
-    // `recomputeUserRollups` for the (user, type, DAY, window)
-    // partition and re-reads so the request returns the converged
-    // rows.
-    const sparseRollup = [
-      {
-        type: "BLOOD_PRESSURE_SYS",
-        bucketStart: new Date(Date.UTC(2026, 4, 1, 0, 0, 0)),
-        mean: 128,
-        count: 1,
-        sumValue: null,
-        source: "APPLE_HEALTH",
-      },
-      {
-        type: "BLOOD_PRESSURE_SYS",
-        bucketStart: new Date(Date.UTC(2026, 4, 10, 0, 0, 0)),
-        mean: 132,
-        count: 1,
-        sumValue: null,
-        source: "APPLE_HEALTH",
-      },
-    ];
-    const convergedRollup = Array.from({ length: 28 }, (_, i) => ({
-      type: "BLOOD_PRESSURE_SYS",
-      bucketStart: new Date(Date.UTC(2026, 4, 1 + i, 0, 0, 0)),
-      mean: 128 + (i % 5),
-      count: 2,
-      sumValue: null,
-      source: "APPLE_HEALTH",
-    }));
-    // First read returns the sparse rows; second (post-fold) read
-    // returns the converged rows.
-    vi.mocked(prisma.measurementRollup.findMany)
-      .mockResolvedValueOnce(sparseRollup as never)
-      .mockResolvedValueOnce(convergedRollup as never);
-    // Coverage probe — live `measurements` has 28 distinct days.
-    vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
-      { days: BigInt(28) },
-    ] as never);
-
-    const res = await GET(
-      getRequest(
-        "type=BLOOD_PRESSURE_SYS&from=2026-04-30T00:00:00Z&to=2026-05-30T00:00:00Z&aggregate=daily&source=rollup&limit=5000",
-      ),
-    );
-    expect(res.status).toBe(200);
-    const json = (await res.json()) as {
-      data: { measurements: Array<unknown> };
-    };
-    // The inline fold fired exactly once with the (type, DAY, window)
-    // bound so the partition write stays small.
-    expect(recomputeUserRollups).toHaveBeenCalledTimes(1);
-    expect(recomputeUserRollups).toHaveBeenCalledWith(
-      "user-1",
-      expect.objectContaining({
-        types: ["BLOOD_PRESSURE_SYS"],
-        granularities: ["DAY"],
-      }),
-    );
-    // The route re-read the rollup after the fold so the response
-    // carries the converged 28 buckets — well above the chart's
-    // `< 3 daily points` empty-state threshold.
-    expect(prisma.measurementRollup.findMany).toHaveBeenCalledTimes(2);
-    expect(json.data.measurements.length).toBe(28);
-  });
-
-  it("source=rollup skips the coverage probe on a covered window (v1.4.39.2 hot-path)", async () => {
-    // Happy case: 30-day window, 28 rollup rows present. The route
-    // must short-circuit on the first read and skip the probe so the
-    // covered-tenant hot path stays a single indexed read.
-    const buckets = Array.from({ length: 28 }, (_, i) => ({
-      type: "WEIGHT",
-      bucketStart: new Date(Date.UTC(2026, 3, 16 + i, 0, 0, 0)),
-      mean: 81 + i * 0.05,
-      count: 2,
-      sumValue: null,
-      source: "APPLE_HEALTH",
-    }));
-    vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue(
-      buckets as never,
-    );
-
-    const res = await GET(
-      getRequest(
-        "type=WEIGHT&from=2026-04-15T00:00:00Z&to=2026-05-15T00:00:00Z&aggregate=daily&source=rollup&limit=5000",
-      ),
-    );
-    expect(res.status).toBe(200);
-    expect(prisma.measurementRollup.findMany).toHaveBeenCalledTimes(1);
-    expect(recomputeUserRollups).not.toHaveBeenCalled();
-    expect(prisma.$queryRaw).not.toHaveBeenCalled();
-  });
-
-  it("source=rollup skips the coverage fallback on short windows (v1.4.39.2)", async () => {
-    // A 5-day window with 2 rollup rows is plausibly genuine sparsity
-    // for a user who measures BP every other day. The coverage
-    // fallback gates on `windowDays >= 7` so the probe + inline fold
-    // never fire on these short windows.
-    const sparseRollup = [
-      {
-        type: "BLOOD_PRESSURE_SYS",
-        bucketStart: new Date(Date.UTC(2026, 4, 1, 0, 0, 0)),
-        mean: 128,
-        count: 1,
-        sumValue: null,
-        source: "APPLE_HEALTH",
-      },
-      {
-        type: "BLOOD_PRESSURE_SYS",
-        bucketStart: new Date(Date.UTC(2026, 4, 3, 0, 0, 0)),
-        mean: 132,
-        count: 1,
-        sumValue: null,
-        source: "APPLE_HEALTH",
-      },
-    ];
-    vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue(
-      sparseRollup as never,
-    );
-
-    const res = await GET(
-      getRequest(
-        "type=BLOOD_PRESSURE_SYS&from=2026-05-01T00:00:00Z&to=2026-05-06T00:00:00Z&aggregate=daily&source=rollup&limit=5000",
-      ),
-    );
-    expect(res.status).toBe(200);
-    expect(recomputeUserRollups).not.toHaveBeenCalled();
-    expect(prisma.$queryRaw).not.toHaveBeenCalled();
-    const json = (await res.json()) as {
-      data: { measurements: Array<unknown> };
-    };
-    expect(json.data.measurements.length).toBe(2);
-  });
-
-  it("source=rollup keeps the sparse rollup when live `measurements` agrees (v1.4.39.2)", async () => {
-    // Genuine sparsity: the user measured BP twice in 30 days. The
-    // probe finds the same 2 distinct days in `measurements` so the
-    // route returns the 2 rollup rows without firing the inline
-    // fold. The chart's `< 3 daily points` empty-state is the right
-    // surface for this case — the data really is sparse.
-    const sparseRollup = [
-      {
-        type: "BLOOD_PRESSURE_SYS",
-        bucketStart: new Date(Date.UTC(2026, 4, 1, 0, 0, 0)),
-        mean: 128,
-        count: 1,
-        sumValue: null,
-        source: "APPLE_HEALTH",
-      },
-      {
-        type: "BLOOD_PRESSURE_SYS",
-        bucketStart: new Date(Date.UTC(2026, 4, 10, 0, 0, 0)),
-        mean: 132,
-        count: 1,
-        sumValue: null,
-        source: "APPLE_HEALTH",
-      },
-    ];
-    vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue(
-      sparseRollup as never,
-    );
-    // Probe agrees — 2 distinct days in `measurements` too.
-    vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
-      { days: BigInt(2) },
-    ] as never);
-
-    const res = await GET(
-      getRequest(
-        "type=BLOOD_PRESSURE_SYS&from=2026-04-30T00:00:00Z&to=2026-05-30T00:00:00Z&aggregate=daily&source=rollup&limit=5000",
-      ),
-    );
-    expect(res.status).toBe(200);
-    // Probe fired (suspicious-low rollup) but the inline fold did
-    // not (live and rollup agree).
-    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
-    expect(recomputeUserRollups).not.toHaveBeenCalled();
-    const json = (await res.json()) as {
-      data: { measurements: Array<unknown> };
-    };
-    expect(json.data.measurements.length).toBe(2);
+    expect(prisma.measurementRollup.findMany).not.toHaveBeenCalled();
+    // The zone travels as a bound parameter of the fold.
+    const call = vi.mocked(prisma.$queryRaw).mock.calls[0] as unknown[];
+    expect(call.slice(1)).toContain("Asia/Kolkata");
+    // Local midnight of 10 May in Kolkata; a SUM carries no spread band.
+    expect(json.data.measurements[0]).toMatchObject({
+      measuredAt: "2026-05-09T18:30:00.000Z",
+      value: 8123,
+    });
+    expect(json.data.measurements[0].minValue).toBeUndefined();
   });
 
   it("returns a weekly series when the all-time window is under two years", async () => {

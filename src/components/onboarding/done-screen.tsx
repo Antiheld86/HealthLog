@@ -1,5 +1,6 @@
 "use client";
 
+import { useAiProviderState } from "@/hooks/use-ai-capability";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -24,7 +25,11 @@ import { useOnboardingAnswer } from "@/components/onboarding/use-onboarding-flow
 import { useAuth } from "@/hooks/use-auth";
 import { useAccountSwitch } from "@/hooks/use-account-switch";
 import { setTourReferrer } from "@/components/onboarding/tour-launcher";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
 import { markChecklistExpanded } from "@/lib/onboarding/checklist-storage";
@@ -127,12 +132,19 @@ export function DoneScreen({ state }: { state: OnboardingStateDto }) {
   // The server decides now, and the four branches below only READ it. The
   // rest of the panel — sample, ladder, the "fully useful without AI" line,
   // the setup link — is identical in every branch; nothing here is a gate.
+  // The panel is one optional offer, shown only while this person could set
+  // AI up here: `provider.canConfigure` is false while the operator has AI
+  // switched off and inside a record somebody else owns. HealthLog is
+  // complete without it, so with nothing to offer the screen simply goes
+  // from "done" to the exits.
+  const providerState = useAiProviderState();
+  const showAiPanel = providerState.canConfigure;
   const { data: aiProvider } = useQuery<AiProviderStatus>({
     queryKey: queryKeys.userAiProvider(),
     queryFn: async () => {
       return apiGet("/api/user/ai-provider");
     },
-    enabled: !!user,
+    enabled: !!user && showAiPanel,
   });
 
   // The tap's own outcome, held locally so the line changes the moment the
@@ -154,9 +166,7 @@ export function DoneScreen({ state }: { state: OnboardingStateDto }) {
     },
     onSuccess: async () => {
       setJustGranted(true);
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.userAiProvider(),
-      });
+      await invalidateKeys(queryClient, aiInputDependentKeys);
       await queryClient.invalidateQueries({
         queryKey: queryKeys.aiConsentReceipt("ai_full"),
       });
@@ -232,163 +242,165 @@ export function DoneScreen({ state }: { state: OnboardingStateDto }) {
           honest local-first ladder and the "useful without AI" release
           valve. Value-first, never a gate: the three exits below stay,
           and setup is a single optional deep-link. */}
-      <section
-        aria-labelledby="onboarding-ai-panel-title"
-        data-slot="onboarding-ai-panel"
-        /* Which of the four variants the panel SETTLED on, and absent until
+      {showAiPanel ? (
+        <section
+          aria-labelledby="onboarding-ai-panel-title"
+          data-slot="onboarding-ai-panel"
+          /* Which of the four variants the panel SETTLED on, and absent until
            it has settled. The panel itself is unconditional and paints
            immediately, so without this an assertion that a variant is absent
            passes on a status that has simply not arrived yet. The value is
            the same tri-state decision made once, above. */
-        data-ai-state={
-          aiProvider === undefined
-            ? undefined
-            : sharedKeyNote
-              ? "consent"
-              : offerShared
-                ? "offer"
-                : sharedUnavailable
-                  ? "unavailable"
-                  : "neutral"
-        }
-        className="border-border bg-card mx-auto flex w-full max-w-md flex-col gap-4 rounded-xl border p-4 text-left md:p-6"
-      >
-        <header className="flex items-start gap-3">
-          <span
-            aria-hidden="true"
-            className="from-primary to-brand-pink flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br"
-          >
-            <Sparkles className="text-background size-4" />
-          </span>
-          <div className="space-y-1">
-            <h2
-              id="onboarding-ai-panel-title"
-              className="text-foreground text-base font-semibold tracking-tight"
+          data-ai-state={
+            aiProvider === undefined
+              ? undefined
+              : sharedKeyNote
+                ? "consent"
+                : offerShared
+                  ? "offer"
+                  : sharedUnavailable
+                    ? "unavailable"
+                    : "neutral"
+          }
+          className="border-border bg-card mx-auto flex w-full max-w-md flex-col gap-4 rounded-xl border p-4 text-left md:p-6"
+        >
+          <header className="flex items-start gap-3">
+            <span
+              aria-hidden="true"
+              className="from-primary to-brand-pink flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br"
             >
-              {t("onboarding.ai.panelTitle")}
-            </h2>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              {t("onboarding.ai.panelIntro")}
-            </p>
-          </div>
-        </header>
+              <Sparkles className="text-background size-4" />
+            </span>
+            <div className="space-y-1">
+              <h2
+                id="onboarding-ai-panel-title"
+                className="text-foreground text-base font-semibold tracking-tight"
+              >
+                {t("onboarding.ai.panelTitle")}
+              </h2>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                {t("onboarding.ai.panelIntro")}
+              </p>
+            </div>
+          </header>
 
-        {sampleOpen ? (
-          <SampleBriefingCard />
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-full"
-            data-slot="onboarding-ai-show-sample"
-            onClick={() => setSampleOpen(true)}
-          >
-            {t("onboarding.ai.showSample")}
-          </Button>
-        )}
-
-        {sharedKeyNote ? (
-          <p
-            data-slot="onboarding-ai-shared-key"
-            className="text-foreground bg-primary/5 border-primary/20 rounded-lg border px-3 py-2 text-sm leading-relaxed"
-          >
-            {justGranted
-              ? t("onboarding.ai.offer.granted")
-              : t("onboarding.ai.sharedKeyNote")}
-          </p>
-        ) : null}
-
-        {offerShared ? (
-          <div
-            data-slot="onboarding-ai-offer"
-            className="border-primary/20 bg-primary/5 space-y-2.5 rounded-lg border px-3 py-3"
-          >
-            <p className="text-foreground text-sm font-medium">
-              {t("onboarding.ai.offer.title")}
-            </p>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              {t("onboarding.ai.offer.body")}
-            </p>
+          {sampleOpen ? (
+            <SampleBriefingCard />
+          ) : (
             <Button
               type="button"
+              variant="outline"
               size="sm"
-              className="min-h-9 w-full"
-              data-slot="onboarding-ai-offer-grant"
-              disabled={grantConsent.isPending}
-              onClick={() => grantConsent.mutate()}
+              className="w-full"
+              data-slot="onboarding-ai-show-sample"
+              onClick={() => setSampleOpen(true)}
             >
-              {t("onboarding.ai.offer.cta")}
+              {t("onboarding.ai.showSample")}
             </Button>
-          </div>
-        ) : null}
+          )}
 
-        {sharedUnavailable ? (
-          <div
-            data-slot="onboarding-ai-unavailable"
-            className="border-border bg-muted/40 space-y-1 rounded-lg border px-3 py-3"
-          >
+          {sharedKeyNote ? (
+            <p
+              data-slot="onboarding-ai-shared-key"
+              className="text-foreground bg-primary/5 border-primary/20 rounded-lg border px-3 py-2 text-sm leading-relaxed"
+            >
+              {justGranted
+                ? t("onboarding.ai.offer.granted")
+                : t("onboarding.ai.sharedKeyNote")}
+            </p>
+          ) : null}
+
+          {offerShared ? (
+            <div
+              data-slot="onboarding-ai-offer"
+              className="border-primary/20 bg-primary/5 space-y-2.5 rounded-lg border px-3 py-3"
+            >
+              <p className="text-foreground text-sm font-medium">
+                {t("onboarding.ai.offer.title")}
+              </p>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                {t("onboarding.ai.offer.body")}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="min-h-9 w-full"
+                data-slot="onboarding-ai-offer-grant"
+                disabled={grantConsent.isPending}
+                onClick={() => grantConsent.mutate()}
+              >
+                {t("onboarding.ai.offer.cta")}
+              </Button>
+            </div>
+          ) : null}
+
+          {sharedUnavailable ? (
+            <div
+              data-slot="onboarding-ai-unavailable"
+              className="border-border bg-muted/40 space-y-1 rounded-lg border px-3 py-3"
+            >
+              <p className="text-foreground text-sm font-medium">
+                {t("onboarding.ai.unavailable.title")}
+              </p>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                {t("onboarding.ai.unavailable.body")}
+              </p>
+            </div>
+          ) : null}
+
+          <div className="space-y-2.5">
             <p className="text-foreground text-sm font-medium">
-              {t("onboarding.ai.unavailable.title")}
+              {t("onboarding.ai.ladderTitle")}
             </p>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              {t("onboarding.ai.unavailable.body")}
-            </p>
-          </div>
-        ) : null}
-
-        <div className="space-y-2.5">
-          <p className="text-foreground text-sm font-medium">
-            {t("onboarding.ai.ladderTitle")}
-          </p>
-          <ul className="space-y-2.5">
-            {/* Local first — the calm, private default — then BYOK, then
+            <ul className="space-y-2.5">
+              {/* Local first — the calm, private default — then BYOK, then
                 the subscription/OAuth path with its training caveat. Same
                 ordering + vendor-blind framing as the shipped document-
                 provider governance. */}
-            <li className="space-y-0.5">
-              <p className="text-foreground text-sm font-medium">
-                {t("onboarding.ai.ladderLocalTitle")}
-              </p>
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                {t("onboarding.ai.ladderLocalBody")}
-              </p>
-            </li>
-            <li className="space-y-0.5">
-              <p className="text-foreground text-sm font-medium">
-                {t("onboarding.ai.ladderByokTitle")}
-              </p>
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                {t("onboarding.ai.ladderByokBody")}
-              </p>
-            </li>
-            <li className="space-y-0.5">
-              <p className="text-foreground text-sm font-medium">
-                {t("onboarding.ai.ladderOauthTitle")}
-              </p>
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                {t("onboarding.ai.ladderOauthBody")}
-              </p>
-            </li>
-          </ul>
-        </div>
+              <li className="space-y-0.5">
+                <p className="text-foreground text-sm font-medium">
+                  {t("onboarding.ai.ladderLocalTitle")}
+                </p>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  {t("onboarding.ai.ladderLocalBody")}
+                </p>
+              </li>
+              <li className="space-y-0.5">
+                <p className="text-foreground text-sm font-medium">
+                  {t("onboarding.ai.ladderByokTitle")}
+                </p>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  {t("onboarding.ai.ladderByokBody")}
+                </p>
+              </li>
+              <li className="space-y-0.5">
+                <p className="text-foreground text-sm font-medium">
+                  {t("onboarding.ai.ladderOauthTitle")}
+                </p>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  {t("onboarding.ai.ladderOauthBody")}
+                </p>
+              </li>
+            </ul>
+          </div>
 
-        <p
-          data-slot="onboarding-ai-keyless"
-          className="text-foreground text-sm leading-relaxed"
-        >
-          {t("onboarding.ai.keylessLine")}
-        </p>
+          <p
+            data-slot="onboarding-ai-keyless"
+            className="text-foreground text-sm leading-relaxed"
+          >
+            {t("onboarding.ai.keylessLine")}
+          </p>
 
-        <MedicalDisclaimer variant="dataPosture" />
+          <MedicalDisclaimer variant="dataPosture" />
 
-        <Link
-          href="/settings/ai"
-          className="text-primary text-sm font-medium underline underline-offset-4"
-        >
-          {t("onboarding.ai.setupCta")}
-        </Link>
-      </section>
+          <Link
+            href="/settings/ai"
+            className="text-primary text-sm font-medium underline underline-offset-4"
+          >
+            {t("onboarding.ai.setupCta")}
+          </Link>
+        </section>
+      ) : null}
 
       <div className="flex w-full max-w-xs flex-col gap-2">
         <Button

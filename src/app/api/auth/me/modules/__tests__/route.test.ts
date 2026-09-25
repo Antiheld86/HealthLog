@@ -43,14 +43,14 @@ vi.mock("@/lib/rate-limit", () => ({
 }));
 
 // Operator master flag = on by default; coach delegation keys off it.
-// Partial mock — api-handler imports `AssistantDisabledError` from here.
-vi.mock("@/lib/feature-flags", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/feature-flags")>();
-  return {
-    ...actual,
-    getAssistantFlags: vi.fn().mockResolvedValue({ coach: true }),
-  };
-});
+// Partial mock: the rest of the module stays real, and both switch readers
+// answer from the one the test drives.
+vi.mock("@/lib/feature-flags", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/feature-flags")>()),
+  ...(
+    await import("@/__tests__/helpers/assistant-switches-mock")
+  ).mockAssistantSwitches(vi.fn().mockResolvedValue({ coach: true })),
+}));
 
 vi.mock("@/lib/cache/invalidate", async (importOriginal) => {
   const actual =

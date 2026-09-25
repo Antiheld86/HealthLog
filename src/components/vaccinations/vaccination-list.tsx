@@ -18,19 +18,25 @@
  * `vaccineName` instead — the degrade the DTO's `catalogEntry: null` signals,
  * now visible.
  *
- * ── Neutral, retrospective ─────────────────────────────────────────────────
+ * ── Neutral, retrospective — and the booster the person planned ───────────
  *
- * No due status anywhere on this page. A booster the user set shows on
- * `/checkups` like every other reminder; this surface reproduces the record
- * and does not adjudicate it. Cards are neutral — content in foreground, meta
- * in muted, no tint.
+ * The page reproduces the record and does not adjudicate it: nothing here
+ * works out what a person is due from their age or history. The one status it
+ * shows is the booster the person confirmed themselves — the reminder planned
+ * when a dose was logged — resolved server-side into a renewal state
+ * (`src/lib/vaccinations/renewal.ts`) and rendered on the antigen's heading,
+ * tinted only when it has passed or is close. Dose cards stay neutral —
+ * content in foreground, meta in muted, no tint.
  */
-import { Syringe } from "lucide-react";
+import { AlarmClock, Syringe } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { InfoPopover } from "@/components/ui/info-popover";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import type { SeriesPosition } from "@/lib/vaccinations/series";
+import type { VaccinationRenewalDTO } from "@/lib/vaccinations/renewal";
+import { cn } from "@/lib/utils";
 import type { Vaccination } from "./use-vaccinations";
 import { CatalogInfo, catalogInfoAvailable } from "./catalog-info";
 
@@ -208,15 +214,56 @@ function DoseRow({
   );
 }
 
+/**
+ * The booster the person planned for this antigen, on its heading. Overdue
+ * and due-soon are tinted so they are seen at a glance; a booster years away
+ * reads as plain meta. Composed from the server's resolved state — the client
+ * never compares dates itself.
+ */
+function RenewalBadge({ renewal }: { renewal: VaccinationRenewalDTO }) {
+  const { t } = useTranslations();
+  const format = useFormatters();
+  const date = format.date(renewal.dueAt);
+  const text =
+    renewal.state === "overdue"
+      ? t("vaccinations.renewal.overdue", { date })
+      : renewal.state === "dueSoon"
+        ? t("vaccinations.renewal.dueSoon", { date })
+        : t("vaccinations.renewal.current", { date });
+  const tone =
+    renewal.state === "overdue"
+      ? "border-warning/30 bg-warning/10 text-warning"
+      : renewal.state === "dueSoon"
+        ? "border-info/30 bg-info/10 text-info"
+        : "text-muted-foreground";
+  return (
+    <Badge
+      variant="outline"
+      data-slot="vaccination-renewal"
+      data-state={renewal.state}
+      className={cn("tracking-normal normal-case", tone)}
+    >
+      <AlarmClock aria-hidden />
+      {text}
+    </Badge>
+  );
+}
+
 export function VaccinationList({
   records,
+  renewals,
   onEdit,
 }: {
   records: readonly Vaccination[];
+  /** Resolved per antigen by the server; null when the grant withholds them. */
+  renewals?: readonly VaccinationRenewalDTO[] | null;
   onEdit?: (record: Vaccination) => void;
 }) {
   const { t } = useTranslations();
   const groups = groupByAntigen(records);
+  const renewalByAntigen = new Map(
+    (renewals ?? []).map((renewal) => [renewal.antigen, renewal]),
+  );
 
   return (
     <div className="space-y-6">
@@ -227,7 +274,7 @@ export function VaccinationList({
           data-slot="vaccination-group"
           data-antigen={group.antigen ?? "free"}
         >
-          <h2 className="text-muted-foreground flex items-center gap-2 text-xs font-medium tracking-wide uppercase">
+          <h2 className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs font-medium tracking-wide uppercase">
             <Syringe className="size-3.5" aria-hidden />
             {group.antigen
               ? t(`vaccinations.catalog.${group.antigen}`)
@@ -240,6 +287,9 @@ export function VaccinationList({
                 iconClassName="h-3 w-3"
                 triggerDataSlot="vaccination-info-trigger"
               />
+            ) : null}
+            {group.antigen && renewalByAntigen.has(group.antigen) ? (
+              <RenewalBadge renewal={renewalByAntigen.get(group.antigen)!} />
             ) : null}
           </h2>
           <div className="space-y-2">

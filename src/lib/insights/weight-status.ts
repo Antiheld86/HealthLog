@@ -10,6 +10,8 @@ import {
   type PairedPoint,
 } from "@/lib/analytics/correlations";
 import { getNoKeyWeightStatusText } from "@/lib/insights/no-key-fallbacks";
+import { resolveWeightTargetOverride } from "@/lib/analytics/effective-range";
+import { buildWeightTargetFeature } from "@/lib/targets/weight-trend";
 import {
   formatPreviousContextForPrompt,
   getPreviousInsightContext,
@@ -193,13 +195,13 @@ export async function prepareWeightStatusForUser(
       metric: "weight",
       locale,
     });
-    // v1.16.13 — `consent-missing` serves the same no-key fallback (see
-    // bmi-status); no enqueue happens for it.
-    if (outcome.kind === "no-provider" || outcome.kind === "consent-missing") {
+    // Unavailable for any reason serves the deterministic line and enqueues
+    // nothing. `hasProvider` is provider presence only.
+    if (outcome.kind === "unavailable") {
       return {
         phase: "served",
         result: {
-          hasProvider: false,
+          hasProvider: outcome.hasProvider,
           text: getNoKeyWeightStatusText(locale),
           cached: true,
           updatedAt: null,
@@ -230,9 +232,24 @@ export async function prepareWeightStatusForUser(
   // correlation math + the provider call) is skipped. A forced run never
   // gates — but still computes the fingerprint so the persisted row carries a
   // current one for the next day's gate.
+  // v1.39 (#1006) — the person's own weight target decides which way is
+  // progress. Folded into the input fingerprint so editing the target flips
+  // the gate even when no weight row moved.
+  const weightTarget = resolveWeightTargetOverride(
+    (
+      await prisma.user.findUnique({
+        where: { id: userId },
+        select: { thresholdsJson: true },
+      })
+    )?.thresholdsJson,
+  );
   const inputHash = await computeStatusInputFingerprint({
     userId,
     types: ["WEIGHT", "BLOOD_PRESSURE_SYS", "BLOOD_PRESSURE_DIA"],
+    extra: {
+      weightTargetMin: weightTarget?.min ?? null,
+      weightTargetMax: weightTarget?.max ?? null,
+    },
     includeMood: true,
     // v1.18.11 (P6-tighten) — WEIGHT is an FDR discovery OUTCOME channel and
     // the prompt folds `getRelevantCorrelationsForMetric(userId, "WEIGHT")`, so
@@ -444,12 +461,30 @@ export async function prepareWeightStatusForUser(
 
   // v1.18.10 (HIGH-4) — hand the model the finished recent-vs-baseline
   // comparison + normal-swing verdict instead of asking it to derive them.
-  // Weight has no universal favourable direction or population band, so the
-  // signal carries the neutral "target-band" framing and no normalRange.
+  // Weight has no universal favourable direction or population band, so
+  // without a stored target the signal carries the neutral "target-band"
+  // framing and no normalRange. v1.39 (#1006) — with one, the direction is
+  // the person's own: below the band a rise is favourable, above it a fall.
+  const recentWeights = weightSeries.daily
+    .filter((bucket) => bucket.dayOffset < 7)
+    .map((bucket) => bucket.value);
+  const weightTargetFeature = buildWeightTargetFeature(weightTarget, {
+    avg7:
+      recentWeights.length > 0
+        ? recentWeights.reduce((sum, value) => sum + value, 0) /
+          recentWeights.length
+        : null,
+    latest: latestWeight?.value ?? null,
+  });
   const weightSignal = buildMetricSignal({
     metric: locale === "en" ? "your weight" : "dein Gewicht",
     unit: "kg",
-    direction: "target-band",
+    direction:
+      weightTargetFeature?.position === "below"
+        ? "higher-better"
+        : weightTargetFeature?.position === "above"
+          ? "lower-better"
+          : "target-band",
     graded: weightGraded,
     newestDaysAgo: newestMeasurementDaysAgo,
   });
@@ -465,6 +500,7 @@ export async function prepareWeightStatusForUser(
     },
     weight: {
       ...(weightSignal ? { signal: weightSignal } : {}),
+      ...(weightTargetFeature ? { target: weightTargetFeature } : {}),
       summary: summarizeSeries(
         weightSeries.daily.map((bucket) => ({ value: bucket.value })),
       ),
@@ -668,11 +704,7 @@ export async function prepareWeightStatusForUser(
         userId,
         cacheAction,
         todayKey,
-        locale,
         text: summary,
-        providerType: outcome.providerType,
-        model: outcome.model,
-        tokensUsed: outcome.tokensUsed,
         snapshotHash,
         // v1.18.11 (P6) — persist the input fingerprint so tomorrow's input
         // gate can skip the rebuild when nothing salient changed.

@@ -19,9 +19,12 @@
  *   - NO TOOLS, NO SNAPSHOT — one completion per turn.
  *   - PROMPT-INJECTION FENCING — every document fenced as DATA (`fenceDocument`),
  *     per-doc header fields marker-scrubbed (`buildFencedChatSystemPrompt`).
- *   - PER-DOCUMENT EGRESS CONSENT — the single picked provider (no cascade) is
- *     consent-checked once per attached document; ALL must clear or the turn
- *     refuses (403) BEFORE any egress and BEFORE the user turn is persisted.
+ *   - CAPABILITY AT THE WIRE — the single picked provider (no cascade) is
+ *     re-checked against `documentAi` (the operator's switch, the module, the
+ *     sharing grant, and a document consent receipt for a pick that leaves the
+ *     machine) and against every other capability the entry point names (the
+ *     Coach, for a turn inside a Coach conversation). Any refusal is a 403
+ *     BEFORE any egress and BEFORE the user turn is persisted.
  *   - NUMERIC GROUNDING over the LIVE attachment union only — recomputed per turn
  *     from the join rows, never history / snapshot.
  *   - OWNER-SCOPED TEXT LOADER as a second ownership layer — a corrupted/foreign
@@ -33,7 +36,8 @@ import { prisma } from "@/lib/db";
 import { createSseStream } from "@/lib/sse/create-stream";
 
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
-import { assertDocumentEgressConsent } from "@/lib/ai/consent-guard";
+import { assertAiEgress } from "@/lib/ai/capabilities/egress";
+import type { AiCapabilityKey } from "@/lib/ai/capabilities/types";
 import {
   AllProvidersFailedError,
   runStreamingRawCompletionWithFallback,
@@ -260,12 +264,19 @@ export interface StreamFencedReplyArgs {
   /** i18n locale for outbound-guard fallbacks. */
   locale: Locale;
   signal: AbortSignal;
+  /**
+   * The capabilities this turn is answered under, beside `documentAi`, which
+   * every fenced turn needs because it reads documents. The Coach's fenced
+   * chat adds `coach`; the vault's single-document chat adds nothing.
+   */
+  alsoRequires: readonly AiCapabilityKey[];
 }
 
 /**
  * Run ONE fenced turn against a resolved conversation and its live documents, and
- * return the SSE response. May throw `ConsentRequiredError` (403, rendered as
- * JSON by the api-handler) BEFORE any egress — the consent fan-out runs first.
+ * return the SSE response. May throw `AiUnavailableError` (403, rendered as
+ * JSON by the api-handler) BEFORE any egress — the capability re-check runs
+ * first.
  */
 export async function streamFencedReply(
   args: StreamFencedReplyArgs,
@@ -274,29 +285,28 @@ export async function streamFencedReply(
     args;
 
   // ── Provider resolution: document order (local-first, codex last), SINGLE
-  // pick, NO cascade — so the exact egress equals the consent-checked target. ──
-  const { pick } = await resolveDocumentTextProvider(userId);
+  // pick, NO cascade — so the exact egress equals the checked target. The pick
+  // re-checks `documentAi` for that provider, consent receipt included; a
+  // refusal is thrown (403) before any egress. ──
+  const { pick, withheld } = await resolveDocumentTextProvider(userId);
+  if (withheld) throw withheld;
   if (!pick) {
     annotate({ action: { name: "documents.chat.noProvider" } });
     return streamFencedError("documents.chat.provider.none");
   }
 
-  // ── Per-document egress consent fan-out. Structured as a loop over the live
-  // attachments (annotated per doc id) so a future per-document consent
-  // dimension slots into this seam. ALL must clear or the first throws
-  // ConsentRequiredError (403) — zero egress on partial consent, BEFORE budget
-  // and BEFORE the user turn is persisted. ──
-  for (const doc of docs) {
-    annotate({
-      action: { name: "documents.chat.consent_check" },
-      meta: { documentId: doc.documentId, provider: pick.providerType },
-    });
-    await assertDocumentEgressConsent({
-      userId,
-      providerType: pick.providerType,
-      surface: "insights",
-    });
+  // ── Every other capability the entry point answers under, for the same
+  // provider, BEFORE budget and BEFORE the user turn is persisted. ──
+  for (const key of args.alsoRequires) {
+    await assertAiEgress(key, userId, [pick.providerType]);
   }
+  annotate({
+    action: { name: "documents.chat.consent_check" },
+    meta: {
+      documentIds: docs.map((doc) => doc.documentId),
+      provider: pick.providerType,
+    },
+  });
 
   // Persist the user's turn first so it's on disk regardless of the outcome.
   await appendMessage({ conversationId, role: "user", content: message });

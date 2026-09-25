@@ -64,6 +64,7 @@ import { getServerTranslator } from "@/lib/i18n/server-translator";
 import { type Locale } from "@/lib/i18n/config";
 import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { userDayKey, DEFAULT_TIMEZONE } from "@/lib/tz/resolver";
+import { validTimezoneOr } from "@/lib/tz/format";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { buildMedsTodayBlock } from "@/lib/dashboard/meds-today";
 import {
@@ -321,7 +322,7 @@ export const GET = apiHandler(async () => {
   // timezone. Falls back to Europe/Berlin when the column is somehow
   // missing (defensive — the schema's NOT NULL default normally pins
   // it).
-  const userTz = user.timezone ?? DEFAULT_TIMEZONE;
+  const userTz = validTimezoneOr(user.timezone, DEFAULT_TIMEZONE);
 
   // v1.4.38 W-F — wrap the whole response in the analytics LRU.
   // Subsequent iOS polls inside the TTL hit memory; measurement /

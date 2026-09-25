@@ -36,10 +36,12 @@ vi.mock("@/lib/modules/operator-availability", async (importOriginal) => {
     >();
   return { ...actual, getOperatorModuleAvailability: vi.fn() };
 });
-vi.mock("@/lib/feature-flags", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/feature-flags")>();
-  return { ...actual, getAssistantFlags: vi.fn() };
-});
+vi.mock("@/lib/feature-flags", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/feature-flags")>()),
+  ...(
+    await import("@/__tests__/helpers/assistant-switches-mock")
+  ).mockAssistantSwitches(vi.fn()),
+}));
 // The heavy builder is stubbed: this test pins the GATE, not the aggregate
 // (which has its own coverage). It returns one card per emitted kind.
 vi.mock("@/lib/cache/server-cache", () => ({

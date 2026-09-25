@@ -193,7 +193,7 @@ export async function refreshConversationSummary(
   const completion: StatusProviderResult = await runCompletion({
     userId,
     cacheAction: "coach.summary",
-    consentSurface: "coach",
+    capability: "coach",
     systemPrompt: locale === "de" ? SYSTEM_PROMPT_DE : SYSTEM_PROMPT_EN,
     userPrompt: buildSummaryUserPrompt(priorSummary, foldedTurns, locale),
     temperature: 0.3,

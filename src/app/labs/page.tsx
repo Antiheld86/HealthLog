@@ -16,6 +16,7 @@ import {
 
 import { LabForm } from "@/components/labs/lab-form";
 import { LabList } from "@/components/labs/lab-list";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { OcrReviewDialog } from "@/components/labs/ocr-review-dialog";
 import {
   shouldProbeOcrCapability,
@@ -64,6 +65,10 @@ export default function LabsPage() {
   // explicit `false`. Every `/api/labs/*` route also enforces the gate
   // server-side, so this is a UX redirect, not the security boundary.
   const enabled = user?.modules?.labs !== false;
+  // Scanning a lab report follows the `labsOcr` capability on
+  // `/api/auth/me`; with only the document-reading consent missing, the scan
+  // stays offered and the dialog asks for it.
+  const labsOcr = useAiCapability("labsOcr");
   const ocrCapability = useOcrCapability(
     shouldProbeOcrCapability({
       isAuthenticated,
@@ -71,6 +76,7 @@ export default function LabsPage() {
       labsEnabled: enabled,
       mounted,
       ownRecord: !inSharedRecord,
+      labsOcr,
     }),
   );
 
@@ -216,6 +222,7 @@ export default function LabsPage() {
           onOpenChange={setScanOpen}
           mode={ocrCapability.data.mode}
           pdfSupported={ocrCapability.data.pdfSupported}
+          consentRequired={labsOcr.reason === "consent_required"}
           onCommitted={() => {
             queryClient.invalidateQueries({
               queryKey: queryKeys.labResults(),

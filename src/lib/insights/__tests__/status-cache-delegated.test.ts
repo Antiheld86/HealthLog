@@ -16,8 +16,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const enqueueStatusGeneration = vi.fn(async () => {});
-const hasUsableStatusProvider = vi.fn(async () => true);
-const statusConsentBlocksGeneration = vi.fn(async () => false);
+const probeProviderPresence = vi.fn(async () => true);
+const aiCapabilityForRecord = vi.fn(async () => ({
+  available: true,
+  reason: null,
+  onDeviceAllowed: true,
+}));
 const suppressed = vi.fn(() => false);
 
 vi.mock("@/lib/jobs/insight-status-generate-shared", () => ({
@@ -26,11 +30,16 @@ vi.mock("@/lib/jobs/insight-status-generate-shared", () => ({
   STATUS_GENERATE_QUEUE: "insight-status-generate",
 }));
 
-vi.mock("@/lib/insights/status-provider", () => ({
-  hasUsableStatusProvider: (...args: unknown[]) =>
-    hasUsableStatusProvider(...(args as [])),
-  statusConsentBlocksGeneration: (...args: unknown[]) =>
-    statusConsentBlocksGeneration(...(args as [])),
+vi.mock("@/lib/ai/provider", () => ({
+  probeProviderPresence: (...args: unknown[]) =>
+    probeProviderPresence(...(args as [])),
+}));
+
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: (...args: unknown[]) =>
+    aiCapabilityForRecord(...(args as [])),
+  aiCapabilityToServe: (...args: unknown[]) =>
+    (aiCapabilityForRecord as (...a: unknown[]) => unknown)(...args),
 }));
 
 vi.mock("@/lib/sharing/delegated-generation", () => ({
@@ -41,11 +50,10 @@ vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    // The last-good text and the negative-cache probe both read the audit
-    // ledger; an empty ledger is the cold-cache case this function is for.
-    auditLog: {
-      findMany: vi.fn(async () => []),
-      findFirst: vi.fn(async () => null),
+    // The last-good text and the negative-cache probe both read the one
+    // status-note row; no row is the cold-cache case this function is for.
+    insightStatusCache: {
+      findUnique: vi.fn(async () => null),
     },
   },
 }));
@@ -57,11 +65,9 @@ beforeEach(() => {
   // the provider probe's call count, and a counter carried over from the
   // previous test would make it fail for the wrong reason (or pass for one).
   enqueueStatusGeneration.mockClear();
-  hasUsableStatusProvider.mockClear();
-  statusConsentBlocksGeneration.mockClear();
+  probeProviderPresence.mockClear();
+  aiCapabilityForRecord.mockClear();
   suppressed.mockReturnValue(false);
-  hasUsableStatusProvider.mockResolvedValue(true);
-  statusConsentBlocksGeneration.mockResolvedValue(false);
 });
 
 const ARGS = {
@@ -103,7 +109,9 @@ describe("resolveReadOnlyStatusMiss — the delegated path", () => {
 
     await resolveReadOnlyStatusMiss(ARGS);
 
-    expect(hasUsableStatusProvider).not.toHaveBeenCalled();
-    expect(statusConsentBlocksGeneration).not.toHaveBeenCalled();
+    // The capability is the one read allowed ahead of the decision; the
+    // provider-presence probe belongs to the unavailable branch only.
+    expect(aiCapabilityForRecord).toHaveBeenCalledWith("owner-1", "statusText");
+    expect(probeProviderPresence).not.toHaveBeenCalled();
   });
 });

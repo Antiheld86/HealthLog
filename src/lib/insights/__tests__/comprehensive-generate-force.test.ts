@@ -24,6 +24,7 @@ const resolveProviderChain = vi.fn();
 const resolveProvider = vi.fn();
 const runRawCompletionWithFallback = vi.fn();
 const extractFeatures = vi.fn();
+const aiCapabilityForRecord = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -48,6 +49,16 @@ vi.mock("@/lib/db", () => ({
       deleteMany: (...a: unknown[]) => auditDeleteMany(...a),
     },
   },
+}));
+// The wire re-check (`aiEgressRefusal`) passes in these fixtures; its refusal
+// arm has its own test in comprehensive-budget-refusal.test.ts.
+vi.mock("@/lib/ai/capabilities/egress", () => ({
+  aiEgressRefusal: vi.fn(async () => null),
+}));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: (...a: unknown[]) => aiCapabilityForRecord(...a),
+  aiCapabilityToServe: (...args: unknown[]) =>
+    (aiCapabilityForRecord as (...a: unknown[]) => unknown)(...args),
 }));
 vi.mock("@/lib/ai/provider", () => ({
   resolveProviderChain: (...a: unknown[]) => resolveProviderChain(...a),
@@ -108,6 +119,68 @@ beforeEach(() => {
   resolveProvider.mockResolvedValue({ type: "none" });
   extractFeatures.mockResolvedValue(FEATURES);
   userUpdate.mockResolvedValue({});
+  aiCapabilityForRecord.mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
+});
+
+describe("generateComprehensiveInsight — the briefing capability at the wire", () => {
+  const STALE_USER = {
+    insightsPrivacyMode: "aggregated",
+    insightsCachedAt: null,
+    insightsCachedText: null,
+    insightsExcludeMetrics: [],
+    insightsSnapshotHash: null,
+  };
+
+  it.each([
+    ["no_provider", "no-provider"],
+    ["consent_required", "no-consent"],
+    ["user_disabled", "unavailable"],
+    ["operator_disabled", "unavailable"],
+  ] as const)(
+    "skips with %s → %s and never resolves the chain",
+    async (reason, skipped) => {
+      findUnique.mockResolvedValue(STALE_USER);
+      aiCapabilityForRecord.mockResolvedValue({
+        available: false,
+        reason,
+        onDeviceAllowed: false,
+      });
+
+      const outcome = await generateComprehensiveInsight("u1", {
+        locale: "de",
+        force: true,
+      });
+
+      expect(outcome).toEqual({ status: "skipped", reason: skipped });
+      expect(aiCapabilityForRecord).toHaveBeenCalledWith("u1", "briefing");
+      expect(resolveProviderChain).not.toHaveBeenCalled();
+      expect(resolveProvider).not.toHaveBeenCalled();
+      expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
+      expect(extractFeatures).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still serves a fresh cache without asking the capability (cache short-circuit comes first)", async () => {
+    findUnique.mockResolvedValue({
+      ...STALE_USER,
+      insightsCachedAt: new Date(Date.now() - 60 * 60 * 1000),
+      insightsCachedText: "{}",
+    });
+    aiCapabilityForRecord.mockResolvedValue({
+      available: false,
+      reason: "user_disabled",
+      onDeviceAllowed: false,
+    });
+
+    const outcome = await generateComprehensiveInsight("u1", { locale: "de" });
+
+    expect(outcome).toEqual({ status: "cached" });
+    expect(aiCapabilityForRecord).not.toHaveBeenCalled();
+  });
 });
 
 describe("generateComprehensiveInsight — cache short-circuit", () => {

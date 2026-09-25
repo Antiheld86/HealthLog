@@ -78,10 +78,8 @@ import {
   BriefingBudgetExceededError,
   runBriefingCompletion,
 } from "@/lib/insights/briefing-provider";
-import {
-  chainRequiresServerManagedConsent,
-  hasActiveConsentForSurface,
-} from "@/lib/ai/consent-guard";
+import { aiCapabilityForRecord } from "@/lib/ai/capabilities/gate";
+import { aiEgressRefusal } from "@/lib/ai/capabilities/egress";
 import { invalidateUserInsights } from "@/lib/cache/invalidate";
 import {
   stripJsonFences,
@@ -142,6 +140,8 @@ export type GenerateOutcome =
   | {
       status: "skipped";
       reason:
+        /** The `briefing` capability is unavailable for another reason. */
+        | "unavailable"
         | "no-provider"
         | "no-consent"
         | "budget"
@@ -508,7 +508,11 @@ function failBeforeProvider(
 }
 
 type InsightCommitResult =
-  "committed" | "scope-changed" | "profile-scope-changed";
+  | "committed"
+  | "scope-changed"
+  | "profile-scope-changed"
+  | "no-consent"
+  | "unavailable";
 
 /**
  * The exact User columns (besides `insightsPrivacyMode`, guarded
@@ -530,6 +534,12 @@ type PromptScopeAtRead = {
  * was built from — without keying on the broad `updatedAt` timestamp, which
  * a provider credential refresh (e.g. `resolveProviderChain()`'s token
  * maintenance) also advances and would otherwise false-positive here.
+ *
+ * The consent rule runs once more too, against the provider that answered
+ * (`servedBy`, `null` for a timestamp-only stamp that writes no text), with a
+ * fresh receipt read: a withdrawal that landed while the
+ * call was in flight already purged the stored briefing, and this write would
+ * bring it back.
  */
 async function commitInsightUnderScope(
   userId: string,
@@ -537,8 +547,15 @@ async function commitInsightUnderScope(
   selfContextAtRead: string | null,
   promptScopeAtRead: PromptScopeAtRead,
   locale: SupportedLocale,
+  servedBy: string | null,
   data: Prisma.UserUpdateInput,
 ): Promise<InsightCommitResult> {
+  if (servedBy !== null) {
+    const late = await aiEgressRefusal("briefing", userId, [servedBy]);
+    if (late) {
+      return late.reason === "consent_required" ? "no-consent" : "unavailable";
+    }
+  }
   const currentSelfContext = await getSelfContextTextForUser(userId, locale);
   if (currentSelfContext !== selfContextAtRead) {
     return "profile-scope-changed";
@@ -657,6 +674,27 @@ export async function generateComprehensiveInsight(
     return { status: "cached" };
   }
 
+  // The `briefing` capability at the wire, before the chain is resolved (a
+  // Codex chain may refresh a token on resolve). Callers resolve it too (the
+  // route before it enqueues, the nightly pass before this call); switches,
+  // the AI analysis opt-out and consent can change in between.
+  const capability = await aiCapabilityForRecord(userId, "briefing");
+  if (!capability.available) {
+    annotate({
+      action: { name: "insights.comprehensive.unavailable" },
+      meta: { reason: capability.reason },
+    });
+    return {
+      status: "skipped",
+      reason:
+        capability.reason === "no_provider"
+          ? "no-provider"
+          : capability.reason === "consent_required"
+            ? "no-consent"
+            : "unavailable",
+    };
+  }
+
   const chain = await resolveProviderChain(userId);
   if (chain.length === 0) {
     const legacy = await resolveProvider(userId);
@@ -666,16 +704,23 @@ export async function generateComprehensiveInsight(
     chain.push({ providerType: "admin-openai", instance: legacy });
   }
 
-  // v1.12.1 — consent gate before any server-managed external egress. This
+  // The wire re-check for exactly this chain (`aiEgressRefusal`): the
+  // capability again, and the consent an operator-held entry needs. This
   // pipeline runs off-request (nightly cron + on-demand force-warm), so a
-  // missing receipt is a typed `skipped` outcome rather than a throw — the
-  // cron batch continues to the next user. BYOK / local / ChatGPT-OAuth
-  // chains never trip the check.
-  if (
-    chainRequiresServerManagedConsent(chain) &&
-    !(await hasActiveConsentForSurface(userId, "insights"))
-  ) {
-    return { status: "skipped", reason: "no-consent" };
+  // refusal is a typed `skipped` outcome rather than a throw — the cron batch
+  // continues to the next user. A person's own key, their ChatGPT account or
+  // a local model need no receipt.
+  const refusal = await aiEgressRefusal(
+    "briefing",
+    userId,
+    chain.map((entry) => entry.providerType),
+  );
+  if (refusal) {
+    return {
+      status: "skipped",
+      reason:
+        refusal.reason === "consent_required" ? "no-consent" : "unavailable",
+    };
   }
 
   const includeRaw = dbUser?.insightsPrivacyMode === "raw";
@@ -902,6 +947,7 @@ export async function generateComprehensiveInsight(
           aboutMe,
           promptScopeAtRead,
           locale,
+          rerolled.providerType,
           {
             insightsCachedAt: new Date(),
             insightsCachedText: rerolled.text,
@@ -928,6 +974,7 @@ export async function generateComprehensiveInsight(
         aboutMe,
         promptScopeAtRead,
         locale,
+        null,
         {
           insightsCachedAt: new Date(),
           // The fingerprint covers the generation locale, so a matching hash
@@ -951,6 +998,7 @@ export async function generateComprehensiveInsight(
       aboutMe,
       promptScopeAtRead,
       locale,
+      null,
       {
         insightsCachedAt: new Date(),
         insightsCachedLocale: locale,
@@ -1294,6 +1342,7 @@ export async function generateComprehensiveInsight(
     aboutMe,
     promptScopeAtRead,
     locale,
+    workingProviderType,
     {
       insightsCachedAt: new Date(),
       insightsCachedText: JSON.stringify(insights),

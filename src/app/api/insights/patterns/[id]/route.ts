@@ -13,7 +13,6 @@ import { auditLog } from "@/lib/auth/audit";
 import { invalidateUserCorrelationPatterns } from "@/lib/cache/invalidate";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
-import { requireModuleEnabled } from "@/lib/modules/gate";
 import { updateCorrelationPatternSchema } from "@/lib/validations/correlation-patterns";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -26,8 +25,6 @@ export const PATCH = apiHandler(
     // at no level below. The dismissal stores its own evidence hash and effect
     // size, so it reads back and reverses.
     const { user } = await requireRecordAuth("manage", "record");
-    const gate = await requireModuleEnabled(user.id, "insights");
-    if (!gate.enabled) return gate.response;
     const parsedId = patternIdSchema.safeParse((await params).id);
     if (!parsedId.success) return returnAllZodIssues(parsedId.error, 422);
     const id = parsedId.data;

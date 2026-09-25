@@ -4,7 +4,11 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     biomarker: { findFirst: vi.fn() },
     labResult: { findMany: vi.fn(), count: vi.fn() },
-    auditLog: { findFirst: vi.fn(), create: vi.fn() },
+    insightStatusCache: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+      updateMany: vi.fn(),
+    },
     // v1.30.3 (QA F5) — `resolveUserTimezone` reads this directly.
     user: { findUnique: vi.fn() },
   },
@@ -12,8 +16,26 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/insights/status-provider", () => ({
   runStatusCompletion: vi.fn(),
-  // Consent never blocks in these fixtures — the gate has its own tests.
-  statusConsentBlocksGeneration: vi.fn(async () => false),
+}));
+
+vi.mock(
+  "@/lib/ai/coach/bytes-codec",
+  async () => (await import("./status-note-fixtures")).fakeBytesCodec,
+);
+
+// statusText is available in these fixtures — the capability read has its
+// own tests in status-cache.test.ts.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
+  aiCapabilityToServe: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 
 import { prisma } from "@/lib/db";
@@ -26,6 +48,7 @@ import {
   biomarkerStatusScope,
 } from "../biomarker-status";
 import { sanitizeForPrompt } from "@/lib/insights/sanitize";
+import { noteRow, writtenNotes } from "./status-note-fixtures";
 
 const MARKER = {
   id: "bm-1",
@@ -74,10 +97,12 @@ function inputHashFor(reading: {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(null);
+  vi.mocked(prisma.insightStatusCache.upsert).mockResolvedValue({} as never);
+  vi.mocked(prisma.insightStatusCache.updateMany).mockResolvedValue(
+    {} as never,
+  );
   vi.mocked(prisma.biomarker.findFirst).mockResolvedValue(MARKER as never);
-  vi.mocked(prisma.auditLog.create).mockResolvedValue({
-    createdAt: new Date("2026-06-20T09:00:00.000Z"),
-  } as never);
   // Default: no stored timezone → resolveUserTimezone falls to the
   // Europe/Berlin server default, matching every other fixture's assumption.
   vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
@@ -85,7 +110,6 @@ beforeEach(() => {
 
 describe("generateBiomarkerStatus — empty-data guard", () => {
   it("returns insufficient WITHOUT calling the provider for a marker with no numeric readings", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null as never);
     vi.mocked(prisma.labResult.findMany).mockResolvedValue([] as never);
 
     const result = await generateBiomarkerStatus({
@@ -119,15 +143,13 @@ describe("generateBiomarkerStatus — empty-data guard", () => {
 describe("generateBiomarkerStatus — cache read", () => {
   it("serves today's cached text without calling the provider", async () => {
     const todayKey = toBerlinDayKey(new Date());
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue({
-      createdAt: new Date(),
-      details: JSON.stringify({
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
         dateKey: todayKey,
-        locale: "en",
         text: "Your LDL is steady.",
-        model: "x",
-      }),
-    } as never);
+        generatedAt: new Date(),
+      }) as never,
+    );
 
     const result = await generateBiomarkerStatus({
       biomarkerId: MARKER.id,
@@ -146,7 +168,6 @@ describe("generateBiomarkerStatus — cache read", () => {
 describe("generateBiomarkerStatus — generation path", () => {
   it("builds a snapshot, runs the completion, and persists with an inputHash", async () => {
     const reading = { id: "r1", value: 95, takenAt: TAKEN_AT };
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null as never);
     vi.mocked(prisma.labResult.findMany).mockResolvedValue([reading] as never);
     vi.mocked(prisma.labResult.count).mockResolvedValue(1 as never);
 
@@ -175,13 +196,9 @@ describe("generateBiomarkerStatus — generation path", () => {
     expect(snapshot.latest.value).toBe(95);
 
     // Persisted under the biomarker scope cache action, carrying the inputHash.
-    const createCall = vi
-      .mocked(prisma.auditLog.create)
-      .mock.calls.at(-1)![0] as {
-      data: { action: string; details: string };
-    };
-    expect(createCall.data.action).toBe("insights.biomarker:bm-1-status.en");
-    const persisted = JSON.parse(createCall.data.details);
+    const persisted = writtenNotes(prisma.insightStatusCache.upsert).at(-1)!;
+    expect(persisted.metric).toBe("biomarker:bm-1");
+    expect(persisted.locale).toBe("en");
     expect(persisted.inputHash).toBe(inputHashFor(reading));
   });
 });
@@ -200,7 +217,6 @@ describe("generateBiomarkerStatus — prompt-injection fence", () => {
       unit: hostileUnit,
     } as never);
     const reading = { id: "r1", value: 95, takenAt: TAKEN_AT };
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null as never);
     vi.mocked(prisma.labResult.findMany).mockResolvedValue([reading] as never);
     vi.mocked(prisma.labResult.count).mockResolvedValue(1 as never);
 
@@ -253,7 +269,6 @@ describe("generateBiomarkerStatus — per-user tz (QA F5)", () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       timezone: "America/New_York",
     } as never);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null as never);
     vi.mocked(prisma.labResult.findMany).mockResolvedValue([reading] as never);
     vi.mocked(prisma.labResult.count).mockResolvedValue(1 as never);
 
@@ -279,16 +294,14 @@ describe("generateBiomarkerStatus — input gate (regenerate only on a new readi
     // A prior assessment from an earlier day whose inputHash matches the
     // current latest reading — readFreshStatusText misses on the day key, but
     // the input gate matches the fingerprint.
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue({
-      createdAt: new Date(),
-      details: JSON.stringify({
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
         dateKey: "2000-01-01",
-        locale: "en",
         text: "Stable LDL from a previous reading.",
-        model: "x",
+        generatedAt: new Date(),
         inputHash: inputHashFor(reading),
-      }),
-    } as never);
+      }) as never,
+    );
     vi.mocked(prisma.labResult.findMany).mockResolvedValue([reading] as never);
     vi.mocked(prisma.labResult.count).mockResolvedValue(1 as never);
 
@@ -312,16 +325,14 @@ describe("generateBiomarkerStatus — input gate (regenerate only on a new readi
     };
     // The cached row's inputHash is for the OLD reading; the live latest is the
     // new reading, so the fingerprint differs and the gate misses.
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue({
-      createdAt: new Date(),
-      details: JSON.stringify({
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
         dateKey: "2000-01-01",
-        locale: "en",
         text: "Stale assessment.",
-        model: "x",
+        generatedAt: new Date(),
         inputHash: inputHashFor(oldReading),
-      }),
-    } as never);
+      }) as never,
+    );
     vi.mocked(prisma.labResult.findMany).mockResolvedValue([
       newReading,
     ] as never);

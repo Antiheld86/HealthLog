@@ -29,6 +29,10 @@ vi.mock("@/lib/insights/status-provider", () => ({
   runStatusCompletion: vi.fn(),
 }));
 
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: vi.fn(),
+}));
+
 // The single-card fallback path — assert it is invoked for omitted / failed
 // metrics, but don't re-drive a real completion.
 vi.mock("@/lib/insights/status-card-generation", async (importOriginal) => {
@@ -48,6 +52,7 @@ import { prepareMedicationComplianceStatusForUser } from "@/lib/insights/medicat
 import { prepareGeneralStatusForUser } from "@/lib/insights/general-status";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
 import { runPreparedStatusCard } from "@/lib/insights/status-card-generation";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import { generateStatusBatchForUser } from "../status-batch";
 
 function servedCard() {
@@ -101,6 +106,37 @@ const ALL_PREPARES = [
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(aiCapabilityForJob).mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  } as never);
+});
+
+describe("generateStatusBatchForUser — the statusText capability comes first", () => {
+  it("builds no snapshot and makes no call while statusText is unavailable", async () => {
+    vi.mocked(aiCapabilityForJob).mockResolvedValue({
+      available: false,
+      reason: "consent_required",
+      onDeviceAllowed: false,
+    } as never);
+    ALL_PREPARES.forEach((prepare, i) => {
+      vi.mocked(prepare).mockResolvedValue(pendingCard(`m${i}`) as never);
+    });
+
+    const result = await generateStatusBatchForUser("u1", { locale: "en" });
+
+    expect(aiCapabilityForJob).toHaveBeenCalledWith("u1", "statusText");
+    for (const prepare of ALL_PREPARES) expect(prepare).not.toHaveBeenCalled();
+    expect(runStatusCompletion).not.toHaveBeenCalled();
+    expect(runPreparedStatusCard).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      served: 0,
+      batched: 0,
+      fellBack: 0,
+      batchCallMade: false,
+    });
+  });
 });
 
 describe("generateStatusBatchForUser — one call covers all present metrics", () => {
@@ -166,6 +202,10 @@ describe("generateStatusBatchForUser — one call covers all present metrics", (
 
     // ONE provider round-trip for all seven metrics.
     expect(runStatusCompletion).toHaveBeenCalledTimes(1);
+    // The chokepoint re-checks the same capability at the wire.
+    expect(runStatusCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({ capability: "statusText" }),
+    );
     expect(result.batched).toBe(7);
     expect(result.fellBack).toBe(0);
     // Each metric's finalize got its own summary, wrapped in the { summary }
@@ -360,7 +400,10 @@ describe("generateStatusBatchForUser — graceful partial degradation", () => {
         pendingCard(`m${i}`, finalizers[i]) as never,
       );
     });
-    vi.mocked(runStatusCompletion).mockResolvedValue({ kind: "none" } as never);
+    vi.mocked(runStatusCompletion).mockResolvedValue({
+      kind: "none",
+      reason: "no_provider",
+    } as never);
 
     const result = await generateStatusBatchForUser("u1", { locale: "en" });
 

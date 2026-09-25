@@ -16,17 +16,6 @@ vi.mock("@/lib/logging/context", () => ({
 vi.mock("@/lib/modules/gate", () => ({
   isModuleEnabled: vi.fn(async () => true),
 }));
-// v1.30 (G3) — the operator-level assistant surface gate `get_ecg_recordings`
-// consults on top of the module gate.
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: vi.fn(async () => ({
-    enabled: true,
-    coach: true,
-    briefing: true,
-    insightStatus: true,
-    correlations: true,
-  })),
-}));
 // v1.22.0 — `search` reads the record directly via Prisma; stub it so the
 // registry-wide loops never reach a DB.
 vi.mock("@/lib/db", () => ({
@@ -151,7 +140,6 @@ import { computeDisplayDue } from "@/lib/medications/scheduling/next-due";
 import { getIntegrationStatus } from "@/lib/integrations/status";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
 import { isModuleEnabled } from "@/lib/modules/gate";
-import { getAssistantFlags } from "@/lib/feature-flags";
 import { getNutrients } from "@/lib/mcp/nutrients-read";
 import { loadIntradayPulse } from "@/lib/analytics/intraday-pulse-io";
 import { listTargetsBySource } from "@/lib/links";
@@ -1331,14 +1319,11 @@ describe("get_intraday_pulse — v1.30 coverage review (G2)", () => {
     expect(result.reason).toBe("no_data");
   });
 
-  it("returns { present: false, reason: module_disabled } when the `insights` module is off", async () => {
-    vi.mocked(isModuleEnabled).mockResolvedValueOnce(false);
-    const result = (await tool("get_intraday_pulse").run(CTX, {})) as {
-      present: boolean;
-      reason?: string;
-    };
-    expect(result).toEqual({ present: false, reason: "module_disabled" });
-    expect(loadIntradayPulse).not.toHaveBeenCalled();
+  it("reads the pulse whatever the AI analysis opt-out (insights module) says", async () => {
+    vi.mocked(isModuleEnabled).mockResolvedValue(false);
+    await tool("get_intraday_pulse").run(CTX, {});
+    expect(loadIntradayPulse).toHaveBeenCalled();
+    expect(isModuleEnabled).not.toHaveBeenCalledWith(CTX.userId, "insights");
   });
 });
 
@@ -1394,29 +1379,11 @@ describe("get_ecg_recordings — v1.30 coverage review (G3)", () => {
     expect(result).toEqual({ present: false, reason: "no_data" });
   });
 
-  it("returns { present: false, reason: module_disabled } when the `insights` module is off", async () => {
-    vi.mocked(isModuleEnabled).mockResolvedValueOnce(false);
-    const result = (await tool("get_ecg_recordings").run(CTX, {})) as {
-      present: boolean;
-      reason?: string;
-    };
-    expect(result).toEqual({ present: false, reason: "module_disabled" });
-    expect(prisma.ecgRecording.findMany).not.toHaveBeenCalled();
-  });
-
-  it("returns { present: false, reason: module_disabled } when the operator-level insightStatus surface is off", async () => {
-    vi.mocked(getAssistantFlags).mockResolvedValueOnce({
-      enabled: true,
-      coach: true,
-      briefing: true,
-      insightStatus: false,
-      correlations: true,
-    } as never);
-    const result = (await tool("get_ecg_recordings").run(CTX, {})) as {
-      present: boolean;
-      reason?: string;
-    };
-    expect(result).toEqual({ present: false, reason: "module_disabled" });
-    expect(prisma.ecgRecording.findMany).not.toHaveBeenCalled();
+  it("reads the recordings whatever the AI analysis opt-out (insights module) says", async () => {
+    vi.mocked(isModuleEnabled).mockResolvedValue(false);
+    vi.mocked(prisma.ecgRecording.findMany).mockResolvedValue([] as never);
+    await tool("get_ecg_recordings").run(CTX, {});
+    expect(prisma.ecgRecording.findMany).toHaveBeenCalled();
+    expect(isModuleEnabled).not.toHaveBeenCalledWith(CTX.userId, "insights");
   });
 });

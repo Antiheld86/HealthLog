@@ -9,8 +9,7 @@ import { COACH_INTERRUPTED_STORAGE_KEY } from "@/components/insights/coach-panel
 import type { CoachNudgeStatus } from "@/components/insights/layout-coach-fab";
 import type { CoachLaunchScope } from "@/lib/insights/coach-launch-context";
 import { useCoachLaunch } from "@/lib/insights/coach-launch-context";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
-import { useDisableCoach } from "@/hooks/use-disable-coach";
+import { useAiCapabilityAnswer } from "@/hooks/use-ai-capability";
 import { useAuth } from "@/hooks/use-auth";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { queryKeys } from "@/lib/query-keys";
@@ -208,24 +207,26 @@ function CoachPageBody() {
 export default function CoachPageClient() {
   const router = useRouter();
   const launch = useCoachLaunch();
-  const flags = useFeatureFlags();
-  const disableCoach = useDisableCoach();
+  // The `coach` capability on `/api/auth/me` is the one answer every Coach
+  // entry point reads. `null` until `/me` has answered, so a direct visit is
+  // never sent away on the loading frame.
+  const coach = useAiCapabilityAnswer("coach");
   const { user, isLoading } = useAuth();
   const { inSharedRecord } = useRecordCapabilities();
 
-  const coachUnavailable = !flags.coach || disableCoach;
+  const coachUnavailable = coach === null || !coach.available;
 
-  // Coach surface gating mirrors `<CoachLaunchButton>` / `<LayoutCoachFab>`:
-  // operator master flag OR per-user opt-out hides the Coach entirely.
-  // Send a direct navigator back to the Insights mother page so the
-  // route is never a dead-end.
+  // With the Coach unavailable for any reason (operator switch, Hide Coach,
+  // no provider, missing consent) a direct navigator goes back to the
+  // Insights overview, so the route is never a dead end. Stored
+  // conversations stay reachable under /coach/conversations.
   const canRenderOwnCoach = user !== null && !isLoading && !inSharedRecord;
 
   useEffect(() => {
-    if (canRenderOwnCoach && coachUnavailable) {
+    if (canRenderOwnCoach && coach !== null && !coach.available) {
       router.replace("/insights");
     }
-  }, [canRenderOwnCoach, coachUnavailable, router]);
+  }, [canRenderOwnCoach, coach, router]);
 
   // Reopening the bottom-right FAB drawer is no longer wired to a page
   // control, but keep the launch context referenced so the lint rule does

@@ -454,6 +454,25 @@ async function main() {
     ),
   );
 
+  // ───── v1.39.0 InsightStatusCache."textEncrypted" / "itemsEncrypted" ─────
+  // The per-metric status notes. Both nullable (a row may carry only a
+  // negative-cache window; only one card stores per-item lines), and
+  // `rotateBytesColumn` skips a NULL payload.
+  results.push(
+    await rotateBytesColumn(
+      "InsightStatusCache",
+      "textEncrypted",
+      prisma.insightStatusCache,
+    ),
+  );
+  results.push(
+    await rotateBytesColumn(
+      "InsightStatusCache",
+      "itemsEncrypted",
+      prisma.insightStatusCache,
+    ),
+  );
+
   // ───── v1.31.0 ArrivalReaction."lineEncrypted" (Bytes, nullable) ─────
   // The data-arrival spine's generated reaction line. Nullable by design — a
   // provider-less install writes markers with no line at all — and

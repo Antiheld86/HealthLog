@@ -37,13 +37,6 @@ vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: vi.fn().mockResolvedValue({
-    briefing: true,
-    insightStatus: false,
-  }),
-}));
-
 import {
   ACCOUNT_SELECTOR_HEADER,
   apiHandler,
@@ -69,7 +62,11 @@ import { warmOneNarrative } from "@/lib/jobs/period-narrative-warm";
 const PROVIDER_ORIGIN_KEY = "provider-origin-test-key";
 let tokenNumber = 0;
 
-async function createUser(id: string, managed = false): Promise<void> {
+async function createUser(
+  id: string,
+  managed = false,
+  withProvider = false,
+): Promise<void> {
   await getPrismaClient().user.create({
     data: {
       id,
@@ -77,6 +74,22 @@ async function createUser(id: string, managed = false): Promise<void> {
       email: `provider-${id}@example.test`,
       role: "USER",
       ...(managed ? { managedProfileAt: new Date() } : {}),
+      // Status work needs a provider (presence only) and consent on the
+      // record; without them nothing is enqueued for anyone, and a
+      // delegate's "nothing enqueued" would prove nothing.
+      ...(withProvider
+        ? {
+            aiProvider: "ANTHROPIC",
+            aiAnthropicKeyEncrypted: "v1:presence-only",
+            consentReceipts: {
+              create: {
+                kind: "ai_full",
+                artefact: "test",
+                signedAt: new Date(),
+              },
+            },
+          }
+        : {}),
     },
   });
 }
@@ -155,7 +168,7 @@ beforeEach(async () => {
 
 describe("sharing provider origin", () => {
   it("[J6-no-delegated-provider-egress] enqueues and dispatches an owner-origin mutation as the positive control", async () => {
-    await createUser("provider-owner");
+    await createUser("provider-owner", false, true);
     headerJar.set(
       "authorization",
       `Bearer ${await mintToken("provider-owner")}`,
@@ -198,7 +211,7 @@ describe("sharing provider origin", () => {
   });
 
   it("[J6-no-delegated-provider-egress] enqueues and dispatches no provider work for a delegate, including a mutation-to-red payload", async () => {
-    await createUser("provider-record");
+    await createUser("provider-record", false, true);
     await createUser("provider-delegate");
     await grantManage({
       id: "provider-delegated-grant",

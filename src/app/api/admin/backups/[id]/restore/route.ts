@@ -71,6 +71,7 @@ import { restoreAwardsData } from "@/lib/export/awards-backup";
 import { restoreEnvironmentData } from "@/lib/export/environment-backup";
 import { restoreEcgData } from "@/lib/export/ecg-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
+import { foldLegacyCoachAvailability } from "@/lib/modules/operator-availability";
 
 export const dynamic = "force-dynamic";
 
@@ -483,6 +484,12 @@ const handler = apiHandler(
           // the account restore assumes.
           if (payload.appSettings && restoreInstanceSettings) {
             const settings = payload.appSettings;
+            // A file from before 0343 carries the Coach's operator answer in
+            // module availability; carry it into the Coach switch.
+            const coachFold = foldLegacyCoachAvailability(
+              settings.moduleAvailabilityJson,
+              settings.assistantCoachEnabled,
+            );
             const settingsData = {
               registrationEnabled: settings.registrationEnabled,
               mfaRequired: settings.mfaRequired,
@@ -523,13 +530,13 @@ const handler = apiHandler(
                 settings.adminAiInsightsFeedbackSummary as never,
               defaultUserTimezone: settings.defaultUserTimezone,
               assistantEnabled: settings.assistantEnabled,
-              assistantCoachEnabled: settings.assistantCoachEnabled,
+              assistantCoachEnabled: coachFold.assistantCoachEnabled,
               assistantBriefingEnabled: settings.assistantBriefingEnabled,
               assistantInsightStatusEnabled:
                 settings.assistantInsightStatusEnabled,
-              assistantCorrelationsEnabled:
-                settings.assistantCorrelationsEnabled,
-              moduleAvailabilityJson: settings.moduleAvailabilityJson as never,
+              assistantDocumentAiEnabled:
+                settings.assistantDocumentAiEnabled ?? true,
+              moduleAvailabilityJson: coachFold.moduleAvailabilityJson as never,
               documentMaxFileBytes: settings.documentMaxFileBytes,
               documentQuotaBytes: BigInt(settings.documentQuotaBytes),
             };

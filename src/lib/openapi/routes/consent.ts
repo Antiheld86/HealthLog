@@ -9,7 +9,9 @@
  * clients have a stable reference.
  *
  * Receipt kinds: `ai_full` (master — satisfies every surface),
- * `ai_insights_only` (Insights only), `ai_coach` (Coach only).
+ * `ai_insights_only` (Insights only), `ai_coach` (Coach only),
+ * `ai_extraction` (reading documents, lab report scans and typed medication
+ * text; minted by the document auto-read switch).
  *
  * - POST /api/consent/ai      — explicit grant with a signed artefact (iOS).
  * - POST /api/consent/ai/web  — idempotent `ai_full` grant for the web
@@ -110,11 +112,12 @@ const consentLatestAllKinds = z
     ai_full: serialisedReceipt.nullable(),
     ai_insights_only: serialisedReceipt.nullable(),
     ai_coach: serialisedReceipt.nullable(),
+    ai_extraction: serialisedReceipt.nullable(),
   })
   .meta({
     id: "ConsentLatestByKind",
     description:
-      "The latest active receipt for every kind. All three keys are always present: a null value means the kind is not granted, so a client never has to read absence as ambiguity.",
+      "The latest active receipt for every kind. Every key is always present: a null value means the kind is not granted, so a client never has to read absence as ambiguity.",
   });
 
 const consentRevokeAllKinds = z
@@ -137,7 +140,7 @@ const consentRevokeAllKinds = z
 const consentQueryValidation400 = {
   "400": {
     description:
-      "`kind` was present but is not one of `ai_full`, `ai_insights_only`, `ai_coach`. Multi-issue envelope; nothing was read or revoked. The consent family answers 400 here where the rest of the API answers 422.",
+      "`kind` was present but is not one of `ai_full`, `ai_insights_only`, `ai_coach`, `ai_extraction`. Multi-issue envelope; nothing was read or revoked. The consent family answers 400 here where the rest of the API answers 422.",
     content: { "application/json": { schema: errorEnvelope } },
   },
 };
@@ -257,7 +260,9 @@ export const consentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "\n" +
         "Idempotent on purpose, and it is worth knowing why: revoking a kind that has nothing active answers 200 with `receipt: null` rather than 404, because the client toggle fires this on every flip and a 404 would render as a failure the user cannot act on. Revocation is append-only in effect — the row is stamped, never deleted — and each revocation is audit-logged.\n" +
         "\n" +
-        "Revoking `ai_full` does NOT switch off `documentsAutoAiRead`; that flag is written through PATCH /api/auth/me/documents-auto-ai-read and turning it on mints a fresh receipt. A client offering both controls should show them as the two separate things they are.",
+        "Revoking `ai_full` or `ai_extraction` does NOT switch off `documentsAutoAiRead`, but it does stop document reading: the document gate reads the receipt, not the switch, so a revocation wins over a switch left on. Turning the switch on again mints a fresh `ai_extraction` receipt through PATCH /api/auth/me/documents-auto-ai-read. A client offering both controls should show them as the two separate things they are.\n" +
+        "\n" +
+        "When a revocation leaves no receipt covering the analysis (`ai_insights_only` or `ai_full`), the same transaction deletes the text a model wrote under it that can be written again: per-metric status notes, the cached briefing, model-written period narratives, reaction lines and workout paragraphs. Coach conversations, facts and plans and document summaries are the person's records and stay. A deletion is audit-logged with counts only (`consent.ai.purge`).",
       requestParams: {
         query: z.object({
           kind: consentKindEnum

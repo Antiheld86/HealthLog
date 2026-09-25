@@ -36,6 +36,7 @@ import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { SettingsInfoTile } from "@/components/settings/_info-tile";
 import { Label } from "@/components/ui/label";
 import { ConfirmButton } from "@/components/ui/confirm-button";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -61,6 +62,7 @@ const FIELD_CLASSES =
 export function AboutMeNoteManager() {
   const { t } = useTranslations();
   const queryClient = useQueryClient();
+  const coach = useAiCapability("coach");
   const [draft, setDraft] = useState<string | null>(null);
 
   const query = useQuery({
@@ -194,14 +196,18 @@ export function AboutMeNoteManager() {
               <li key={q}>{q}</li>
             ))}
           </ul>
-          <p className="mt-3 text-xs">
-            <Link
-              href="/coach"
-              className="text-primary underline-offset-4 hover:underline"
-            >
-              {t("settings.ai.aboutMe.questionsOpenCoach")}
-            </Link>
-          </p>
+          {/* Only while the Coach can open; without it the link would
+              bounce back to Insights. The questions stay readable. */}
+          {coach.available ? (
+            <p className="mt-3 text-xs">
+              <Link
+                href="/coach"
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                {t("settings.ai.aboutMe.questionsOpenCoach")}
+              </Link>
+            </p>
+          ) : null}
         </SettingsInfoTile>
       )}
 

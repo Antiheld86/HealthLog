@@ -29,6 +29,8 @@ const customMetricFindMany = vi.fn();
 
 vi.mock("@/lib/modules/gate", () => ({
   isModuleEnabled: vi.fn(async () => true),
+  // Every module on: the record's map feeds the matrix mask.
+  resolveModuleMap: vi.fn(async () => ({})),
 }));
 vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
 vi.mock("@/lib/db", () => ({

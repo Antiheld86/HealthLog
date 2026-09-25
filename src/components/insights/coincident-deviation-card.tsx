@@ -5,6 +5,7 @@ import { AlertTriangle, Activity } from "lucide-react";
 import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { MEASUREMENT_TYPE_LABEL_KEYS } from "@/components/measurements/measurement-list-meta";
 import { CoverageMeter } from "@/components/insights/derived/coverage-meter";
 import { ProvenanceExplainer } from "@/components/insights/derived/provenance-explainer";
@@ -172,10 +173,31 @@ export function CoincidentDeviationCard({
   className,
 }: CoincidentDeviationCardProps) {
   const { t } = useTranslations();
-  const { data } = useDerivedMetric<CoincidentDeviationValue>(
+  const { data, isError, refetch } = useDerivedMetric<CoincidentDeviationValue>(
     COINCIDENT_METRIC,
     { enabled },
   );
+
+  // A failed read says so with a retry. Without this branch the card sat on
+  // its skeleton forever, which read as "still loading" rather than failed.
+  if (isError && !data) {
+    return (
+      <section
+        data-slot="coincident-deviation-section"
+        aria-label={t("insights.derived.coincident.cardTitle")}
+        className={cn("space-y-3", className)}
+      >
+        <SectionHeading
+          icon={Activity}
+          title={t("insights.derived.coincident.cardTitle")}
+        />
+        <QueryErrorRow
+          slot="coincident-deviation-error"
+          onRetry={() => void refetch()}
+        />
+      </section>
+    );
+  }
 
   // CLS-safe placeholder while the single read is in flight.
   if (!data) {

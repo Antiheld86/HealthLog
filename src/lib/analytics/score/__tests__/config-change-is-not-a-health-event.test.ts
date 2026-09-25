@@ -178,6 +178,8 @@ const fakeDb = vi.hoisted(() => {
     personalRecord: { findMany: none },
     arrivalReaction: { findMany: none },
     encounter: { findFirst: async () => null },
+    // The AI capability loader's consent read: no receipts.
+    consentReceipt: { findMany: none },
   };
 });
 
@@ -215,17 +217,27 @@ vi.mock("@/lib/analytics/bp-in-target-fast-path", () => ({
   computeBpInTargetFastPath: (...a: unknown[]) =>
     computeBpInTargetFastPath(...a),
 }));
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: (...a: unknown[]) => getAssistantFlags(...a),
-}));
+vi.mock("@/lib/feature-flags", async () =>
+  (
+    await import("@/__tests__/helpers/assistant-switches-mock")
+  ).mockAssistantSwitches(() => getAssistantFlags()),
+);
 vi.mock("@/lib/ai/provider", () => ({
   hasAnyConfiguredProvider: (...a: unknown[]) => hasAnyConfiguredProvider(...a),
+  // The capability loader's presence probe: no provider on the record.
+  probeProviderChain: async () => ({
+    entries: [],
+    localOcrEnabled: false,
+    managedBy: null,
+  }),
 }));
 vi.mock("@/lib/dashboard/meds-today", () => ({
   buildMedsTodayBlock: (...a: unknown[]) => buildMedsTodayBlock(...a),
 }));
 vi.mock("@/lib/modules/gate", () => ({
   resolveModuleMap: (...a: unknown[]) => resolveModuleMap(...a),
+  // The operator offers every module; the AI capability loader reads it.
+  getOperatorModuleAvailability: async () => moduleMap(),
 }));
 vi.mock("@/lib/dashboard/score-rings", () => ({
   buildScoreRingsBlock: (...a: unknown[]) => buildScoreRingsBlock(...a),
@@ -400,7 +412,7 @@ beforeEach(() => {
     coach: false,
     briefing: false,
     insightStatus: false,
-    correlations: false,
+    documentAi: false,
   });
   hasAnyConfiguredProvider.mockResolvedValue(false);
   buildMedsTodayBlock.mockResolvedValue({
@@ -448,6 +460,12 @@ describe("a settings change is never narrated as a health event", () => {
     expect(digest.score?.deltaReason).toBeNull();
     expect(digest.score?.delta).toBe(snapshot.healthScore!.delta);
     expect(digest.score!.delta!).toBeLessThanOrEqual(-10);
+    // The fixture's AI is off because the operator switched it off, and the
+    // capability loader actually ran to say so. `check_failed` here would mean
+    // a mock starved the loader and the digest was assembled on a failure
+    // path nobody meant to test.
+    expect(digest.ai.coach.reason).toBe("operator_disabled");
+    expect(digest.ai.reactionLines.reason).toBe("operator_disabled");
   });
 
   it("renders no delta chip when the recipe changed inside the window", async () => {

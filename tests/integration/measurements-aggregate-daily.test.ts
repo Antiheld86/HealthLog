@@ -14,6 +14,7 @@
  */
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { userDayKey } from "@/lib/tz/format";
 
 import { cookieJar } from "./mock-next-headers";
 import { getPrismaClient, truncateAllTables } from "./setup";
@@ -128,11 +129,15 @@ describe("GET /api/measurements?aggregate=… (real Postgres)", () => {
     expect(json.data.meta.aggregate).toBe("daily");
     expect(json.data.measurements).toHaveLength(2);
 
-    const may1 = json.data.measurements.find((m) =>
-      m.measuredAt.startsWith("2026-05-01"),
+    // Buckets are the account's own calendar days (Europe/Berlin, the
+    // column default), keyed by the instant of local midnight (#1026).
+    const may1 = json.data.measurements.find(
+      (m) =>
+        userDayKey(new Date(m.measuredAt), "Europe/Berlin") === "2026-05-01",
     );
-    const may2 = json.data.measurements.find((m) =>
-      m.measuredAt.startsWith("2026-05-02"),
+    const may2 = json.data.measurements.find(
+      (m) =>
+        userDayKey(new Date(m.measuredAt), "Europe/Berlin") === "2026-05-02",
     );
     expect(may1).toBeDefined();
     expect(may1!.count).toBe(2);

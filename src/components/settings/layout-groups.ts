@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 
 import type { ModuleKey } from "@/lib/modules/registry";
+import { surfaceModule } from "@/lib/modules/surface";
 import { DashboardSection } from "./dashboard-section";
 import { InsightsSection } from "./insights-section";
 import { MedicationsSection } from "./medications-section";
@@ -43,11 +44,16 @@ export interface LayoutGroup {
   /** i18n key under `settings.sections.layout.<slug>.description`. */
   descriptionKey: string;
   Body: () => JSX.Element | null;
-  /**
-   * When set, the row / subpage renders only while the module is enabled
-   * (fail-open, `!== false`). Omitted = always shown.
-   */
-  moduleGate?: ModuleKey;
+}
+
+/**
+ * The module a layout group belongs to, from the one surface map
+ * (`settings-layout:<id>`), or `undefined` for a group that is always shown.
+ * The row and its sub-page render only while that module is on (fail-open,
+ * `!== false`).
+ */
+export function layoutGroupModule(id: string): ModuleKey | undefined {
+  return surfaceModule(`settings-layout:${id}`);
 }
 
 export const LAYOUT_GROUPS: ReadonlyArray<LayoutGroup> = [
@@ -68,28 +74,24 @@ export const LAYOUT_GROUPS: ReadonlyArray<LayoutGroup> = [
     titleKey: "settings.sections.layout.medications.title",
     descriptionKey: "settings.sections.layout.medications.description",
     Body: MedicationsSection,
-    moduleGate: "medications",
   },
   {
     id: "mood",
     titleKey: "settings.sections.layout.mood.title",
     descriptionKey: "settings.sections.layout.mood.description",
     Body: MoodSection,
-    moduleGate: "mood",
   },
   {
     id: "labs",
     titleKey: "settings.sections.layout.labs.title",
     descriptionKey: "settings.sections.layout.labs.description",
     Body: LabsSection,
-    moduleGate: "labs",
   },
   {
     id: "illness",
     titleKey: "settings.sections.layout.illness.title",
     descriptionKey: "settings.sections.layout.illness.description",
     Body: IllnessSection,
-    moduleGate: "illness",
   },
   {
     id: "vorsorge",

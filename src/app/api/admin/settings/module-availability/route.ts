@@ -43,11 +43,12 @@ import {
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
+import { getAssistantFlags } from "@/lib/feature-flags";
 import {
   mergeAvailabilityPatch,
   resolveOperatorAvailability,
 } from "@/lib/modules/operator-availability";
-import { MODULE_KEYS } from "@/lib/modules/registry";
+import { MODULE_KEYS, SWITCH_OWNED_MODULE_KEYS } from "@/lib/modules/registry";
 
 export const dynamic = "force-dynamic";
 
@@ -55,11 +56,17 @@ export const dynamic = "force-dynamic";
  * Strict per-module boolean patch. Building the shape from `MODULE_KEYS`
  * keeps the schema exhaustive and rejects any non-module key (including
  * the four core domains) at the validation boundary.
+ *
+ * The Coach is left out and therefore refused: its operator layer is the
+ * Coach switch on the assistant panel, and a second place to turn it off
+ * would be a second answer to one question.
  */
 const moduleAvailabilitySchema = z
   .object(
     Object.fromEntries(
-      MODULE_KEYS.map((key) => [key, z.boolean().optional()]),
+      MODULE_KEYS.filter((key) => !SWITCH_OWNED_MODULE_KEYS.includes(key)).map(
+        (key) => [key, z.boolean().optional()],
+      ),
     ) as Record<(typeof MODULE_KEYS)[number], z.ZodOptional<z.ZodBoolean>>,
   )
   .strict();
@@ -68,13 +75,19 @@ export const GET = apiHandler(async () => {
   await requireAdmin();
   annotate({ action: { name: "admin.settings.module-availability.get" } });
 
-  const settings = await prisma.appSettings.findUnique({
-    where: { id: "singleton" },
-    select: { moduleAvailabilityJson: true },
-  });
+  const [settings, switches] = await Promise.all([
+    prisma.appSettings.findUnique({
+      where: { id: "singleton" },
+      select: { moduleAvailabilityJson: true },
+    }),
+    getAssistantFlags(),
+  ]);
 
   return apiSuccess({
-    availability: resolveOperatorAvailability(settings?.moduleAvailabilityJson),
+    availability: resolveOperatorAvailability(
+      settings?.moduleAvailabilityJson,
+      switches.coach,
+    ),
   });
 });
 
@@ -128,6 +141,9 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   });
 
   return apiSuccess({
-    availability: resolveOperatorAvailability(settings.moduleAvailabilityJson),
+    availability: resolveOperatorAvailability(
+      settings.moduleAvailabilityJson,
+      (await getAssistantFlags()).coach,
+    ),
   });
 });

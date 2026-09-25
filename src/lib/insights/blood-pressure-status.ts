@@ -191,13 +191,13 @@ export async function prepareBloodPressureStatusForUser(
       metric: "blood-pressure",
       locale,
     });
-    // v1.16.13 — `consent-missing` serves the same no-key fallback (see
-    // bmi-status); no enqueue happens for it.
-    if (outcome.kind === "no-provider" || outcome.kind === "consent-missing") {
+    // Unavailable for any reason serves the deterministic line and enqueues
+    // nothing. `hasProvider` is provider presence only.
+    if (outcome.kind === "unavailable") {
       return {
         phase: "served",
         result: {
-          hasProvider: false,
+          hasProvider: outcome.hasProvider,
           text: getNoKeyBloodPressureStatusText(locale),
           cached: true,
           updatedAt: null,
@@ -769,11 +769,7 @@ export async function prepareBloodPressureStatusForUser(
         userId,
         cacheAction,
         todayKey,
-        locale,
         text: summary,
-        providerType: outcome.providerType,
-        model: outcome.model,
-        tokensUsed: outcome.tokensUsed,
         snapshotHash,
       });
       return {

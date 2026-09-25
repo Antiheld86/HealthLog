@@ -140,6 +140,24 @@ describe("<EntityLinkPicker> inline summary", () => {
     expect(html).not.toContain('data-slot="test-link-add"');
   });
 
+  it("a failed read shows an error row with retry, never the empty label", () => {
+    const html = render(
+      <EntityLinkPicker
+        {...base}
+        options={[]}
+        pending={true}
+        error
+        errorLabel="Could not load documents"
+        onRetry={() => undefined}
+        selected={[]}
+      />,
+    );
+    expect(html).toContain('data-slot="test-link-error"');
+    expect(html).toContain("Could not load documents");
+    expect(html).toContain('role="alert"');
+    expect(html).not.toContain("Nothing to link");
+  });
+
   it("renders a skeleton while the options load", () => {
     const html = render(
       <EntityLinkPicker {...base} options={[]} pending={true} selected={[]} />,

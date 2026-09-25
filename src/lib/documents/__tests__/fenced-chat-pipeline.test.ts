@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * v1.29.x (S7) — the shared fenced turn pipeline (design §3, adversarial tests
- * 12, 14, 16, 17, 18, 19). Pins: per-document egress consent fan-out (ALL clear
- * or refuse, zero egress + no user turn persisted on partial consent), the SINGLE
- * consent-checked provider (no cascade), numeric grounding over the LIVE
+ * 12, 14, 16, 17, 18, 19). Pins: the capability re-check at the wire (the
+ * document pick answers `documentAi`, each extra capability the entry point
+ * names is asked for the same provider; any refusal means zero egress and no
+ * user turn persisted), the SINGLE checked provider (no cascade), numeric grounding over the LIVE
  * attachment UNION, and the owner-scoped context loader (a corrupted/foreign join
  * row yields null → the turn refuses, never foreign text).
  */
@@ -21,8 +22,8 @@ vi.mock("@/lib/documents/content-index", () => ({
 vi.mock("@/lib/documents/provider-order", () => ({
   resolveDocumentTextProvider: vi.fn(),
 }));
-vi.mock("@/lib/ai/consent-guard", () => ({
-  assertDocumentEgressConsent: vi.fn().mockResolvedValue(undefined),
+vi.mock("@/lib/ai/capabilities/egress", () => ({
+  assertAiEgress: vi.fn(),
 }));
 vi.mock("@/lib/ai/coach/budget", () => ({
   buildDateKey: vi.fn(() => "2026-07-16"),
@@ -49,7 +50,8 @@ import {
 } from "../fenced-chat";
 import { loadDocumentChatText } from "@/lib/documents/content-index";
 import { resolveDocumentTextProvider } from "@/lib/documents/provider-order";
-import { assertDocumentEgressConsent } from "@/lib/ai/consent-guard";
+import { assertAiEgress } from "@/lib/ai/capabilities/egress";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 import { runStreamingRawCompletionWithFallback } from "@/lib/ai/provider-runner";
 import { appendMessage } from "@/lib/ai/coach/persistence";
 
@@ -90,12 +92,13 @@ const baseArgs = {
   contractLocale: "en" as const,
   locale: "en" as const,
   signal: new AbortController().signal,
+  alsoRequires: [],
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(resolveDocumentTextProvider).mockResolvedValue(PICK as never);
-  vi.mocked(assertDocumentEgressConsent).mockResolvedValue(undefined);
+  vi.mocked(assertAiEgress).mockResolvedValue(undefined);
   vi.mocked(appendMessage).mockImplementation(
     async (p) => ({ id: p.role === "assistant" ? "a" : "u", ...p }) as never,
   );
@@ -106,36 +109,67 @@ beforeEach(() => {
   } as never);
 });
 
-describe("streamFencedReply — consent fan-out", () => {
-  it("checks egress consent ONCE PER attached document", async () => {
-    await streamFencedReply({
-      ...baseArgs,
-      docs: [doc("a", "x"), doc("b", "y"), doc("c", "z")],
-    });
-    expect(assertDocumentEgressConsent).toHaveBeenCalledTimes(3);
-    expect(assertDocumentEgressConsent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user-1",
-        providerType: "anthropic",
-        surface: "insights",
-      }),
-    );
-  });
-
-  it("refuses (throws) with ZERO egress + no user turn persisted when ANY document's consent fails", async () => {
-    vi.mocked(assertDocumentEgressConsent)
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error("ConsentRequiredError"));
+describe("streamFencedReply — the capability at the wire", () => {
+  it("throws the document pick's refusal with ZERO egress and no user turn persisted", async () => {
+    const refusal = new AiUnavailableError("documentAi", "consent_required");
+    vi.mocked(resolveDocumentTextProvider).mockResolvedValue({
+      chain: [],
+      pick: null,
+      withheld: refusal,
+    } as never);
     await expect(
       streamFencedReply({ ...baseArgs, docs: [doc("a", "x"), doc("b", "y")] }),
-    ).rejects.toThrow();
+    ).rejects.toBe(refusal);
     expect(runStreamingRawCompletionWithFallback).not.toHaveBeenCalled();
     expect(appendMessage).not.toHaveBeenCalled();
+  });
+
+  it("asks every extra capability about the picked provider", async () => {
+    await drain(
+      await streamFencedReply({
+        ...baseArgs,
+        alsoRequires: ["coach"],
+        docs: [doc("a", "x"), doc("b", "y")],
+      }),
+    );
+    expect(assertAiEgress).toHaveBeenCalledTimes(1);
+    expect(assertAiEgress).toHaveBeenCalledWith("coach", "user-1", [
+      "anthropic",
+    ]);
+  });
+
+  it("refuses with ZERO egress when an extra capability closed", async () => {
+    vi.mocked(assertAiEgress).mockRejectedValueOnce(
+      new AiUnavailableError("coach", "operator_disabled"),
+    );
+    await expect(
+      streamFencedReply({
+        ...baseArgs,
+        alsoRequires: ["coach"],
+        docs: [doc("a", "x")],
+      }),
+    ).rejects.toBeInstanceOf(AiUnavailableError);
+    expect(runStreamingRawCompletionWithFallback).not.toHaveBeenCalled();
+    expect(appendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps a missing provider an SSE frame, not a refusal", async () => {
+    vi.mocked(resolveDocumentTextProvider).mockResolvedValue({
+      chain: [],
+      pick: null,
+      withheld: null,
+    } as never);
+    const events = await drain(
+      await streamFencedReply({ ...baseArgs, docs: [doc("a", "x")] }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({ code: "documents.chat.provider.none" }),
+    );
   });
 });
 
 describe("streamFencedReply — single provider, no cascade", () => {
-  it("passes exactly the ONE consent-checked provider entry to the runner", async () => {
+  it("passes exactly the ONE checked provider entry to the runner", async () => {
     await drain(
       await streamFencedReply({ ...baseArgs, docs: [doc("a", "x")] }),
     );

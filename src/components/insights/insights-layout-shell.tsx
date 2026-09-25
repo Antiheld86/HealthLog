@@ -5,7 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
+import { useAiCapability } from "@/hooks/use-ai-capability";
+import { useSurfaceVisible } from "@/hooks/use-surface-visible";
 import { useWorkouts } from "@/hooks/use-workouts";
 import { InsightsTabStrip } from "@/components/insights/insights-tab-strip";
 import {
@@ -52,26 +53,18 @@ interface ComprehensivePayload {
 
 export function InsightsLayoutShell({ children }: { children: ReactNode }) {
   const { isAuthenticated, user } = useAuth();
-  // v1.4.33 F18 — gate the advisor POST on the operator's assistant
-  // feature flag. Pre-fix, every /insights mount fired POST
-  // /api/insights/generate even when the operator had disabled the
-  // briefing surface or the user had no AI provider configured. The
-  // server returned 422 in that case and the regenerate button on the
-  // tab strip rendered a non-functional spinner. Reading the flag
-  // matrix off `/api/feature-flags` keeps the hot path one fetch
-  // (shared `["feature-flags"]` cache, 60s staleTime) and skips the
-  // advisor request entirely when the operator has the briefing gate
-  // off. The fail-open default in `useFeatureFlags` means a network
-  // hiccup still renders the advisor — the gate only takes effect when
-  // the operator has explicitly turned the surface off.
-  const flags = useFeatureFlags();
+  // The briefing read and the regenerate button follow the `briefing`
+  // capability on `/api/auth/me`: the server resolves the operator's switch,
+  // the person's AI analysis opt-out, provider presence and consent into one
+  // answer, and the strip offers regenerate only while that answer is yes.
+  // Unavailable while `/me` loads, so nothing fires before the answer lands.
+  const briefing = useAiCapability("briefing");
   // v1.16.4 — `mounted` keeps the hydration render in lockstep with the
   // SSR HTML: a late-hydrating boundary can see resolved query state on
   // its first render (auth + flags settled), which used to flip the
   // regenerate affordance on at hydration time and trip React #418.
   const mounted = useMounted();
-  const advisorEnabled =
-    mounted && isAuthenticated && flags.enabled && flags.briefing;
+  const advisorEnabled = mounted && isAuthenticated && briefing.available;
 
   const advisor = useInsightsAdvisorQuery(advisorEnabled);
 
@@ -104,7 +97,10 @@ export function InsightsLayoutShell({ children }: { children: ReactNode }) {
   // least one canonical row in the list-endpoint response. The
   // single-row probe shares its cache slot with the list page +
   // dashboard tile so navigation between surfaces is a free cache hit.
-  const workoutsProbe = useWorkouts({ limit: 1 });
+  // Only while the Workouts module shows: a switched-off module is never
+  // probed (its pill is hidden by the surface map regardless).
+  const workoutsVisible = useSurfaceVisible("insights-page:workouts");
+  const workoutsProbe = useWorkouts({ limit: 1, enabled: workoutsVisible });
 
   // v1.29 — nutrients gate. `nutrients` is opt-in (default off), unlike
   // the always-on metric clusters, so the pill's floor is the module

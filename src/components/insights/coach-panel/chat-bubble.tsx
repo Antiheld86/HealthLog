@@ -99,7 +99,23 @@ export function errorCodeToI18nKey(code: string): string {
     case "coach.provider.empty":
     case "coach.stream":
       return "insights.coach.errorProvider";
+    // v1.39 — the capability refusals (`meta.errorCode` on a 403/422/503
+    // before the stream opens). Each says what is off and who can change it.
+    case "consent.ai.required":
+      return "insights.coach.errorConsent";
+    case "ai.record.notPermitted":
+      return "insights.coach.errorNotPermitted";
+    case "ai.unavailable":
+      return "insights.coach.errorUnavailable";
+    case "ai.provider.none":
+      return "insights.coach.errorNoProvider";
+    case "module.disabled":
+      return "insights.coach.errorCoachOff";
     default:
+      // The operator switched the Coach (or all AI) off on this server.
+      if (code.startsWith("assistant.disabled.")) {
+        return "insights.coach.errorOperatorOff";
+      }
       // Forward-compat: try `insights.coach.<code>` for codes that
       // ship their own translation (e.g. legacy `errorProvider`).
       return `insights.coach.${code}`;
@@ -756,7 +772,8 @@ function ChatBubbleImpl({
             setup gap, not a transient failure: surface a direct link to
             Settings → AI so the Coach guides the user into BYOK / local
             setup instead of inviting an endless retry. */}
-        {errorCode === "coach.provider.none" && (
+        {(errorCode === "coach.provider.none" ||
+          errorCode === "ai.provider.none") && (
           <Link
             href="/settings/ai"
             data-slot="coach-no-provider-cta"

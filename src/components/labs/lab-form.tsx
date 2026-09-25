@@ -1,7 +1,7 @@
 "use client";
 
 import { useActiveRecordName } from "@/hooks/use-record-capabilities";
-import { useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -55,6 +55,40 @@ function parseDecimal(raw: string): number | null {
   if (trimmed === "") return null;
   const n = Number(trimmed);
   return Number.isFinite(n) ? n : null;
+}
+
+/** The per-reading fields "Save & add another" decides to keep or clear. */
+export interface LabEntryDraft {
+  biomarkerId: string;
+  value: string;
+  valueText: string;
+  takenAt: string;
+  note: string;
+  sourceRange: string;
+  visitId: string | null;
+}
+
+/**
+ * The form after "Save & add another": the reading is cleared, everything that
+ * describes the report it came from stays. The draw date and the visit are
+ * shared by every value on one report, and the biomarker stays because a run
+ * of entries is as often one marker over several dates as several markers on
+ * one date; re-picking it each time is what the button exists to avoid.
+ *
+ * Clearing the biomarker here used to drop the picker out of its controlled
+ * state. It kept showing the marker it last held while the form value was
+ * empty, so the next save refused with "Pick a biomarker first" under a
+ * visibly picked marker.
+ */
+export function nextEntryAfterKeepOpen(draft: LabEntryDraft): LabEntryDraft {
+  return {
+    ...draft,
+    value: "",
+    valueText: "",
+    note: "",
+    // The next reading has its own printed window.
+    sourceRange: "",
+  };
 }
 
 interface LabFormProps {
@@ -157,7 +191,6 @@ export function LabForm({
   const [defineFooterEl, setDefineFooterEl] = useState<HTMLDivElement | null>(
     null,
   );
-  const biomarkerTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const allMarkers = catalog?.biomarkers ?? [];
   const selected = allMarkers.find((m) => m.id === biomarkerId);
@@ -256,30 +289,31 @@ export function LabForm({
           : undefined,
       );
       if (keepOpen) {
-        // A real lab report shares one blood-draw date across every
-        // analyte — clear the reading but deliberately KEEP `takenAt` so
-        // the next row doesn't need it re-set away from "now" again.
-        // The biomarker resets too (unless locked to one detail page)
-        // since the whole point is entering the NEXT analyte.
-        if (!lockedBiomarkerId) setBiomarkerId("");
-        setValue("");
-        setValueText("");
-        setNote("");
-        // The next analyte off the same report has its own printed window.
-        setSourceRange("");
+        const next = nextEntryAfterKeepOpen({
+          biomarkerId,
+          value,
+          valueText,
+          takenAt,
+          note,
+          sourceRange,
+          visitId,
+        });
+        setBiomarkerId(next.biomarkerId);
+        setValue(next.value);
+        setValueText(next.valueText);
+        setTakenAt(next.takenAt);
+        setNote(next.note);
+        setSourceRange(next.sourceRange);
+        setVisitId(next.visitId);
         setError(null);
         onSavedKeepOpen?.(created);
-        // Return focus to wherever the next entry starts so the flow
-        // stays keyboard/screen-reader friendly across repeated saves.
-        if (!lockedBiomarkerId) {
-          biomarkerTriggerRef.current?.focus();
-        } else {
-          document
-            .getElementById(
-              resultType === "numeric" ? "lab-value" : "lab-valueText",
-            )
-            ?.focus();
-        }
+        // The next entry starts at the value, so focus goes there and keeps
+        // the flow keyboard/screen-reader friendly across repeated saves.
+        document
+          .getElementById(
+            resultType === "numeric" ? "lab-value" : "lab-valueText",
+          )
+          ?.focus();
       } else {
         onSuccess?.(created);
       }
@@ -355,16 +389,16 @@ export function LabForm({
       <form id={formId} onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="lab-biomarker">{t("labs.form.biomarker")}</Label>
+          {/* Always controlled: `""` shows the placeholder. Passing
+              `undefined` for an empty pick switched the picker to its own
+              internal state, which kept displaying the last marker while the
+              form held none. */}
           <Select
-            value={biomarkerId || undefined}
+            value={biomarkerId}
             onValueChange={handleSelect}
             disabled={!!lockedBiomarkerId || catalogLoading}
           >
-            <SelectTrigger
-              id="lab-biomarker"
-              ref={biomarkerTriggerRef}
-              className="w-full"
-            >
+            <SelectTrigger id="lab-biomarker" className="w-full">
               <SelectValue placeholder={t("labs.form.biomarkerPlaceholder")} />
             </SelectTrigger>
             <SelectContent>

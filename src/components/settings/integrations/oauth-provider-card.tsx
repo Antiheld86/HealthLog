@@ -72,6 +72,7 @@ import {
   type IntegrationDocsProvider,
 } from "./setup-guide-link";
 import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
+import { loadDocument } from "@/lib/navigation/load-document";
 
 export interface OAuthProviderStatus {
   connected: boolean;
@@ -265,7 +266,7 @@ export function OAuthProviderCard({
   function handleConnect() {
     setMsg(null);
     void invalidateKeys(queryClient, measurementDependentKeys);
-    window.location.href = `/api/${provider}/connect`;
+    loadDocument(`/api/${provider}/connect`);
   }
 
   return (

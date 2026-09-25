@@ -246,6 +246,16 @@ export default defineConfig({
         // share the five-per-fifteen-minutes budget on `auth:register`, so
         // the second one meets a rate limit rather than the form.
         "invite-registration.spec.ts",
+        // The module-surfaces journey switches its account's mood and
+        // medications modules off and on; a second project would flip them
+        // under the first mid-assertion. It sets the mobile width itself for
+        // the add menu, so it runs in one project.
+        "modules-off.spec.ts",
+        // The AI-optional account journeys withdraw their account's consent
+        // and delete its stored Coach rows; a second project would reset the
+        // account under the first. They prove server state through stable
+        // data-slots, not a mobile layout, so they run in one project.
+        "ai-optional-account.spec.ts",
       ],
       use: {
         // Pixel 5 — Chromium-based mobile profile so CI only needs
