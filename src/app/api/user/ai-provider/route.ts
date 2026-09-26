@@ -197,14 +197,14 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       const trimmed = body.baseUrl.trim();
       // SSRF guard: by default reject private/internal hostnames so a
       // compromised user account cannot point the server at the cloud
-      // metadata endpoint or internal admin panels. v1.18.7 (SECURITY LOW) —
-      // ops opt in via `ALLOW_LOCAL_AI_PRIVATE_HOSTS`, now a host allowlist:
-      // `true` permits any private host (legacy), a comma-separated host list
-      // permits only those exact hostnames.
+      // metadata endpoint or internal admin panels. The operator grants a
+      // private endpoint by exact origin (`AI_PRIVATE_ORIGINS`, or the legacy
+      // host list); the retired `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` grants
+      // nothing since v1.39.3, and no grant can open metadata or link-local.
       const allowPrivate = isLocalAiHostAllowed(trimmed);
       if (!allowPrivate && !isPublicUrl(trimmed)) {
         return apiError(
-          "Base URL points to an internal/private host. Ops must allow it on this instance via ALLOW_LOCAL_AI_PRIVATE_HOSTS — set it to the exact host (e.g. ollama.lan) or to true for any private host (intended for self-hosted Ollama / LM Studio).",
+          "Base URL points to an internal/private host. The operator must allow its exact origin on this instance via AI_PRIVATE_ORIGINS (e.g. http://ollama.lan:11434) for a self-hosted Ollama / LM Studio.",
           422,
         );
       }
@@ -228,7 +228,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       // here as much as it does for Ollama.
       if (!isLocalAiHostAllowed(trimmed) && !isPublicUrl(trimmed)) {
         return apiError(
-          "Base URL points to an internal/private host. Ops must allow it on this instance via ALLOW_LOCAL_AI_PRIVATE_HOSTS — set it to the exact host (e.g. litellm.lan) or to true for any private host (intended for a self-hosted gateway).",
+          "Base URL points to an internal/private host. The operator must allow its exact origin on this instance via AI_PRIVATE_ORIGINS (e.g. http://litellm.lan:4000) for a self-hosted gateway.",
           422,
         );
       }

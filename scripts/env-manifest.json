@@ -123,8 +123,12 @@
       "required": false,
       "variables": [
         {
+          "name": "AI_PRIVATE_ORIGINS",
+          "purpose": "AI endpoints on the operator's own network (Ollama, LM Studio, LiteLLM). Comma-separated exact origins (scheme://host[:port]), e.g. \"http://ollama.lan:11434\". Unset refuses every private AI base URL. Link-local, metadata and unspecified addresses stay refused even when listed; a malformed entry is logged once and grants nothing."
+        },
+        {
           "name": "ALLOW_LOCAL_AI_PRIVATE_HOSTS",
-          "purpose": "Local-AI SSRF opt-in. Unset rejects private/internal hosts; set an exact comma-separated host allowlist or \"true\" to allow any private host."
+          "purpose": "Older form of AI_PRIVATE_ORIGINS, kept for existing installs: an exact comma-separated host list still grants those hosts. \"true\" grants nothing since v1.39.3 and is reported at boot."
         },
         {
           "name": "INSIGHTS_MAX_TOKENS",

@@ -1189,8 +1189,8 @@ export async function resolveProviderForTest(
       if (!baseUrl) {
         throw new AITestConfigError(422, "Local provider requires a base URL");
       }
-      // v1.18.7 (SECURITY LOW) — host allowlist (`true` = any private host;
-      // a comma-separated host list = only those) replaces the binary flag.
+      // A private host only when the operator granted its origin
+      // (`AI_PRIVATE_ORIGINS` or the legacy host list; v1.39.3).
       const allowPrivate = isLocalAiHostAllowed(baseUrl);
       if (!allowPrivate && !isPublicUrl(baseUrl)) {
         throw new AITestConfigError(

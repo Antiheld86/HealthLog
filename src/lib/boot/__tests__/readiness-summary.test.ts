@@ -129,3 +129,23 @@ describe("formatReadiness + logReadinessSummary", () => {
     expect(errors).toHaveLength(1);
   });
 });
+
+describe("collectReadiness — retired AI grant", () => {
+  it("warns, without blocking, when ALLOW_LOCAL_AI_PRIVATE_HOSTS is still `true`", () => {
+    const env = { ...baseEnv(), ALLOW_LOCAL_AI_PRIVATE_HOSTS: " TRUE " };
+    const line = lineFor(env, "ALLOW_LOCAL_AI_PRIVATE_HOSTS");
+    expect(line?.status).toBe("warn");
+    expect(line?.detail).toContain("AI_PRIVATE_ORIGINS");
+    expect(collectReadiness(env).hasBlocker).toBe(false);
+  });
+
+  it("says nothing for a host list or an unset variable", () => {
+    expect(
+      lineFor(
+        { ...baseEnv(), ALLOW_LOCAL_AI_PRIVATE_HOSTS: "ollama.lan" },
+        "ALLOW_LOCAL_AI_PRIVATE_HOSTS",
+      ),
+    ).toBeUndefined();
+    expect(lineFor(baseEnv(), "ALLOW_LOCAL_AI_PRIVATE_HOSTS")).toBeUndefined();
+  });
+});

@@ -8,7 +8,7 @@ import {
   jsonModeDialectFor,
   rememberJsonModeDialect,
 } from "./json-dialect";
-import { requirePublicHostFor } from "./local-host-allowlist";
+import { aiEgressPolicyFor } from "./local-host-allowlist";
 import {
   buildOpenAIMessages,
   buildOpenAITools,
@@ -152,7 +152,8 @@ export class OpenAIClient implements AIProvider {
       // v1.21.5 — honour the caller's per-request timeout override; default 60 s.
       // v1.33.1 (#470) — the gateway tag reuses the Local provider's host
       // policy verbatim: public hosts always; a private host only when the
-      // operator allowlisted it via ALLOW_LOCAL_AI_PRIVATE_HOSTS.
+      // operator granted its origin (`AI_PRIVATE_ORIGINS` or the legacy host
+      // list), and then only through the pinned operator-approved dispatcher.
       //
       // v1.37.30 — the `admin-key` tag consults the same policy. Its base URL
       // is the one other operator-typed URL in this client (an operator can
@@ -167,10 +168,9 @@ export class OpenAIClient implements AIProvider {
       // operator legitimately redirects.
       {
         timeoutMs: params.timeoutMs ?? 60_000,
-        requirePublicHost:
-          this.isGateway || this.type === "admin-key"
-            ? requirePublicHostFor(this.config.baseUrl)
-            : true,
+        ...(this.isGateway || this.type === "admin-key"
+          ? aiEgressPolicyFor(url)
+          : { requirePublicHost: true as const }),
         signal: params.signal,
       },
     );
