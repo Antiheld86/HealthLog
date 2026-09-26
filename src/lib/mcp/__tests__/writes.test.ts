@@ -21,8 +21,8 @@ vi.mock("@/lib/cache/invalidate", () => ({
   invalidateUserMood: vi.fn(),
 }));
 
-vi.mock("@/lib/rollups/measurement-rollups", () => ({
-  recomputeBucketsForMeasurement: vi.fn().mockResolvedValue(undefined),
+vi.mock("@/lib/rollups/after-measurement-mutation", () => ({
+  afterMeasurementMutation: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/rollups/mood-rollups", () => ({
@@ -41,6 +41,7 @@ vi.mock("@/lib/logging/context", () => ({
 
 import { logMcpMeasurement, logMcpMood, logMcpBloodPressure } from "../writes";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -463,5 +464,38 @@ describe("MCP writes — idempotency-key stability floor", () => {
     });
     expect(result.status).toBe("written");
     expect(measurement.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("MCP writes — post-write tail", () => {
+  it("refolds and re-warms through the shared helper for a single reading", async () => {
+    await logMcpMeasurement({
+      userId: "u-1",
+      type: "WEIGHT",
+      value: 80,
+      idempotencyKey: "tail-1",
+    });
+    expect(afterMeasurementMutation).toHaveBeenCalledWith(
+      "u-1",
+      [expect.objectContaining({ type: "WEIGHT" })],
+      "mcp",
+    );
+  });
+
+  it("refolds and re-warms both blood-pressure series", async () => {
+    await logMcpBloodPressure({
+      userId: "u-1",
+      systolic: 120,
+      diastolic: 80,
+      idempotencyKey: "tail-2",
+    });
+    expect(afterMeasurementMutation).toHaveBeenCalledWith(
+      "u-1",
+      [
+        expect.objectContaining({ type: "BLOOD_PRESSURE_SYS" }),
+        expect.objectContaining({ type: "BLOOD_PRESSURE_DIA" }),
+      ],
+      "mcp",
+    );
   });
 });

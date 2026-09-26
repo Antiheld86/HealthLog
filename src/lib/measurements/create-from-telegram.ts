@@ -24,8 +24,7 @@ import {
   validateMeasurementRange,
 } from "@/lib/validations/measurement";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
-import { recomputeBucketsForMeasurement } from "@/lib/rollups/measurement-rollups";
-import { getEvent } from "@/lib/logging/context";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 import { emitInsertedMeasurementArrivals } from "@/lib/arrivals/measurement-emit";
 
 /**
@@ -158,15 +157,13 @@ export async function logTelegramMeasurement(input: {
 
   invalidateUserMeasurements(input.userId, { evict: true });
 
-  // Best-effort rollup refresh — a cache tier, never a write-path invariant.
-  try {
-    await recomputeBucketsForMeasurement(input.userId, input.type, measuredAt);
-  } catch (rollupErr) {
-    getEvent()?.addMeta(
-      "telegram_measurement_rollup_failed",
-      rollupErr instanceof Error ? rollupErr.message : String(rollupErr),
-    );
-  }
+  // Rollup refresh plus the status re-warm, both best-effort — a cache
+  // tier, never a write-path invariant.
+  await afterMeasurementMutation(
+    input.userId,
+    [{ type: input.type, measuredAt }],
+    "telegram-measurement",
+  );
 
   return { status: "ok" };
 }
