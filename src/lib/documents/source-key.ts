@@ -107,3 +107,64 @@ export function checkSourceLookupRateLimit(
     SOURCE_LOOKUP_WINDOW_MS,
   );
 }
+
+/** What the vault holds for one source key, as the picker lists it. */
+export type SourceKeyState =
+  { state: "imported"; documentId: string } | { state: "deleted" };
+
+/**
+ * {@link findSourceKey} for a page of results at once: the same three places,
+ * three queries for the whole page instead of three per result. A key held by
+ * a live document answers `imported` with its id; one held by a tombstone, or
+ * kept by the purge ledger, answers `deleted`. A key the vault does not know
+ * is absent from the map.
+ */
+export async function findSourceKeyStates(
+  userId: string,
+  sourceSystem: DocumentSourceSystemValue,
+  sourceIds: string[],
+): Promise<Map<string, SourceKeyState>> {
+  const states = new Map<string, SourceKeyState>();
+  const ids = [...new Set(sourceIds)];
+  if (ids.length === 0) return states;
+
+  const [own, aliases, purged] = await Promise.all([
+    prisma.inboundDocument.findMany({
+      where: { userId, sourceSystem, sourceId: { in: ids } },
+      select: { id: true, sourceId: true, deletedAt: true },
+    }),
+    prisma.documentSourceAlias.findMany({
+      where: { userId, sourceSystem, sourceId: { in: ids } },
+      select: {
+        sourceId: true,
+        document: { select: { id: true, deletedAt: true } },
+      },
+    }),
+    prisma.documentImportKey.findMany({
+      where: { userId, sourceSystem, sourceId: { in: ids } },
+      select: { sourceId: true },
+    }),
+  ]);
+
+  // Lowest precedence first, so the document's own key wins, as it does in
+  // `findSourceKey`.
+  for (const row of purged) states.set(row.sourceId, { state: "deleted" });
+  for (const row of aliases) {
+    states.set(
+      row.sourceId,
+      row.document.deletedAt
+        ? { state: "deleted" }
+        : { state: "imported", documentId: row.document.id },
+    );
+  }
+  for (const row of own) {
+    if (!row.sourceId) continue;
+    states.set(
+      row.sourceId,
+      row.deletedAt
+        ? { state: "deleted" }
+        : { state: "imported", documentId: row.id },
+    );
+  }
+  return states;
+}

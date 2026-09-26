@@ -155,6 +155,10 @@ export const WIPE_MODELS = [
   // Further import keys that resolved to a document by content; a child of
   // the document, removed before it so the counts are truthful.
   "DocumentSourceAlias",
+  // The person's own connections to Paperless-ngx / Papra (#1038), with their
+  // encrypted API tokens. A wipe that left them would leave a working
+  // credential to another system behind an account that erased everything.
+  "DocumentSourceConnection",
   "ExtractedFact",
   "ImportJob",
 

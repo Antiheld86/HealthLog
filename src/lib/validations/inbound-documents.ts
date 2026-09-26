@@ -701,7 +701,7 @@ export const DOCUMENT_SOURCE_ID_MAX = 128;
  * The document's id in its source system. Printable ASCII only: it is a key,
  * not prose, and it is echoed on the detail sheet.
  */
-const documentSourceIdSchema = z
+export const documentSourceIdSchema = z
   .string()
   .trim()
   .min(1)

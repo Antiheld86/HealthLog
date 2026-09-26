@@ -928,6 +928,9 @@ model User {
   // v1.39.2 — further source keys an import answered with an existing
   // document (same bytes under another key). See DocumentSourceAlias.
   documentSourceAliases                     DocumentSourceAlias[]
+  // v1.39.3 — the person's own connection to a Paperless-ngx or Papra
+  // instance for the document picker. See DocumentSourceConnection.
+  documentSourceConnections                 DocumentSourceConnection[]
   extractedFacts                            ExtractedFact[]
   documentConditionLinks                    DocumentConditionLink[]
   documentContentIndexes                    DocumentContentIndex[]
@@ -8112,6 +8115,43 @@ model DocumentImportKey {
 
   @@unique([userId, sourceSystem, sourceId])
   @@map("document_import_keys")
+}
+
+/// v1.39.3 (#1038) — one person's connection to a Paperless-ngx or Papra
+/// instance, used by the document picker to search that system by name, tag
+/// and date and import the documents the person picks. One per system per
+/// person. Only reachable when the operator lists the instance's origin in
+/// `DOCUMENT_SOURCE_ORIGINS`; the origin is re-checked on every request, so
+/// removing it from the list cuts the connection off without touching the
+/// row. No background job reads it: every request to the source is one the
+/// person started. Not carried in backups (a third-party credential for a
+/// service on the operator's network; see `NOT_IN_BACKUP_MODELS`); removed by
+/// Delete all data and with the account.
+model DocumentSourceConnection {
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  /// `PAPERLESS` | `PAPRA` (`DOCUMENT_PICKER_SYSTEMS` in
+  /// `src/lib/documents/sources/types.ts`).
+  system         String    @map("system") @db.VarChar(16)
+  /// Base address of the instance, origin plus an optional path. Plaintext:
+  /// its origin is compared with the operator's list on every use, and the
+  /// settings card shows it. Not health data.
+  baseUrl        String    @map("base_url") @db.VarChar(2048)
+  /// Papra organization id; null for Paperless-ngx.
+  organizationId String?   @map("organization_id") @db.VarChar(128)
+  /// The API token (Paperless-ngx) or API key (Papra), AES-256-GCM via
+  /// `encrypt()`. No route returns it, in whole or in part.
+  tokenEncrypted String    @map("token_encrypted")
+  /// Last time the source answered a test with this token: the save's live
+  /// check or the settings card's Test button. Shown on the card.
+  lastVerifiedAt DateTime? @map("last_verified_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, system])
+  @@map("document_source_connections")
 }
 
 model ExtractedFact {

@@ -328,6 +328,16 @@ async function main() {
     );
   }
 
+  // ───── Document picker (String) ─────
+  // Column: "tokenEncrypted" — a person's Paperless-ngx / Papra API token.
+  results.push(
+    await rotateStringColumn(
+      "DocumentSourceConnection",
+      "tokenEncrypted",
+      prisma.documentSourceConnection,
+    ),
+  );
+
   // ───── AppSettings — operator credentials (String) ─────
   // Columns: "adminAiKeyEncrypted" "webPushVapidPrivateKeyEncrypted"
   // "adminCodexAccessTokenEncrypted" "adminCodexRefreshTokenEncrypted"

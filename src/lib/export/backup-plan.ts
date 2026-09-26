@@ -620,6 +620,8 @@ export const NOT_IN_BACKUP_MODELS: Readonly<Record<string, string>> = {
     "A CSRF nonce for a handshake that is valid for minutes and is already over by the time any backup is read.",
   McpOAuthConnection:
     "A grant issued to a client that was registered against this instance.",
+  DocumentSourceConnection:
+    "A person's API token for their Paperless-ngx or Papra instance. A backup file is not a credential store, same reasoning as ApiToken; and restored on another host it would point at an address that host's operator never allowed in DOCUMENT_SOURCE_ORIGINS. The documents imported through it are carried with the vault; reconnecting takes one form.",
   IntegrationStatus:
     "A ledger of what this deployment's syncs did. Restoring it onto another host would assert a sync history that host never had.",
 

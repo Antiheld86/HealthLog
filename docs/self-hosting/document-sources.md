@@ -1,0 +1,82 @@
+# Document picker — Paperless-ngx and Papra
+
+People who keep their paperwork in Paperless-ngx or Papra can search it from
+HealthLog and import the documents they pick: under "Link a document" on a
+visit, a vaccination or a condition, and from the Documents page. They search
+by document name, narrow by tag and date, tick what they want, and HealthLog
+fetches those files and stores its own encrypted copy, exactly as if they had
+been uploaded.
+
+The picker is off until the operator names the instances HealthLog may
+contact.
+
+## Turning it on
+
+List the origins in the server environment:
+
+```env
+DOCUMENT_SOURCE_ORIGINS="https://paperless.example.com,http://papra.lan:1221"
+```
+
+The variable is on the `docker-compose.yml` whitelist, so setting it in `.env`
+is enough; restart the app container afterwards. Unset or empty, the settings
+card and every import button stay hidden and the routes answer 404.
+
+Each entry is one `scheme://host[:port]`, the grammar
+`NOTIFICATION_PRIVATE_ORIGINS` uses (see [notifications](notifications.md)):
+
+- only `http` and `https`; scheme, host and port must match what a person
+  enters (`https://paperless.example.com:8443` and
+  `https://paperless.example.com` are two different entries);
+- no path, query, credentials, wildcard or CIDR; a person may still enter a
+  base address with a path (`https://example.com/paperless`) as long as its
+  origin is listed;
+- the unspecified address, link-local and the cloud-metadata range can never
+  be listed, and a listed name that resolves there is refused when HealthLog
+  connects;
+- a malformed entry is logged once at startup, reduced to scheme and host, and
+  grants nothing; the valid entries beside it keep working.
+
+Unlike the notification list, this list is the whole decision: an origin
+that is not listed is refused even when it is a public address. Removing an
+entry cuts off the connections that point at it on their next request; people
+can still delete their stored connection.
+
+## What each person sets up
+
+Settings → Integrations → Document archives:
+
+- **Paperless-ngx:** the base address and an API token (Paperless-ngx: My
+  Profile → API token). Paperless-ngx 2.16 or later (API version 9).
+- **Papra:** the base address, the organization id (from the Papra address
+  bar) and an API key with `documents:read` and `tags:read`.
+
+HealthLog tests the connection before saving it. The token is stored
+encrypted (AES-256-GCM, rotated with the other keys by
+`scripts/rotate-encryption-key.ts`) and is never shown again, not even in
+part.
+
+## What leaves the server, and when
+
+Only requests the person starts: a search, the tag list for the filter, a
+connection test, and one download per picked document. There is no background
+sync and no polling. Every request goes to the listed origin only, with
+redirects refused, a 10-second limit for searches and 60 seconds for a file,
+and a size cap on every answer (1 MiB for a search page, the vault's per-file
+limit for a document).
+
+## Limits and rules
+
+- Imports count against the person's normal upload allowance (60 an hour) and
+  storage quota.
+- A document that is already in HealthLog is not stored twice, and one the
+  person deleted in HealthLog is not brought back by picking it again. These
+  are the same rules the document token and `scripts/import-documents.mjs`
+  follow.
+- A picked document follows the person's own automatic AI reading setting.
+- Only the owner of a record can connect an archive or import from it. People
+  with shared access to a record, whatever their level, do not see the picker.
+- Connections are not part of backups. After a restore on another server,
+  each person reconnects (one form); the imported documents themselves are in
+  the backup with the rest of the vault.
+- Delete all data and account deletion remove the connection and its token.
