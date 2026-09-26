@@ -153,5 +153,18 @@ describe("off-host copies leave with the account", () => {
       where: { action: "offhost.backup.purged", userId },
     });
     expect(receipt).not.toBeNull();
+
+    // The request outlives the purge until a nightly run has walked the
+    // account since the wipe: the upload in flight at the wipe reads it to
+    // throw its pre-wipe copy away.
+    expect(await prisma.offhostPurgeRequest.count()).toBe(1);
+    await prisma.offhostBackupState.upsert({
+      where: { userId },
+      create: { userId, lastAttemptAt: new Date(Date.now() + 1000) },
+      update: { lastAttemptAt: new Date(Date.now() + 1000) },
+    });
+    const report = await processOffhostPurges(prisma);
+    expect(report).toMatchObject({ completed: 1, awaitingRun: 0 });
+    expect(await prisma.offhostPurgeRequest.count()).toBe(0);
   });
 });

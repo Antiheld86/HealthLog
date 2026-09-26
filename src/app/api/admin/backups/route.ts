@@ -167,9 +167,20 @@ export const GET = apiHandler(async () => {
       a.username.localeCompare(b.username),
   );
 
+  // A wipe whose copies are already gone waits for the next nightly run
+  // before its request is removed (see `offhost-purge.ts`); nothing of it is
+  // left in the bucket, so it is not counted as a pending deletion.
+  const stillInBucket = {
+    NOT: {
+      reason: "data_wiped",
+      lastFailure: null,
+      lastAttemptAt: { not: null },
+    },
+  };
   const [purgeCount, oldestPurge, lifecycle] = await Promise.all([
-    prisma.offhostPurgeRequest.count(),
+    prisma.offhostPurgeRequest.count({ where: stillInBucket }),
     prisma.offhostPurgeRequest.findFirst({
+      where: stillInBucket,
       orderBy: { requestedAt: "asc" },
       select: { requestedAt: true, lastFailure: true },
     }),
