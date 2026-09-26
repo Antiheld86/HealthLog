@@ -833,6 +833,10 @@ paths:
         "unknown"` and a machine-readable `reason`, so the UI can offer a retry instead of a red banner nobody can act
         on. The one genuine error is a feed that answers successfully with no version tag in it. Nothing is cached
         server-side; the client is expected to hold the result.
+
+
+        An operator who sets `UPDATE_CHECK_DISABLED` turns the outbound request off: the route then answers `status:
+        "unknown"` with `reason: "disabled"` and contacts nobody.
       responses:
         "200":
           description: Up to date, an update is available, or the check could not be completed.
