@@ -80,8 +80,6 @@ export const MAX_RECORD_RESULTS = 50;
 export const EMPTY_QUERY_PER_KIND = 10;
 /** Characters of indexed document text one `fetch` returns. */
 export const MAX_DOCUMENT_EXCERPT_CHARS = 1500;
-/** Characters of a condition or dose note one `fetch` returns. */
-export const MAX_NOTE_CHARS = 1000;
 /** One-hop links one `fetch` returns. */
 export const MAX_LINKS = 25;
 
@@ -275,6 +273,20 @@ const PHRASE_BONUS = 5;
  * are wider than the word the person typed, and a substring match on them
  * would find "rate" inside "moderate".
  */
+/** Query words shorter than this match whole words or word starts only. */
+export const MIN_SUBSTRING_WORD = 4;
+
+/**
+ * Whether a query word hits a field by its own spelling. A word of four
+ * letters or more may sit anywhere ("knee" in "kneecap"); a shorter one has
+ * to start a word, so "arm" finds "Arm" and "Armpit" but not "Darm" or "warm".
+ */
+function hitsField(field: PreparedField, word: string): boolean {
+  if (word.length >= MIN_SUBSTRING_WORD) return field.folded.includes(word);
+  for (const token of field.tokens) if (token.startsWith(word)) return true;
+  return false;
+}
+
 export function scoreCandidate(
   candidate: Pick<SearchCandidate, "fields" | "contentWords">,
   words: readonly string[],
@@ -290,10 +302,7 @@ export function scoreCandidate(
     let best = 0;
     for (const field of fields) {
       if (field.weight <= best) continue;
-      if (
-        field.folded.includes(word) ||
-        synonyms.some((s) => field.tokens.has(s))
-      ) {
+      if (hitsField(field, word) || synonyms.some((s) => field.tokens.has(s))) {
         best = field.weight;
       }
     }
@@ -307,7 +316,11 @@ export function scoreCandidate(
   }
   const phrase =
     foldedQuery.length > 0 &&
-    fields.some((field) => field.folded.includes(foldedQuery));
+    fields.some((field) =>
+      foldedQuery.includes(" ")
+        ? field.folded.includes(foldedQuery)
+        : hitsField(field, foldedQuery),
+    );
   if (phrase) score += PHRASE_BONUS;
   return { matched, score, phrase };
 }
@@ -516,19 +529,51 @@ function visitTitle(args: {
   return scrubFenceMarkers(`${parts.join(" · ")} (${args.day}${status})`);
 }
 
+/**
+ * The practitioner columns a record read selects. `deletedAt` rides along so
+ * a practitioner the person removed contributes nothing: the visit keeps its
+ * scalar id, but the name is no longer something the record says.
+ */
+const PRACTITIONER_SELECT = {
+  select: { name: true, specialty: true, deletedAt: true },
+} as const;
+
+type PractitionerRow = {
+  name: string;
+  specialty: string | null;
+  deletedAt: Date | null;
+} | null;
+
+/** The practitioner as the record may still show it, or null. */
+export function livePractitioner(
+  row: PractitionerRow | undefined,
+): { name: string; specialty: string | null } | null {
+  return row && row.deletedAt === null
+    ? { name: row.name, specialty: row.specialty }
+    : null;
+}
+
 async function visitCandidates(
   userId: string,
   owner: Owner,
   origin: string,
   take: number,
+  empty: boolean,
 ): Promise<SearchCandidate[]> {
   const rows = await prisma.encounter.findMany({
-    where: { userId, deletedAt: null },
+    // The empty-query listing is "what is in my record": things that
+    // happened. A booked appointment is still found by any query naming it.
+    where: {
+      userId,
+      deletedAt: null,
+      ...(empty ? { occurredAt: { lte: new Date() } } : {}),
+    },
     orderBy: [{ occurredAt: "desc" }, { id: "asc" }],
     take,
-    include: { practitioner: { select: { name: true, specialty: true } } },
+    include: { practitioner: PRACTITIONER_SELECT },
   });
   return rows.map((row) => {
+    const practitioner = livePractitioner(row.practitioner);
     const reason = decryptText(row.reasonEncrypted);
     const outcome = decryptText(row.outcomeEncrypted);
     const bodySite = decryptText(row.bodySiteEncrypted);
@@ -540,7 +585,7 @@ async function visitCandidates(
         day,
         bodySite: bodySite?.replace(/\s+/g, " ").trim() ?? null,
         laterality: row.laterality,
-        practitioner: row.practitioner?.name ?? null,
+        practitioner: practitioner?.name ?? null,
         status: row.status,
       }),
       url: recordUrl(origin, "visit", row.id),
@@ -550,8 +595,8 @@ async function visitCandidates(
       fields: [
         { text: bodySite ?? "", weight: WEIGHT.primary },
         { text: reason ?? "", weight: WEIGHT.primary },
-        { text: row.practitioner?.name ?? "", weight: WEIGHT.primary },
-        { text: row.practitioner?.specialty ?? "", weight: WEIGHT.primary },
+        { text: practitioner?.name ?? "", weight: WEIGHT.primary },
+        { text: practitioner?.specialty ?? "", weight: WEIGHT.primary },
         {
           text: [
             "visit",
@@ -572,6 +617,36 @@ async function visitCandidates(
   });
 }
 
+/**
+ * The condition columns MCP reads. An explicit list, and the note is not on
+ * it: a condition's note is never handed to an AI surface (the Coach illness
+ * snapshot and the doctor report leave it out too), and an outside assistant
+ * is one. `no-note-columns-guard.test.ts` holds every MCP read to this.
+ */
+const CONDITION_SELECT = {
+  id: true,
+  label: true,
+  type: true,
+  lifecycle: true,
+  onsetAt: true,
+  resolvedAt: true,
+  bodySiteEncrypted: true,
+  laterality: true,
+} as const;
+
+/** The dose columns MCP reads; the note is left out for the same reason. */
+const VACCINATION_SELECT = {
+  id: true,
+  occurredAt: true,
+  antigenSlug: true,
+  vaccineName: true,
+  doseNumber: true,
+  seriesDoses: true,
+  lotNumber: true,
+  site: true,
+  practitioner: PRACTITIONER_SELECT,
+} as const;
+
 async function conditionCandidates(
   userId: string,
   owner: Owner,
@@ -582,10 +657,10 @@ async function conditionCandidates(
     where: { userId, deletedAt: null },
     orderBy: [{ onsetAt: "desc" }, { id: "asc" }],
     take,
+    select: CONDITION_SELECT,
   });
   return rows.map((row) => {
     const bodySite = decryptText(row.bodySiteEncrypted);
-    const note = decryptText(row.noteEncrypted);
     const day = userDayKey(row.onsetAt, owner.timezone);
     const site = bodySite?.replace(/\s+/g, " ").trim();
     return {
@@ -614,7 +689,6 @@ async function conditionCandidates(
           text: sideTerms(row.laterality, owner.locale) ?? "",
           weight: WEIGHT.secondary,
         },
-        { text: note ?? "", weight: WEIGHT.tertiary },
       ],
     };
   });
@@ -648,7 +722,9 @@ async function contentMatches(
         where: {
           userId,
           searchTokens: { hasSome: hashes },
-          document: { deletedAt: null },
+          // A document held back from AI reading is not searched by its
+          // text over this wire either; its title and kind still are.
+          document: { deletedAt: null, aiReadDeferred: false },
         },
         select: { documentId: true },
         take: MAX_ROWS_PER_KIND,
@@ -663,14 +739,36 @@ async function contentMatches(
   return byDocument;
 }
 
+/**
+ * The terms a title or file name is looked up by in SQL: the folded query
+ * words plus the raw lower-cased ones, because the columns keep their accents
+ * and "Schädel" folds to "schadel". Short words stay out: a three-letter
+ * substring over every title is noise, and the in-memory pass still sees
+ * them for the newest documents.
+ */
+function documentNameTerms(query: string, words: readonly string[]): string[] {
+  const raw = query
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}._-]+/u)
+    .filter((w) => w.length >= MIN_SUBSTRING_WORD);
+  return [
+    ...new Set([
+      ...words.filter((w) => w.length >= MIN_SUBSTRING_WORD),
+      ...raw,
+    ]),
+  ].slice(0, MAX_QUERY_WORDS * 2);
+}
+
 async function documentCandidates(
   userId: string,
   owner: Owner,
   origin: string,
   take: number,
+  query: string,
   words: readonly string[],
 ): Promise<SearchCandidate[]> {
-  const [rows, content] = await Promise.all([
+  const nameTerms = documentNameTerms(query, words);
+  const [rows, content, named] = await Promise.all([
     prisma.inboundDocument.findMany({
       where: { userId, deletedAt: null },
       select: DOCUMENT_SELECT,
@@ -680,10 +778,30 @@ async function documentCandidates(
     words.length > 0
       ? contentMatches(userId, words)
       : Promise.resolve(new Map<string, Set<string>>()),
+    // Title and file name are plaintext columns, so an older document is
+    // found by them in SQL, the way the vault list finds it.
+    nameTerms.length > 0
+      ? prisma.inboundDocument.findMany({
+          where: {
+            userId,
+            deletedAt: null,
+            OR: nameTerms.flatMap((term) => [
+              { title: { contains: term, mode: "insensitive" as const } },
+              { filename: { contains: term, mode: "insensitive" as const } },
+            ]),
+          },
+          select: { id: true },
+          orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+          take: MAX_ROWS_PER_KIND,
+        })
+      : Promise.resolve([] as Array<{ id: string }>),
   ]);
-  // A content hit on a document older than the newest `take` still counts.
+  // A content or name hit on a document older than the newest `take` still
+  // counts; the extra read is bounded like the others.
   const seen = new Set(rows.map((r) => r.id));
-  const missing = [...content.keys()].filter((id) => !seen.has(id));
+  const missing = [
+    ...new Set([...content.keys(), ...named.map((r) => r.id)]),
+  ].filter((id) => !seen.has(id));
   const extra =
     missing.length > 0
       ? await prisma.inboundDocument.findMany({
@@ -735,9 +853,10 @@ async function vaccinationCandidates(
     where: { userId, deletedAt: null },
     orderBy: [{ occurredAt: "desc" }, { id: "asc" }],
     take,
-    include: { practitioner: { select: { name: true, specialty: true } } },
+    select: VACCINATION_SELECT,
   });
   return rows.map((row) => {
+    const practitioner = livePractitioner(row.practitioner);
     const entry = resolveCatalogEntry(row.antigenSlug);
     const catalogEn = vaccineCatalogName(row.antigenSlug, "en");
     const name =
@@ -768,9 +887,8 @@ async function vaccinationCandidates(
           text: "vaccination vaccine immunization impfung",
           weight: WEIGHT.secondary,
         },
-        { text: row.practitioner?.name ?? "", weight: WEIGHT.secondary },
-        { text: row.practitioner?.specialty ?? "", weight: WEIGHT.secondary },
-        { text: decryptText(row.noteEncrypted) ?? "", weight: WEIGHT.tertiary },
+        { text: practitioner?.name ?? "", weight: WEIGHT.secondary },
+        { text: practitioner?.specialty ?? "", weight: WEIGHT.secondary },
       ],
     };
   });
@@ -793,12 +911,12 @@ export async function loadRecordCandidates(
     loadOwner(userId),
   ]);
   const groups = await Promise.all([
-    visitCandidates(userId, owner, origin, take),
+    visitCandidates(userId, owner, origin, take, empty),
     kinds.has("condition")
       ? conditionCandidates(userId, owner, origin, take)
       : Promise.resolve([]),
     kinds.has("document")
-      ? documentCandidates(userId, owner, origin, take, words)
+      ? documentCandidates(userId, owner, origin, take, query, words)
       : Promise.resolve([]),
     kinds.has("vaccination")
       ? vaccinationCandidates(userId, owner, origin, take)
@@ -929,7 +1047,7 @@ async function fetchVisit(
 ): Promise<FetchResult> {
   const row = await prisma.encounter.findFirst({
     where: { id: rid, userId, deletedAt: null },
-    include: { practitioner: { select: { name: true, specialty: true } } },
+    include: { practitioner: PRACTITIONER_SELECT },
   });
   if (!row) return notFound(id, "visit", origin);
 
@@ -981,8 +1099,9 @@ async function fetchVisit(
   const bodySite = decryptText(row.bodySiteEncrypted);
   const day = userDayKey(row.occurredAt, owner.timezone);
   const kindLabel = encounterKindLabel(row.kind, "en");
-  const practitioner = row.practitioner?.name ?? null;
-  const specialty = row.practitioner?.specialty ?? null;
+  const live = livePractitioner(row.practitioner);
+  const practitioner = live?.name ?? null;
+  const specialty = live?.specialty ?? null;
 
   const sentences = [
     `Visit on ${day}: ${kindLabel}, status ${row.status}.`,
@@ -1037,6 +1156,7 @@ async function fetchCondition(
 ): Promise<FetchResult> {
   const row = await prisma.illnessEpisode.findFirst({
     where: { id: rid, userId, deletedAt: null },
+    select: CONDITION_SELECT,
   });
   if (!row) return notFound(id, "condition", origin);
 
@@ -1057,8 +1177,6 @@ async function fetchCondition(
   ]);
 
   const bodySite = decryptText(row.bodySiteEncrypted);
-  const noteRaw = decryptText(row.noteEncrypted);
-  const note = noteRaw === null ? null : clip(noteRaw, MAX_NOTE_CHARS);
   const onset = userDayKey(row.onsetAt, owner.timezone);
   const resolved = row.resolvedAt
     ? userDayKey(row.resolvedAt, owner.timezone)
@@ -1070,7 +1188,6 @@ async function fetchCondition(
     bodySite
       ? `Body site: ${fenceUserText(bodySite)}${row.laterality ? `, side ${row.laterality}` : ""}.`
       : null,
-    note ? `Note: ${fenceUserText(note.text)}` : "No note recorded.",
     linksSentence(links),
   ].filter((s): s is string => s !== null);
 
@@ -1092,8 +1209,6 @@ async function fetchCondition(
       resolvedAt: row.resolvedAt ? row.resolvedAt.toISOString() : null,
       bodySite: fenced(bodySite),
       laterality: row.laterality,
-      note: note ? fenceUserText(note.text) : null,
-      noteTruncated: note?.truncated ?? false,
       links,
       linksTruncated,
     },
@@ -1147,13 +1262,20 @@ async function fetchDocument(
       ...DOCUMENT_SELECT,
       mimeType: true,
       byteSize: true,
+      aiReadDeferred: true,
     },
   });
   if (!row) return notFound(id, "document", origin);
+  // Held back from AI reading at upload: the indexed text is not read, let
+  // alone sent. The title, kind, dates and links are the record's metadata
+  // and still are.
+  const deferred = row.aiReadDeferred;
 
   const source = { userId, sourceKind: "document" as const, sourceId: rid };
   const [content, visits, conditions, doses] = await Promise.all([
-    documentExcerpt(userId, rid),
+    deferred
+      ? Promise.resolve({ indexed: false, excerpt: null })
+      : documentExcerpt(userId, rid),
     listTargets(prisma, { ...source, targetKind: "encounter" }),
     kinds.has("condition")
       ? listTargets(prisma, { ...source, targetKind: "conditionEpisode" })
@@ -1173,11 +1295,13 @@ async function fetchDocument(
   const dated = row.documentDate ?? row.reportDate;
   const sentences = [
     `Document ${fenceUserText(name)}: ${kindLabel}, ${dated ? `dated ${dateOnly(dated)}` : "undated"}, added ${dateOnly(row.createdAt)}.`,
-    content.excerpt
-      ? `Indexed text${content.excerpt.truncated ? " (excerpt)" : ""}: ${fenceUserText(content.excerpt.text)}`
-      : content.indexed
-        ? "The indexed text could not be read."
-        : "No indexed text is stored for this document.",
+    deferred
+      ? "This document was stored without AI reading, so its text is not shared here."
+      : content.excerpt
+        ? `Indexed text${content.excerpt.truncated ? " (excerpt)" : ""}: ${fenceUserText(content.excerpt.text)}`
+        : content.indexed
+          ? "The indexed text could not be read."
+          : "No indexed text is stored for this document.",
     linksSentence(links),
   ];
 
@@ -1199,6 +1323,7 @@ async function fetchDocument(
       createdAt: row.createdAt.toISOString(),
       mimeType: row.mimeType,
       byteSize: row.byteSize,
+      ...(deferred ? { reason: "ai_read_deferred" } : {}),
       indexed: content.indexed,
       excerpt: content.excerpt ? fenceUserText(content.excerpt.text) : null,
       excerptTruncated: content.excerpt?.truncated ?? false,
@@ -1217,8 +1342,8 @@ async function fetchVaccination(
 ): Promise<FetchResult> {
   const row = await prisma.vaccinationRecord.findFirst({
     where: { id: rid, userId, deletedAt: null },
-    include: {
-      practitioner: { select: { name: true, specialty: true } },
+    select: {
+      ...VACCINATION_SELECT,
       encounter: {
         select: { id: true, kind: true, occurredAt: true, deletedAt: true },
       },
@@ -1252,8 +1377,7 @@ async function fetchVaccination(
 
   const catalog = vaccineCatalogName(row.antigenSlug, "en");
   const name = row.vaccineName ?? catalog ?? row.antigenSlug ?? "Vaccination";
-  const noteRaw = decryptText(row.noteEncrypted);
-  const note = noteRaw === null ? null : clip(noteRaw, MAX_NOTE_CHARS);
+  const practitioner = livePractitioner(row.practitioner);
   const day = dateOnly(row.occurredAt);
   const dose =
     row.doseNumber !== null
@@ -1263,10 +1387,9 @@ async function fetchVaccination(
   const sentences = [
     `Vaccination ${fenceUserText(name)} on ${day}, ${dose}.`,
     catalog && row.vaccineName ? `Catalogue entry: ${catalog}.` : null,
-    row.practitioner
-      ? `Given by ${fenceUserText(row.practitioner.name)}.`
+    practitioner
+      ? `Given by ${fenceUserText(practitioner.name)}.`
       : "No practitioner recorded.",
-    note ? `Note: ${fenceUserText(note.text)}` : null,
     linksSentence(links),
   ].filter((s): s is string => s !== null);
 
@@ -1288,11 +1411,7 @@ async function fetchVaccination(
       seriesDoses: row.seriesDoses,
       lotNumber: row.lotNumber ? scrubFenceMarkers(row.lotNumber) : null,
       site: row.site,
-      practitioner: row.practitioner
-        ? scrubFenceMarkers(row.practitioner.name)
-        : null,
-      note: note ? fenceUserText(note.text) : null,
-      noteTruncated: note?.truncated ?? false,
+      practitioner: practitioner ? scrubFenceMarkers(practitioner.name) : null,
       links,
       linksTruncated,
     },

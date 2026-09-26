@@ -375,6 +375,10 @@ async function authorizeGet(request: NextRequest): Promise<Response> {
     const accessSummary = writeGranted
       ? `<p><strong>This grants read AND write access:</strong> the application will be able to read your own health records <strong>and log new measurements and mood entries</strong> to your account on your behalf. It cannot delete or change existing entries, edit medications, or reach admin functions.</p>`
       : `<p>Scope: <code>${htmlEscape(v.scope)}</code> — read-only access to your own health records.</p>`;
+    // What a read reaches, in plain words, before the person clicks Allow.
+    // Document text is named on its own because it is the widest thing a
+    // connection can read (v1.39.3: search and fetch reach it).
+    const readSummary = `<p>What it can read: your measurements, medications, lab values, visits and procedures, conditions and vaccinations, and your stored documents, including the text of your stored documents that HealthLog has indexed. It never receives the files themselves. A document you held back from AI reading is shared by its title and details only, without its text. Anything in a module you have switched off is not shared.</p>`;
     // The one response whose form may lead off-origin: allow exactly the
     // redirect URI `validate()` just matched against the resolved client.
     return withAuthorizeCsp(
@@ -385,6 +389,7 @@ async function authorizeGet(request: NextRequest): Promise<Response> {
         ${provenance}
         <p>Scope: <code>${htmlEscape(v.scope)}</code></p>
         ${accessSummary}
+        ${readSummary}
         <form method="POST" action="/api/mcp/oauth/authorize">
           ${hidden("response_type", "code")}
           ${hidden("client_id", v.clientId)}

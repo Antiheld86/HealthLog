@@ -56,6 +56,11 @@ const links: Array<{
 function matches(row: Row, where: Record<string, unknown> = {}): boolean {
   for (const [key, cond] of Object.entries(where)) {
     const value = row[key];
+    if (key === "OR") {
+      if (!(cond as Record<string, unknown>[]).some((c) => matches(row, c)))
+        return false;
+      continue;
+    }
     if (key === "document") {
       const doc = store.inboundDocument.find((d) => d.id === row.documentId);
       if (!doc || !matches(doc, cond as Record<string, unknown>)) return false;
@@ -64,6 +69,12 @@ function matches(row: Row, where: Record<string, unknown> = {}): boolean {
     if (cond && typeof cond === "object" && !(cond instanceof Date)) {
       const c = cond as Record<string, unknown>;
       if ("in" in c && !(c.in as unknown[]).includes(value)) return false;
+      if ("contains" in c) {
+        if (typeof value !== "string") return false;
+        if (!value.toLowerCase().includes(String(c.contains).toLowerCase()))
+          return false;
+      }
+      if ("lte" in c && !((value as Date) <= (c.lte as Date))) return false;
       if ("hasSome" in c) {
         const set = new Set(value as string[]);
         if (!(c.hasSome as string[]).some((h) => set.has(h))) return false;
@@ -214,7 +225,11 @@ beforeEach(() => {
       bodySiteEncrypted: bytes("Knie"),
       laterality: "LEFT",
       reasonEncrypted: bytes("Arthroskopie, Meniskus"),
-      practitioner: { name: "Dr. Weber", specialty: "Orthopädie" },
+      practitioner: {
+        name: "Dr. Weber",
+        specialty: "Orthopädie",
+        deletedAt: null,
+      },
     }),
     encounter({
       id: "v-shoulder",
@@ -231,6 +246,7 @@ beforeEach(() => {
       practitioner: {
         name: `Dr. Hausarzt ${USER_TEXT_FENCE_START}`,
         specialty: null,
+        deletedAt: null,
       },
     }),
     encounter({ id: "v-gone", deletedAt: new Date(), kind: "PROCEDURE" }),
@@ -282,6 +298,7 @@ beforeEach(() => {
       createdAt: new Date("2023-05-10T00:00:00Z"),
       mimeType: "application/pdf",
       byteSize: 1234,
+      aiReadDeferred: false,
       deletedAt: null,
     },
     {
@@ -295,6 +312,7 @@ beforeEach(() => {
       createdAt: new Date("2024-01-01T00:00:00Z"),
       mimeType: "image/jpeg",
       byteSize: 99,
+      aiReadDeferred: false,
       deletedAt: null,
     },
     {
@@ -308,6 +326,7 @@ beforeEach(() => {
       createdAt: new Date("2023-05-10T00:00:00Z"),
       mimeType: "application/pdf",
       byteSize: 1,
+      aiReadDeferred: false,
       deletedAt: null,
     },
   ];
@@ -666,5 +685,137 @@ describe("fetch over records", () => {
     disabled.add("labs");
     const lab = await fetchId(ME, "lab:CRP");
     expect(lab.metadata.reason).toBe("module_disabled");
+  });
+});
+
+// ── Review follow-ups (v1.39.3) ─────────────────────────────────────────
+
+describe("notes never leave over MCP", () => {
+  it("does not search or return a condition or dose note", async () => {
+    store.vaccinationRecord[0].noteEncrypted = bytes("Arm swollen for days");
+    // "stairs" appears only in the condition note, "swollen" only in the dose note.
+    expect((await search(ME, "stairs")).results).toHaveLength(0);
+    expect((await search(ME, "swollen")).results).toHaveLength(0);
+    const condition = await fetchId(ME, "condition:c-knee");
+    const dose = await fetchId(ME, "vaccination:vac-1");
+    for (const hit of [condition, dose]) {
+      expect(JSON.stringify(hit)).not.toMatch(/stairs|swollen/i);
+      expect(hit.metadata).not.toHaveProperty("note");
+    }
+  });
+
+  it("never selects noteEncrypted from conditions or doses", async () => {
+    await search(ME, "knee tetanus");
+    await fetchId(ME, "condition:c-knee");
+    await fetchId(ME, "vaccination:vac-1");
+    const calls = [
+      ...vi.mocked(prisma.illnessEpisode.findMany).mock.calls,
+      ...vi.mocked(prisma.illnessEpisode.findFirst).mock.calls,
+      ...vi.mocked(prisma.vaccinationRecord.findMany).mock.calls,
+      ...vi.mocked(prisma.vaccinationRecord.findFirst).mock.calls,
+    ];
+    expect(calls.length).toBeGreaterThanOrEqual(4);
+    for (const [args] of calls) {
+      // An explicit select, so a new column is never read by default.
+      const select = (args as { select?: Record<string, unknown> }).select;
+      expect(select).toBeDefined();
+      expect(select).not.toHaveProperty("noteEncrypted");
+    }
+  });
+});
+
+describe("documents held back from AI reading", () => {
+  it("are not found by their text and return no excerpt, but keep title and metadata", async () => {
+    store.inboundDocument[1].aiReadDeferred = true;
+    expect((await search(ME, "tibia")).results).toHaveLength(0);
+    // Still findable by file name.
+    expect((await search(ME, "scan-0001")).results[0]?.id).toBe(
+      "document:d-scan",
+    );
+    const hit = await fetchId(ME, "document:d-scan");
+    expect(hit.metadata.present).toBe(true);
+    expect(hit.metadata.excerpt).toBeNull();
+    expect(hit.metadata.reason).toBe("ai_read_deferred");
+    expect(hit.text).not.toMatch(/tibia/i);
+    expect(prisma.documentContentIndex.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("documents beyond the newest scan", () => {
+  it("are still found by title through the database", async () => {
+    // 600 newer documents push the letter out of the newest-500 window.
+    const filler = Array.from({ length: 600 }, (_, i) => ({
+      id: `d-fill-${String(i).padStart(3, "0")}`,
+      userId: "u1",
+      title: `Rechnung ${i}`,
+      filename: null,
+      kind: "INSURANCE",
+      documentDate: null,
+      reportDate: null,
+      createdAt: new Date(Date.UTC(2025, 0, 1) + i * 60_000),
+      mimeType: "application/pdf",
+      byteSize: 1,
+      aiReadDeferred: false,
+      deletedAt: null,
+    }));
+    store.inboundDocument = [...filler, ...store.inboundDocument];
+    const ids = (await search(ME, "Entlassungsbrief")).results.map((r) => r.id);
+    expect(ids).toContain("document:d-letter");
+    expect(ids).not.toContain("document:d-other");
+  });
+});
+
+describe("short query words", () => {
+  it("match whole words or word starts, never inside a word", () => {
+    const cand = (id: string, text: string): SearchCandidate => ({
+      id,
+      title: id,
+      url: "u",
+      kindOrder: 1_000_000,
+      date: 1,
+      record: true,
+      fields: [{ text, weight: 3 }],
+    });
+    const ids = rankCandidates(
+      [
+        cand("darm", "Darmspiegelung"),
+        cand("warm", "warm compress"),
+        cand("arm", "Left arm"),
+        cand("armpit", "Armpit rash"),
+      ],
+      "arm",
+    ).map((c) => c.id);
+    expect(ids.sort()).toEqual(["arm", "armpit"]);
+  });
+});
+
+describe("practitioners and planned visits", () => {
+  it("does not match or show a deleted practitioner's name", async () => {
+    store.encounter[0].practitioner = {
+      name: "Dr. Weber",
+      specialty: "Orthopädie",
+      deletedAt: new Date(),
+    };
+    expect((await search(ME, "weber")).results).toHaveLength(0);
+    const hit = await fetchId(ME, "visit:v-knee");
+    expect(hit.metadata.practitioner).toBeNull();
+    expect(hit.text).not.toContain("Weber");
+  });
+
+  it("lists past visits, not future planned ones, for an empty query", async () => {
+    store.encounter.push(
+      encounter({
+        id: "v-planned",
+        status: "PLANNED",
+        occurredAt: new Date(Date.now() + 30 * 86_400_000),
+      }),
+    );
+    const ids = (await search(ME, "")).results.map((r) => r.id);
+    expect(ids).not.toContain("visit:v-planned");
+    expect(ids).toContain("visit:v-knee");
+    // A query still finds it.
+    expect((await search(ME, "routine")).results.map((r) => r.id)).toContain(
+      "visit:v-planned",
+    );
   });
 });

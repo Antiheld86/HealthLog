@@ -916,7 +916,11 @@ describe("get_preventive_care — upcoming appointments fold in", () => {
         status: "PLANNED",
         kind: "ROUTINE",
         reasonEncrypted: null,
-        practitioner: { name: "Dr. Wolke", specialty: "General practice" },
+        practitioner: {
+          name: "Dr. Wolke",
+          specialty: "General practice",
+          deletedAt: null,
+        },
       },
     ] as never);
     const result = (await tool("get_preventive_care").run(CTX, {})) as {
@@ -964,7 +968,11 @@ describe("get_visits", () => {
       kind: "SPECIALIST",
       reasonEncrypted: Buffer.from("chest pain follow-up", "utf8"),
       outcomeEncrypted: Buffer.from("all clear", "utf8"),
-      practitioner: { name: "Dr. Herz", specialty: "Cardiology" },
+      practitioner: {
+        name: "Dr. Herz",
+        specialty: "Cardiology",
+        deletedAt: null,
+      },
       ...overrides,
     };
   }
