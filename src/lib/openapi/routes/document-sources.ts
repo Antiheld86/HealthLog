@@ -117,7 +117,7 @@ export const documentSourcePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Document archives: availability and connections",
       description:
-        "Whether the operator enabled the document picker (`available`, true when `DOCUMENT_SOURCE_ORIGINS` lists at least one origin), the listed origins, and the caller's own saved connections to Paperless-ngx or Papra. A connection never carries its token: `hasToken` is always true for a saved one, and no route returns the token in whole or in part. `originAllowed` is false once the operator removed the connection's origin from the list. No request leaves the server. Cookie session only; not delegable.",
+        "Whether the operator enabled the document picker (`available`, true when `DOCUMENT_SOURCE_ORIGINS` lists at least one origin), the listed origins, and the caller's own saved connections to Paperless-ngx or Papra. A connection never carries its token: `hasToken` is always true for a saved one, and no route returns the token in whole or in part. `originAllowed` is false once the operator removed the connection's origin from the list. No request leaves the server. Needs neither the Documents module nor the list: with the list unset, `available` is false and any connection still stored is listed (with `originAllowed: false`) so it can be removed. Cookie session only; not delegable.",
       security: cookieOnly,
       responses: {
         "200": {
@@ -141,7 +141,7 @@ export const documentSourcePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Save a connection to a document archive",
       description:
-        "Saves or replaces the caller's connection to Paperless-ngx (`paperless`: base address and API token) or Papra (`papra`: base address, organization id, API key with `documents:read` and `tags:read`). The base address may carry a path; its origin must be listed in `DOCUMENT_SOURCE_ORIGINS`. The connection is tested live before anything is stored. Leaving out `token` keeps the stored one (the first save must carry it). The token is stored encrypted (AES-256-GCM) and never returned. Ten saves and tests a minute per person. Cookie session only; not delegable.",
+        "Saves or replaces the caller's connection to Paperless-ngx (`paperless`: base address and API token) or Papra (`papra`: base address, organization id, API key with `documents:read` and `tags:read`). The base address may carry a path; its origin must be listed in `DOCUMENT_SOURCE_ORIGINS`. The connection is tested live before anything is stored. Leaving out `token` keeps the stored one, but only when the new address is on the same origin as the saved one: the first save and a move to another origin must carry it (422 `documents.sources.tokenRequired`), so a stored token is never sent to an address it was not saved for. A Papra organization id is letters, digits, `_` and `-`. The token is stored encrypted (AES-256-GCM) and never returned. Ten saves and tests a minute per person. Cookie session only; not delegable.",
       security: cookieOnly,
       parameters: [systemParameter],
       requestBody: {
@@ -176,7 +176,7 @@ export const documentSourcePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Remove a connection to a document archive",
       description:
-        "Deletes the caller's connection for this system, and its token with it. Works even after the operator removed the origin from the list. `disconnected` is false when there was nothing to delete. Cookie session only; not delegable.",
+        "Deletes the caller's connection for this system, and its token with it. Works even after the operator removed the origin from the list, and with the Documents module switched off. `disconnected` is false when there was nothing to delete. Cookie session only; not delegable.",
       security: cookieOnly,
       parameters: [systemParameter],
       responses: {
@@ -269,7 +269,7 @@ export const documentSourcePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Search a connected archive by name, tag and date",
       description:
-        "Searches the source 25 documents at a time. `q` matches the document's name (Paperless-ngx title, Papra name); `tag` narrows to one of the source's tags by id; `from` / `to` to a date range, inclusive (Papra's range is applied to each page after it arrives, so a page can hold fewer than 25). Each result carries what the vault already holds under that source key: `new`, `imported` with the vault document's `documentId`, or `deleted` (deleted in HealthLog; importing it again stores nothing). Nothing is stored. Sixty searches a minute, shared with the tag read. Cookie session only; not delegable.",
+        "Searches the source 25 documents at a time. `q` matches the document's name (Paperless-ngx title, Papra name); `tag` narrows to one of the source's tags by id; `from` / `to` to a date range, inclusive (Paperless-ngx filters on `created__gte` / `created__lte`; Papra's range is applied to each page after it arrives). When a filter applied after arrival empties a page, the route reads on, up to five source pages, and `page` in the answer is the last source page read; ask for `page + 1` next. Each result carries what the vault already holds under that source key: `new`, `imported` with the vault document's `documentId`, or `deleted` (deleted in HealthLog; importing it again stores nothing). Nothing is stored. Sixty searches a minute, shared with the tag read. Cookie session only; not delegable.",
       security: cookieOnly,
       parameters: [
         systemParameter,
@@ -335,7 +335,7 @@ export const documentSourcePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Import one picked document",
       description:
-        "Fetches one document from the source and stores it in the vault through the same path as an upload, with `sourceSystem` / `sourceId` provenance. A source key the vault already holds is answered without a download: `duplicate` for a live document (same id), `deleted` for one the person deleted in HealthLog, which is never stored again. Bytes already in the vault under another key are `duplicate` too, and the key is remembered for that document. `link` files the document against the record the picker was opened from (a condition, a visit or a vaccination, which must be the caller's own and live; checked before anything is fetched), including a duplicate. `kind` sets the document type (default OTHER). Automatic AI reading follows the person's own setting. Counts against the person's upload allowance (60 an hour) and storage quota. 201 for a new document, 200 otherwise. Cookie session only; not delegable.",
+        "`sourceId` must be an id the system issues (Paperless-ngx: digits; Papra: letters, digits, `_`, `-`), else 422 before anything is fetched. Fetches one document from the source and stores it in the vault through the same path as an upload, with `sourceSystem` / `sourceId` / `sourceInstance` (the connection's origin) provenance; the same id from another instance is another document. One import per key runs at a time; a concurrent second one waits and then answers `duplicate`. The key check counts toward the lookup allowance, the fetch toward the search allowance, and only a file that arrived toward the upload allowance. A source key the vault already holds is answered without a download: `duplicate` for a live document (same id), `deleted` for one the person deleted in HealthLog, which is never stored again. Bytes already in the vault under another key are `duplicate` too, and the key is remembered for that document. `link` files the document against the record the picker was opened from (a condition, a visit or a vaccination, which must be the caller's own and live; checked before anything is fetched), including a duplicate. `kind` sets the document type (default OTHER). Automatic AI reading follows the person's own setting. Counts against the person's upload allowance (60 an hour) and storage quota. 201 for a new document, 200 otherwise. Cookie session only; not delegable.",
       security: cookieOnly,
       parameters: [systemParameter],
       requestBody: {

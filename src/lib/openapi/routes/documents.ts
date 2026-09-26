@@ -24,6 +24,7 @@ import {
   inboundConfirmSchema,
   inboundFactEditSchema,
   DOCUMENT_SOURCE_ID_MAX,
+  DOCUMENT_SOURCE_INSTANCE_MAX,
   DOCUMENT_SOURCE_SYSTEMS,
   DOCUMENT_SUMMARY_STATES,
   INBOUND_DOCUMENT_KINDS,
@@ -417,12 +418,20 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description:
             "Import source key, second half. Both halves or neither; half a key is 422.",
         },
+        {
+          name: "sourceInstance",
+          in: "query",
+          required: false,
+          schema: { type: "string", maxLength: DOCUMENT_SOURCE_INSTANCE_MAX },
+          description:
+            "Optional, with a key. The instance of `sourceSystem` the id belongs to, as its http(s) address; normalised to the origin (`scheme://host[:port]`). The same id in two instances is two documents. Optional: a key stored without an instance (every upload before v1.39.3) matches any instance of its system, and a key sent without one matches any stored instance. If also sent in the form it must agree.",
+        },
       ],
       tags: ["Documents"],
       summary: "Store a document (no extraction)",
       description:
         'STORE-ONLY upload. Stores the raw document ENCRYPTED at rest with `status: STORED` and runs NO extraction — provider-free, no AI consent / budget / egress. A file is always filable, even with no document-scan provider configured. `multipart/form-data`: a `file` plus optional `title`, `kind`, `documentDate` (YYYY-MM-DD), and repeated `episodeIds` form fields (pre-link to the caller\'s illness/condition episodes). Accepted types (magic-byte sniffed, never the wire Content-Type): PDF/JPEG/PNG/WebP/GIF render inline; Office (docx/xlsx/pptx/doc/xls/ppt), text/CSV/Markdown/RTF, TIFF, HEIC/HEIF, XML/JSON are stored verbatim and served download-only. HEIC is stored as-is but attachment-only — prefer transcoding to JPEG client-side for inline preview parity. Error contract: `413` with `meta.reason = "fileTooLarge"` (+ `maxFileBytes`) or `"quotaExceeded"` (+ `quotaBytes`, `usedBytes`); `415` with `meta.reason = "unsupportedType"`. A same-user duplicate (same bytes) returns 200 + `meta.duplicate: true` with the existing row — not an error. `Idempotency-Key` honoured. Read `GET /api/documents/inbound/usage` for the effective limits before offering an upload. AI extraction is a separate opt-in action — see `POST /api/documents/inbound/{id}/extract`.\n\n' +
-        "**Importing from another system (v1.39.2).** Optional `sourceSystem` (`PAPERLESS`, `PAPRA`, `OTHER`) and `sourceId` (its id there, printable, up to 128 characters; needs `sourceSystem`) key the upload. A re-send with a known key is a duplicate: 200 with the live row (`meta.duplicate: true`), or, when the owner DELETED that document, 200 with `data.deleted: true` and `meta.deleted: true` and nothing stored; this holds after the 30-day purge too. The key may also ride the query string (`?sourceSystem=…&sourceId=…`): a key the vault already holds is then answered at once, the file is not stored or processed, and the request counts only toward the lookup allowance shared with `GET /api/documents/inbound/source` (5000 an hour per token, per person for a session; 429 past it), not toward the hourly upload limit. A key in both places must agree (else 422). Every other upload counts toward the hourly upload limit, duplicates included. A key that is answered with an existing document by its bytes is remembered for that document, so deleting it keeps that key deleted too; one document takes at most 20 such keys, beyond which the upload is refused 409 (`documents.inbound.sourceAliasLimit`). `OTHER` is one shared namespace per account: two different systems both sent as `OTHER` must not reuse each other\'s ids. `aiRead=defer` holds back automatic AI reading for this upload: the thumbnail and a local text index still run, the summary and lab staging do not, and the document stays out of every automatic AI path (the summary catch-up, the automatic index, Index all for search) until the person reads it with AI or generates its summary. Absent, behaviour is unchanged.\n\n" +
+        "**Importing from another system (v1.39.2).** Optional `sourceSystem` (`PAPERLESS`, `PAPRA`, `OTHER`) and `sourceId` (its id there, printable, up to 128 characters, never `.` or `..`; needs `sourceSystem`) key the upload, optionally with `sourceInstance` (v1.39.3: the address of the Paperless-ngx or Papra it came from, normalised to its origin; without it the key matches any instance of the system). A re-send with a known key is a duplicate: 200 with the live row (`meta.duplicate: true`), or, when the owner DELETED that document, 200 with `data.deleted: true` and `meta.deleted: true` and nothing stored; this holds after the 30-day purge too. The key may also ride the query string (`?sourceSystem=…&sourceId=…`): a key the vault already holds is then answered at once, the file is not stored or processed, and the request counts only toward the lookup allowance shared with `GET /api/documents/inbound/source` (5000 an hour per token, per person for a session; 429 past it), not toward the hourly upload limit. A key in both places must agree (else 422). Every other upload counts toward the hourly upload limit, duplicates included. A key that is answered with an existing document by its bytes is remembered for that document, so deleting it keeps that key deleted too; one document takes at most 20 such keys, beyond which the upload is refused 409 (`documents.inbound.sourceAliasLimit`). `OTHER` is one shared namespace per account: two different systems both sent as `OTHER` must not reuse each other\'s ids. `aiRead=defer` holds back automatic AI reading for this upload: the thumbnail and a local text index still run, the summary and lab staging do not, and the document stays out of every automatic AI path (the summary catch-up, the automatic index, Index all for search) until the person reads it with AI or generates its summary. Absent, behaviour is unchanged.\n\n" +
         "**Narrow token.** Also reachable with a `documents:write` Bearer (minted at `POST /api/tokens/documents`), which reaches only this route and the source-key lookup `GET /api/documents/inbound/source`. Such a caller draws on a bucket of its own, keyed on the token (default 120 an hour, `DOCUMENT_UPLOAD_LIMIT_PER_HOUR`, clamped 1-1000; the 429 carries `Retry-After` and `X-RateLimit-*`), and gets a `DocumentUploadReceipt` instead of the stored row; its 413 `quotaExceeded` carries no `quotaBytes` / `usedBytes`. The response is an untagged union (row or receipt) on purpose: a discriminator would need a new field on the row every existing client decodes. A cookie or wildcard caller keeps the 60-an-hour per-user bucket and the full row. With the vault module off the answer is 403 `module.disabled` for every caller.",
       requestBody: {
         required: true,
@@ -461,6 +470,14 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                 description:
                   "Optional. The document's id in `sourceSystem`; requires it. Unique per account across live and deleted documents.",
               }),
+              sourceInstance: z
+                .string()
+                .max(DOCUMENT_SOURCE_INSTANCE_MAX)
+                .optional()
+                .meta({
+                  description:
+                    "Optional; requires `sourceId`. The instance of `sourceSystem` the id belongs to, as its http(s) address; normalised to the origin (`scheme://host[:port]`). The same id in two instances is two documents. Optional: a key stored without an instance (every upload before v1.39.3) matches any instance of its system, and a key sent without one matches any stored instance.",
+                }),
               aiRead: z.enum(["defer"]).optional().meta({
                 description:
                   "Optional. `defer` holds back automatic AI reading for this upload (local index and thumbnail only).",
@@ -526,6 +543,14 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           in: "query",
           required: true,
           schema: { type: "string", maxLength: DOCUMENT_SOURCE_ID_MAX },
+        },
+        {
+          name: "sourceInstance",
+          in: "query",
+          required: false,
+          schema: { type: "string", maxLength: DOCUMENT_SOURCE_INSTANCE_MAX },
+          description:
+            "The instance of `sourceSystem` the id belongs to, as its http(s) address; normalised to the origin (`scheme://host[:port]`). The same id in two instances is two documents. Optional: a key stored without an instance (every upload before v1.39.3) matches any instance of its system, and a key sent without one matches any stored instance.",
         },
       ],
       responses: {

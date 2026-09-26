@@ -15721,21 +15721,23 @@ paths:
 
 
         **Importing from another system (v1.39.2).** Optional `sourceSystem` (`PAPERLESS`, `PAPRA`, `OTHER`) and
-        `sourceId` (its id there, printable, up to 128 characters; needs `sourceSystem`) key the upload. A re-send with
-        a known key is a duplicate: 200 with the live row (`meta.duplicate: true`), or, when the owner DELETED that
-        document, 200 with `data.deleted: true` and `meta.deleted: true` and nothing stored; this holds after the 30-day
-        purge too. The key may also ride the query string (`?sourceSystem=…&sourceId=…`): a key the vault already holds
-        is then answered at once, the file is not stored or processed, and the request counts only toward the lookup
-        allowance shared with `GET /api/documents/inbound/source` (5000 an hour per token, per person for a session; 429
-        past it), not toward the hourly upload limit. A key in both places must agree (else 422). Every other upload
-        counts toward the hourly upload limit, duplicates included. A key that is answered with an existing document by
-        its bytes is remembered for that document, so deleting it keeps that key deleted too; one document takes at most
-        20 such keys, beyond which the upload is refused 409 (`documents.inbound.sourceAliasLimit`). `OTHER` is one
-        shared namespace per account: two different systems both sent as `OTHER` must not reuse each other's ids.
-        `aiRead=defer` holds back automatic AI reading for this upload: the thumbnail and a local text index still run,
-        the summary and lab staging do not, and the document stays out of every automatic AI path (the summary catch-up,
-        the automatic index, Index all for search) until the person reads it with AI or generates its summary. Absent,
-        behaviour is unchanged.
+        `sourceId` (its id there, printable, up to 128 characters, never `.` or `..`; needs `sourceSystem`) key the
+        upload, optionally with `sourceInstance` (v1.39.3: the address of the Paperless-ngx or Papra it came from,
+        normalised to its origin; without it the key matches any instance of the system). A re-send with a known key is
+        a duplicate: 200 with the live row (`meta.duplicate: true`), or, when the owner DELETED that document, 200 with
+        `data.deleted: true` and `meta.deleted: true` and nothing stored; this holds after the 30-day purge too. The key
+        may also ride the query string (`?sourceSystem=…&sourceId=…`): a key the vault already holds is then answered at
+        once, the file is not stored or processed, and the request counts only toward the lookup allowance shared with
+        `GET /api/documents/inbound/source` (5000 an hour per token, per person for a session; 429 past it), not toward
+        the hourly upload limit. A key in both places must agree (else 422). Every other upload counts toward the hourly
+        upload limit, duplicates included. A key that is answered with an existing document by its bytes is remembered
+        for that document, so deleting it keeps that key deleted too; one document takes at most 20 such keys, beyond
+        which the upload is refused 409 (`documents.inbound.sourceAliasLimit`). `OTHER` is one shared namespace per
+        account: two different systems both sent as `OTHER` must not reuse each other's ids. `aiRead=defer` holds back
+        automatic AI reading for this upload: the thumbnail and a local text index still run, the summary and lab
+        staging do not, and the document stays out of every automatic AI path (the summary catch-up, the automatic
+        index, Index all for search) until the person reads it with AI or generates its summary. Absent, behaviour is
+        unchanged.
 
 
         **Narrow token.** Also reachable with a `documents:write` Bearer (minted at `POST /api/tokens/documents`), which
@@ -15767,6 +15769,16 @@ paths:
             type: string
             maxLength: 128
           description: Import source key, second half. Both halves or neither; half a key is 422.
+        - name: sourceInstance
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+          description: "Optional, with a key. The instance of `sourceSystem` the id belongs to, as its http(s) address; normalised
+            to the origin (`scheme://host[:port]`). The same id in two instances is two documents. Optional: a key
+            stored without an instance (every upload before v1.39.3) matches any instance of its system, and a key sent
+            without one matches any stored instance. If also sent in the form it must agree."
       requestBody:
         required: true
         content:
@@ -15821,6 +15833,13 @@ paths:
                     documents.
                   type: string
                   maxLength: 128
+                sourceInstance:
+                  description: "Optional; requires `sourceId`. The instance of `sourceSystem` the id belongs to, as its http(s) address;
+                    normalised to the origin (`scheme://host[:port]`). The same id in two instances is two documents.
+                    Optional: a key stored without an instance (every upload before v1.39.3) matches any instance of its
+                    system, and a key sent without one matches any stored instance."
+                  type: string
+                  maxLength: 512
                 aiRead:
                   description: Optional. `defer` holds back automatic AI reading for this upload (local index and thumbnail only).
                   type: string
@@ -15896,6 +15915,16 @@ paths:
           schema:
             type: string
             maxLength: 128
+        - name: sourceInstance
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+          description: "The instance of `sourceSystem` the id belongs to, as its http(s) address; normalised to the origin
+            (`scheme://host[:port]`). The same id in two instances is two documents. Optional: a key stored without an
+            instance (every upload before v1.39.3) matches any instance of its system, and a key sent without one
+            matches any stored instance."
       responses:
         "200":
           description: The answer for this key.
@@ -20975,7 +21004,9 @@ paths:
         at least one origin), the listed origins, and the caller's own saved connections to Paperless-ngx or Papra. A
         connection never carries its token: `hasToken` is always true for a saved one, and no route returns the token in
         whole or in part. `originAllowed` is false once the operator removed the connection's origin from the list. No
-        request leaves the server. Cookie session only; not delegable."
+        request leaves the server. Needs neither the Documents module nor the list: with the list unset, `available` is
+        false and any connection still stored is listed (with `originAllowed: false`) so it can be removed. Cookie
+        session only; not delegable."
       security: &a52
         - cookieAuth: []
       responses:
@@ -21004,9 +21035,11 @@ paths:
       description: "Saves or replaces the caller's connection to Paperless-ngx (`paperless`: base address and API token) or
         Papra (`papra`: base address, organization id, API key with `documents:read` and `tags:read`). The base address
         may carry a path; its origin must be listed in `DOCUMENT_SOURCE_ORIGINS`. The connection is tested live before
-        anything is stored. Leaving out `token` keeps the stored one (the first save must carry it). The token is stored
-        encrypted (AES-256-GCM) and never returned. Ten saves and tests a minute per person. Cookie session only; not
-        delegable."
+        anything is stored. Leaving out `token` keeps the stored one, but only when the new address is on the same
+        origin as the saved one: the first save and a move to another origin must carry it (422
+        `documents.sources.tokenRequired`), so a stored token is never sent to an address it was not saved for. A Papra
+        organization id is letters, digits, `_` and `-`. The token is stored encrypted (AES-256-GCM) and never returned.
+        Ten saves and tests a minute per person. Cookie session only; not delegable."
       security: *a52
       parameters:
         - &a54
@@ -21032,9 +21065,7 @@ paths:
                   maxLength: 2048
                 organizationId:
                   type: string
-                  minLength: 1
-                  maxLength: 128
-                  pattern: ^[\x21-\x7e]+$
+                  pattern: ^[A-Za-z0-9_-]{1,128}$
                 token:
                   type: string
                   minLength: 1
@@ -21084,8 +21115,8 @@ paths:
         - Documents
       summary: Remove a connection to a document archive
       description: Deletes the caller's connection for this system, and its token with it. Works even after the operator
-        removed the origin from the list. `disconnected` is false when there was nothing to delete. Cookie session only;
-        not delegable.
+        removed the origin from the list, and with the Documents module switched off. `disconnected` is false when there
+        was nothing to delete. Cookie session only; not delegable.
       security: *a52
       parameters:
         - *a54
@@ -21160,11 +21191,13 @@ paths:
         - Documents
       summary: Search a connected archive by name, tag and date
       description: "Searches the source 25 documents at a time. `q` matches the document's name (Paperless-ngx title, Papra
-        name); `tag` narrows to one of the source's tags by id; `from` / `to` to a date range, inclusive (Papra's range
-        is applied to each page after it arrives, so a page can hold fewer than 25). Each result carries what the vault
-        already holds under that source key: `new`, `imported` with the vault document's `documentId`, or `deleted`
-        (deleted in HealthLog; importing it again stores nothing). Nothing is stored. Sixty searches a minute, shared
-        with the tag read. Cookie session only; not delegable."
+        name); `tag` narrows to one of the source's tags by id; `from` / `to` to a date range, inclusive (Paperless-ngx
+        filters on `created__gte` / `created__lte`; Papra's range is applied to each page after it arrives). When a
+        filter applied after arrival empties a page, the route reads on, up to five source pages, and `page` in the
+        answer is the last source page read; ask for `page + 1` next. Each result carries what the vault already holds
+        under that source key: `new`, `imported` with the vault document's `documentId`, or `deleted` (deleted in
+        HealthLog; importing it again stores nothing). Nothing is stored. Sixty searches a minute, shared with the tag
+        read. Cookie session only; not delegable."
       security: *a52
       parameters:
         - *a54
@@ -21218,15 +21251,19 @@ paths:
       tags:
         - Documents
       summary: Import one picked document
-      description: "Fetches one document from the source and stores it in the vault through the same path as an upload, with
-        `sourceSystem` / `sourceId` provenance. A source key the vault already holds is answered without a download:
-        `duplicate` for a live document (same id), `deleted` for one the person deleted in HealthLog, which is never
-        stored again. Bytes already in the vault under another key are `duplicate` too, and the key is remembered for
-        that document. `link` files the document against the record the picker was opened from (a condition, a visit or
-        a vaccination, which must be the caller's own and live; checked before anything is fetched), including a
-        duplicate. `kind` sets the document type (default OTHER). Automatic AI reading follows the person's own setting.
-        Counts against the person's upload allowance (60 an hour) and storage quota. 201 for a new document, 200
-        otherwise. Cookie session only; not delegable."
+      description: "`sourceId` must be an id the system issues (Paperless-ngx: digits; Papra: letters, digits, `_`, `-`), else
+        422 before anything is fetched. Fetches one document from the source and stores it in the vault through the same
+        path as an upload, with `sourceSystem` / `sourceId` / `sourceInstance` (the connection's origin) provenance; the
+        same id from another instance is another document. One import per key runs at a time; a concurrent second one
+        waits and then answers `duplicate`. The key check counts toward the lookup allowance, the fetch toward the
+        search allowance, and only a file that arrived toward the upload allowance. A source key the vault already holds
+        is answered without a download: `duplicate` for a live document (same id), `deleted` for one the person deleted
+        in HealthLog, which is never stored again. Bytes already in the vault under another key are `duplicate` too, and
+        the key is remembered for that document. `link` files the document against the record the picker was opened from
+        (a condition, a visit or a vaccination, which must be the caller's own and live; checked before anything is
+        fetched), including a duplicate. `kind` sets the document type (default OTHER). Automatic AI reading follows the
+        person's own setting. Counts against the person's upload allowance (60 an hour) and storage quota. 201 for a new
+        document, 200 otherwise. Cookie session only; not delegable."
       security: *a52
       parameters:
         - *a54
@@ -35768,6 +35805,11 @@ components:
                 anyOf:
                   - type: string
                     maxLength: 128
+                  - type: "null"
+              sourceInstance:
+                anyOf:
+                  - type: string
+                    maxLength: 512
                   - type: "null"
               aiReadDeferred:
                 type: boolean
