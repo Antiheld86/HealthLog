@@ -46,6 +46,7 @@ import {
   isRecordOnly,
   scheduleWireFields,
 } from "@/lib/medications/intake-tracking";
+import { floorWhole } from "@/lib/medications/units-per-dose";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -216,7 +217,7 @@ export const GET = apiHandler(
     const stockDosesRemaining =
       stockUnitsRemaining === null
         ? null
-        : Math.floor(
+        : floorWhole(
             stockUnitsRemaining /
               effectiveUnitsPerDose(
                 schedulesDto,

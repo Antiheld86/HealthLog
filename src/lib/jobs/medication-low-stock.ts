@@ -422,6 +422,11 @@ export async function runMedicationLowStockTick(
               rollingIntervalDays: true,
               // v1.37.19 — per-slot units feed the slot-aware burn rate.
               unitsPerDose: true,
+              // A PRN schedule consumes nothing on a cadence, a CYCLIC one
+              // only in its "on" weeks.
+              scheduleType: true,
+              cyclicOnWeeks: true,
+              cyclicOffWeeks: true,
             },
           },
         },

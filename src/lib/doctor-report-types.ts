@@ -40,7 +40,14 @@ export interface DoctorReportStats {
   latest: number;
 }
 
+/**
+ * One medication's adherence over the report window. The report's
+ * `compliance` map is keyed by medication id, because two medications may
+ * share a name (an ended course and a new one, two strengths); `name` is the
+ * label every renderer prints.
+ */
 export interface DoctorReportCompliance {
+  name: string;
   total: number;
   taken: number;
   skipped: number;
@@ -102,8 +109,11 @@ export interface DoctorReportData {
    */
   glucoseClinical: GlucoseClinicalMetrics;
   bmi: number | null;
+  /** Keyed by medication id; see `DoctorReportCompliance`. */
   compliance: Record<string, DoctorReportCompliance>;
   medications: Array<{
+    /** The medication id, the key into `compliance`. */
+    id: string;
     name: string;
     dose: string;
     // v1.9.0 — optional user/clinician-asserted drug-classification

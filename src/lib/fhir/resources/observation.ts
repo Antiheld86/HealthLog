@@ -177,7 +177,7 @@ function adherenceObservations(
 ): FhirObservation[] {
   const observations: FhirObservation[] = [];
   const period = reportingPeriod(data);
-  for (const [name, comp] of Object.entries(data.compliance)) {
+  for (const comp of Object.values(data.compliance)) {
     if (comp.total <= 0) continue;
     // Integer percent — the one canonical rounding the app card + PDF use, so
     // a clinician sees the same adherence figure on every surface. The helper
@@ -201,7 +201,7 @@ function adherenceObservations(
               "Adherence to prescribed medication instructions [Reported]",
           },
         ],
-        text: `Medication adherence — ${name}`,
+        text: `Medication adherence — ${comp.name}`,
       },
       subject: patientRef,
       effectivePeriod: period,

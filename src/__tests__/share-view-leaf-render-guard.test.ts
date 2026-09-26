@@ -225,7 +225,9 @@ const DISPOSITIONS: Record<StructuredLeafId, Disposition> = {
   MEDICATION_LIST: {
     kind: "rendered",
     data: {
-      medications: [{ name: "Ramipril", dose: "5 mg", schedules: [] }],
+      medications: [
+        { id: "med-ramipril", name: "Ramipril", dose: "5 mg", schedules: [] },
+      ],
     },
     marker: "Ramipril",
   },
@@ -252,7 +254,13 @@ const DISPOSITIONS: Record<StructuredLeafId, Disposition> = {
     kind: "rendered",
     data: {
       compliance: {
-        Metformin: { total: 60, taken: 57, skipped: 1, missed: 2 },
+        "med-metformin": {
+          name: "Metformin",
+          total: 60,
+          taken: 57,
+          skipped: 1,
+          missed: 2,
+        },
       },
     },
     marker: "Metformin",

@@ -583,6 +583,7 @@ export async function collectDoctorReportData(
     compliance: gate.admits("MEDICATION_COMPLIANCE") ? compliance : {},
     medications: gate.admits("MEDICATION_LIST")
       ? medications.map((m) => ({
+          id: m.id,
           name: m.name,
           dose: m.dose,
           atcCode: m.atcCode,

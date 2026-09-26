@@ -65,9 +65,17 @@ function makeData(overrides?: Partial<DoctorReportData>): DoctorReportData {
     glucoseUnit: "mg/dL",
     bmi: 24.1,
     compliance: {
-      "Example Drug": { total: 90, taken: 85, skipped: 3, missed: 2 },
+      "med-example": {
+        name: "Example Drug",
+        total: 90,
+        taken: 85,
+        skipped: 3,
+        missed: 2,
+      },
     },
-    medications: [{ name: "Example Drug", dose: "5mg", schedules: [] }],
+    medications: [
+      { id: "med-example", name: "Example Drug", dose: "5mg", schedules: [] },
+    ],
     medicationAdministrations: [
       {
         medicationName: "Example Drug",

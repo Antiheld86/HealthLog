@@ -851,3 +851,44 @@ describe("issue #664 — exact occurrence identity survives local midnight", () 
     expect(dispatchNotification).not.toHaveBeenCalled();
   });
 });
+
+describe("handleReminderCheck — a snooze holds only the slot it answered", () => {
+  function snoozed(at: string): Record<string, unknown> {
+    return {
+      ...medicationWithSchedule({ timesOfDay: ["08:00", "18:00"] }),
+      // A Telegram "skip" of the morning dose snoozes to the end of the day;
+      // the snooze write stamps the row's updatedAt.
+      snoozedUntil: new Date("2026-07-28T23:59:59.000Z"),
+      updatedAt: new Date(at),
+    };
+  }
+
+  it("still reminds the evening dose after the morning one was snoozed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-28T18:40:00.000Z"));
+    prismaMock.medication.findMany.mockResolvedValue([
+      snoozed("2026-07-28T08:30:00.000Z"),
+    ] as never);
+
+    await handleReminderCheck([]);
+
+    expect(dispatchNotification).toHaveBeenCalledTimes(1);
+    expect(dispatchNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ timeOfDay: "18:00" }),
+      }),
+    );
+  });
+
+  it("holds the slot whose reminder was open when the snooze was set", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-28T08:40:00.000Z"));
+    prismaMock.medication.findMany.mockResolvedValue([
+      snoozed("2026-07-28T08:30:00.000Z"),
+    ] as never);
+
+    await handleReminderCheck([]);
+
+    expect(dispatchNotification).not.toHaveBeenCalled();
+  });
+});

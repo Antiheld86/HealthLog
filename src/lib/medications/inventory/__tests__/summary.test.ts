@@ -195,3 +195,14 @@ describe("supply surfaces — server computes, the detail-page clients render th
     expect(src).toContain("medications.detail.bestand.expiredSuffix");
   });
 });
+
+describe("summariseSupply — whole doses survive binary floating point", () => {
+  it("2.4 mL at 0.8 mL per dose is three doses, not two", () => {
+    const summary = summariseSupply(
+      [{ state: "ACTIVE", unitsRemaining: 2.4, unitsTotal: 2.4 }] as never,
+      0.8,
+    );
+    expect(summary.dosesRemaining).toBe(3);
+    expect(summary.dosesTotal).toBe(3);
+  });
+});
