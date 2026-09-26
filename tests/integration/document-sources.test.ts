@@ -638,6 +638,70 @@ describe("search and import", () => {
 });
 
 describe("review follow-ups", () => {
+  it("keeps a document deleted in HealthLog deleted when the same bytes arrive under another source key", async () => {
+    await seedOwner();
+    await connect();
+    const prisma = getPrismaClient();
+    const first = await importDoc({ sourceId: "41" });
+    const id = (await first.json()).data.documentId as string;
+    await prisma.inboundDocument.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+
+    // The same file, uploaded by another importer under its own key (a
+    // document token or the script sending from another system).
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([
+        new Uint8Array(
+          Buffer.concat([DOCS[0].bytes, Buffer.from(`% ${ORIGIN}\n`)]),
+        ),
+      ]),
+      "x.pdf",
+    );
+    form.append("sourceSystem", "PAPRA");
+    form.append("sourceId", "doc_same_bytes");
+    const { POST } = await import("@/app/api/documents/inbound/route");
+    const res = await (POST as unknown as (r: Request) => Promise<Response>)(
+      new Request("http://localhost/api/documents/inbound", {
+        method: "POST",
+        body: form,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toMatchObject({ deleted: true });
+    expect(await prisma.inboundDocument.count()).toBe(1);
+    // The new key is remembered on the deleted document, so the purge
+    // carries it into the ledger.
+    expect(
+      await prisma.documentSourceAlias.count({
+        where: { documentId: id, sourceId: "doc_same_bytes" },
+      }),
+    ).toBe(1);
+
+    // A person uploading the same file by hand, without a key, is a
+    // deliberate new copy and is stored.
+    const manual = new FormData();
+    manual.append(
+      "file",
+      new Blob([
+        new Uint8Array(
+          Buffer.concat([DOCS[0].bytes, Buffer.from(`% ${ORIGIN}\n`)]),
+        ),
+      ]),
+      "x.pdf",
+    );
+    const byHand = await (POST as unknown as (r: Request) => Promise<Response>)(
+      new Request("http://localhost/api/documents/inbound", {
+        method: "POST",
+        body: manual,
+      }),
+    );
+    expect(byHand.status).toBe(201);
+  });
+
   it("never sends the stored token to a new origin", async () => {
     await seedOwner();
     await connect();

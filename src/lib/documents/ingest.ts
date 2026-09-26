@@ -16,6 +16,8 @@
  *     id names nothing the caller owns;
  *   - sha256 duplicate detection against live rows, remembering the source key
  *     for the existing document so a later delete keeps that key deleted too;
+ *     for an import, also against deleted (not yet purged) rows, which answer
+ *     "deleted" rather than storing the file again;
  *   - the quota gate and the insert in one transaction under a per-user
  *     advisory lock, and the race on either partial unique index resolved the
  *     way the fast paths above would have answered;
@@ -215,6 +217,36 @@ export async function ingestDocument(
     omit: { contentEncrypted: true },
   });
   if (existing) return answerDuplicate(input, existing);
+
+  // An import (a source key is present) of bytes the person deleted here,
+  // arriving under a key HealthLog has not seen: another system, another
+  // instance, or a re-scan with a new id. The deletion was a decision about
+  // the document, not about one key, so it is answered "deleted", and the
+  // new key is remembered on the tombstone so the purge carries it into the
+  // ledger. After the 30-day purge the bytes and their hash are gone and only
+  // the keys remain; no content hash of a deleted document is kept. A person
+  // uploading the file by hand (no key) is making a new copy on purpose.
+  if (sourceSystem && sourceId) {
+    const tombstone = await prisma.inboundDocument.findFirst({
+      where: { userId, contentSha256, deletedAt: { not: null } },
+      select: { id: true },
+      orderBy: { deletedAt: "desc" },
+    });
+    if (tombstone) {
+      const remembered = await rememberSourceAlias(
+        userId,
+        tombstone.id,
+        sourceSystem,
+        sourceId,
+        sourceInstance,
+      );
+      if (remembered === "limit") return { kind: "aliasLimit" };
+      return {
+        kind: "sourceKey",
+        match: { state: "deleted", id: tombstone.id },
+      };
+    }
+  }
 
   // Quota gate + insert + pre-links in ONE transaction. Usage counts every
   // non-purged row — tombstones still hold TOAST bytes, so "deleted" bytes
