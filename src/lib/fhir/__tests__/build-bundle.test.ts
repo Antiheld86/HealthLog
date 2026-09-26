@@ -9,6 +9,7 @@ import type {
   FhirPatient,
   FhirCoverage,
   FhirDiagnosticReport,
+  FhirComposition,
 } from "../types";
 
 function administrationsOf(
@@ -1170,6 +1171,57 @@ describe("buildFhirDocumentBundle", () => {
     expect(bmiObs[0].code.coding?.[0].display).toBe(
       "Body mass index (BMI) [Ratio]",
     );
+  });
+
+  it("emits no DiagnosticReport, and no empty array anywhere, when the window holds no vital sign", () => {
+    const bundle = buildFhirDocumentBundle(
+      makeData({ measurements: {}, bmi: null }),
+      { insuranceNumber: null },
+      FIXED_NOW,
+    );
+    const types = bundle.entry.map((e) => e.resource.resourceType);
+    expect(types).not.toContain("DiagnosticReport");
+    const composition = bundle.entry[0].resource as FhirComposition;
+    const refs = (composition.section ?? []).flatMap((s) => s.entry ?? []);
+    for (const ref of refs) {
+      expect(refTarget(bundle, ref.reference)).not.toMatch(
+        /^DiagnosticReport\//,
+      );
+    }
+    // R4: an array element is absent, never empty.
+    const emptyArrays: string[] = [];
+    const walk = (value: unknown, path: string): void => {
+      if (Array.isArray(value)) {
+        if (value.length === 0) emptyArrays.push(path);
+        value.forEach((item, i) => walk(item, `${path}[${i}]`));
+      } else if (value && typeof value === "object") {
+        for (const [k, v] of Object.entries(value)) walk(v, `${path}.${k}`);
+      }
+    };
+    walk(bundle, "Bundle");
+    expect(emptyArrays).toEqual([]);
+  });
+
+  it("leaves the vital-signs section without `entry` when it has nothing to list", () => {
+    const bundle = buildFhirDocumentBundle(
+      makeData({
+        measurements: {},
+        bmi: null,
+        glucoseStats: {},
+        compliance: {},
+        medications: [],
+        mood: null,
+        labResults: [],
+      } as Partial<DoctorReportData>),
+      { insuranceNumber: null },
+      FIXED_NOW,
+    );
+    const composition = bundle.entry[0].resource as FhirComposition;
+    const vitals = composition.section?.find((s) => s.title === "Vital signs");
+    expect(vitals?.text?.div).toBeTruthy();
+    expect(
+      vitals && "entry" in vitals ? vitals.entry : undefined,
+    ).toBeUndefined();
   });
 
   it("appends a DiagnosticReport as the LAST entry routing all Observation refs", () => {

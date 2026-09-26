@@ -5,7 +5,8 @@
  * the Composition, the authoring Device, Patient, Coverage, every Observation
  * (vitals / glucose / labs / adherence / mood / wellness AND the cycle set),
  * MedicationStatements, MedicationAdministrations, Conditions, Encounters,
- * AllergyIntolerances, FamilyMemberHistories and the DiagnosticReport.
+ * AllergyIntolerances, FamilyMemberHistories and the DiagnosticReport (present
+ * when the window holds a vital sign).
  *
  * The set is the document export's, flattened — same builder, same order, same
  * `urn:uuid` entry identities, so a reference between two resources still
