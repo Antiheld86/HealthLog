@@ -77,8 +77,11 @@ export interface FitbitCredentials {
  *   - when derived from `NEXT_PUBLIC_APP_URL`, must stay same-origin with it.
  */
 export function getFitbitRedirectUri(): string {
-  const explicit = process.env.FITBIT_REDIRECT_URI;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  // An empty or blank value counts as unset: the compose whitelist
+  // materialises an unset var as an empty string, which must fall through to
+  // the derived URI rather than read as "not configured".
+  const explicit = process.env.FITBIT_REDIRECT_URI?.trim() || undefined;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || undefined;
   const raw =
     explicit ?? (appUrl ? `${appUrl}/api/fitbit/callback` : undefined);
 

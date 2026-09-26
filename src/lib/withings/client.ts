@@ -21,9 +21,12 @@ export interface WithingsCredentials {
 }
 
 export function getWithingsRedirectUri(): string {
+  // An empty or blank value counts as unset: the compose whitelist
+  // materialises an unset var as an empty string, which must fall through to
+  // the derived URI rather than go out as `redirect_uri=`.
   return (
-    process.env.WITHINGS_REDIRECT_URI ??
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/withings/callback`
+    process.env.WITHINGS_REDIRECT_URI?.trim() ||
+    `${process.env.NEXT_PUBLIC_APP_URL?.trim()}/api/withings/callback`
   );
 }
 

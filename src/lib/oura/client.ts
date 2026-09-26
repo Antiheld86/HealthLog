@@ -42,9 +42,11 @@ export function getOuraCredentials(): OuraCredentials | null {
 }
 
 export function getOuraRedirectUri(): string {
+  // An empty or blank value counts as unset (the compose whitelist
+  // materialises an unset var as an empty string).
   return (
-    process.env.OURA_REDIRECT_URI ||
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/oura/callback`
+    process.env.OURA_REDIRECT_URI?.trim() ||
+    `${process.env.NEXT_PUBLIC_APP_URL?.trim()}/api/oura/callback`
   );
 }
 

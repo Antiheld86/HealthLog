@@ -54,11 +54,12 @@ export function getPolarCredentials(): PolarCredentials | null {
 }
 
 export function getPolarRedirectUri(): string {
-  // `||`, not `??`: the compose whitelist materialises an unset var as an empty
-  // string, which must still fall through to the derived URI.
+  // An empty or blank value counts as unset: the compose whitelist
+  // materialises an unset var as an empty string, which must still fall
+  // through to the derived URI.
   return (
-    process.env.POLAR_REDIRECT_URI ||
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/polar/callback`
+    process.env.POLAR_REDIRECT_URI?.trim() ||
+    `${process.env.NEXT_PUBLIC_APP_URL?.trim()}/api/polar/callback`
   );
 }
 
