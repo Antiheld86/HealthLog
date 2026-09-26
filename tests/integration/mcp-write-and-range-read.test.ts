@@ -386,6 +386,36 @@ describe("search + fetch over clinical records — real DB (v1.39.3)", () => {
     expect(doc.url).toContain(`/documents?doc=${mine.document.id}`);
   });
 
+  it("keeps a condition note and a held-back document's text off the wire", async () => {
+    const prisma = getPrismaClient();
+    const mine = await seed("rec-private");
+    await prisma.illnessEpisode.update({
+      where: { id: mine.condition.id },
+      data: { noteEncrypted: encryptToBytes("Treppensteigen schmerzhaft") },
+    });
+    await prisma.inboundDocument.update({
+      where: { id: mine.document.id },
+      data: { aiReadDeferred: true },
+    });
+
+    expect((await search(mine.user.id, "Treppensteigen")).results).toEqual([]);
+    expect((await search(mine.user.id, "Innenmeniskus")).results).toEqual([]);
+    // Still found by its title.
+    expect(
+      (await search(mine.user.id, "Klinikum")).results.map((r) => r.id),
+    ).toContain(`document:${mine.document.id}`);
+
+    const condition = await readTool("fetch").run(readCtx(mine.user.id), {
+      id: `condition:${mine.condition.id}`,
+    });
+    expect(JSON.stringify(condition)).not.toContain("Treppensteigen");
+    const doc = (await readTool("fetch").run(readCtx(mine.user.id), {
+      id: `document:${mine.document.id}`,
+    })) as { metadata: Record<string, unknown> };
+    expect(doc.metadata.excerpt).toBeNull();
+    expect(doc.metadata.reason).toBe("ai_read_deferred");
+  });
+
   it("drops a switched-off module's records from search and fetch", async () => {
     const prisma = getPrismaClient();
     const mine = await seed("rec-gate");
