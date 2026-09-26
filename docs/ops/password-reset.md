@@ -18,10 +18,12 @@ instance).
 
 ## Run it
 
-The reset CLI ships in the image and runs under plain `node` against the built
-runtime (the standalone image strips `tsx`, so this is a `.mjs` that uses the
-in-image `pg` and `@node-rs/argon2` directly and reuses the app's exact Argon2id
-parameters):
+The reset CLI ships in the image from v1.39.3 on. It runs under plain `node`
+against the built runtime: a `.mjs` file that uses the in-image `pg` and
+`@node-rs/argon2` directly and reuses the app's exact Argon2id parameters.
+Images up to and including v1.39.2 did not contain the script, so on those
+the command below fails with "Cannot find module"; use the source-checkout
+form at the end of this page instead.
 
 ```sh
 docker compose exec app node scripts/reset-password.mjs <username-or-email>
@@ -32,7 +34,7 @@ confirmation that names only the user — never the password:
 
 ```
 New password (input hidden):
-reset-password: password updated for "alice"
+reset-password: password updated for "alice"; revoked 2 sessions, 0 API tokens, 1 refresh tokens, 0 trusted devices, and 0 step-up elevations
 ```
 
 You can also pass the password as a second argument for non-interactive use,
@@ -57,8 +59,10 @@ docker compose exec app node scripts/reset-password.mjs alice 'a-strong-passphra
 
 ## Source checkout
 
-From a source checkout (not the production image) the same script runs under
-Node directly:
+From a source checkout of the same release (after `pnpm install`) the same
+script runs under Node directly. It needs a `DATABASE_URL` that reaches the
+database; the bundled `db` service publishes no port, so on a stock compose
+stack run it inside the compose network or publish the port temporarily:
 
 ```sh
 DATABASE_URL='postgres://…' node scripts/reset-password.mjs <username-or-email>

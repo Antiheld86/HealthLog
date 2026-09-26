@@ -170,6 +170,24 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/src/generated ./src/generated
 
+# Operator maintenance scripts that a runbook tells the operator to run inside
+# this container (`docs/ops/password-reset.md`, `docs/ops/intake-repair.md`).
+# The standalone output carries none of `scripts/`, so without these lines the
+# documented `docker compose exec app node scripts/reset-password.mjs` failed
+# with "Cannot find module". Only self-contained scripts belong here: plain
+# `node` or the `healthlog-tsx` launcher below, resolving `pg` and
+# `@node-rs/argon2` from the traced runtime tree. Scripts that import the
+# application graph (`@/…`, the generated Prisma client) run from a source
+# checkout instead. `src/__tests__/container-scripts-ship-guard.test.ts` holds
+# the runbooks and this list in step. Root-owned on purpose: the app user can
+# run them but not rewrite them.
+COPY --from=builder /app/scripts/reset-password.mjs ./scripts/reset-password.mjs
+COPY --from=builder /app/src/lib/auth/argon2-params.mjs ./src/lib/auth/argon2-params.mjs
+COPY --from=builder /app/scripts/repair-intake-anomalies.ts ./scripts/repair-intake-anomalies.ts
+# Prove the reset CLI's imports resolve in this tree: with every import found
+# it stops at its own usage line; a missing module throws before reaching it.
+RUN node scripts/reset-password.mjs 2>&1 | grep -q "reset-password: usage:"
+
 # Install the migration CLI, its config dependency, and a pinned launcher for
 # the maintenance scripts already shipped in the standalone tree. The Prisma
 # config loads dotenv from /app, so expose the isolated copy there before
@@ -212,6 +230,10 @@ RUN mkdir -p /opt/prisma-cli && \
     ln -sfn /opt/prisma-cli/node_modules/prisma /app/node_modules/prisma && \
     rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /root/.cache/node/corepack /root/.npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
+
+# Same proof for the intake-repair script under the launcher it is documented
+# with: its `pg` import resolves, so it reaches its own DATABASE_URL check.
+RUN env -u DATABASE_URL healthlog-tsx scripts/repair-intake-anomalies.ts 2>&1 | grep -q "DATABASE_URL must be set"
 
 # v1.4.27 B3 — offline GeoLite2 databases for IP→location and IP→ASN
 # lookups. The MMDB files live in `/opt/geolite2/` and are read by

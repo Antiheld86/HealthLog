@@ -7348,7 +7348,7 @@
         "rotateEnqueued": "Rotation started.",
         "rotateFailed": "Could not start the rotation.",
         "stepUpNeeded": "A fresh second factor is required. Confirm your second factor, or use the command-line tool if you have no second factor enrolled.",
-        "cliNote": "A second factor is required to use this button. Operators without one rotate with scripts/rotate-encryption-key.ts.",
+        "cliNote": "A second factor is required to use this button. Without one, run scripts/rotate-encryption-key.ts from a source checkout of this release; the steps are in docs/ops/encryption-key-rotation.md.",
         "columnsTitle": "Per-column coverage",
         "columnsDescription": "Each encrypted column with its row counts on the active key versus older keys.",
         "colColumn": "Column",

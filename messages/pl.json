@@ -7348,7 +7348,7 @@
         "rotateEnqueued": "Rotacja rozpoczęta.",
         "rotateFailed": "Nie udało się rozpocząć rotacji.",
         "stepUpNeeded": "Wymagany jest świeży drugi składnik. Potwierdź drugi składnik lub użyj narzędzia wiersza poleceń, jeśli nie masz skonfigurowanego żadnego.",
-        "cliNote": "Do tego przycisku wymagany jest drugi składnik. Operatorzy bez niego rotują przez scripts/rotate-encryption-key.ts.",
+        "cliNote": "Do tego przycisku wymagany jest drugi składnik. Bez niego uruchom scripts/rotate-encryption-key.ts z kopii kodu źródłowego tej wersji; kroki opisuje docs/ops/encryption-key-rotation.md.",
         "columnsTitle": "Pokrycie wg kolumn",
         "columnsDescription": "Każda zaszyfrowana kolumna z liczbą wierszy na aktywnym kluczu względem starszych kluczy.",
         "colColumn": "Kolumna",

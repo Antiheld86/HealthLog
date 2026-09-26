@@ -7348,7 +7348,7 @@
         "rotateEnqueued": "Rotation gestartet.",
         "rotateFailed": "Rotation konnte nicht gestartet werden.",
         "stepUpNeeded": "Ein frischer zweiter Faktor ist erforderlich. Bestätige deinen zweiten Faktor oder nutze das Kommandozeilen-Werkzeug, falls kein zweiter Faktor eingerichtet ist.",
-        "cliNote": "Für diesen Knopf ist ein zweiter Faktor nötig. Betreiber ohne zweiten Faktor rotieren mit scripts/rotate-encryption-key.ts.",
+        "cliNote": "Für diesen Knopf ist ein zweiter Faktor nötig. Ohne ihn führen Betreiber scripts/rotate-encryption-key.ts aus einem Quellcode-Checkout dieser Version aus; die Schritte stehen in docs/ops/encryption-key-rotation.md.",
         "columnsTitle": "Abdeckung pro Spalte",
         "columnsDescription": "Jede verschlüsselte Spalte mit ihren Zeilenzahlen auf dem aktiven Schlüssel gegenüber älteren Schlüsseln.",
         "colColumn": "Spalte",

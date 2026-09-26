@@ -9,10 +9,10 @@
  *     `rotateCorpus()` to re-encrypt every row that is not already on the
  *     active key.
  *
- * The standalone CLI (`scripts/rotate-encryption-key.ts`) remains the canonical
- * rotation path and stays independent (its own Prisma client). This module is
- * the in-app convenience that reuses the SAME registry, so the guard test keeps
- * both in lock-step.
+ * The admin-triggered job is the primary rotation path on the published image.
+ * The standalone CLI (`scripts/rotate-encryption-key.ts`) runs from a source
+ * checkout with its own Prisma client and reuses the SAME registry, so the
+ * guard test keeps both in lock-step.
  *
  * GUARANTEES (the security review must confirm these on the rotation path):
  *  - ACTIVE-KEY-ONLY. Re-encryption is `encrypt(decrypt(value))`; `encrypt()`

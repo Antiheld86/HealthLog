@@ -3,9 +3,10 @@
  *
  * v1.23 — admin-triggered encryption-key rotation. Enqueues the
  * `encryption-key-rotate` pg-boss job, which re-encrypts the whole encrypted-
- * column corpus to the configured ACTIVE key id. The CLI
- * (`scripts/rotate-encryption-key.ts`) stays the canonical path; this is a
- * convenience that reuses the same column registry and is safe by construction:
+ * column corpus to the configured ACTIVE key id. This is the primary path on
+ * the published image, which contains neither a package manager nor
+ * `scripts/rotate-encryption-key.ts`; the CLI runs from a source checkout and
+ * reuses the same column registry. Safe by construction:
  *
  *  - ACTIVE-KEY-ONLY + NEVER ADDS / DROPS A KEY: the job only writes the active
  *    key and never touches `ENCRYPTION_KEYS`. Dropping a key remains an env +
@@ -16,8 +17,8 @@
  * Auth: cookie-only `requireAdmin` (Bearer can never reach admin) PLUS
  * `requireFreshMfa` step-up — re-encrypting the whole sensitive corpus is a
  * high-blast-radius action. An admin without a second factor cannot use the
- * button and falls back to the CLI (this is intentional: step-up cannot be
- * softened, and the CLI is the documented canonical path).
+ * button and falls back to the CLI from a source checkout (intentional:
+ * step-up cannot be softened).
  */
 import {
   apiHandler,

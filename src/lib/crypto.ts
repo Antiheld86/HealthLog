@@ -255,7 +255,7 @@ export function decrypt(encoded: string): string {
     throw new Error(
       "Found a legacy-format ciphertext but no v1 key is configured. " +
         "Restore the original ENCRYPTION_KEY (or add a 'v1' entry to " +
-        "ENCRYPTION_KEYS) and run scripts/rotate-encryption-key.ts before " +
+        "ENCRYPTION_KEYS) and run the key rotation (Admin > Encryption) before " +
         "removing it.",
     );
   }

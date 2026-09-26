@@ -7348,7 +7348,7 @@
         "rotateEnqueued": "Rotazione avviata.",
         "rotateFailed": "Impossibile avviare la rotazione.",
         "stepUpNeeded": "È richiesto un secondo fattore recente. Conferma il secondo fattore oppure usa lo strumento da riga di comando se non ne hai configurato uno.",
-        "cliNote": "Per questo pulsante serve un secondo fattore. Gli operatori senza secondo fattore ruotano con scripts/rotate-encryption-key.ts.",
+        "cliNote": "Per questo pulsante serve un secondo fattore. Senza, esegui scripts/rotate-encryption-key.ts da una copia dei sorgenti di questa versione; i passaggi sono in docs/ops/encryption-key-rotation.md.",
         "columnsTitle": "Copertura per colonna",
         "columnsDescription": "Ogni colonna cifrata con i conteggi di righe sulla chiave attiva rispetto alle chiavi più vecchie.",
         "colColumn": "Colonna",

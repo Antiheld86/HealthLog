@@ -7348,7 +7348,7 @@
         "rotateEnqueued": "Rotación iniciada.",
         "rotateFailed": "No se pudo iniciar la rotación.",
         "stepUpNeeded": "Se requiere un segundo factor reciente. Confirma tu segundo factor o usa la herramienta de línea de comandos si no tienes ninguno configurado.",
-        "cliNote": "Se necesita un segundo factor para usar este botón. Los operadores sin él rotan con scripts/rotate-encryption-key.ts.",
+        "cliNote": "Se necesita un segundo factor para usar este botón. Sin él, ejecuta scripts/rotate-encryption-key.ts desde una copia del código fuente de esta versión; los pasos están en docs/ops/encryption-key-rotation.md.",
         "columnsTitle": "Cobertura por columna",
         "columnsDescription": "Cada columna cifrada con sus recuentos de filas en la clave activa frente a claves anteriores.",
         "colColumn": "Columna",

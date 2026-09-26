@@ -7327,7 +7327,7 @@
         "rotateEnqueued": "교체를 시작했어요.",
         "rotateFailed": "교체를 시작하지 못했어요.",
         "stepUpNeeded": "2단계 인증을 다시 확인해야 해요. 2단계 인증을 확인하거나, 등록한 수단이 없으면 명령줄 도구를 써 주세요.",
-        "cliNote": "이 버튼을 쓰려면 2단계 인증이 필요해요. 등록하지 않은 운영자는 scripts/rotate-encryption-key.ts로 교체해 주세요.",
+        "cliNote": "이 버튼을 쓰려면 2단계 인증이 필요해요. 등록하지 않았다면 이 버전의 소스 코드 체크아웃에서 scripts/rotate-encryption-key.ts를 실행해 주세요. 절차는 docs/ops/encryption-key-rotation.md에 있어요.",
         "columnsTitle": "열별 적용 범위",
         "columnsDescription": "암호화된 열마다 활성 키와 이전 키의 행 수를 보여줘요.",
         "colColumn": "열",
