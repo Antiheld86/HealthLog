@@ -21,19 +21,23 @@ import { SNOMED_SYSTEM, patientRef } from "@/lib/fhir/resources/common";
 const DISEASE_SNOMED = { code: "64572001", display: "Disease" } as const;
 
 /**
- * The side of a body site, as SNOMED CT laterality qualifiers from the R4 core
- * value set `http://hl7.org/fhir/ValueSet/bodysite-laterality`
- * (https://hl7.org/fhir/R4/valueset-bodysite-laterality.html); the same three
- * concepts sit in `bodystructure-relative-location`, the value set R4 binds to
- * `BodyStructure.locationQualifier`. Keyed on the `Laterality` enum.
+ * The side of a body site, as active SNOMED CT laterality qualifier values:
+ * 7771000 Left, 24028007 Right, 51440002 Right and left. These are the codes
+ * of the HL7 mCODE Laterality Qualifier value set
+ * (https://build.fhir.org/ig/HL7/fhir-mCODE-ig/ValueSet-mcode-laterality-qualifier-vs.html).
+ * The R4 core `bodysite-laterality` value set lists 419161000 / 419465000 for
+ * left / right, but the HL7 validator reports both as inactive in current
+ * SNOMED CT, so they are not used. R4 binds `BodyStructure.locationQualifier`
+ * with example strength, so any SNOMED CT qualifier is conformant there.
+ * Keyed on the `Laterality` enum.
  */
 const LATERALITY_SNOMED: Record<
   string,
   { code: string; display: string; text: string }
 > = {
-  LEFT: { code: "419161000", display: "Unilateral left", text: "left" },
-  RIGHT: { code: "419465000", display: "Unilateral right", text: "right" },
-  BOTH: { code: "51440002", display: "Bilateral", text: "both sides" },
+  LEFT: { code: "7771000", display: "Left", text: "left" },
+  RIGHT: { code: "24028007", display: "Right", text: "right" },
+  BOTH: { code: "51440002", display: "Right and left", text: "both sides" },
 };
 
 /**
@@ -58,6 +62,13 @@ const BODY_STRUCTURE_ID = "bodysite-1";
  * `locationQualifier` holds the SNOMED CT side. The side is also written into
  * `bodySite.text`, because a receiver that ignores extensions must still read
  * "Knee (left)" rather than a bare "Knee".
+ *
+ * The side word is English on purpose. The builder takes no locale
+ * (`FhirBuildOptions` carries none, unlike the PDF path), and every other
+ * generated text in the Bundle is English: section titles, the Condition note,
+ * the narratives. The site stays in the words the user wrote, so a German
+ * record reads "Knie (left)", the same mix as a German label beside the
+ * English "Self-recorded … condition journal entry" note.
  */
 function bodySiteOf(
   bodySite: string | null | undefined,

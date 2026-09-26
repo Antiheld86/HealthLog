@@ -51,9 +51,9 @@ describe("conditionsFromReportData — bodySite", () => {
   });
 
   it.each([
-    ["LEFT", "419161000", "Unilateral left", "left"],
-    ["RIGHT", "419465000", "Unilateral right", "right"],
-    ["BOTH", "51440002", "Bilateral", "both sides"],
+    ["LEFT", "7771000", "Left", "left"],
+    ["RIGHT", "24028007", "Right", "right"],
+    ["BOTH", "51440002", "Right and left", "both sides"],
   ])(
     "carries %s as SNOMED %s on a contained BodyStructure",
     (laterality, code, display, sideText) => {
@@ -89,6 +89,14 @@ describe("conditionsFromReportData — bodySite", () => {
   it("never puts the side into bodySite.coding", () => {
     const c = conditionFor({ bodySite: "Knee", laterality: "RIGHT" });
     expect(c.bodySite?.[0]?.coding).toBeUndefined();
+  });
+
+  it("writes the side in the Bundle's language and the site in the user's words", () => {
+    const c = conditionFor({ bodySite: "Knie", laterality: "LEFT" });
+    expect(c.bodySite?.[0]?.text).toBe("Knie (left)");
+    // The same language as the rest of the generated Condition text.
+    expect(c.note?.[0]?.text).toMatch(/^Self-recorded /);
+    expect(c.contained?.[0]?.location?.text).toBe("Knie");
   });
 
   it("falls back to the site alone for an unknown side value", () => {

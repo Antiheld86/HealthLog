@@ -194,9 +194,9 @@ describe("Condition.bodySite", () => {
     const structure = condition.contained?.find((c) => `#${c.id}` === target);
     expect(structure?.resourceType).toBe("BodyStructure");
     expect(structure?.patient.reference).toBe(patientUrl);
-    // A code from the R4 core bodysite-laterality value set.
+    // An active SNOMED CT laterality qualifier value.
     expect(
-      ["419161000", "419465000", "51440002"].includes(
+      ["7771000", "24028007", "51440002"].includes(
         structure?.locationQualifier?.[0]?.coding?.[0]?.code ?? "",
       ),
     ).toBe(true);
