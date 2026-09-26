@@ -19,7 +19,7 @@
  * supplies its reducer/types and keeps its own public summary shape.
  *
  * The timezone day-math helpers (`dayKeyForUserTz`,
- * `canonicalDailyTimestamp`, `localStartOfDay`, `localDayWindow`), the
+ * `canonicalDailyTimestamp`), the
  * `PerSampleRow` shape, and `CONSOLIDATION_GRACE_CUTOFF_HOURS` all live
  * in the dependency-free leaf `consolidation-tz.ts`. Both this module
  * and `drain-per-sample-cumulative.ts` import them from there, so there

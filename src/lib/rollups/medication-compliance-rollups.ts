@@ -52,7 +52,7 @@ import { prisma } from "@/lib/db";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { annotate } from "@/lib/logging/context";
 import { DEFAULT_TIMEZONE, isValidTimezone, userDayKey } from "@/lib/tz/format";
-import { wallClockInTz } from "@/lib/tz/wall-clock";
+import { localDayWindow, startOfLocalDayKey } from "@/lib/tz/local-day";
 
 /**
  * pg-boss queue name for the boot-time medication compliance backfill.
@@ -82,55 +82,6 @@ export interface ComplianceBucket {
   date: string;
   scheduled: number;
   taken: number;
-}
-
-/**
- * UTC offset (in minutes) of `tz` at the given instant. Positive east
- * of UTC. Honours DST via `Intl.DateTimeFormat`.
- */
-function tzOffsetMinutes(date: Date, tz: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-  const get = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((p) => p.type === type)?.value ?? "0";
-  let hour = Number(get("hour"));
-  if (hour === 24) hour = 0;
-  const asIfUtc = Date.UTC(
-    Number(get("year")),
-    Number(get("month")) - 1,
-    Number(get("day")),
-    hour,
-    Number(get("minute")),
-    Number(get("second")),
-  );
-  return Math.round((asIfUtc - date.getTime()) / 60000);
-}
-
-/**
- * The UTC instant corresponding to local-midnight on `dayKey` in `tz`.
- * Two-pass convergence handles DST transitions correctly.
- */
-function startOfDayUtcInTz(dayKey: string, tz: string): Date {
-  const [yearStr, monthStr, dayStr] = dayKey.split("-");
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const day = Number(dayStr);
-  let guess = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
-  for (let i = 0; i < 2; i++) {
-    const offsetMin = tzOffsetMinutes(guess, tz);
-    guess = new Date(
-      Date.UTC(year, month - 1, day, 0, 0, 0, 0) - offsetMin * 60_000,
-    );
-  }
-  return guess;
 }
 
 /**
@@ -176,20 +127,8 @@ export async function recomputeMedicationComplianceForDay(
   client: MedicationComplianceRollupClient = prisma,
 ): Promise<void> {
   const safeTz = safeTimezone(tz);
-  const start = startOfDayUtcInTz(dayKey, safeTz);
-  const end = new Date(start.getTime() + 86_400_000);
-  // Re-derive end via the day-after boundary to honour DST 23 / 25-hour
-  // days. `start + 86_400_000` is correct for non-transition days; on
-  // a fall-back day we add one calendar day in the local zone.
-  const nextDayKey = (() => {
-    const [y, m, d] = dayKey.split("-").map(Number);
-    const probe = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
-    const probeNext = new Date(probe.getTime() + 86_400_000);
-    const parts = wallClockInTz(probeNext, safeTz);
-    return `${String(parts.year).padStart(4, "0")}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
-  })();
-  const dstSafeEnd = startOfDayUtcInTz(nextDayKey, safeTz);
-  const windowEnd = dstSafeEnd.getTime() > start.getTime() ? dstSafeEnd : end;
+  // The local day's own bounds: 23, 24 or 25 hours on DST days.
+  const { dayStart: start, dayEnd: windowEnd } = localDayWindow(dayKey, safeTz);
 
   // v1.4.39 hotfix (QA F-H-02): atomic upsert closes the race window
   // between the prior `SELECT … aggregate then UPSERT` pattern. Two
@@ -397,7 +336,7 @@ export async function hasMedicationComplianceCoverage(
     new Date(now.getTime() - (days - 1) * 86_400_000),
     safeTz,
   );
-  const oldestStart = startOfDayUtcInTz(oldestKey, safeTz);
+  const oldestStart = startOfLocalDayKey(oldestKey, safeTz);
 
   // Single SQL aggregate: count DISTINCT rolled days vs DISTINCT
   // event-days in window. The event side is anchored on the same
@@ -456,7 +395,7 @@ export async function recomputeUserMedicationCompliance(
     new Date(now.getTime() - (days - 1) * 86_400_000),
     safeTz,
   );
-  const oldestStart = startOfDayUtcInTz(oldestKey, safeTz);
+  const oldestStart = startOfLocalDayKey(oldestKey, safeTz);
 
   // Distinct (medication_id, dayKey) pairs the user has any intake
   // event for inside the trailing window. `to_char(... AT TIME ZONE

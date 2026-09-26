@@ -32,7 +32,7 @@ import {
 import { toBerlinDayKey } from "@/lib/tz/resolver";
 import { userDayKey } from "@/lib/tz/format";
 import { percentile } from "@/lib/insights/strain-score";
-import { localDayWindow } from "@/lib/measurements/consolidation-tz";
+import { localDayWindow } from "@/lib/tz/local-day";
 
 /** Mirrors the private `median()` helper in `intraday-pulse-io.ts`. */
 function median(values: number[]): number | null {

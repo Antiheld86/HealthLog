@@ -130,7 +130,33 @@ export function zonedWallClockToUtc(
     const offsetMin = Math.round((guessAsIfUtc - guess.getTime()) / 60_000);
     guess = new Date(asIfUtc - offsetMin * 60_000);
   }
-  return guess;
+  const settled = wallClockInTz(guess, tz);
+  if (
+    settled.year === parts.year &&
+    settled.month === parts.month &&
+    settled.day === parts.day &&
+    settled.hour === parts.hour &&
+    settled.minute === parts.minute
+  ) {
+    return guess;
+  }
+  // The wall clock does not exist: a DST change skips it (00:00 on the
+  // spring-forward day in America/Santiago, 02:30 in Europe/Berlin). Read it
+  // with the offset in force BEFORE the gap, which lands the same distance
+  // past the change (00:00 becomes 01:00), the way a wall clock reads when
+  // it is set forward. The converge alone could settle on the previous day.
+  let before = Infinity;
+  for (const delta of [-14, 0, 14]) {
+    const probe = new Date(asIfUtc + delta * 3_600_000);
+    const at = wallClockInTz(probe, tz);
+    const offset = Math.round(
+      (Date.UTC(at.year, at.month - 1, at.day, at.hour, at.minute, at.second) -
+        probe.getTime()) /
+        60_000,
+    );
+    if (offset < before) before = offset;
+  }
+  return new Date(asIfUtc - before * 60_000);
 }
 
 /**

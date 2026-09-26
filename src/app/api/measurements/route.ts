@@ -34,8 +34,8 @@ import { pickCanonicalSourceRows } from "@/lib/analytics/source-priority";
 import {
   canonicalDailyTimestamp,
   dayKeyForUserTz,
-  localDayWindow,
 } from "@/lib/measurements/drain-per-sample-cumulative";
+import { localDayWindow } from "@/lib/tz/local-day";
 import { withIdempotency } from "@/lib/idempotency";
 import { isP2002 } from "@/lib/prisma-errors";
 import { encryptNote, shapeMeasurementNotes } from "@/lib/crypto/note-cipher";
