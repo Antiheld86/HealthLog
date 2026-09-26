@@ -6,8 +6,9 @@
  * (`DOCUMENT_SOURCE_ORIGINS`), tests the connection live before storing
  * anything (a wrong token or an unreachable host is reported here, not on the
  * first search), then stores the token encrypted. A PUT without a token keeps
- * the stored one, so the address or the Papra organization can change without
- * typing the key again; the first save must carry it. The response is the
+ * the stored one, so the base path or the Papra organization can change
+ * without typing the key again, but only on the same origin: a new origin, and
+ * the first save, must carry it (422 `documents.sources.tokenRequired`). The response is the
  * connection without its token, like every read of it.
  *
  * DELETE removes the row, and with it the token.
@@ -100,8 +101,16 @@ export const PUT = apiHandler(
     }
 
     const existing = await loadConnection(userId, system);
+    // The stored token is only ever sent back to the origin it was saved
+    // for. A new address on another origin needs the token typed again, or
+    // saving an address would hand the old archive's token to whatever the
+    // new one is.
+    const reusable =
+      existing !== null &&
+      evaluateSourceBaseUrl(existing.baseUrl, new Set([verdict.origin])).ok;
     const token =
-      parsed.data.token ?? (existing ? decrypt(existing.tokenEncrypted) : null);
+      parsed.data.token ??
+      (existing && reusable ? decrypt(existing.tokenEncrypted) : null);
     if (!token) {
       return apiError("Enter the API token.", 422, {
         errorCode: "documents.sources.tokenRequired",
@@ -165,9 +174,13 @@ export const PUT = apiHandler(
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
     const auth = await requireAuth();
-    // No list needed to forget a connection: an operator who removed the
-    // origin must not leave the person unable to delete the stored token.
-    const refused = await admitDocumentSourceCaller(auth, { needsList: false });
+    // Neither the list nor the module is needed to forget a connection: an
+    // operator who removed the origin, or a person who switched Documents
+    // off, must still be able to delete the stored token.
+    const refused = await admitDocumentSourceCaller(auth, {
+      needsList: false,
+      needsModule: false,
+    });
     if (refused) return refused;
     const system = await systemParam(params);
     if (system instanceof Response) return system;

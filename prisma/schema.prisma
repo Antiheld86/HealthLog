@@ -8011,15 +8011,24 @@ model InboundDocument {
   /// and the Paperless workflow recipe; shown on the detail sheet.
   sourceSystem       String?               @map("source_system") @db.VarChar(16)
   /// v1.39.2 (#1038) — the document's id in `sourceSystem`. Together with
-  /// `userId` + `sourceSystem` it is unique across live AND tombstoned rows
-  /// (raw SQL in migration 0353, not expressible in Prisma):
-  ///   CREATE UNIQUE INDEX inbound_documents_user_source_key
-  ///     ON inbound_documents (user_id, source_system, source_id)
-  ///     WHERE source_id IS NOT NULL;
+  /// `userId`, `sourceSystem` and `sourceInstance` it is unique across live
+  /// AND tombstoned rows (raw SQL in migrations 0353 and 0356, not expressible
+  /// in Prisma; see `sourceInstance` for the current definition).
   /// Including tombstones is the point: re-running an importer must not bring
   /// back a document the person deleted. The purge carries the key over to
   /// `DocumentImportKey` when it removes the row.
   sourceId           String?               @map("source_id") @db.VarChar(128)
+  /// v1.39.3 (#1038) — which instance of `sourceSystem` the document came
+  /// from: the normalised origin (`scheme://host[:port]`) of the Paperless-ngx
+  /// or Papra it was fetched from, so id 123 on one Paperless and id 123 on
+  /// another are two keys. Plaintext; an address, not health data. Null for a
+  /// key sent without one (every v1.39.2 import, an older script, a workflow
+  /// that does not send it): such a key matches any instance of its system,
+  /// and a lookup without an instance matches any stored instance. Part of the
+  /// source-key unique index since migration 0356, which rebuilt it as
+  ///   (user_id, source_system, source_instance, source_id) NULLS NOT DISTINCT
+  ///   WHERE source_id IS NOT NULL.
+  sourceInstance     String?               @map("source_instance") @db.VarChar(512)
   /// v1.39.2 (#1038) — the upload asked for `aiRead=defer`: nothing may send
   /// this document to an AI provider on its own (the summary catch-up, the
   /// summary job, lab auto-staging all skip it). Cleared when the person
@@ -8081,18 +8090,24 @@ model InboundDocument {
 /// own, so deleting the document keeps every key that ever reached it deleted.
 /// Cascades with the document; the purge copies it first.
 model DocumentSourceAlias {
-  id           String   @id @default(cuid())
-  userId       String   @map("user_id")
-  documentId   String   @map("document_id")
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  documentId     String   @map("document_id")
   /// Same closed vocabulary as `InboundDocument.sourceSystem`.
-  sourceSystem String   @map("source_system") @db.VarChar(16)
-  sourceId     String   @map("source_id") @db.VarChar(128)
-  createdAt    DateTime @default(now()) @map("created_at")
+  sourceSystem   String   @map("source_system") @db.VarChar(16)
+  sourceId       String   @map("source_id") @db.VarChar(128)
+  /// v1.39.3 — the source instance, as on `InboundDocument.sourceInstance`
+  /// (null matches any instance of the system).
+  sourceInstance String?  @map("source_instance") @db.VarChar(512)
+  createdAt      DateTime @default(now()) @map("created_at")
 
   user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   document InboundDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, sourceSystem, sourceId])
+  // NULLS NOT DISTINCT in migration 0356 (hand-written; Prisma would
+  // regenerate it NULLS DISTINCT): a key stored without an instance still
+  // collides with the same key without one.
+  @@unique([userId, sourceSystem, sourceInstance, sourceId])
   @@index([documentId])
   @@map("document_source_aliases")
 }
@@ -8104,16 +8119,22 @@ model DocumentSourceAlias {
 /// "deleted" instead of storing the document again. Written by the purge only;
 /// read by the upload route's source-key check. Holds no document content.
 model DocumentImportKey {
-  id           String   @id @default(cuid())
-  userId       String   @map("user_id")
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
   /// Same closed vocabulary as `InboundDocument.sourceSystem`.
-  sourceSystem String   @map("source_system") @db.VarChar(16)
-  sourceId     String   @map("source_id") @db.VarChar(128)
-  createdAt    DateTime @default(now()) @map("created_at")
+  sourceSystem   String   @map("source_system") @db.VarChar(16)
+  sourceId       String   @map("source_id") @db.VarChar(128)
+  /// v1.39.3 — the source instance, as on `InboundDocument.sourceInstance`
+  /// (null matches any instance of the system).
+  sourceInstance String?  @map("source_instance") @db.VarChar(512)
+  createdAt      DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, sourceSystem, sourceId])
+  // NULLS NOT DISTINCT in migration 0356 (hand-written; Prisma would
+  // regenerate it NULLS DISTINCT): a key stored without an instance still
+  // collides with the same key without one.
+  @@unique([userId, sourceSystem, sourceInstance, sourceId])
   @@map("document_import_keys")
 }
 

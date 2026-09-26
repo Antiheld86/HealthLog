@@ -9,6 +9,10 @@
  * `new`, `imported` (with the vault document's id) or `deleted` (the person
  * deleted it here; importing it again is refused). Nothing is stored.
  *
+ * When the source ignores a filter and the local re-check empties a page, the
+ * route reads on (up to five source pages) and answers with the last page it
+ * read, so the client's "load more" continues after it.
+ *
  * Sixty searches a minute, shared with the tag read. Cookie-only and
  * owner-only; see `admitDocumentSourceCaller`.
  */
@@ -30,15 +34,19 @@ import {
   sourceErrorResponse,
   systemParam,
 } from "@/lib/documents/sources/route-support";
-import type {
-  DocumentSourceResultDto,
-  DocumentSourceSearchDto,
+import {
+  DOCUMENT_PICKER_MAX_PAGE,
+  type DocumentSourceResultDto,
+  type DocumentSourceSearchDto,
 } from "@/lib/documents/sources/types";
 import { annotate } from "@/lib/logging/context";
 import { rateLimitHeaders } from "@/lib/rate-limit";
 import { documentSourceSearchSchema } from "@/lib/validations/document-sources";
 
 export const dynamic = "force-dynamic";
+
+/** Source pages one search request may read to find a non-empty one. */
+const SEARCH_PAGES_PER_REQUEST = 5;
 
 type RouteParams = { params: Promise<{ system: string }> };
 
@@ -77,16 +85,34 @@ export const GET = apiHandler(
       );
     }
 
-    let found: { items: SourceListItem[]; hasMore: boolean };
+    // A page the local tag/date re-check emptied is not an answer: the next
+    // source page may hold matches. Read on, a bounded number of pages, and
+    // report the last one read so "load more" continues after it.
+    let found: { items: SourceListItem[]; hasMore: boolean } = {
+      items: [],
+      hasMore: false,
+    };
+    let lastPage = page;
+    let instance: string;
     try {
       const client = await openConnection(userId, system);
-      found = await client.search({
-        q,
-        tagId: tag ?? null,
-        from: from ?? null,
-        to: to ?? null,
-        page,
-      });
+      instance = client.instance;
+      for (
+        let next = page;
+        next < page + SEARCH_PAGES_PER_REQUEST &&
+        next <= DOCUMENT_PICKER_MAX_PAGE;
+        next += 1
+      ) {
+        found = await client.search({
+          q,
+          tagId: tag ?? null,
+          from: from ?? null,
+          to: to ?? null,
+          page: next,
+        });
+        lastPage = next;
+        if (found.items.length > 0 || !found.hasMore) break;
+      }
     } catch (err) {
       return responseForSourceFailure(err);
     }
@@ -95,6 +121,7 @@ export const GET = apiHandler(
       userId,
       system,
       found.items.map((item) => item.sourceId),
+      instance,
     );
     const results: DocumentSourceResultDto[] = found.items.map((item) => {
       const held = states.get(item.sourceId);
@@ -116,6 +143,7 @@ export const GET = apiHandler(
       meta: {
         system,
         page,
+        pagesRead: lastPage - page + 1,
         count: results.length,
         filtered: Boolean(q || tag || from || to),
       },
@@ -123,8 +151,8 @@ export const GET = apiHandler(
 
     const body: DocumentSourceSearchDto = {
       results,
-      page,
-      hasMore: found.hasMore,
+      page: lastPage,
+      hasMore: found.hasMore && lastPage < DOCUMENT_PICKER_MAX_PAGE,
     };
     return apiSuccess(body);
   },

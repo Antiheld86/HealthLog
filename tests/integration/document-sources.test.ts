@@ -56,6 +56,8 @@ vi.mock("@/lib/db-compat", () => ({
 // ── The fake Paperless-ngx behind `safeFetch` ──────────────────────────────
 
 const ORIGIN = "http://paperless.lan:8000";
+/** A second Paperless-ngx the operator also listed; same ids, other documents. */
+const ORIGIN_B = "https://paperless-b.example.com";
 const TOKEN = "paperless-token-0123456789-secret";
 
 const PDF = (tag: string) =>
@@ -83,6 +85,10 @@ const DOCS = [
 const fake = vi.hoisted(() => ({
   calls: [] as Array<{ url: string; opts: Record<string, unknown> }>,
   acceptToken: "",
+  /** Delay a download so two imports of one key overlap. */
+  downloadDelayMs: 0,
+  /** Answer downloads with this status instead of the file. */
+  downloadStatus: 200,
 }));
 
 vi.mock("@/lib/safe-fetch", async (importOriginal) => {
@@ -113,6 +119,31 @@ vi.mock("@/lib/safe-fetch", async (importOriginal) => {
           return json({ results: [{ id: 7, name: "Health" }], next: null });
         }
         if (path === "/api/documents/") {
+          // Tag 99: a server that ignores the tag filter, with the only match
+          // on its second page.
+          if (url.searchParams.get("tags__id__all") === "99") {
+            const page2 = url.searchParams.get("page") === "2";
+            return json({
+              next: page2 ? null : "next",
+              results: page2
+                ? [
+                    {
+                      id: 41,
+                      title: "Blood test",
+                      created: "2024-03-04",
+                      tags: [99],
+                    },
+                  ]
+                : [
+                    {
+                      id: 42,
+                      title: "Discharge letter",
+                      created: "2023-11-20",
+                      tags: [],
+                    },
+                  ],
+            });
+          }
           const q = (
             url.searchParams.get("title__icontains") ?? ""
           ).toLowerCase();
@@ -126,8 +157,19 @@ vi.mock("@/lib/safe-fetch", async (importOriginal) => {
         const download = /^\/api\/documents\/(\d+)\/download\/$/.exec(path);
         if (download) {
           const doc = DOCS.find((d) => String(d.id) === download[1]);
+          if (fake.downloadDelayMs > 0) {
+            await new Promise((r) => setTimeout(r, fake.downloadDelayMs));
+          }
+          if (fake.downloadStatus !== 200) {
+            return new Response("", { status: fake.downloadStatus });
+          }
+          // Each instance holds different bytes under the same id.
           return doc
-            ? new Response(new Uint8Array(doc.bytes))
+            ? new Response(
+                new Uint8Array(
+                  Buffer.concat([doc.bytes, Buffer.from(`% ${url.origin}\n`)]),
+                ),
+              )
             : new Response("", { status: 404 });
         }
         const detail = /^\/api\/documents\/(\d+)\/$/.exec(path);
@@ -259,7 +301,9 @@ beforeEach(async () => {
   headerJar.clear();
   fake.calls.length = 0;
   fake.acceptToken = TOKEN;
-  process.env.DOCUMENT_SOURCE_ORIGINS = ORIGIN;
+  fake.downloadDelayMs = 0;
+  fake.downloadStatus = 200;
+  process.env.DOCUMENT_SOURCE_ORIGINS = `${ORIGIN},${ORIGIN_B}`;
 });
 
 afterEach(() => {
@@ -338,7 +382,7 @@ describe("saving a connection", () => {
 
     const read = await (await status()).text();
     expect(read).not.toContain(TOKEN);
-    expect(JSON.parse(read).data.allowedOrigins).toEqual([ORIGIN]);
+    expect(JSON.parse(read).data.allowedOrigins).toEqual([ORIGIN, ORIGIN_B]);
 
     // A save without a token keeps the stored one.
     const again = await save({ baseUrl: ORIGIN });
@@ -495,7 +539,15 @@ describe("search and import", () => {
 
     // The same bytes, uploaded through the vault without a source key.
     const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(DOCS[1].bytes)]), "x.pdf");
+    form.append(
+      "file",
+      new Blob([
+        new Uint8Array(
+          Buffer.concat([DOCS[1].bytes, Buffer.from(`% ${ORIGIN}\n`)]),
+        ),
+      ]),
+      "x.pdf",
+    );
     const { POST } = await import("@/app/api/documents/inbound/route");
     const uploaded = await (
       POST as unknown as (r: Request) => Promise<Response>
@@ -520,6 +572,7 @@ describe("search and import", () => {
         where: {
           documentId: uploadedId,
           sourceSystem: "PAPERLESS",
+          sourceInstance: ORIGIN,
           sourceId: "42",
         },
       }),
@@ -581,5 +634,141 @@ describe("search and import", () => {
     expect(read.connections[0]).toMatchObject({ originAllowed: false });
     // Still removable.
     expect((await disconnect()).status).toBe(200);
+  });
+});
+
+describe("review follow-ups", () => {
+  it("never sends the stored token to a new origin", async () => {
+    await seedOwner();
+    await connect();
+    fake.calls.length = 0;
+    const moved = await save({ baseUrl: ORIGIN_B });
+    expect(moved.status).toBe(422);
+    expect((await moved.json()).meta.errorCode).toBe(
+      "documents.sources.tokenRequired",
+    );
+    expect(fake.calls).toHaveLength(0);
+    // A new path on the same origin keeps the token.
+    const samePlace = await save({ baseUrl: `${ORIGIN}/` });
+    expect(samePlace.status).toBe(200);
+    expect(fake.calls.every((c) => c.url.startsWith(ORIGIN))).toBe(true);
+  });
+
+  it("keeps the same id on two instances apart, and lets a key without an instance match any", async () => {
+    await seedOwner();
+    await connect();
+    const prisma = getPrismaClient();
+
+    const first = await importDoc({ sourceId: "41" });
+    expect(first.status).toBe(201);
+    const a = (await first.json()).data.documentId as string;
+    expect(
+      (await prisma.inboundDocument.findUniqueOrThrow({ where: { id: a } }))
+        .sourceInstance,
+    ).toBe(ORIGIN);
+
+    // Switch the connection to the other Paperless-ngx.
+    expect((await save({ baseUrl: ORIGIN_B, token: TOKEN })).status).toBe(200);
+    const listed = (await (await search("q=blood")).json()).data.results[0];
+    expect(listed).toMatchObject({ sourceId: "41", state: "new" });
+    const second = await importDoc({ sourceId: "41" });
+    expect(second.status).toBe(201);
+    const b = (await second.json()).data.documentId as string;
+    expect(b).not.toBe(a);
+    expect(
+      (await prisma.inboundDocument.findUniqueOrThrow({ where: { id: b } }))
+        .sourceInstance,
+    ).toBe(ORIGIN_B);
+
+    // A v1.39.2 import of #42 carries no instance: it answers for any
+    // instance of its system, so the picker neither re-imports it nor
+    // forgets a deletion of it.
+    await prisma.inboundDocument.create({
+      data: {
+        userId,
+        kind: "OTHER",
+        mimeType: "application/pdf",
+        byteSize: 1,
+        contentEncrypted: Buffer.from("x"),
+        contentSha256: "legacy-sha",
+        status: "STORED",
+        sourceSystem: "PAPERLESS",
+        sourceId: "42",
+        deletedAt: new Date(),
+      },
+    });
+    const legacy = (await (await search("q=discharge")).json()).data.results[0];
+    expect(legacy).toMatchObject({ sourceId: "42", state: "deleted" });
+    const refused = await importDoc({ sourceId: "42" });
+    expect((await refused.json()).data.outcome).toBe("deleted");
+  });
+
+  it("refuses an id that could leave the document path, before dialling", async () => {
+    await seedOwner();
+    await connect();
+    fake.calls.length = 0;
+    for (const sourceId of ["..", ".", "41/../../admin", "abc", "41?x=1"]) {
+      const res = await importDoc({ sourceId });
+      expect(res.status, sourceId).toBe(422);
+    }
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("downloads a key once when two imports of it overlap", async () => {
+    await seedOwner();
+    await connect();
+    fake.downloadDelayMs = 300;
+    const [one, two] = await Promise.all([
+      importDoc({ sourceId: "41" }),
+      importDoc({ sourceId: "41" }),
+    ]);
+    const outcomes = [
+      (await one.json()).data.outcome,
+      (await two.json()).data.outcome,
+    ].sort();
+    expect(outcomes).toEqual(["duplicate", "imported"]);
+    expect(downloads()).toBe(1);
+    expect(await getPrismaClient().inboundDocument.count()).toBe(1);
+  });
+
+  it("does not charge the upload allowance for a fetch that failed", async () => {
+    await seedOwner();
+    await connect();
+    fake.downloadStatus = 500;
+    const res = await importDoc({ sourceId: "41" });
+    expect(res.status).toBe(502);
+    expect(
+      await getPrismaClient().rateLimit.count({
+        where: { key: `documents-upload:${userId}` },
+      }),
+    ).toBe(0);
+  });
+
+  it("reads past a page the local re-check emptied", async () => {
+    await seedOwner();
+    await connect();
+    const res = await search("tag=99");
+    expect(res.status).toBe(200);
+    const data = (await res.json()).data;
+    expect(data.page).toBe(2);
+    expect(data.results.map((r: { sourceId: string }) => r.sourceId)).toEqual([
+      "41",
+    ]);
+  });
+
+  it("shows and deletes a connection with the module off and the list gone", async () => {
+    await seedOwner();
+    await connect();
+    delete process.env.DOCUMENT_SOURCE_ORIGINS;
+    await getPrismaClient().user.update({
+      where: { id: userId },
+      data: { modulePreferencesJson: { inboundDocuments: false } },
+    });
+    const read = (await (await status()).json()).data;
+    expect(read.available).toBe(false);
+    expect(read.connections).toHaveLength(1);
+    expect(read.connections[0].originAllowed).toBe(false);
+    expect((await disconnect()).status).toBe(200);
+    expect(await getPrismaClient().documentSourceConnection.count()).toBe(0);
   });
 });

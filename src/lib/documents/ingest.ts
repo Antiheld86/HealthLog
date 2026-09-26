@@ -93,6 +93,11 @@ export interface IngestInput {
   encounterIds: string[];
   sourceSystem: DocumentSourceSystemValue | null;
   sourceId: string | null;
+  /**
+   * The source instance (origin) of the key, or null for a key sent without
+   * one; see `src/lib/documents/source-key.ts` for how null matches.
+   */
+  sourceInstance: string | null;
   /** Hold back automatic AI reading (`aiRead=defer`). */
   aiDeferred: boolean;
   /**
@@ -151,6 +156,7 @@ async function answerDuplicate(
       existing.id,
       input.sourceSystem,
       input.sourceId,
+      input.sourceInstance,
     );
     if (remembered === "limit") return { kind: "aliasLimit" };
   }
@@ -161,6 +167,7 @@ export async function ingestDocument(
   input: IngestInput,
 ): Promise<IngestResult> {
   const { userId, sourceSystem, sourceId, limits, bytes } = input;
+  const sourceInstance = sourceId ? input.sourceInstance : null;
 
   // A source key answers before the bytes are looked at: an import re-sending
   // what it sent before is a duplicate, and one re-sending a document the
@@ -168,7 +175,12 @@ export async function ingestDocument(
   // count (the unique index has no `deleted_at` predicate), and past the purge
   // the ledger remembers.
   if (sourceSystem && sourceId && !input.sourceKeyChecked) {
-    const match = await findSourceKey(userId, sourceSystem, sourceId);
+    const match = await findSourceKey(
+      userId,
+      sourceSystem,
+      sourceId,
+      sourceInstance,
+    );
     if (match) return { kind: "sourceKey", match };
   }
 
@@ -258,6 +270,7 @@ export async function ingestDocument(
             : new Date(),
           sourceSystem,
           sourceId,
+          sourceInstance,
           aiReadDeferred: input.aiDeferred,
         },
         omit: { contentEncrypted: true },
@@ -296,7 +309,12 @@ export async function ingestDocument(
       // source key, or the same bytes. Surface the winner exactly as the fast
       // paths above would have.
       if (sourceSystem && sourceId) {
-        const match = await findSourceKey(userId, sourceSystem, sourceId);
+        const match = await findSourceKey(
+          userId,
+          sourceSystem,
+          sourceId,
+          sourceInstance,
+        );
         if (match) return { kind: "sourceKey", match };
       }
       const winner = await prisma.inboundDocument.findFirst({

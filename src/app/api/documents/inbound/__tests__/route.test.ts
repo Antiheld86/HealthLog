@@ -51,10 +51,10 @@ vi.mock("@/lib/db", () => {
         findFirst: vi.fn(),
       },
       documentImportKey: {
-        findUnique: vi.fn(),
+        findFirst: vi.fn(),
       },
       documentSourceAlias: {
-        findUnique: vi.fn(),
+        findFirst: vi.fn(),
         createMany: vi.fn(),
         count: vi.fn(),
       },
@@ -239,10 +239,10 @@ beforeEach(() => {
     [] as never,
   );
   vi.mocked(prisma.inboundDocument.findFirst).mockResolvedValue(null as never);
-  vi.mocked(prisma.documentImportKey.findUnique).mockResolvedValue(
+  vi.mocked(prisma.documentImportKey.findFirst).mockResolvedValue(
     null as never,
   );
-  vi.mocked(prisma.documentSourceAlias.findUnique).mockResolvedValue(
+  vi.mocked(prisma.documentSourceAlias.findFirst).mockResolvedValue(
     null as never,
   );
   vi.mocked(prisma.documentSourceAlias.createMany).mockResolvedValue({
@@ -783,7 +783,7 @@ describe("POST /api/documents/inbound — document import", () => {
   });
 
   it("remembers a purged import through the ledger", async () => {
-    vi.mocked(prisma.documentImportKey.findUnique).mockResolvedValue({
+    vi.mocked(prisma.documentImportKey.findFirst).mockResolvedValue({
       id: "key-1",
     } as never);
     const res = await post(
@@ -909,6 +909,8 @@ describe("POST /api/documents/inbound — document import", () => {
           userId: "user-1",
           documentId: "doc-manual",
           sourceSystem: "PAPRA",
+          // Sent without an instance: the alias matches any Papra.
+          sourceInstance: null,
           sourceId: "doc_9",
         },
       ],
@@ -936,7 +938,7 @@ describe("POST /api/documents/inbound — document import", () => {
   });
 
   it("resolves a key held as an alias of a deleted document to deleted", async () => {
-    vi.mocked(prisma.documentSourceAlias.findUnique).mockResolvedValue({
+    vi.mocked(prisma.documentSourceAlias.findFirst).mockResolvedValue({
       document: docRow({ id: "doc-gone", deletedAt: new Date() }),
     } as never);
     const res = await post(

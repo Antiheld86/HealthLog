@@ -424,6 +424,7 @@ describe("import-documents.mjs — Paperless-ngx", () => {
         kind: "LAB_RESULT",
         sourceSystem: "PAPERLESS",
         sourceId: "1",
+        sourceInstance: new URL(pl.url).origin,
         aiRead: "defer",
       },
     });
@@ -664,6 +665,7 @@ describe("import-documents.mjs — Papra", () => {
       documentDate: "2019-06-01",
       sourceSystem: "PAPRA",
       sourceId: "doc_a",
+      sourceInstance: new URL(pp.url).origin,
     });
     // --ai-read: no deferral field at all.
     expect(sent[0].aiRead).toBeUndefined();

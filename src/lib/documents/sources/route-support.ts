@@ -39,12 +39,13 @@ import {
  * Each route calls `requireAuth()` itself, in its own module, so the sharing
  * guard's scan sees every one of them as a bare, owner-only route rather than
  * a helper it cannot follow. This adds the rest: a cookie transport, the
- * documents module, and (unless `needsList` is false, which only the status
- * read passes) the operator's list.
+ * documents module and the operator's list. The status read and the delete
+ * pass `needsList: false, needsModule: false`: they touch only the person's
+ * own row and never the network.
  */
 export async function admitDocumentSourceCaller(
   auth: AuthContext,
-  options: { needsList?: boolean } = {},
+  options: { needsList?: boolean; needsModule?: boolean } = {},
 ): Promise<Response | null> {
   if (auth.authMethod !== "cookie") {
     return apiError(
@@ -53,8 +54,13 @@ export async function admitDocumentSourceCaller(
       { errorCode: "documents.sources.browserOnly" },
     );
   }
-  const gate = await requireModuleEnabled(auth.user.id, "inboundDocuments");
-  if (!gate.enabled) return gate.response;
+  // Reading and removing one's own connection needs neither the module nor
+  // the list: a person who switched Documents off, or whose operator removed
+  // the list, must still be able to see and delete the stored token.
+  if (options.needsModule !== false) {
+    const gate = await requireModuleEnabled(auth.user.id, "inboundDocuments");
+    if (!gate.enabled) return gate.response;
+  }
   if (options.needsList !== false && !documentSourcesAvailable()) {
     return sourceErrorResponse("unavailable");
   }

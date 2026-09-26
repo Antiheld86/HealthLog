@@ -38,8 +38,26 @@ export const DOCUMENT_PICKER_MAX_PAGE = 500;
 export const DOCUMENT_PICKER_QUERY_MAX = 200;
 /** Documents the sheet imports in one run. */
 export const DOCUMENT_PICKER_MAX_SELECTION = 25;
-/** Tags offered in the filter. */
-export const DOCUMENT_PICKER_MAX_TAGS = 250;
+/** Tags offered in the filter (read in pages of 250). */
+export const DOCUMENT_PICKER_MAX_TAGS = 1000;
+
+/** Paperless-ngx document ids are integers. */
+export const PAPERLESS_ID = /^\d{1,18}$/;
+/** Papra document and organization ids: letters, digits, `_` and `-`. */
+export const PAPRA_ID = /^[A-Za-z0-9_-]{1,128}$/;
+
+/**
+ * Is `id` a document id `system` could have issued? Checked before an id is
+ * put into a request path, so nothing a request carries can add a path
+ * segment, a query or a `..` to the URL built from it.
+ */
+export function isSourceDocumentId(
+  system: DocumentPickerSystem,
+  id: string,
+): boolean {
+  if (id === "." || id === "..") return false;
+  return (system === "PAPERLESS" ? PAPERLESS_ID : PAPRA_ID).test(id);
+}
 
 /** A connection as every route may show it: never the token. */
 export interface DocumentSourceConnectionDto {

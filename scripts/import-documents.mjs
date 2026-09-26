@@ -301,6 +301,7 @@ function paperless(options) {
 
   return {
     system: "PAPERLESS",
+    instance: new URL(base).origin,
     label,
     async *documents() {
       const query = new URLSearchParams({
@@ -324,7 +325,8 @@ function paperless(options) {
         tagId = found[0].id;
         query.set("tags__id__all", String(tagId));
       }
-      if (options.since) query.set("created__date__gte", options.since);
+      // API version 9 made `created` a plain date: filter on it directly.
+      if (options.since) query.set("created__gte", options.since);
 
       let typeNames = new Map();
       if (options.kindMap.size > 0) {
@@ -399,6 +401,7 @@ function papra(options) {
 
   return {
     system: "PAPRA",
+    instance: new URL(options.baseUrl).origin,
     label,
     async *documents() {
       let tagId = null;
@@ -526,6 +529,7 @@ function keyQuery(source, doc) {
   return new URLSearchParams({
     sourceSystem: source.system,
     sourceId: doc.sourceId.slice(0, SOURCE_ID_MAX),
+    sourceInstance: source.instance,
   });
 }
 
@@ -617,6 +621,9 @@ async function upload(options, source, doc, file) {
       if (!options.aiRead) form.append("aiRead", "defer");
       form.append("sourceSystem", source.system);
       form.append("sourceId", doc.sourceId.slice(0, SOURCE_ID_MAX));
+      // Which Paperless-ngx or Papra this id belongs to: the same id in two
+      // instances is two documents. HealthLog 1.39.2 ignores the field.
+      form.append("sourceInstance", source.instance);
       return form;
     },
   );

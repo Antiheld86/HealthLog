@@ -29,6 +29,8 @@ import {
 import {
   DOCUMENT_PICKER_MAX_TAGS,
   DOCUMENT_PICKER_PAGE_SIZE,
+  isSourceDocumentId,
+  PAPRA_ID,
   type DocumentPickerSystem,
   type DocumentSourceTagDto,
 } from "./types";
@@ -64,6 +66,11 @@ export interface SourceDocumentMeta {
 
 export interface SourceClient {
   readonly system: DocumentPickerSystem;
+  /**
+   * The instance this client talks to, as the normalised origin every source
+   * key it produces carries (`sourceInstance`).
+   */
+  readonly instance: string;
   test(): Promise<void>;
   tags(): Promise<DocumentSourceTagDto[]>;
   search(
@@ -82,6 +89,16 @@ export interface SourceConnection {
   baseUrl: string;
   organizationId: string | null;
   token: string;
+}
+
+/** Paperless tags are read this many per page. */
+const TAG_PAGE_SIZE = 250;
+
+/** Refuse an id that is not one the system issues, before it reaches a URL. */
+function requireId(system: DocumentPickerSystem, id: string): void {
+  if (!isSourceDocumentId(system, id)) {
+    throw new DocumentSourceError("notFound");
+  }
 }
 
 // ── Defensive readers ──────────────────────────────────────────────────────
@@ -181,26 +198,36 @@ function paperless(connection: SourceConnection): SourceClient {
   }
 
   async function listTags(): Promise<DocumentSourceTagDto[]> {
-    const query = new URLSearchParams({
-      page_size: String(DOCUMENT_PICKER_MAX_TAGS),
-      ordering: "name",
-    });
-    const { body, response } = await sourceJson(target, `/api/tags/?${query}`);
-    checkVersion(response);
-    const page = asRecord(body);
-    if (!page) throw shapeError();
+    // Paged by number rather than by following `next`: the link is the
+    // server's to write, the page number is ours.
     const tags: DocumentSourceTagDto[] = [];
-    for (const raw of asArray(page.results)) {
-      const tag = asRecord(raw);
-      const id = asText(tag?.id);
-      const name = asText(tag?.name);
-      if (id && name) tags.push({ id, name });
+    for (let pageNo = 1; tags.length < DOCUMENT_PICKER_MAX_TAGS; pageNo += 1) {
+      const query = new URLSearchParams({
+        page: String(pageNo),
+        page_size: String(TAG_PAGE_SIZE),
+        ordering: "name",
+      });
+      const { body, response } = await sourceJson(
+        target,
+        `/api/tags/?${query}`,
+      );
+      checkVersion(response);
+      const page = asRecord(body);
+      if (!page) throw shapeError();
+      for (const raw of asArray(page.results)) {
+        const tag = asRecord(raw);
+        const id = asText(tag?.id);
+        const name = asText(tag?.name);
+        if (id && name) tags.push({ id, name });
+      }
+      if (typeof page.next !== "string" || !page.next) break;
     }
-    return tags;
+    return tags.slice(0, DOCUMENT_PICKER_MAX_TAGS);
   }
 
   return {
     system: "PAPERLESS",
+    instance: connection.origin,
 
     async test() {
       const { body, response } = await sourceJson(
@@ -223,8 +250,10 @@ function paperless(connection: SourceConnection): SourceClient {
       });
       if (params.q) query.set("title__icontains", params.q);
       if (params.tagId) query.set("tags__id__all", params.tagId);
-      if (params.from) query.set("created__date__gte", params.from);
-      if (params.to) query.set("created__date__lte", params.to);
+      // API version 9 made `created` a plain date, so the range filters on
+      // it directly (`created__gte` / `created__lte`), both ends inclusive.
+      if (params.from) query.set("created__gte", params.from);
+      if (params.to) query.set("created__lte", params.to);
 
       let page: Json | null;
       let names: Map<string, string>;
@@ -250,7 +279,7 @@ function paperless(connection: SourceConnection): SourceClient {
       for (const raw of asArray(page.results)) {
         const doc = asRecord(raw);
         const id = asText(doc?.id);
-        if (!doc || !id) continue;
+        if (!doc || !id || !isSourceDocumentId("PAPERLESS", id)) continue;
         const tagIds = asArray(doc.tags)
           .map(asText)
           .filter((t): t is string => t !== null);
@@ -275,6 +304,7 @@ function paperless(connection: SourceConnection): SourceClient {
     },
 
     async document(sourceId) {
+      requireId("PAPERLESS", sourceId);
       const { body, response } = await sourceJson(
         target,
         `/api/documents/${encodeURIComponent(sourceId)}/?fields=id,title,created,added,original_file_name`,
@@ -290,7 +320,8 @@ function paperless(connection: SourceConnection): SourceClient {
       };
     },
 
-    download(sourceId, maxFileBytes) {
+    async download(sourceId, maxFileBytes) {
+      requireId("PAPERLESS", sourceId);
       // The original, not the archived PDF/A: the same bytes a Paperless
       // workflow or the import script sends, so they dedup against each other.
       return sourceDownload(
@@ -310,7 +341,7 @@ function papraTagTerm(name: string): string {
 }
 
 function papra(connection: SourceConnection): SourceClient {
-  if (!connection.organizationId) {
+  if (!connection.organizationId || !PAPRA_ID.test(connection.organizationId)) {
     throw new DocumentSourceError("notFound");
   }
   const org = `/api/organizations/${encodeURIComponent(connection.organizationId)}`;
@@ -345,6 +376,7 @@ function papra(connection: SourceConnection): SourceClient {
 
   return {
     system: "PAPRA",
+    instance: connection.origin,
 
     async test() {
       const { body } = await sourceJson(
@@ -381,7 +413,7 @@ function papra(connection: SourceConnection): SourceClient {
       for (const raw of documents) {
         const doc = asRecord(raw);
         const id = asText(doc?.id);
-        if (!doc || !id) continue;
+        if (!doc || !id || !isSourceDocumentId("PAPRA", id)) continue;
         const tags = asArray(doc.tags)
           .map(asRecord)
           .filter((t): t is Json => t !== null);
@@ -417,6 +449,7 @@ function papra(connection: SourceConnection): SourceClient {
     },
 
     async document(sourceId) {
+      requireId("PAPRA", sourceId);
       const { body } = await sourceJson(
         target,
         `${org}/documents/${encodeURIComponent(sourceId)}`,
@@ -435,7 +468,8 @@ function papra(connection: SourceConnection): SourceClient {
       };
     },
 
-    download(sourceId, maxFileBytes) {
+    async download(sourceId, maxFileBytes) {
+      requireId("PAPRA", sourceId);
       return sourceDownload(
         download,
         `${org}/documents/${encodeURIComponent(sourceId)}/file`,

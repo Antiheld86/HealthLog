@@ -171,8 +171,10 @@ describe("Paperless-ngx", () => {
     const list = calledUrls().find((u) => u.pathname.endsWith("/documents/"));
     expect(list?.searchParams.get("title__icontains")).toBe("blood");
     expect(list?.searchParams.get("tags__id__all")).toBe("7");
-    expect(list?.searchParams.get("created__date__gte")).toBe("2025-01-01");
-    expect(list?.searchParams.get("created__date__lte")).toBe("2025-12-31");
+    expect(list?.searchParams.get("created__gte")).toBe("2025-01-01");
+    expect(list?.searchParams.get("created__lte")).toBe("2025-12-31");
+    // API version 9 made `created` a date; the `__date` lookups are gone.
+    expect(list?.searchParams.has("created__date__gte")).toBe(false);
     expect(list?.searchParams.get("page")).toBe("2");
     expect(list?.searchParams.get("page_size")).toBe("25");
 
@@ -308,6 +310,76 @@ describe("Paperless-ngx", () => {
     expect(
       await failure(sourceClient(PAPERLESS).download("41", 1024)),
     ).toBeInstanceOf(DocumentSourceTooLargeError);
+  });
+});
+
+describe("ids never shape a request path", () => {
+  it("refuses a Paperless id that is not a number, and dot segments, before dialling", async () => {
+    const client = sourceClient(PAPERLESS);
+    for (const id of ["..", ".", "41/../x", "abc", "41?x=1"]) {
+      const err = await failure(client.document(id));
+      expect((err as DocumentSourceError).code, id).toBe("notFound");
+      expect(
+        ((await failure(client.download(id, 10))) as DocumentSourceError).code,
+      ).toBe("notFound");
+    }
+    expect(safeFetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Papra id or organization id outside [A-Za-z0-9_-]", async () => {
+    for (const id of ["..", "doc/1", "doc%2F1", "doc 1"]) {
+      await failure(sourceClient(PAPRA).document(id));
+    }
+    expect(() =>
+      sourceClient({ ...PAPRA, organizationId: "../admin" }),
+    ).toThrow(DocumentSourceError);
+    expect(safeFetch).not.toHaveBeenCalled();
+  });
+
+  it("leaves a result with an unusable id out of the list", async () => {
+    serve({
+      "/paperless/api/tags/": () => json({ results: [], next: null }),
+      "/paperless/api/documents/": () =>
+        json({
+          next: null,
+          results: [
+            { id: "..", title: "Odd", created: "2025-01-01", tags: [] },
+            { id: 5, title: "Fine", created: "2025-01-01", tags: [] },
+          ],
+        }),
+    });
+    const result = await sourceClient(PAPERLESS).search({
+      q: "",
+      tagId: null,
+      from: null,
+      to: null,
+      page: 1,
+    });
+    expect(result.items.map((i) => i.sourceId)).toEqual(["5"]);
+  });
+});
+
+describe("Paperless-ngx tags", () => {
+  it("pages through tags beyond the first 250", async () => {
+    serve({
+      "/paperless/api/tags/": (url) => {
+        const page = Number(url.searchParams.get("page"));
+        const results = Array.from(
+          { length: page === 1 ? 250 : 3 },
+          (_, i) => ({
+            id: page * 1000 + i,
+            name: `t${page}-${i}`,
+          }),
+        );
+        return json({ results, next: page === 1 ? "more" : null });
+      },
+    });
+    const tags = await sourceClient(PAPERLESS).tags();
+    expect(tags).toHaveLength(253);
+    expect(calledUrls().map((u) => u.searchParams.get("page"))).toEqual([
+      "1",
+      "2",
+    ]);
   });
 });
 

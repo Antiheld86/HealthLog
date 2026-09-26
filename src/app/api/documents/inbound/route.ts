@@ -274,14 +274,17 @@ async function processUpload(
   const url = new URL(request.url);
   const querySystem = url.searchParams.get("sourceSystem");
   const queryId = url.searchParams.get("sourceId");
+  const queryInstance = url.searchParams.get("sourceInstance");
   let queryKey: {
     sourceSystem: DocumentSourceSystemValue;
     sourceId: string;
+    sourceInstance?: string;
   } | null = null;
   if (querySystem !== null || queryId !== null) {
     const parsedKey = documentSourceKeySchema.safeParse({
       sourceSystem: querySystem ?? undefined,
       sourceId: queryId ?? undefined,
+      sourceInstance: queryInstance ?? undefined,
     });
     if (!parsedKey.success) {
       return apiValidationError(
@@ -312,6 +315,7 @@ async function processUpload(
       user.id,
       queryKey.sourceSystem,
       queryKey.sourceId,
+      queryKey.sourceInstance ?? null,
     );
     if (match) {
       return answerSourceKey(
@@ -408,6 +412,7 @@ async function processUpload(
     encounterIds: rawEncounterIds.length > 0 ? rawEncounterIds : undefined,
     sourceSystem: formData.get("sourceSystem") ?? undefined,
     sourceId: formData.get("sourceId") ?? undefined,
+    sourceInstance: formData.get("sourceInstance") ?? undefined,
     aiRead: formData.get("aiRead") ?? undefined,
   });
   if (!parsed.success) {
@@ -425,10 +430,14 @@ async function processUpload(
   // both they have to agree.
   const formSystem = parsed.data.sourceSystem ?? null;
   const formId = formSystem ? (parsed.data.sourceId ?? null) : null;
+  const formInstance = formId ? (parsed.data.sourceInstance ?? null) : null;
   if (
     queryKey &&
     formSystem !== null &&
-    (formSystem !== queryKey.sourceSystem || formId !== queryKey.sourceId)
+    (formSystem !== queryKey.sourceSystem ||
+      formId !== queryKey.sourceId ||
+      (formInstance !== null &&
+        formInstance !== (queryKey.sourceInstance ?? null)))
   ) {
     return apiError(
       "The source key in the address and in the form differ.",
@@ -438,6 +447,9 @@ async function processUpload(
   }
   const sourceSystem = queryKey?.sourceSystem ?? formSystem;
   const sourceId = queryKey?.sourceId ?? formId;
+  const sourceInstance = sourceId
+    ? (queryKey?.sourceInstance ?? formInstance ?? null)
+    : null;
   const ctx: UploadContext = {
     userId: user.id,
     scoped,
@@ -451,7 +463,12 @@ async function processUpload(
   // count (the unique index has no `deleted_at` predicate), and past the purge
   // the ledger remembers.
   if (sourceSystem && sourceId && !queryKey) {
-    const match = await findSourceKey(user.id, sourceSystem, sourceId);
+    const match = await findSourceKey(
+      user.id,
+      sourceSystem,
+      sourceId,
+      sourceInstance,
+    );
     if (match) return answerSourceKey(ctx, match);
   }
 
@@ -478,6 +495,7 @@ async function processUpload(
     encounterIds: parsed.data.encounterIds ?? [],
     sourceSystem,
     sourceId,
+    sourceInstance,
     aiDeferred: ctx.aiDeferred,
     sourceKeyChecked: true,
     limits,

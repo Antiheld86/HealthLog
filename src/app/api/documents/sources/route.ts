@@ -8,9 +8,10 @@
  * No request leaves the server here.
  *
  * Cookie-only and owner-only like every route under this path
- * (`admitDocumentSourceCaller`). With the list unset it answers 200
- * `available: false` rather than 404, because this is the one read the client
- * makes to decide whether to show the picker at all.
+ * (`admitDocumentSourceCaller`), but it needs neither the documents module nor
+ * the list: with the list unset it answers 200 `available: false` (plus any
+ * rows still stored, so they can be deleted) rather than 404, because this is
+ * the one read the client makes to decide what to show.
  */
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
@@ -30,21 +31,27 @@ export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async () => {
   const auth = await requireAuth();
-  const refused = await admitDocumentSourceCaller(auth, { needsList: false });
+  const refused = await admitDocumentSourceCaller(auth, {
+    needsList: false,
+    needsModule: false,
+  });
   if (refused) return refused;
 
   annotate({ action: { name: "documents.sources.status" } });
 
+  // Rows are listed even with the picker off: a connection whose origin the
+  // operator removed (or whose list is gone) must stay visible so it can be
+  // deleted. `originAllowed` is false for each of them then.
+  const rows = await listConnections(auth.user.id);
   if (!documentSourcesAvailable()) {
     const off: DocumentSourcesStatusDto = {
       available: false,
       allowedOrigins: [],
-      connections: [],
+      connections: rows.map(toConnectionDto),
     };
     return apiSuccess(off);
   }
 
-  const rows = await listConnections(auth.user.id);
   const status: DocumentSourcesStatusDto = {
     available: true,
     allowedOrigins: listedDocumentSourceOrigins(),

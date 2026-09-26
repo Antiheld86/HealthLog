@@ -10,6 +10,7 @@ import {
   DOCUMENT_PICKER_LINK_KINDS,
   DOCUMENT_PICKER_MAX_PAGE,
   DOCUMENT_PICKER_QUERY_MAX,
+  PAPRA_ID,
 } from "@/lib/documents/sources/types";
 import {
   documentSourceIdSchema,
@@ -37,9 +38,7 @@ export const documentSourceSaveSchema = z.object({
   organizationId: z
     .string()
     .trim()
-    .min(1)
-    .max(128)
-    .regex(printable, "Expected printable characters without spaces")
+    .regex(PAPRA_ID, "Expected letters, digits, _ or -")
     .optional(),
   token: z
     .string()

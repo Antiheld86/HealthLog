@@ -706,7 +706,41 @@ export const documentSourceIdSchema = z
   .trim()
   .min(1)
   .max(DOCUMENT_SOURCE_ID_MAX)
-  .regex(/^[\x21-\x7e]+$/u, "Expected printable characters without spaces");
+  .regex(/^[\x21-\x7e]+$/u, "Expected printable characters without spaces")
+  // A path segment of its own name: an importer that builds a URL from the id
+  // must never be handed one that walks up the source's path.
+  .refine((v) => v !== "." && v !== "..", "Not a document id");
+
+/** Longest source instance (an origin) a key may carry. */
+export const DOCUMENT_SOURCE_INSTANCE_MAX = 512;
+
+/**
+ * v1.39.3 — the instance of the source system a key belongs to, as the
+ * normalised origin (`scheme://host[:port]`) of the Paperless-ngx or Papra it
+ * came from, or null when the value is not one. A path, query or credentials
+ * in the value are dropped: two addresses on one origin are one instance.
+ */
+export function normaliseSourceInstance(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    if (url.username || url.password) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+/** The instance as a request field: validated, then normalised to its origin. */
+export const documentSourceInstanceSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(DOCUMENT_SOURCE_INSTANCE_MAX)
+  .refine((v) => normaliseSourceInstance(v) !== null, {
+    message: "Expected the http(s) address of the source instance",
+  })
+  .transform((v) => normaliseSourceInstance(v) as string);
 
 /**
  * A source key on its own — the query-string form the upload accepts ahead of
@@ -715,6 +749,8 @@ export const documentSourceIdSchema = z
 export const documentSourceKeySchema = z.object({
   sourceSystem: z.enum(DOCUMENT_SOURCE_SYSTEMS),
   sourceId: documentSourceIdSchema,
+  /** Optional: without it the key matches any instance of the system. */
+  sourceInstance: documentSourceInstanceSchema.optional(),
 });
 
 export const documentCreateSchema = z
@@ -732,6 +768,11 @@ export const documentCreateSchema = z
      */
     sourceId: documentSourceIdSchema.optional(),
     /**
+     * v1.39.3 — which instance of `sourceSystem` (its origin). Optional; a
+     * key without one matches any instance.
+     */
+    sourceInstance: documentSourceInstanceSchema.optional(),
+    /**
      * `defer` holds back automatic AI reading for this upload: the thumbnail
      * and a local text index still run, the summary and the lab staging do
      * not. Absent means today's behaviour.
@@ -741,6 +782,10 @@ export const documentCreateSchema = z
   .refine((v) => v.sourceId === undefined || v.sourceSystem !== undefined, {
     path: ["sourceSystem"],
     message: "sourceId needs a sourceSystem",
+  })
+  .refine((v) => v.sourceInstance === undefined || v.sourceId !== undefined, {
+    path: ["sourceInstance"],
+    message: "sourceInstance needs a sourceId",
   });
 
 export type DocumentCreateInput = z.infer<typeof documentCreateSchema>;

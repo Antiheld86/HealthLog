@@ -12,13 +12,16 @@
  *      imported (or already holding this key as an alias) is a `duplicate`,
  *      and one the person deleted here is `deleted` — nothing is fetched and
  *      nothing is stored, exactly as the token upload answers the same key;
- *   3. only then the vault's own upload allowance (60 an hour, shared with
- *      uploads from the web and the phone) and an upload slot are taken, the
- *      document's details and its original file are fetched (bounded by the
- *      vault's per-file cap), and the file goes through `ingestDocument`, the
- *      same function the upload route stores through: type check, content
- *      dedup, quota, provenance (`sourceSystem` / `sourceId`), the background
- *      jobs;
+ *   3. only then is the source asked (on the search allowance, like every
+ *      request to it) and an upload slot taken. One import per key and person
+ *      runs at a time under an advisory lock, so a double click downloads the
+ *      document once. The details and the original file are fetched (bounded
+ *      by the vault's per-file cap); only a file that arrived is charged to
+ *      the vault's own upload allowance (60 an hour, shared with uploads from
+ *      the web and the phone), and it goes through `ingestDocument`, the same
+ *      function the upload route stores through: type check, content dedup,
+ *      quota, provenance (`sourceSystem` / `sourceId` / `sourceInstance`), the
+ *      background jobs;
  *   4. the document is linked to the record through `src/lib/links/`.
  *
  * AI reading follows the person's own setting, unlike the token upload's
@@ -48,18 +51,26 @@ import {
   UPLOAD_LIMIT_PER_HOUR,
   UPLOAD_WINDOW_MS,
 } from "@/lib/documents/ingest";
-import { findSourceKey, type SourceKeyMatch } from "@/lib/documents/source-key";
+import {
+  checkSourceLookupRateLimit,
+  findSourceKey,
+  type SourceKeyMatch,
+} from "@/lib/documents/source-key";
+import type { SourceClient } from "@/lib/documents/sources/clients";
 import { clientFor, loadConnection } from "@/lib/documents/sources/connections";
 import {
   admitDocumentSourceCaller,
+  checkSearchRateLimit,
   responseForSourceFailure,
   sourceErrorResponse,
   systemParam,
 } from "@/lib/documents/sources/route-support";
-import type {
-  DocumentImportOutcome,
-  DocumentPickerLinkKind,
-  DocumentSourceImportDto,
+import {
+  isSourceDocumentId,
+  type DocumentImportOutcome,
+  type DocumentPickerLinkKind,
+  type DocumentPickerSystem,
+  type DocumentSourceImportDto,
 } from "@/lib/documents/sources/types";
 import {
   acquireDocumentUploadSlot,
@@ -69,10 +80,16 @@ import { linkTargets } from "@/lib/links";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { documentSourceImportSchema } from "@/lib/validations/document-sources";
+import type { InboundDocumentKindValue } from "@/lib/validations/inbound-documents";
 
 export const dynamic = "force-dynamic";
 
 type RouteParams = { params: Promise<{ system: string }> };
+
+/** How long an import waits for a database connection to hold its lock on. */
+const IMPORT_LOCK_WAIT_MS = 10_000;
+/** Longest a single import may hold its key: the download plus the store. */
+const IMPORT_LOCK_HOLD_MS = 150_000;
 
 interface LinkTarget {
   kind: DocumentPickerLinkKind;
@@ -172,6 +189,10 @@ export const POST = apiHandler(
       );
     }
     const { sourceId, kind, link } = parsed.data;
+    // Only an id this system could have issued goes into a request path.
+    if (!isSourceDocumentId(system, sourceId)) {
+      return apiError("Not a document id of this archive.", 422);
+    }
 
     const row = await loadConnection(userId, system);
     if (!row) return sourceErrorResponse("notConnected");
@@ -181,25 +202,38 @@ export const POST = apiHandler(
     } catch (err) {
       return responseForSourceFailure(err);
     }
+    const instance = client.instance;
 
     if (link && !(await ownsLinkTarget(userId, link))) {
       return sourceErrorResponse("linkTargetNotFound");
     }
 
-    // The source key answers before anything is downloaded or charged.
-    const held = await findSourceKey(userId, system, sourceId);
+    // The source key answers before anything is downloaded or charged, on the
+    // same metered lookup allowance the upload's key check draws on.
+    const lookupRl = await checkSourceLookupRateLimit(
+      false,
+      auth.session.id,
+      userId,
+    );
+    if (!lookupRl.allowed) {
+      return sourceErrorResponse(
+        "rateLimited",
+        undefined,
+        rateLimitHeaders(lookupRl),
+      );
+    }
+    const held = await findSourceKey(userId, system, sourceId, instance);
     if (held) return answerHeldKey(system, userId, link, held);
 
-    const rl = await checkRateLimit(
-      personalUploadBucket(userId),
-      UPLOAD_LIMIT_PER_HOUR,
-      UPLOAD_WINDOW_MS,
-    );
-    if (!rl.allowed) {
-      return apiError("Too many uploads. Try again later.", 429, {
-        errorCode: "documents.inbound.rateLimited",
-        headers: rateLimitHeaders(rl),
-      });
+    // A request to the source counts against the search allowance like any
+    // other; the upload allowance is charged only once a file arrived.
+    const fetchRl = await checkSearchRateLimit(userId);
+    if (!fetchRl.allowed) {
+      return sourceErrorResponse(
+        "rateLimited",
+        undefined,
+        rateLimitHeaders(fetchRl),
+      );
     }
 
     const release = acquireDocumentUploadSlot(userId);
@@ -216,83 +250,136 @@ export const POST = apiHandler(
     }
 
     try {
-      const limits = await resolveDocumentLimits(userId);
-      let meta;
-      let file;
-      try {
-        meta = await client.document(sourceId);
-        file = await client.download(sourceId, limits.maxFileBytes);
-      } catch (err) {
-        return responseForSourceFailure(err);
-      }
-
-      const result = await ingestDocument({
-        userId,
-        scoped: false,
-        ipAddress: getClientIp(request),
-        bytes: Buffer.from(file.bytes),
-        filename: meta.filename ?? file.filename,
-        title: meta.title,
-        kind: kind ?? null,
-        documentDate: meta.date,
-        episodeIds: [],
-        encounterIds: [],
-        sourceSystem: system,
-        sourceId,
-        aiDeferred: false,
-        sourceKeyChecked: true,
-        limits,
-        // The import is data; only the summary queued after a fresh insert
-        // follows the capability (and the person's auto-read setting).
-        documentAi: () => getAiCapability("documentAi"),
-      });
-
-      switch (result.kind) {
-        case "sourceKey":
-          return answerHeldKey(system, userId, link, result.match);
-        case "duplicate": {
-          // The same bytes were already in the vault (an upload, or another
-          // archive); the key is now remembered for that document.
-          const linked = await linkDocument(userId, link, result.document.id);
-          return respond(system, "duplicate", result.document.id, linked);
-        }
-        case "stored": {
-          const linked = await linkDocument(userId, link, result.document.id);
-          return respond(system, "imported", result.document.id, linked);
-        }
-        case "tooLarge":
-          return apiError("File is too large.", 413, {
-            errorCode: "documents.inbound.fileTooLarge",
-            reason: "fileTooLarge",
-            maxFileBytes: result.maxFileBytes,
+      // One import of one key at a time per person: a second tab or a double
+      // click waits here, then finds the key the first one stored, so the
+      // document is downloaded once. The lock is transaction-scoped and the
+      // transaction holds nothing else; the store runs in its own.
+      return await prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`
+            SELECT 1 AS locked
+            FROM pg_advisory_xact_lock(hashtextextended(${`documents-import:${userId}:${system}:${instance}:${sourceId}`}, 0))
+          `;
+          const raced = await findSourceKey(userId, system, sourceId, instance);
+          if (raced) return answerHeldKey(system, userId, link, raced);
+          return importOne({
+            request,
+            client,
+            userId,
+            system,
+            instance,
+            sourceId,
+            kind: kind ?? null,
+            link,
           });
-        case "empty":
-        case "unsupportedType":
-          return apiError("This file type is not supported.", 415, {
-            errorCode: "documents.inbound.fileType",
-            reason: "unsupportedType",
-          });
-        case "quotaExceeded":
-          return apiError("Storage quota exceeded.", 413, {
-            errorCode: "documents.inbound.quotaExceeded",
-            reason: "quotaExceeded",
-            quotaBytes: result.quotaBytes,
-            usedBytes: result.usedBytes,
-          });
-        case "aliasLimit":
-          return apiError(
-            "This file is already stored under too many source ids.",
-            409,
-            { errorCode: "documents.inbound.sourceAliasLimit" },
-          );
-        case "episodeNotFound":
-        case "encounterNotFound":
-          // No pre-links are passed on this path; unreachable, but a result
-          // the switch does not name must not fall through silently.
-          return sourceErrorResponse("linkTargetNotFound");
-      }
+        },
+        { maxWait: IMPORT_LOCK_WAIT_MS, timeout: IMPORT_LOCK_HOLD_MS },
+      );
     } finally {
       release();
     }
   },
 );
+
+/** Fetch one document and store it; the caller holds the key's lock. */
+async function importOne(args: {
+  request: Request;
+  client: SourceClient;
+  userId: string;
+  system: DocumentPickerSystem;
+  instance: string;
+  sourceId: string;
+  kind: InboundDocumentKindValue | null;
+  link: LinkTarget | undefined;
+}): Promise<Response> {
+  const { request, client, userId, system, instance, sourceId, kind, link } =
+    args;
+  const limits = await resolveDocumentLimits(userId);
+  let meta;
+  let file;
+  try {
+    meta = await client.document(sourceId);
+    file = await client.download(sourceId, limits.maxFileBytes);
+  } catch (err) {
+    return responseForSourceFailure(err);
+  }
+
+  const rl = await checkRateLimit(
+    personalUploadBucket(userId),
+    UPLOAD_LIMIT_PER_HOUR,
+    UPLOAD_WINDOW_MS,
+  );
+  if (!rl.allowed) {
+    return apiError("Too many uploads. Try again later.", 429, {
+      errorCode: "documents.inbound.rateLimited",
+      headers: rateLimitHeaders(rl),
+    });
+  }
+
+  const result = await ingestDocument({
+    userId,
+    scoped: false,
+    ipAddress: getClientIp(request),
+    bytes: Buffer.from(file.bytes),
+    filename: meta.filename ?? file.filename,
+    title: meta.title,
+    kind,
+    documentDate: meta.date,
+    episodeIds: [],
+    encounterIds: [],
+    sourceSystem: system,
+    sourceId,
+    sourceInstance: instance,
+    aiDeferred: false,
+    sourceKeyChecked: true,
+    limits,
+    // The import is data; only the summary queued after a fresh insert
+    // follows the capability (and the person's auto-read setting).
+    documentAi: () => getAiCapability("documentAi"),
+  });
+
+  switch (result.kind) {
+    case "sourceKey":
+      return answerHeldKey(system, userId, link, result.match);
+    case "duplicate": {
+      // The same bytes were already in the vault (an upload, or another
+      // archive); the key is now remembered for that document.
+      const linked = await linkDocument(userId, link, result.document.id);
+      return respond(system, "duplicate", result.document.id, linked);
+    }
+    case "stored": {
+      const linked = await linkDocument(userId, link, result.document.id);
+      return respond(system, "imported", result.document.id, linked);
+    }
+    case "tooLarge":
+      return apiError("File is too large.", 413, {
+        errorCode: "documents.inbound.fileTooLarge",
+        reason: "fileTooLarge",
+        maxFileBytes: result.maxFileBytes,
+      });
+    case "empty":
+    case "unsupportedType":
+      return apiError("This file type is not supported.", 415, {
+        errorCode: "documents.inbound.fileType",
+        reason: "unsupportedType",
+      });
+    case "quotaExceeded":
+      return apiError("Storage quota exceeded.", 413, {
+        errorCode: "documents.inbound.quotaExceeded",
+        reason: "quotaExceeded",
+        quotaBytes: result.quotaBytes,
+        usedBytes: result.usedBytes,
+      });
+    case "aliasLimit":
+      return apiError(
+        "This file is already stored under too many source ids.",
+        409,
+        { errorCode: "documents.inbound.sourceAliasLimit" },
+      );
+    case "episodeNotFound":
+    case "encounterNotFound":
+      // No pre-links are passed on this path; unreachable, but a result
+      // the switch does not name must not fall through silently.
+      return sourceErrorResponse("linkTargetNotFound");
+  }
+}
