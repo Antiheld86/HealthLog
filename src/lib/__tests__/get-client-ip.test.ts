@@ -61,6 +61,17 @@ describe("getClientIp trusted-proxy semantics (V3 audit)", () => {
     ).toThrow(/TRUST_PROXY_HOPS/);
   });
 
+  it.each(["", "   "])(
+    "treats an empty TRUST_PROXY_HOPS (%j) as unset — the default compose file passes one",
+    (value) => {
+      process.env.TRUST_PROXY_HOPS = value;
+      const ip = getClientIp(
+        makeRequest({ "x-forwarded-for": "9.9.9.9, 1.2.3.4, 5.6.7.8" }),
+      );
+      expect(ip).toBe("5.6.7.8");
+    },
+  );
+
   it("with TRUST_PROXY_HOPS=0 ignores XFF entirely", () => {
     process.env.TRUST_PROXY_HOPS = "0";
     const ip = getClientIp(

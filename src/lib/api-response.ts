@@ -400,8 +400,12 @@ function readCfConnectingIp(request: Request): string | null {
 }
 
 function parseTrustProxyHops(raw: string | undefined): number {
-  if (raw === undefined) return 1;
-  const trimmed = raw.trim();
+  // Empty is unset. The shipped docker-compose.yml passes
+  // `TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-}"`, which is an empty string for
+  // every operator who never set it; reading that as invalid threw on every
+  // request that asked for the client IP.
+  const trimmed = raw?.trim() ?? "";
+  if (trimmed === "") return 1;
   if (!/^\d+$/.test(trimmed)) {
     // Reject explicitly-invalid values so an operator typo doesn't silently
     // switch a real-proxy deployment to "no XFF trust" mode (review
