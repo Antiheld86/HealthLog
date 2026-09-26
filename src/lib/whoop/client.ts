@@ -19,6 +19,7 @@ import { getEvent } from "@/lib/logging/context";
 import { safeFetch } from "@/lib/safe-fetch";
 import { reconstructContiguousSleepTimeline } from "@/lib/sleep/reconstruct-timeline";
 import { WhoopApiError, classifyWhoopResponse } from "./response-classifier";
+import { envOr, envValue } from "@/lib/env";
 
 const WHOOP_API_BASE = "https://api.prod.whoop.com/developer";
 const WHOOP_OAUTH_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth";
@@ -36,9 +37,9 @@ export function getWhoopRedirectUri(): string {
   // An empty or blank value counts as unset: the compose whitelist
   // materialises the var as an empty string when unset, which must still fall
   // through to the derived URI.
-  return (
-    process.env.WHOOP_REDIRECT_URI?.trim() ||
-    `${process.env.NEXT_PUBLIC_APP_URL?.trim()}/api/whoop/callback`
+  return envOr(
+    "WHOOP_REDIRECT_URI",
+    `${envValue("NEXT_PUBLIC_APP_URL")}/api/whoop/callback`,
   );
 }
 

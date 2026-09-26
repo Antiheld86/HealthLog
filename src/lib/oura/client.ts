@@ -18,6 +18,7 @@ import { canonicalDailyTimestamp } from "@/lib/measurements/consolidation-tz";
 import { dayDiff } from "@/lib/cycle/day-math";
 import { safeFetch } from "@/lib/safe-fetch";
 import { OuraApiError, classifyOuraResponse } from "./response-classifier";
+import { envOr, envValue } from "@/lib/env";
 
 const OURA_API_BASE = "https://api.ouraring.com";
 const OURA_OAUTH_AUTH_URL = "https://cloud.ouraring.com/oauth/authorize";
@@ -44,9 +45,9 @@ export function getOuraCredentials(): OuraCredentials | null {
 export function getOuraRedirectUri(): string {
   // An empty or blank value counts as unset (the compose whitelist
   // materialises an unset var as an empty string).
-  return (
-    process.env.OURA_REDIRECT_URI?.trim() ||
-    `${process.env.NEXT_PUBLIC_APP_URL?.trim()}/api/oura/callback`
+  return envOr(
+    "OURA_REDIRECT_URI",
+    `${envValue("NEXT_PUBLIC_APP_URL")}/api/oura/callback`,
   );
 }
 

@@ -27,6 +27,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { StravaApiError, classifyStravaResponse } from "./response-classifier";
 import { mapStravaSportType } from "./sport-map";
 import type { WorkoutSportType } from "@/lib/validations/workout";
+import { envOr, envValue } from "@/lib/env";
 
 const STRAVA_API_BASE = "https://www.strava.com/api/v3";
 const STRAVA_OAUTH_AUTH_URL = "https://www.strava.com/oauth/authorize";
@@ -55,9 +56,9 @@ export function getStravaRedirectUri(): string {
   // An empty or blank value counts as unset: the compose whitelist
   // materialises an unset var as an empty string, which must still fall
   // through to the derived URI.
-  return (
-    process.env.STRAVA_REDIRECT_URI?.trim() ||
-    `${process.env.NEXT_PUBLIC_APP_URL?.trim()}/api/strava/callback`
+  return envOr(
+    "STRAVA_REDIRECT_URI",
+    `${envValue("NEXT_PUBLIC_APP_URL")}/api/strava/callback`,
   );
 }
 

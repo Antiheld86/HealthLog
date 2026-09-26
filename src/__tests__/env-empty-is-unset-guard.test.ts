@@ -38,16 +38,6 @@ const SRC = join(process.cwd(), "src");
 const NULLISH_ENV_FALLBACK =
   /process\.env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\s*["'`][A-Za-z_][A-Za-z0-9_]*["'`]\s*\])(?:\?\.[A-Za-z_]+\((?:[^()]|\([^()]*\))*\))*\s*\?\?/g;
 
-/**
- * Files that still carry the pattern because another change owns them.
- * Each entry fails T3 once the file no longer matches, so the list can only
- * shrink.
- */
-const PENDING: Readonly<Record<string, string>> = {
-  "lib/withings/client.ts":
-    "WITHINGS_REDIRECT_URI ?? derived callback; the integration clients are being reworked in a parallel change that owns this file",
-};
-
 function sourceFiles(): string[] {
   return walkSourceFiles(SRC, { floor: 3000 })
     .filter((rel) => !rel.startsWith("generated/"))
@@ -88,20 +78,30 @@ describe("an empty environment variable counts as unset", () => {
   });
 
   it("T2 — no source file defaults a process.env read with ??", () => {
-    const found = offenders().filter((rel) => !(rel in PENDING));
     expect(
-      found,
+      offenders(),
       "Read these through envValue/envOr/envFlag from @/lib/env. Compose " +
         "passes an unset variable as the empty string, and ?? keeps it.",
     ).toEqual([]);
   });
 
-  it("T3 — every pending entry still matches, so the list only shrinks", () => {
-    const current = new Set(offenders());
-    const stale = Object.keys(PENDING).filter((rel) => !current.has(rel));
-    expect(
-      stale,
-      "No longer carries the pattern; drop the entry from PENDING.",
-    ).toEqual([]);
+  it("T3 — the sweep read the tree and the matcher fires on real source", () => {
+    // An empty offender list proves nothing if the narrowed walk found no
+    // files, or if the matcher no longer fires on what the tree actually
+    // holds. Floor the narrowed set, then put the pre-fix read back into a
+    // real client and require the matcher to find it there.
+    const files = sourceFiles();
+    expect(files.length).toBeGreaterThan(2400);
+    expect(files).toContain("lib/withings/client.ts");
+    const real = readFileSync(join(SRC, "lib/withings/client.ts"), "utf8");
+    expect([...real.matchAll(NULLISH_ENV_FALLBACK)]).toEqual([]);
+    const reverted = real.replace(
+      /envOr\(\s*"WITHINGS_REDIRECT_URI",/,
+      "process.env.WITHINGS_REDIRECT_URI ?? (",
+    );
+    expect(reverted).not.toBe(real);
+    expect([...reverted.matchAll(NULLISH_ENV_FALLBACK)].length).toBeGreaterThan(
+      0,
+    );
   });
 });

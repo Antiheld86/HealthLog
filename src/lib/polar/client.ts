@@ -31,6 +31,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import type { WorkoutSportType } from "@/lib/validations/workout";
 import { PolarApiError, classifyPolarResponse } from "./response-classifier";
 import { mapPolarSportType } from "./sport-map";
+import { envOr, envValue } from "@/lib/env";
 
 const POLAR_API_BASE = "https://www.polaraccesslink.com";
 const POLAR_OAUTH_AUTH_URL = "https://flow.polar.com/oauth2/authorization";
@@ -57,9 +58,9 @@ export function getPolarRedirectUri(): string {
   // An empty or blank value counts as unset: the compose whitelist
   // materialises an unset var as an empty string, which must still fall
   // through to the derived URI.
-  return (
-    process.env.POLAR_REDIRECT_URI?.trim() ||
-    `${process.env.NEXT_PUBLIC_APP_URL?.trim()}/api/polar/callback`
+  return envOr(
+    "POLAR_REDIRECT_URI",
+    `${envValue("NEXT_PUBLIC_APP_URL")}/api/polar/callback`,
   );
 }
 

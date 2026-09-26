@@ -42,6 +42,7 @@ import { safeFetch } from "@/lib/safe-fetch";
 import { canonicalDailyTimestamp } from "@/lib/measurements/consolidation-tz";
 import { zonedWallClockToUtc } from "@/lib/tz/wall-clock";
 import { FitbitApiError, classifyFitbitResponse } from "./response-classifier";
+import { envValue } from "@/lib/env";
 
 /** Classic Fitbit Web API base. */
 export const FITBIT_API_BASE = "https://api.fitbit.com";
@@ -80,8 +81,8 @@ export function getFitbitRedirectUri(): string {
   // An empty or blank value counts as unset: the compose whitelist
   // materialises an unset var as an empty string, which must fall through to
   // the derived URI rather than read as "not configured".
-  const explicit = process.env.FITBIT_REDIRECT_URI?.trim() || undefined;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || undefined;
+  const explicit = envValue("FITBIT_REDIRECT_URI");
+  const appUrl = envValue("NEXT_PUBLIC_APP_URL");
   const raw =
     explicit ?? (appUrl ? `${appUrl}/api/fitbit/callback` : undefined);
 
