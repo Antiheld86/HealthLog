@@ -6746,7 +6746,11 @@
       "removeBody": "Konta bez własnego klucza natychmiast tracą funkcje AI. Po zapisaniu klucz nie jest nigdzie pokazywany, więc do przywrócenia potrzebny będzie oryginał.",
       "removeConfirm": "Usuń klucz",
       "saved": "Zapisano ustawienia serwerowego klucza AI",
-      "error": "Nie udało się zapisać serwerowego klucza AI"
+      "error": "Nie udało się zapisać serwerowego klucza AI",
+      "legacyGrantTitle": "ALLOW_LOCAL_AI_PRIVATE_HOSTS=true jest przestarzałe",
+      "legacyGrantBody": "Nadal pozwala kluczowi serwera powyżej i ustawieniom AI zapisanym na koncie administratora sięgać do Twojej sieci i zostanie usunięte w jednej z kolejnych wersji. Pozostałe konta już teraz potrzebują swojego punktu końcowego AI w AI_PRIVATE_ORIGINS. Ustaw AI_PRIVATE_ORIGINS w środowisku serwera, uruchom go ponownie, a potem usuń ALLOW_LOCAL_AI_PRIVATE_HOSTS.",
+      "legacyGrantOrigins": "Adresy AI zapisane na tej instancji, które wskazują na Twoją sieć:",
+      "legacyGrantNoOrigins": "Żaden adres AI zapisany na tej instancji nie wskazuje na Twoją sieć, więc możesz już usunąć ALLOW_LOCAL_AI_PRIVATE_HOSTS."
     },
     "providerHealth": {
       "title": "Stan dostawców AI",

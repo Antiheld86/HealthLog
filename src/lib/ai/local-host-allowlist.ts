@@ -18,12 +18,20 @@
  * time, and a literal in those ranges cannot be granted at all. Nothing in a
  * request or a settings field can confer a grant.
  *
- * `ALLOW_LOCAL_AI_PRIVATE_HOSTS` (v1.18.7) stays readable for the one form that
- * can be made safe: a comma-separated host list (`ollama.lan,10.0.0.5`) still
- * grants those exact hosts, on any port, dialled the same pinned way. Its
- * `=true` form granted every private host on the network to every user and
- * cannot be made safe, so from v1.39.3 it grants nothing; the boot readiness
- * summary and a one-time warning say so and name the replacement.
+ * `ALLOW_LOCAL_AI_PRIVATE_HOSTS` (v1.18.7) stays readable. A comma-separated
+ * host list (`ollama.lan,10.0.0.5`) still grants those exact hosts, on any
+ * port, dialled the same pinned way.
+ *
+ * Its `=true` form used to open every private host to every user of the
+ * instance. From v1.39.3 it is deprecated and narrowed for one release cycle
+ * rather than removed, so a single-user self-host with Ollama on the LAN keeps
+ * working after a patch update: it still grants a private host, but only to
+ * the configurations the operator owns (the instance-wide admin provider, and
+ * provider settings saved on an admin account), and only through the same
+ * pinned dispatcher, so the metadata range, link-local and the unspecified
+ * address stay unreachable. A non-admin account's own base URL needs an exact
+ * origin in `AI_PRIVATE_ORIGINS`. The boot summary and the admin AI settings
+ * page say so and name the origins in use.
  */
 import { isIP } from "node:net";
 
@@ -32,15 +40,27 @@ import {
   originOfUrl,
   parsePrivateOrigins,
 } from "@/lib/private-origin-policy";
+import { isPublicUrl } from "@/lib/validations/notifications";
 
 const ORIGINS_ENV = "AI_PRIVATE_ORIGINS";
 const LEGACY_ENV = "ALLOW_LOCAL_AI_PRIVATE_HOSTS";
 
 /** The operator-facing sentence for a legacy `=true`. Shared with the boot summary. */
 export const LEGACY_ANY_HOST_WARNING =
-  `${LEGACY_ENV}=true no longer opens every private host (it let any user ` +
-  `reach any service on the operator's network). List the AI endpoint ` +
-  `instead: ${ORIGINS_ENV}="http://ollama.lan:11434".`;
+  `${LEGACY_ENV}=true is deprecated, set ${ORIGINS_ENV}=<origin> ` +
+  `(for example ${ORIGINS_ENV}="http://ollama.lan:11434"); =true will be ` +
+  `removed in a later release. Until then it only covers the admin AI ` +
+  `provider and AI settings saved on an admin account.`;
+
+/**
+ * Who a base URL belongs to. `operatorTrusted` is true for the instance-wide
+ * admin provider and for provider settings saved on an admin account: the
+ * configurations the deprecated `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` still
+ * covers. Everything else (any non-admin account's own base URL) is not.
+ */
+export interface AiUrlOwner {
+  operatorTrusted?: boolean;
+}
 
 interface Grants {
   origins: ReadonlySet<string>;
@@ -67,6 +87,8 @@ export function legacyAnyHostConfigured(
 function parseLegacyHosts(raw: string | undefined): ReadonlySet<string> {
   const value = raw?.trim() ?? "";
   if (!value || value.toLowerCase() === "false") return new Set();
+  // `true` is handled per call in `grantedAiOrigin` (operator-owned
+  // configurations only); it is not a host list.
   if (value.toLowerCase() === "true") {
     warnOnce(LEGACY_ANY_HOST_WARNING);
     return new Set();
@@ -117,7 +139,10 @@ function grants(): Grants {
  * legacy host list. A host no grant may name is never granted, whatever the
  * lists say.
  */
-export function grantedAiOrigin(url: string): string | null {
+export function grantedAiOrigin(
+  url: string,
+  owner: AiUrlOwner = {},
+): string | null {
   // Parse the grants first, so a malformed entry is reported on the first
   // call that could have used it rather than never.
   const { origins, legacyHosts } = grants();
@@ -129,6 +154,16 @@ export function grantedAiOrigin(url: string): string | null {
   // dropped by the pinned dispatcher at dial time.
   if (origins.has(origin)) return origin;
   if (legacyHosts.has(hostname.replace(/^\[|\]$/g, ""))) return origin;
+  // Deprecated `=true`: an operator-owned configuration only, and never a
+  // literal no grant may name. A name that resolves into those ranges is
+  // dropped by the pinned dispatcher at dial time.
+  if (
+    owner.operatorTrusted === true &&
+    legacyAnyHostConfigured() &&
+    !isNeverGrantableHost(hostname)
+  ) {
+    return origin;
+  }
   return null;
 }
 
@@ -137,8 +172,11 @@ export function grantedAiOrigin(url: string): string | null {
  * host be saved and called?", never "is it public?": callers still accept a
  * public URL without any grant.
  */
-export function isLocalAiHostAllowed(url: string): boolean {
-  return grantedAiOrigin(url) !== null;
+export function isLocalAiHostAllowed(
+  url: string,
+  owner: AiUrlOwner = {},
+): boolean {
+  return grantedAiOrigin(url, owner) !== null;
 }
 
 /**
@@ -149,13 +187,50 @@ export function isLocalAiHostAllowed(url: string): boolean {
  */
 export function aiEgressPolicyFor(
   url: string,
+  owner: AiUrlOwner = {},
 ):
   | { requirePublicHost: true }
   | { requirePublicHost: false; operatorApprovedPrivateOrigin: string } {
-  const origin = grantedAiOrigin(url);
+  const origin = grantedAiOrigin(url, owner);
   return origin === null
     ? { requirePublicHost: true }
     : { requirePublicHost: false, operatorApprovedPrivateOrigin: origin };
+}
+
+/**
+ * Host names that only resolve on a local network. `isPublicUrl` judges the
+ * text of a name, not where it resolves, so `ollama.lan` reads as public to it
+ * while the connect-time pin would refuse it.
+ */
+const LAN_SUFFIXES = [
+  ".lan",
+  ".local",
+  ".home",
+  ".home.arpa",
+  ".internal",
+  ".intranet",
+  ".localdomain",
+  ".corp",
+];
+
+/**
+ * The origin an operator would add to `AI_PRIVATE_ORIGINS` for this saved
+ * base URL, or null when it needs none: a hosted endpoint, an address no grant
+ * can open, an origin the exact list or the legacy host list already covers,
+ * or an unparseable value. Used by the admin AI settings page to name what the
+ * deprecated `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` is currently standing in for.
+ */
+export function originNeedingAiGrant(url: string): string | null {
+  const origin = originOfUrl(url);
+  if (!origin) return null;
+  const hostname = new URL(origin).hostname.toLowerCase();
+  if (isNeverGrantableHost(hostname)) return null;
+  const lanName =
+    !hostname.includes(".") ||
+    LAN_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
+  if (isPublicUrl(url) && !lanName) return null;
+  if (grantedAiOrigin(url) !== null) return null;
+  return origin;
 }
 
 /** Test helper: forget the parsed grants and the warnings already printed. */

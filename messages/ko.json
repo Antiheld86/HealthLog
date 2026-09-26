@@ -6746,7 +6746,11 @@
       "removeBody": "자기 키가 없는 계정은 바로 AI 기능을 쓸 수 없게 돼요. 저장한 뒤에는 키를 어디에도 다시 보여주지 않으니, 되돌리려면 원본 키가 필요해요.",
       "removeConfirm": "키 삭제",
       "saved": "AI 서버 키 설정을 저장했어요",
-      "error": "AI 서버 키를 저장하지 못했어요"
+      "error": "AI 서버 키를 저장하지 못했어요",
+      "legacyGrantTitle": "ALLOW_LOCAL_AI_PRIVATE_HOSTS=true는 더 이상 권장되지 않습니다",
+      "legacyGrantBody": "위의 서버 키와 관리자 계정에 저장된 AI 설정은 아직 이 설정으로 네트워크에 접근할 수 있지만, 이후 버전에서 제거됩니다. 다른 계정은 이미 AI 엔드포인트를 AI_PRIVATE_ORIGINS에 등록해야 합니다. 서버 환경에 AI_PRIVATE_ORIGINS를 설정하고 재시작한 뒤 ALLOW_LOCAL_AI_PRIVATE_HOSTS를 제거하세요.",
+      "legacyGrantOrigins": "이 인스턴스에 저장된 AI 주소 중 내부 네트워크를 가리키는 주소:",
+      "legacyGrantNoOrigins": "이 인스턴스에 저장된 AI 주소 중 내부 네트워크를 가리키는 주소가 없으므로 지금 ALLOW_LOCAL_AI_PRIVATE_HOSTS를 제거해도 됩니다."
     },
     "aiQuality": {
       "title": "인사이트 품질",

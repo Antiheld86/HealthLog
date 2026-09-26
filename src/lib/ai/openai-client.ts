@@ -46,6 +46,13 @@ interface OpenAIClientConfig {
    * `codex` keeps the fully pinned posture.
    */
   providerType?: OpenAIProviderType;
+  /**
+   * v1.39.3 — true when the base URL belongs to the operator: the
+   * instance-wide admin provider, or provider settings saved on an admin
+   * account. Only such a URL is still covered by the deprecated
+   * `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` (see `local-host-allowlist.ts`).
+   */
+  operatorTrusted?: boolean;
 }
 
 type OpenAIProviderType = "admin-key" | "codex" | "openai-compatible";
@@ -169,7 +176,9 @@ export class OpenAIClient implements AIProvider {
       {
         timeoutMs: params.timeoutMs ?? 60_000,
         ...(this.isGateway || this.type === "admin-key"
-          ? aiEgressPolicyFor(url)
+          ? aiEgressPolicyFor(url, {
+              operatorTrusted: this.config.operatorTrusted,
+            })
           : { requirePublicHost: true as const }),
         signal: params.signal,
       },

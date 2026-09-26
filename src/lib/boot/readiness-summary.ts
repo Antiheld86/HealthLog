@@ -126,11 +126,11 @@ export function collectReadiness(env: Env = process.env): ReadinessReport {
       : "Secure cookie flag OFF — fine for plain-HTTP LAN; do NOT expose plain HTTP to the internet",
   });
 
-  // --- Retired AI grant (a warning, never a blocker) ----------------------
+  // --- Deprecated AI grant (a warning, never a blocker) -------------------
   // `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` used to open every private host on
-  // the network to every user's AI base URL. It grants nothing since
-  // v1.39.3; an operator who still has it set has a local AI endpoint that
-  // just stopped answering, and this is the line that says why.
+  // the network to every user's AI base URL. Since v1.39.3 it only covers the
+  // operator's own AI configurations and is on its way out; this line names
+  // the replacement. The admin AI settings page lists the origins in use.
   if (legacyAnyHostConfigured(env)) {
     lines.push({
       label: "ALLOW_LOCAL_AI_PRIVATE_HOSTS",

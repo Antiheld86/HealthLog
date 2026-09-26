@@ -179,6 +179,26 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   }
   const body = parsed.data;
 
+  // v1.39.3 — whose configuration this is. Settings saved on an admin account
+  // are the operator's own and are still covered by the deprecated
+  // `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true`; any other account needs an exact
+  // origin in `AI_PRIVATE_ORIGINS`. Read from the saved row, the same rule
+  // the provider resolution applies when it later dials the URL.
+  const needsHostPolicy =
+    (typeof body.baseUrl === "string" && body.baseUrl !== "") ||
+    (typeof body.compatBaseUrl === "string" && body.compatBaseUrl !== "");
+  const owner = needsHostPolicy
+    ? {
+        operatorTrusted:
+          (
+            await prisma.user.findUnique({
+              where: { id: user.id },
+              select: { role: true },
+            })
+          )?.role === "ADMIN",
+      }
+    : {};
+
   const updates: Record<string, unknown> = {};
 
   if (body.provider !== undefined) {
@@ -199,9 +219,10 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       // compromised user account cannot point the server at the cloud
       // metadata endpoint or internal admin panels. The operator grants a
       // private endpoint by exact origin (`AI_PRIVATE_ORIGINS`, or the legacy
-      // host list); the retired `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` grants
-      // nothing since v1.39.3, and no grant can open metadata or link-local.
-      const allowPrivate = isLocalAiHostAllowed(trimmed);
+      // host list); the deprecated `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` covers
+      // an admin account's own settings only (`owner` above), and no grant
+      // can open metadata or link-local.
+      const allowPrivate = isLocalAiHostAllowed(trimmed, owner);
       if (!allowPrivate && !isPublicUrl(trimmed)) {
         return apiError(
           "Base URL points to an internal/private host. The operator must allow its exact origin on this instance via AI_PRIVATE_ORIGINS (e.g. http://ollama.lan:11434) for a self-hosted Ollama / LM Studio.",
@@ -226,7 +247,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       // private one only when the operator allowlisted it. Gateways on a LAN
       // are the normal case for LiteLLM / vLLM, so the escape hatch matters
       // here as much as it does for Ollama.
-      if (!isLocalAiHostAllowed(trimmed) && !isPublicUrl(trimmed)) {
+      if (!isLocalAiHostAllowed(trimmed, owner) && !isPublicUrl(trimmed)) {
         return apiError(
           "Base URL points to an internal/private host. The operator must allow its exact origin on this instance via AI_PRIVATE_ORIGINS (e.g. http://litellm.lan:4000) for a self-hosted gateway.",
           422,

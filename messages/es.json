@@ -6746,7 +6746,11 @@
       "removeBody": "Las cuentas sin clave propia pierden las funciones de IA de inmediato. La clave no se muestra en ningún sitio una vez guardada, así que necesitarás el original para volver a ponerla.",
       "removeConfirm": "Eliminar clave",
       "saved": "Ajustes de la clave de IA del servidor guardados",
-      "error": "No se pudo guardar la clave de IA del servidor"
+      "error": "No se pudo guardar la clave de IA del servidor",
+      "legacyGrantTitle": "ALLOW_LOCAL_AI_PRIVATE_HOSTS=true está obsoleto",
+      "legacyGrantBody": "Sigue permitiendo que la clave del servidor de arriba y la configuración de IA guardada en una cuenta de administrador lleguen a tu red, y se eliminará en una versión posterior. Las demás cuentas ya necesitan su endpoint de IA en AI_PRIVATE_ORIGINS. Define AI_PRIVATE_ORIGINS en el entorno del servidor, reinicia y después elimina ALLOW_LOCAL_AI_PRIVATE_HOSTS.",
+      "legacyGrantOrigins": "Las URL de IA guardadas en esta instancia que apuntan a tu red:",
+      "legacyGrantNoOrigins": "Ninguna URL de IA guardada en esta instancia apunta a tu red, así que ya puedes eliminar ALLOW_LOCAL_AI_PRIVATE_HOSTS."
     },
     "providerHealth": {
       "title": "Estado de los proveedores de IA",

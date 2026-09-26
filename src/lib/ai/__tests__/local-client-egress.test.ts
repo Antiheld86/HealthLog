@@ -67,10 +67,24 @@ describe("Local AI egress policy", () => {
     expect(opts).not.toHaveProperty("operatorApprovedPrivateOrigin");
   });
 
-  it("the retired `=true` grants nothing any more", async () => {
+  it("the deprecated `=true` no longer covers a non-admin account's endpoint", async () => {
     vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "true");
     await client("http://10.0.0.5:11434/v1").generateCompletion(call);
     expect(safeFetch.mock.calls[0][2].requirePublicHost).toBe(true);
+  });
+
+  it("the deprecated `=true` still covers the operator's own endpoint, pinned", async () => {
+    vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "true");
+    await new LocalOpenAICompatibleClient({
+      apiKey: null,
+      model: "llama3:8b",
+      baseUrl: "http://10.0.0.5:11434/v1",
+      operatorTrusted: true,
+    }).generateCompletion(call);
+    expect(safeFetch.mock.calls[0][2]).toMatchObject({
+      requirePublicHost: false,
+      operatorApprovedPrivateOrigin: "http://10.0.0.5:11434",
+    });
   });
 
   it("streams through the same policy", async () => {

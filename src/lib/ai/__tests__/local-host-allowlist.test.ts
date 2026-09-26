@@ -7,13 +7,15 @@ import {
   isLocalAiHostAllowed,
   legacyAnyHostConfigured,
   LEGACY_ANY_HOST_WARNING,
+  originNeedingAiGrant,
 } from "../local-host-allowlist";
 
 /**
  * v1.39.3 — AI base URLs on a private network are granted by exact origin
  * (`AI_PRIVATE_ORIGINS`), the grammar the notification and Nightscout grants
  * use, and dialled through the pinned operator-approved dispatcher. The legacy
- * host list keeps working; its `=true` form grants nothing.
+ * host list keeps working; its deprecated `=true` form covers only the
+ * operator's own configurations.
  */
 
 let warn: ReturnType<typeof vi.spyOn>;
@@ -72,12 +74,50 @@ describe("ALLOW_LOCAL_AI_PRIVATE_HOSTS (legacy)", () => {
     expect(isLocalAiHostAllowed("http://10.0.0.6/v1")).toBe(false);
   });
 
-  it("no longer opens every private host with `true`, and says so", () => {
+  it("`true` still covers an operator-owned configuration, pinned, and says it is deprecated", () => {
+    vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "true");
+    expect(
+      aiEgressPolicyFor("http://10.0.0.5:11434/v1", { operatorTrusted: true }),
+    ).toEqual({
+      requirePublicHost: false,
+      operatorApprovedPrivateOrigin: "http://10.0.0.5:11434",
+    });
+    expect(warn).toHaveBeenCalledWith(LEGACY_ANY_HOST_WARNING);
+    expect(LEGACY_ANY_HOST_WARNING).toContain("deprecated");
+    expect(LEGACY_ANY_HOST_WARNING).toContain("AI_PRIVATE_ORIGINS=");
+    expect(legacyAnyHostConfigured()).toBe(true);
+  });
+
+  it("`true` no longer covers a non-admin account's own base URL", () => {
     vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "true");
     expect(isLocalAiHostAllowed("http://10.0.0.5:11434/v1")).toBe(false);
-    expect(isLocalAiHostAllowed("http://169.254.169.254/latest/")).toBe(false);
-    expect(warn).toHaveBeenCalledWith(LEGACY_ANY_HOST_WARNING);
-    expect(legacyAnyHostConfigured()).toBe(true);
+    expect(
+      isLocalAiHostAllowed("http://10.0.0.5:11434/v1", {
+        operatorTrusted: false,
+      }),
+    ).toBe(false);
+    expect(aiEgressPolicyFor("http://10.0.0.5:11434/v1")).toEqual({
+      requirePublicHost: true,
+    });
+  });
+
+  it("`true` never opens metadata, link-local or the unspecified address, even for the operator", () => {
+    vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "true");
+    for (const url of [
+      "http://169.254.169.254/latest/meta-data/",
+      "http://[fe80::1]/v1",
+      "http://0.0.0.0:11434/v1",
+      "http://[::ffff:169.254.169.254]/v1",
+    ]) {
+      expect(isLocalAiHostAllowed(url, { operatorTrusted: true }), url).toBe(
+        false,
+      );
+    }
+  });
+
+  it("an exact origin grant covers every account, with or without `true`", () => {
+    vi.stubEnv("AI_PRIVATE_ORIGINS", "http://ollama.lan:11434");
+    expect(isLocalAiHostAllowed("http://ollama.lan:11434/v1")).toBe(true);
   });
 
   it("refuses a metadata literal and a host:port entry instead of granting a guess", () => {
@@ -112,5 +152,32 @@ describe("aiEgressPolicyFor", () => {
       requirePublicHost: false,
       operatorApprovedPrivateOrigin: "http://ollama.lan:11434",
     });
+  });
+});
+
+describe("originNeedingAiGrant", () => {
+  it("names the origin of a LAN endpoint no grant covers yet", () => {
+    for (const [url, origin] of [
+      ["http://10.0.0.5:11434/v1", "http://10.0.0.5:11434"],
+      ["http://ollama.lan:11434/v1", "http://ollama.lan:11434"],
+      ["http://ollama:11434/v1", "http://ollama:11434"],
+      ["http://nas.local:1234/v1", "http://nas.local:1234"],
+      ["http://localhost:11434/v1", "http://localhost:11434"],
+    ]) {
+      expect(originNeedingAiGrant(url), url).toBe(origin);
+    }
+  });
+
+  it("skips hosted endpoints, never-grantable addresses and origins already granted", () => {
+    vi.stubEnv("AI_PRIVATE_ORIGINS", "http://10.0.0.5:11434");
+    for (const url of [
+      "https://openrouter.ai/api/v1",
+      "https://api.openai.com/v1",
+      "http://169.254.169.254/latest",
+      "http://10.0.0.5:11434/v1",
+      "not a url",
+    ]) {
+      expect(originNeedingAiGrant(url), url).toBeNull();
+    }
   });
 });

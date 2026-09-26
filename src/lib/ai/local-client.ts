@@ -27,6 +27,13 @@ interface LocalClientConfig {
   apiKey?: string | null;
   model: string;
   baseUrl: string;
+  /**
+   * v1.39.3 — true when the base URL belongs to the operator: the
+   * instance-wide admin provider, or provider settings saved on an admin
+   * account. Only such a URL is still covered by the deprecated
+   * `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` (see `local-host-allowlist.ts`).
+   */
+  operatorTrusted?: boolean;
 }
 
 const STRICT_JSON_PREFIX =
@@ -198,7 +205,9 @@ export class LocalOpenAICompatibleClient implements AIProvider {
     // operator-approved dispatcher, never unpinned, so the metadata range and
     // link-local stay unreachable even for a granted name (v1.39.3). Enforced
     // at write-time in /api/user/ai-provider too.
-    const egress = aiEgressPolicyFor(url);
+    const egress = aiEgressPolicyFor(url, {
+      operatorTrusted: this.config.operatorTrusted,
+    });
     const res = await safeFetch(
       url,
       {
@@ -336,7 +345,9 @@ export class LocalOpenAICompatibleClient implements AIProvider {
     onDelta: (delta: string) => void,
   ): Promise<CompletionResult> {
     const { url, headers, body } = this.buildRequest(params, true);
-    const egress = aiEgressPolicyFor(url);
+    const egress = aiEgressPolicyFor(url, {
+      operatorTrusted: this.config.operatorTrusted,
+    });
 
     // Idle controller: aborts the upstream when no chunk arrives within the
     // per-idle window. Composed with the caller's cancel signal so a client

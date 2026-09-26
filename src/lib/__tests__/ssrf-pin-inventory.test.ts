@@ -34,7 +34,7 @@ describe("SSRF requirePublicHost pin inventory", () => {
   it("openai-client routes person-typed base URLs through the allowlist with a pinned floor", () => {
     const src = read("ai/openai-client.ts");
     expect(src).toMatch(
-      /this\.isGateway \|\| this\.type === "admin-key"\s*\?\s*aiEgressPolicyFor\(url\)\s*:\s*\{\s*requirePublicHost:\s*true as const\s*\}/,
+      /this\.isGateway \|\| this\.type === "admin-key"\s*\?\s*aiEgressPolicyFor\(url,\s*\{\s*operatorTrusted:\s*this\.config\.operatorTrusted,?\s*\}\)\s*:\s*\{\s*requirePublicHost:\s*true as const\s*\}/,
     );
     expect(src).not.toMatch(/requirePublicHost:\s*false/);
   });
@@ -87,7 +87,9 @@ describe("SSRF requirePublicHost pin inventory", () => {
     const src = read("ai/local-client.ts");
     // Both the buffered and the streaming call derive the policy …
     expect([
-      ...src.matchAll(/const egress = aiEgressPolicyFor\(url\)/g),
+      ...src.matchAll(
+        /const egress = aiEgressPolicyFor\(url,\s*\{\s*operatorTrusted:\s*this\.config\.operatorTrusted,?\s*\}\)/g,
+      ),
     ]).toHaveLength(2);
     // … and spread it into safeFetch …
     expect([...src.matchAll(/\.\.\.egress,/g)]).toHaveLength(2);

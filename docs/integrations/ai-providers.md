@@ -158,10 +158,17 @@ unreachable even when listed or when a listed name resolves to one.
 
 `ALLOW_LOCAL_AI_PRIVATE_HOSTS`, the older setting, still works as a
 host list (`ollama.lan,10.0.0.5`, any port), with the same pinning.
+
 Its `true` form used to open every private host on the network to
-every user and no longer grants anything since v1.39.3; the boot
-summary names it when it is still set. Replace it with the one origin
-your endpoint listens on.
+every user. It is deprecated since v1.39.3 and will be removed in a
+later release. Until then it still covers the operator's own AI
+configurations, the server key in the admin panel and AI settings
+saved on an admin account, over the same pinned connection, so the
+metadata address and link-local addresses stay unreachable. Any other
+account's base URL needs its origin in `AI_PRIVATE_ORIGINS`. The boot
+summary names the setting while it is set, and the admin AI settings
+page shows the exact `AI_PRIVATE_ORIGINS` line for the endpoints saved
+on the instance.
 
 **Model sizing.** Roughly: 7-8B for 8 GB GPU / Apple Silicon base
 (briefings fine, deeper Coach reasoning gets terse), 14-24B for
@@ -454,9 +461,9 @@ upstream error.
 - **Local endpoint rejected as "internal/private host".** Add the
   endpoint's exact origin to `AI_PRIVATE_ORIGINS` in the container
   environment (e.g. `http://ollama.lan:11434`; comma-separate several)
-  and restart. If it stopped working after an update and you had
-  `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true`, that form no longer grants
-  anything; list the origin instead.
+  and restart. With `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` an admin
+  account's endpoint still works, but no other account's does; the
+  admin AI settings page lists the origins to add.
 - **Codex disconnects after a few weeks of inactivity.** ChatGPT
   refresh tokens lapse after extended idle periods. Reconnect via
   the **Connect ChatGPT** button — HealthLog re-runs the device-code

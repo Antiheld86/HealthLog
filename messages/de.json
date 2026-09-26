@@ -6746,7 +6746,11 @@
       "removeBody": "Konten ohne eigenen Schlüssel verlieren die KI-Funktionen sofort. Der Schlüssel wird nach dem Speichern nirgends mehr angezeigt — zum Wiederherstellen brauchst du das Original.",
       "removeConfirm": "Schlüssel entfernen",
       "saved": "KI-Server-Schlüssel gespeichert",
-      "error": "Speichern des KI-Server-Schlüssels fehlgeschlagen"
+      "error": "Speichern des KI-Server-Schlüssels fehlgeschlagen",
+      "legacyGrantTitle": "ALLOW_LOCAL_AI_PRIVATE_HOSTS=true ist veraltet",
+      "legacyGrantBody": "Die Einstellung erlaubt dem Server-Schlüssel oben und KI-Einstellungen, die in einem Admin-Konto gespeichert sind, weiterhin Zugriff auf dein Netzwerk und entfällt in einer späteren Version. Andere Konten brauchen ihren KI-Endpunkt schon jetzt in AI_PRIVATE_ORIGINS. Setze AI_PRIVATE_ORIGINS in der Server-Umgebung, starte neu und entferne dann ALLOW_LOCAL_AI_PRIVATE_HOSTS.",
+      "legacyGrantOrigins": "Diese auf dieser Instanz gespeicherten KI-Adressen zeigen in dein Netzwerk:",
+      "legacyGrantNoOrigins": "Keine auf dieser Instanz gespeicherte KI-Adresse zeigt in dein Netzwerk, du kannst ALLOW_LOCAL_AI_PRIVATE_HOSTS also jetzt entfernen."
     },
     "providerHealth": {
       "title": "Zustand der KI-Provider",
