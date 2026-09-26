@@ -34,6 +34,7 @@ import {
   scheduleWireFields,
 } from "@/lib/medications/intake-tracking";
 import { liveEraStartsByMedication } from "@/lib/medications/scheduling/live-era";
+import { floorWhole } from "@/lib/medications/units-per-dose";
 
 export type MedicationsListResult = Array<Record<string, unknown>>;
 
@@ -272,7 +273,7 @@ export async function buildMedicationsList(
     const stockDosesRemaining =
       stockUnitsRemaining === null
         ? null
-        : Math.floor(
+        : floorWhole(
             stockUnitsRemaining /
               effectiveUnitsPerDose(schedulesDto, Number(m.unitsPerDose)),
           );

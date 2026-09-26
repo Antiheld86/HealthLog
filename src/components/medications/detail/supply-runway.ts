@@ -10,6 +10,7 @@
  */
 
 import { parseScheduleRecurrence } from "@/lib/medication-schedule";
+import { floorWhole } from "@/lib/medications/units-per-dose";
 
 /** The schedule fields the runway estimate reads. */
 export interface RunwaySchedule {
@@ -24,6 +25,30 @@ export interface RunwaySchedule {
    * `unitsPerDose`, exactly like the consumption path's resolver.
    */
   unitsPerDose?: number | null;
+  /**
+   * Schedule type. PRN consumes nothing on a cadence; CYCLIC consumes only
+   * in its "on" weeks, so its rate is scaled by on / (on + off).
+   */
+  scheduleType?: "SCHEDULED" | "PRN" | "CYCLIC" | string | null;
+  cyclicOnWeeks?: number | null;
+  cyclicOffWeeks?: number | null;
+}
+
+/** A positive integer RRULE part (`INTERVAL=3`), or `fallback`. */
+function rrulePositiveInt(
+  rrule: string,
+  key: string,
+  fallback: number,
+): number {
+  const m = new RegExp(`(?:^|;)${key}=(\\d+)(?:;|$)`, "i").exec(rrule);
+  const n = m ? Number(m[1]) : NaN;
+  return Number.isInteger(n) && n >= 1 ? n : fallback;
+}
+
+/** How many comma-separated values an RRULE list part carries, or 0. */
+function rruleListCount(rrule: string, key: string): number {
+  const m = new RegExp(`(?:^|;)${key}=([^;]+)`, "i").exec(rrule);
+  return m ? m[1].split(",").filter((v) => v.trim() !== "").length : 0;
 }
 
 /**
@@ -32,17 +57,40 @@ export interface RunwaySchedule {
  * weeks, monthly/yearly RRULEs).
  */
 function scheduleDailyDoseCount(s: RunwaySchedule): number {
+  if (s.scheduleType === "PRN") return 0;
+  const rate = cadenceDailyDoseCount(s);
+  if (s.scheduleType === "CYCLIC") {
+    // Doses fall only in the "on" weeks of the cycle.
+    const on = s.cyclicOnWeeks ?? 0;
+    const off = s.cyclicOffWeeks ?? 0;
+    if (on > 0 && off > 0) return (rate * on) / (on + off);
+  }
+  return rate;
+}
+
+function cadenceDailyDoseCount(s: RunwaySchedule): number {
   const times =
     s.timesOfDay && s.timesOfDay.length > 0 ? s.timesOfDay.length : 1;
   if (typeof s.rollingIntervalDays === "number" && s.rollingIntervalDays >= 1) {
     return times / s.rollingIntervalDays;
   }
   const rrule = s.rrule ?? "";
-  if (/FREQ=MONTHLY/.test(rrule)) {
-    return times / 30;
+  // INTERVAL stretches every calendar frequency: FREQ=MONTHLY;INTERVAL=3 is
+  // one dose a quarter, not one a month.
+  const interval = rrulePositiveInt(rrule, "INTERVAL", 1);
+  if (/FREQ=DAILY/i.test(rrule)) {
+    return times / interval;
   }
-  if (/FREQ=YEARLY/.test(rrule)) {
-    return times / 365;
+  if (/FREQ=MONTHLY/i.test(rrule)) {
+    const perMonth = Math.max(
+      1,
+      rruleListCount(rrule, "BYMONTHDAY") || rruleListCount(rrule, "BYDAY"),
+    );
+    return (times * perMonth) / (30 * interval);
+  }
+  if (/FREQ=YEARLY/i.test(rrule)) {
+    const perYear = Math.max(1, rruleListCount(rrule, "BYMONTH"));
+    return (times * perYear) / (365 * interval);
   }
   // FREQ=WEEKLY;BYDAY=…;INTERVAL=… is the modern weekly encoding (the
   // create path stores the cadence on the rrule and leaves daysOfWeek
@@ -52,14 +100,7 @@ function scheduleDailyDoseCount(s: RunwaySchedule): number {
   // daysOfWeek fallback below with daysPerWeek=7, over-estimating the
   // rate ~7× (≈14× bi-weekly) and firing low-stock alerts far too early.
   if (/FREQ=WEEKLY/.test(rrule)) {
-    const byday = /BYDAY=([^;]+)/.exec(rrule);
-    const bydayCount =
-      byday && byday[1].length > 0 ? byday[1].split(",").length : 1;
-    const intervalMatch = /INTERVAL=(\d+)/.exec(rrule);
-    const interval =
-      intervalMatch && Number(intervalMatch[1]) >= 1
-        ? Number(intervalMatch[1])
-        : 1;
+    const bydayCount = Math.max(1, rruleListCount(rrule, "BYDAY"));
     return (times * bydayCount) / (7 * interval);
   }
   const { daysOfWeek, intervalWeeks } = parseScheduleRecurrence(s.daysOfWeek);
@@ -137,7 +178,7 @@ export function estimateUnitsRunwayDays(
     medicationUnitsPerDose,
   );
   if (perDayUnits <= 0) return null;
-  return Math.floor(Math.max(0, unitsRemaining) / perDayUnits);
+  return floorWhole(Math.max(0, unitsRemaining) / perDayUnits);
 }
 
 /**
@@ -151,7 +192,7 @@ export function estimateRunwayDays(
   if (dosesRemaining <= 0) return null;
   const perDay = estimateDailyDoseCount(schedules);
   if (perDay <= 0) return null;
-  return Math.floor(dosesRemaining / perDay);
+  return floorWhole(dosesRemaining / perDay);
 }
 
 /**

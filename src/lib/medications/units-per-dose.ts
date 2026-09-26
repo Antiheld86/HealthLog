@@ -136,3 +136,16 @@ export function formatUnitsPerDose(value: number, locale?: string): string {
     useGrouping: false,
   }).format(rounded);
 }
+
+/**
+ * `Math.floor` for the supply arithmetic, tolerant of binary floating point.
+ * 2.4 / 0.8 is 2.9999999999999996 in IEEE 754, so a plain floor reports two
+ * doses left where there are three. Units and units per dose carry at most
+ * four decimals (per dose at most 100), so a quotient that is not a whole
+ * number sits at least 1e-6 below the next one; a rounding error sits
+ * orders of magnitude closer. Anything within 1e-9 of the next whole
+ * number is that number.
+ */
+export function floorWhole(value: number): number {
+  return Math.floor(value + 1e-9);
+}

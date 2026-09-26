@@ -24,6 +24,7 @@ import { readNote } from "@/lib/crypto/note-cipher";
 import { matchGlp1SideEffectTags } from "@/lib/medications/glp1-side-effect-tag-match";
 import type { Glp1SideEffectTag } from "@/lib/medications/glp1-side-effect-tags";
 import { isRecordOnly } from "@/lib/medications/intake-tracking";
+import { floorWhole } from "@/lib/medications/units-per-dose";
 
 /**
  * Recommended generic name for the canonical GLP-1 drug brand. The Coach
@@ -372,7 +373,7 @@ export async function buildGlp1SnapshotBlock(
         0,
       );
       pensRemaining = usable.length;
-      dosesRemaining = Math.floor(
+      dosesRemaining = floorWhole(
         unitsRemaining / (Number(med.unitsPerDose) || 1),
       );
       weeksOfSupplyApprox = Math.round(dosesRemaining / dosesPerWeek);
