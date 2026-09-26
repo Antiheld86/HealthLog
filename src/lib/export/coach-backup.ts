@@ -93,8 +93,9 @@ export interface CoachConversationBackupEntry {
    *  and reminders all address a conversation by it. */
   id: string;
   /**
-   * The readable title. Present on a portable payload only (and on every file
-   * written before v1.39.3, when the title was stored readable).
+   * The readable title. Present on a portable payload, on every file written
+   * before v1.39.3, and on a disaster-recovery payload for a row the free-text
+   * backfill had not reached yet.
    */
   title?: string;
   /** v1.39.3 — the title's ciphertext as base64. Disaster-recovery only. */
@@ -208,15 +209,18 @@ export async function buildCoachBackupSection(
   return {
     coachConversations: rows.map((row) => ({
       id: row.id,
-      ...(disasterRecovery
+      // A disaster-recovery file carries the stored bytes: the ciphertext,
+      // or, for a row the free-text backfill has not reached yet, the old
+      // readable title exactly as stored (the restore seals it). Sealing it
+      // here instead would make the export non-deterministic, and the
+      // streaming writer and this builder must produce the same file.
+      ...(disasterRecovery && row.titleEncrypted
         ? {
-            // A row the backfill has not reached yet is sealed here, so a DR
-            // file never carries a title readable.
-            titleEncrypted: Buffer.from(
-              row.titleEncrypted ?? encryptToBytes(row.title ?? ""),
-            ).toString("base64"),
+            titleEncrypted: Buffer.from(row.titleEncrypted).toString("base64"),
           }
-        : { title: readTitleSoft(row) }),
+        : disasterRecovery
+          ? { title: row.title ?? "" }
+          : { title: readTitleSoft(row) }),
       documentScoped: row.documentScoped,
       ...(disasterRecovery
         ? {

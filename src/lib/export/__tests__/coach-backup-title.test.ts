@@ -1,11 +1,12 @@
 /**
  * v1.39.3 — the Coach conversation title in both backup formats.
  *
- * A disaster-recovery file carries the title as ciphertext only, including for
- * a row the free-text backfill has not reached yet (it is sealed on the way
- * out). A portable file carries it readable, for the person who owns it. A
- * restore of either writes the ciphertext column and never the readable one,
- * and a file written before this release (readable title only) still restores.
+ * A disaster-recovery file carries the title as stored: the ciphertext, or
+ * for a row the free-text backfill has not reached yet the old readable value
+ * (sealing it on the way out would make the export non-deterministic). A
+ * portable file carries it readable, for the person who owns it. A restore of
+ * any of these writes the ciphertext column and never the readable one, and a
+ * file written before this release (readable title only) still restores.
  */
 import { describe, expect, it, vi } from "vitest";
 
@@ -50,19 +51,24 @@ const rows = [
 ];
 
 describe("coach backup title", () => {
-  it("a disaster-recovery file carries only ciphertext, sealing legacy rows on the way out", async () => {
+  it("a disaster-recovery file carries the title as stored", async () => {
     const section = await buildCoachBackupSection(prismaWith(rows), "u1", {
       purpose: "disaster-recovery",
     });
-    const json = JSON.stringify(section);
-    expect(json).not.toContain("Sealed title");
-    expect(json).not.toContain("Legacy readable title");
+    const [sealed, legacy] = section.coachConversations;
+    expect(JSON.stringify(sealed)).not.toContain("Sealed title");
+    expect(sealed).not.toHaveProperty("title");
     expect(
-      section.coachConversations.map((c) => {
-        expect(c).not.toHaveProperty("title");
-        return decryptFromBytes(Buffer.from(c.titleEncrypted!, "base64"));
-      }),
-    ).toEqual(["Sealed title", "Legacy readable title"]);
+      decryptFromBytes(Buffer.from(sealed.titleEncrypted!, "base64")),
+    ).toBe("Sealed title");
+    expect(legacy).toMatchObject({ title: "Legacy readable title" });
+    expect(legacy).not.toHaveProperty("titleEncrypted");
+    // The same input exports byte-identically twice: nothing is sealed with
+    // a fresh IV on the way out.
+    const again = await buildCoachBackupSection(prismaWith(rows), "u1", {
+      purpose: "disaster-recovery",
+    });
+    expect(JSON.stringify(again)).toBe(JSON.stringify(section));
   });
 
   it("a portable file carries the readable title and no ciphertext", async () => {

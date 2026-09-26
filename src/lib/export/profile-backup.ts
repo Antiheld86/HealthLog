@@ -117,7 +117,10 @@ export interface CustomMetricEntryBackupEntry {
   /** Unit snapshot taken from the metric at write time, not a live join. */
   unit: string;
   measuredAt: string;
-  /** Portable exports carry the readable note; DR payloads leave this null. */
+  /**
+   * The readable note: portable exports, and DR payloads for a row the
+   * free-text backfill had not reached yet. Null otherwise.
+   */
   note: string | null;
   /**
    * v1.39.3 — base64 ciphertext of the note, present only in disaster-recovery
@@ -480,18 +483,21 @@ export async function buildProfileBackupSection(
             id: entry.id,
             createdAt: entry.createdAt.toISOString(),
             deletedAt: entry.deletedAt?.toISOString() ?? null,
-            // v1.39.3 — the ciphertext rides verbatim. A row the backfill has
-            // not reached yet is sealed here, so a DR file never carries the
-            // note readable either way.
-            noteEncrypted: toBase64(
-              entry.noteEncrypted ?? encryptNote(entry.note),
-            ),
+            // v1.39.3 — the ciphertext rides verbatim. A row the free-text
+            // backfill has not reached yet carries its old readable note in
+            // `note` instead, as stored; the restore seals it. Sealing it
+            // here would make the export non-deterministic.
+            noteEncrypted: toBase64(entry.noteEncrypted),
           }
         : {}),
       value: entry.value,
       unit: entry.unit,
       measuredAt: entry.measuredAt.toISOString(),
-      note: disasterRecovery ? null : readEntryNoteSoft(entry, decryptFailures),
+      note: disasterRecovery
+        ? entry.noteEncrypted
+          ? null
+          : entry.note
+        : readEntryNoteSoft(entry, decryptFailures),
     })),
   }));
 

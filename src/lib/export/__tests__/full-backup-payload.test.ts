@@ -1286,22 +1286,14 @@ describe("buildFullBackupPayload — profile and custom metrics", () => {
             value: 44.5,
             unit: "kg",
             measuredAt: "2026-07-19T06:30:00.000Z",
-            // v1.39.3 — a DR file carries the note sealed, never readable,
-            // including for a row the backfill has not reached yet.
-            note: null,
-            noteEncrypted: expect.any(String),
+            // v1.39.3 — the fixture row predates the encryption backfill:
+            // a DR file carries it as stored, and the restore seals it.
+            note: "felt strong",
+            noteEncrypted: null,
           }),
         ],
       }),
     ]);
-    const [sealedMetric] = payload.customMetrics as Array<{
-      entries: Array<{ noteEncrypted: string }>;
-    }>;
-    expect(
-      decryptFromBytes(
-        Buffer.from(sealedMetric.entries[0].noteEncrypted, "base64"),
-      ),
-    ).toBe("felt strong");
     expect(counts.customMetrics).toBe(1);
     expect(counts.customMetricEntries).toBe(1);
     expect(payload.correlationPatterns).toEqual([
