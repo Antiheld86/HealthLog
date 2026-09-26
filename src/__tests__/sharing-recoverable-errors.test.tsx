@@ -345,18 +345,16 @@ describe("a refused invitation keeps what was typed", () => {
 
   it("clears the form only where the invitation actually went", () => {
     // A static render cannot press the button, so the claim is made about the
-    // code path instead: every field reset lives inside `onSuccess`. A reset
-    // that migrated into `onError` — or out of the callbacks entirely — would
-    // wipe a typed identifier and eight ticked sections on a failure the
-    // person is being asked to retry.
-    const start = INVITE_CARD.indexOf("onSuccess:");
-    const split = INVITE_CARD.indexOf("onError:", start);
-    // The options object ends at the first `      },` after the error arm, so
-    // the slice stops at the mutation rather than running into the JSX below,
-    // where a `setNarrowed(false)` / `setNarrowed(true)` on a radio would
-    // satisfy the matcher for the wrong reason. The success reset returns the
-    // scope to unset (`null`), which the JSX never writes.
-    const end = INVITE_CARD.indexOf("\n      },", split);
+    // code path instead: every field reset sits after the awaited invitation
+    // inside `try`, and none in the `catch`. A reset that migrated into the
+    // failure arm would wipe a typed identifier and eight ticked sections on
+    // a failure the person is being asked to retry. The failure arm ends at
+    // the end of the submit handler, before the JSX below, where a
+    // `setNarrowed(false)` on a radio would satisfy the matcher for the wrong
+    // reason.
+    const start = INVITE_CARD.indexOf("await recentProof.run(");
+    const split = INVITE_CARD.indexOf("} catch (err) {", start);
+    const end = INVITE_CARD.indexOf("\n  };", split);
     const onSuccess = INVITE_CARD.slice(start, split);
     const onError = INVITE_CARD.slice(split, end);
 
