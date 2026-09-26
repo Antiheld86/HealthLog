@@ -152,8 +152,15 @@ What it does:
   quick. Documents you deleted in HealthLog stay deleted, also after they
   are removed for good. The same goes for a file you had already uploaded
   by hand: the import recognises it by its content (sending it once to
-  compare), and if you delete it later, the import leaves it deleted. An
-  interrupted run simply picks up where it stopped.
+  compare), and if you delete it later, the import leaves it deleted. Since
+  v1.39.3 a deleted document is also recognised by its content while it is
+  in the 30-day undo window: the same file arriving from another system or
+  under a new id is answered "deleted" and not stored again. After the purge
+  HealthLog keeps the ids it saw, not the content. An interrupted run simply
+  picks up where it stopped.
+- Once HealthLog has refused one file as too large, the script skips any
+  further document the source already lists as larger (Papra lists sizes)
+  without downloading it.
 - When HealthLog asks it to slow down, it waits as long as HealthLog says
   and carries on. By default a document token may send 120 uploads an hour,
   so an archive of a thousand documents takes a night. Every upload that

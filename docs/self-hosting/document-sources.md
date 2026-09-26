@@ -49,7 +49,9 @@ Settings → Integrations → Document archives:
 - **Paperless-ngx:** the base address and an API token (Paperless-ngx: My
   Profile → API token). Paperless-ngx 2.16 or later (API version 9).
 - **Papra:** the base address, the organization id (from the Papra address
-  bar) and an API key with `documents:read` and `tags:read`.
+  bar, `org_` followed by 24 letters and digits) and an API key with
+  `documents:read` and `tags:read`. The connection test reads the tags too,
+  so a key without `tags:read` is refused at save.
 
 HealthLog tests the connection before saving it. A saved token is only ever
 sent to the address it was saved for: changing the address to another origin
@@ -68,6 +70,15 @@ and a size cap on every answer (1 MiB for a search page, the vault's per-file
 limit for a document).
 
 ## Limits and rules
+
+- Name search on Paperless-ngx uses its own title filter. On a Paperless-ngx
+  that stores its data in SQLite, that filter ignores upper and lower case
+  only for plain ASCII letters: searching `röntgen` does not find `Röntgen`.
+  That is Paperless-ngx's behaviour, not HealthLog's; PostgreSQL-backed
+  Paperless does not have it.
+- A document deleted in HealthLog is recognised by its content during the
+  30-day undo window, so the same file from another archive is not stored
+  again; after the purge only its ids are remembered.
 
 - Imports count against the person's normal upload allowance (60 an hour) and
   storage quota.
