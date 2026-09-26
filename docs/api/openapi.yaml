@@ -31198,8 +31198,13 @@ components:
                 documents.inbound.notIndexed, documents.inbound.pdfNeedsAnthropic,
                 documents.inbound.providerUnsupported, documents.inbound.quotaExceeded, documents.inbound.rateLimited,
                 documents.inbound.restoreDuplicate, documents.inbound.restoreGone, documents.inbound.sourceAliasLimit,
-                documents.inbound.uploadBusy, documents.inbound.uploadTimeout, documents.inbound.vaccinationNotFound;
-                encounter — encounter.invalid, encounter.link.invalid, encounter.practitioner-not-found,
+                documents.inbound.uploadBusy, documents.inbound.uploadTimeout, documents.inbound.vaccinationNotFound,
+                documents.sources.authRefused, documents.sources.badResponse, documents.sources.browserOnly,
+                documents.sources.invalidAddress, documents.sources.linkTargetNotFound, documents.sources.notConnected,
+                documents.sources.notFound, documents.sources.organizationRequired, documents.sources.originNotAllowed,
+                documents.sources.rateLimited, documents.sources.redirected, documents.sources.tokenRequired,
+                documents.sources.unavailable, documents.sources.unreachable, documents.sources.versionTooOld; encounter
+                — encounter.invalid, encounter.link.invalid, encounter.practitioner-not-found,
                 encounter.reminder-conflict, encounter.reminder-not-found; environment — environment.invalid,
                 environment.no_home, environment.range_too_large, environment.travel.not_found; export —
                 export.selection.empty, export.selection.unknown_leaf; familyHistory — familyHistory.invalid; feedback —

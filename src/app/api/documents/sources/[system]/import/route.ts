@@ -40,6 +40,7 @@ import {
   safeJson,
   sanitiseZodIssues,
 } from "@/lib/api-response";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
 import { prisma } from "@/lib/db";
 import {
   ingestDocument,
@@ -241,6 +242,9 @@ export const POST = apiHandler(
         aiDeferred: false,
         sourceKeyChecked: true,
         limits,
+        // The import is data; only the summary queued after a fresh insert
+        // follows the capability (and the person's auto-read setting).
+        documentAi: () => getAiCapability("documentAi"),
       });
 
       switch (result.kind) {

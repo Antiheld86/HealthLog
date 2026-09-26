@@ -29,7 +29,7 @@
 import type { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import type { AiCapabilityState } from "@/lib/ai/capabilities/types";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import {
@@ -102,6 +102,13 @@ export interface IngestInput {
   sourceKeyChecked: boolean;
   /** The per-file cap and the quota, resolved by the caller. */
   limits: { maxFileBytes: number; quotaBytes: number };
+  /**
+   * The `documentAi` capability, asked by the caller's route only once a new
+   * document was stored (a duplicate never asks). Passed in rather than asked
+   * here so each route that can queue AI work names the capability in its own
+   * source, where the AI route inventory reads it.
+   */
+  documentAi: () => Promise<AiCapabilityState>;
 }
 
 export type IngestResult =
@@ -358,7 +365,7 @@ export async function ingestDocument(
   // the detail sheet offers "Generate summary" rather than a pending state.
   const documentAi = input.aiDeferred
     ? { available: false as const, reason: "deferred" }
-    : await getAiCapability("documentAi");
+    : await input.documentAi();
   if (documentAi.available) {
     void enqueueDocumentSummary(userId, document.id);
   } else {

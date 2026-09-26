@@ -105,23 +105,32 @@ export const DOCUMENT_PICKER_LINK_KINDS = [
 export type DocumentPickerLinkKind =
   (typeof DOCUMENT_PICKER_LINK_KINDS)[number];
 
-/** Why a request to a source failed, as `meta.errorCode` suffixes. */
+/**
+ * Why a request to a source failed, as the `meta.errorCode` values the routes
+ * emit. The route helper keys its status and wording on the last segment.
+ */
 export const DOCUMENT_SOURCE_ERROR_CODES = [
-  "unavailable",
-  "notConnected",
-  "originNotAllowed",
-  "unreachable",
-  "redirected",
-  "authRefused",
-  "versionTooOld",
-  "badResponse",
-  "notFound",
-  "linkTargetNotFound",
-  "rateLimited",
+  "documents.sources.unavailable",
+  "documents.sources.notConnected",
+  "documents.sources.originNotAllowed",
+  "documents.sources.unreachable",
+  "documents.sources.redirected",
+  "documents.sources.authRefused",
+  "documents.sources.versionTooOld",
+  "documents.sources.badResponse",
+  "documents.sources.notFound",
+  "documents.sources.linkTargetNotFound",
+  "documents.sources.rateLimited",
 ] as const;
-export type DocumentSourceErrorCode =
-  (typeof DOCUMENT_SOURCE_ERROR_CODES)[number];
+type SourceErrorSuffix<T> = T extends `documents.sources.${infer S}`
+  ? S
+  : never;
+export type DocumentSourceErrorCode = SourceErrorSuffix<
+  (typeof DOCUMENT_SOURCE_ERROR_CODES)[number]
+>;
 
-export function documentSourceErrorCode(code: DocumentSourceErrorCode): string {
+export function documentSourceErrorCode(
+  code: DocumentSourceErrorCode,
+): (typeof DOCUMENT_SOURCE_ERROR_CODES)[number] {
   return `documents.sources.${code}`;
 }

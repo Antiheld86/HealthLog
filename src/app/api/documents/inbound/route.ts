@@ -49,6 +49,7 @@ import {
   getClientIp,
   sanitiseZodIssues,
 } from "@/lib/api-response";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
 import { prisma } from "@/lib/db";
 import { hashQueryTokens } from "@/lib/documents/content-index";
 import {
@@ -480,6 +481,9 @@ async function processUpload(
     aiDeferred: ctx.aiDeferred,
     sourceKeyChecked: true,
     limits,
+    // Only the AI work queued after a fresh insert follows the capability;
+    // the upload itself is data and always accepted.
+    documentAi: () => getAiCapability("documentAi"),
   });
 
   switch (result.kind) {
