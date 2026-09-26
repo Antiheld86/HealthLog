@@ -143,16 +143,29 @@ export function glucoseClinicalObservations(
     });
   }
   if (clinical.meanMgdl !== null) {
-    push({
-      loinc: {
-        code: GLUCOSE_MEAN_LOINC,
-        display:
-          "Average glucose [Mass/volume] in Interstitial fluid during Reporting Period",
-      },
-      text: "Mean glucose",
-      value: convertGlucose(clinical.meanMgdl, glucoseUnit),
-      unit: glucoseUnit,
-    });
+    // 97507-8 is the mean of interstitial glucose in mass/volume. Only a
+    // continuous stream (not a spot estimate, by reading density) is
+    // interstitial, so only that mean carries the code, and it goes out in
+    // mg/dL: the canonical unit the mean is computed in, so no conversion is
+    // involved. A spot-reading mean stays text-only in the display unit.
+    if (clinical.isSpotEstimate) {
+      push({
+        text: "Mean glucose",
+        value: convertGlucose(clinical.meanMgdl, glucoseUnit),
+        unit: glucoseUnit,
+      });
+    } else {
+      push({
+        loinc: {
+          code: GLUCOSE_MEAN_LOINC,
+          display:
+            "Average glucose [Mass/volume] in Interstitial fluid during Reporting Period",
+        },
+        text: "Mean glucose",
+        value: convertGlucose(clinical.meanMgdl, "mg/dL"),
+        unit: "mg/dL",
+      });
+    }
   }
   if (clinical.gmi !== null) {
     push({

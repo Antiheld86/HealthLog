@@ -131,6 +131,55 @@ describe("clinical glucose-panel FHIR Observations", () => {
     expect(tir!.valueQuantity?.value).toBeLessThanOrEqual(100);
   });
 
+  it("codes a continuous-stream mean as 97507-8 in mg/dL, even for a mmol/L account", () => {
+    const glucoseClinical = computeGlucoseClinicalMetrics(denseReadings(), {
+      now: FIXED_NOW,
+      windowDays: 90,
+    });
+    expect(glucoseClinical.isSpotEstimate).toBe(false);
+    const bundle = buildFhirDocumentBundle(
+      makeData({ glucoseClinical, glucoseUnit: "mmol/L" }),
+      { insuranceNumber: null },
+      FIXED_NOW,
+    );
+    const mean = observationsOf(bundle).find(
+      (o) => o.code.text === "Mean glucose",
+    );
+    expect(codeOf(mean!)).toBe(GLUCOSE_MEAN_LOINC);
+    expect(mean?.valueQuantity?.code).toBe("mg/dL");
+    expect(mean?.valueQuantity?.value).toBe(
+      Math.round(glucoseClinical.meanMgdl!),
+    );
+  });
+
+  it("sends a spot-reading mean text-only, in the account's unit", () => {
+    // Four readings a day: fingerstick cadence, not a continuous stream.
+    const sparse = Array.from({ length: 120 }, (_, i) => ({
+      measuredAt: new Date(FIXED_NOW.getTime() - i * 6 * 3_600_000),
+      mgdl: 100 + (i % 5) * 10,
+    }));
+    const glucoseClinical = computeGlucoseClinicalMetrics(sparse, {
+      now: FIXED_NOW,
+      windowDays: 90,
+    });
+    expect(glucoseClinical.isSpotEstimate).toBe(true);
+    expect(glucoseClinical.meanMgdl).not.toBeNull();
+    const bundle = buildFhirDocumentBundle(
+      makeData({ glucoseClinical, glucoseUnit: "mmol/L" }),
+      { insuranceNumber: null },
+      FIXED_NOW,
+    );
+    const mean = observationsOf(bundle).find(
+      (o) => o.code.text === "Mean glucose",
+    );
+    expect(mean).toBeDefined();
+    expect(mean?.code.coding).toBeUndefined();
+    expect(mean?.valueQuantity?.unit).toBe("mmol/L");
+    expect(observationsOf(bundle).map(codeOf)).not.toContain(
+      GLUCOSE_MEAN_LOINC,
+    );
+  });
+
   it("emits NO clinical glucose Observation when the panel has no readings (module off / no data)", () => {
     // Default makeData() has an empty (zero-reading) panel.
     const bundle = buildFhirDocumentBundle(
