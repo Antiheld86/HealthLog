@@ -44,6 +44,8 @@ vi.mock("@/lib/rate-limit", () => ({
     ip: "1.2.3.4",
   }),
   rateLimitHeaders: vi.fn(() => ({})),
+  checkRateLimit: vi.fn(async () => ({ allowed: true, remaining: 9 })),
+  refundRateLimit: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/db-compat", () => ({
