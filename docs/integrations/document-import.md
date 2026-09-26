@@ -43,12 +43,13 @@ This needs Paperless-ngx 3.0 or later, the first release with the
   - **Use parameters for webhook body:** on. **Send webhook payload as
     JSON:** off. **Webhook params:**
 
-    | Name           | Value                                                |
-    | -------------- | ---------------------------------------------------- |
-    | `title`        | `{{doc_title}}`                                      |
-    | `documentDate` | `{{created_year}}-{{created_month}}-{{created_day}}` |
-    | `sourceSystem` | `PAPERLESS`                                          |
-    | `sourceId`     | `{{doc_id}}`                                         |
+    | Name             | Value                                                    |
+    | ---------------- | -------------------------------------------------------- |
+    | `title`          | `{{doc_title}}`                                          |
+    | `documentDate`   | `{{created_year}}-{{created_month}}-{{created_day}}`     |
+    | `sourceSystem`   | `PAPERLESS`                                              |
+    | `sourceId`       | `{{doc_id}}`                                             |
+    | `sourceInstance` | `https://paperless.example.com` (your Paperless address) |
 
   - **Include document:** on. Paperless then sends the original file along
     with the parameters, which is exactly what HealthLog expects.
@@ -230,6 +231,15 @@ id. Anything else is sent as `OTHER`, and `OTHER` is one shared set of ids
 per account: if you push documents from two other systems, make sure their
 ids cannot collide, for example by prefixing them (`nextcloud-123`,
 `scanner-123`).
+
+Since v1.39.3 a key can also name its instance: `sourceInstance`, the
+address of the Paperless-ngx or Papra it came from (only its origin,
+`scheme://host[:port]`, counts). With it, document 123 on one Paperless and
+document 123 on another are two documents. The import script sends it
+automatically; add it to a Paperless workflow as shown above. A key sent or
+stored without an instance (everything imported with v1.39.2, or a workflow
+without the parameter) matches that id on any instance of its system, so
+nothing imported earlier is stored twice or brought back after a deletion.
 
 The same file sent under a different id is stored once, and HealthLog
 remembers the extra id for it, up to 20 extra ids per document. A 21st is

@@ -51,7 +51,9 @@ Settings → Integrations → Document archives:
 - **Papra:** the base address, the organization id (from the Papra address
   bar) and an API key with `documents:read` and `tags:read`.
 
-HealthLog tests the connection before saving it. The token is stored
+HealthLog tests the connection before saving it. A saved token is only ever
+sent to the address it was saved for: changing the address to another origin
+asks for the token again. The token is stored
 encrypted (AES-256-GCM, rotated with the other keys by
 `scripts/rotate-encryption-key.ts`) and is never shown again, not even in
 part.
@@ -70,7 +72,10 @@ limit for a document).
 - Imports count against the person's normal upload allowance (60 an hour) and
   storage quota.
 - A document that is already in HealthLog is not stored twice, and one the
-  person deleted in HealthLog is not brought back by picking it again. These
+  person deleted in HealthLog is not brought back by picking it again. Each
+  import is keyed by system, instance (the archive's origin) and document id,
+  so the same id on two Paperless-ngx instances is two documents; a key
+  imported before v1.39.3 carries no instance and matches any instance. These
   are the same rules the document token and `scripts/import-documents.mjs`
   follow.
 - A picked document follows the person's own automatic AI reading setting.
@@ -80,3 +85,6 @@ limit for a document).
   each person reconnects (one form); the imported documents themselves are in
   the backup with the rest of the vault.
 - Delete all data and account deletion remove the connection and its token.
+- A stored connection stays visible under Settings, read-only, when this
+  variable is unset or the person switched Documents off, so it can still be
+  removed.
