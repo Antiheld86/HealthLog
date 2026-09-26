@@ -7063,6 +7063,7 @@
       "versionTileBuiltAt": "Compilado el",
       "versionTileUpdateAvailable": "Actualización disponible: {tag}",
       "versionTileUpToDate": "Actualizado",
+      "versionTileCheckOff": "Comprobación de actualizaciones desactivada",
       "snapshotLoadError": "No se pudo cargar la instantánea del sistema.",
       "snapshotLoading": "Cargando instantánea...",
       "auditTitle": "Actividad reciente",

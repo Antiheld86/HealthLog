@@ -7063,6 +7063,7 @@
       "versionTileBuiltAt": "Skompilowano",
       "versionTileUpdateAvailable": "Dostępna aktualizacja: {tag}",
       "versionTileUpToDate": "Aktualne",
+      "versionTileCheckOff": "Sprawdzanie aktualizacji wyłączone",
       "snapshotLoadError": "Nie udało się załadować migawki systemu.",
       "snapshotLoading": "Ładowanie migawki...",
       "auditTitle": "Ostatnia aktywność",

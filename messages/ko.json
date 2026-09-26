@@ -7042,6 +7042,7 @@
       "versionTileBuiltAt": "빌드 시각",
       "versionTileUpdateAvailable": "업데이트 있음: {tag}",
       "versionTileUpToDate": "최신 상태",
+      "versionTileCheckOff": "업데이트 확인 꺼짐",
       "snapshotLoadError": "시스템 스냅샷을 불러오지 못했어요.",
       "snapshotLoading": "스냅샷 불러오는 중…",
       "auditTitle": "최근 활동",

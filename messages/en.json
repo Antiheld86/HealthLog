@@ -7063,6 +7063,7 @@
       "versionTileBuiltAt": "Built at",
       "versionTileUpdateAvailable": "Update available: {tag}",
       "versionTileUpToDate": "Up to date",
+      "versionTileCheckOff": "Update check off",
       "snapshotLoadError": "Failed to load system snapshot.",
       "snapshotLoading": "Loading snapshot…",
       "auditTitle": "Recent activity",

@@ -7063,6 +7063,7 @@
       "versionTileBuiltAt": "Gebaut am",
       "versionTileUpdateAvailable": "Update verfügbar: {tag}",
       "versionTileUpToDate": "Aktuell",
+      "versionTileCheckOff": "Update-Prüfung aus",
       "snapshotLoadError": "System-Snapshot konnte nicht geladen werden.",
       "snapshotLoading": "Snapshot wird geladen…",
       "auditTitle": "Letzte Aktivitäten",

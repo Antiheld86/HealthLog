@@ -102,6 +102,14 @@ x-healthlog-env: &healthlog_env
   IP_GEO_LOOKUP_URL: "${IP_GEO_LOOKUP_URL:-}"
   IP_GEO_LOOKUP_DISABLED: "${IP_GEO_LOOKUP_DISABLED:-}"
   IP_GEO_ALLOW_INSECURE: "${IP_GEO_ALLOW_INSECURE:-}"
+  # Outbound requests an operator can turn off (1 / true / yes). Both are on
+  # by default. PASSWORD_BREACH_CHECK_DISABLED stops the HaveIBeenPwned range
+  # query made when a password is set (only the first five characters of the
+  # password's SHA-1 are sent). UPDATE_CHECK_DISABLED stops the daily request
+  # to the GitHub releases API behind the About page and the admin version
+  # tile. Listed here so an operator value in .env reaches the container.
+  PASSWORD_BREACH_CHECK_DISABLED: "${PASSWORD_BREACH_CHECK_DISABLED:-}"
+  UPDATE_CHECK_DISABLED: "${UPDATE_CHECK_DISABLED:-}"
   # Directory the offline GeoLite2 databases are read from. Default
   # `/opt/geolite2` — the path the published image bakes its own copy
   # into, if the build had a MaxMind licence key. Point this at a

@@ -24,7 +24,7 @@ import { annotate } from "@/lib/logging/context";
 import { destroyAllSessions, createSession } from "@/lib/auth/session";
 import { revokeStepUpElevations } from "@/lib/auth/step-up";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
-import { checkPasswordBreach } from "@/lib/auth/hibp";
+import { checkPasswordBreachIfEnabled } from "@/lib/password-breach-check";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 
 export const POST = apiHandler(async (request: NextRequest) => {
@@ -89,7 +89,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // corpus (HIBP k-anonymity). Fail-open: a null result (HIBP unreachable)
   // never blocks the change. Only the user's chosen NEW password is checked —
   // existing credentials are never retroactively blocked at login.
-  const breach = await checkPasswordBreach(newPassword);
+  const breach = await checkPasswordBreachIfEnabled(newPassword);
   if (breach?.breached) {
     return apiError(
       getServerTranslator(locale).t("auth.passwordBreached"),

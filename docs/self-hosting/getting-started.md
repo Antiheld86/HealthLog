@@ -21,6 +21,13 @@ already installed, longer if a TLS-fronted public hostname is in scope
   weather and daylight; it stays off until you
   enable it and set a home location, and every outbound call goes
   through the SSRF-guarded egress wrapper.
+  Three requests happen by default without anything connected: the
+  HaveIBeenPwned range query when a password is set (only the first five
+  characters of the password's SHA-1 are sent), a daily check of the
+  GitHub releases API for the update badge, and the online IP
+  geolocation lookup for login events. `PASSWORD_BREACH_CHECK_DISABLED`,
+  `UPDATE_CHECK_DISABLED` and `IP_GEO_LOOKUP_DISABLED` turn each off; see
+  `.env.production.example`.
 - **Optional but recommended:** a reverse proxy that terminates TLS
   and forwards to `http://localhost:3000` (Caddy, Traefik, Nginx
   Proxy Manager, Coolify, or bare Nginx — see `reverse-proxy.md`).
@@ -33,9 +40,11 @@ cd HealthLog
 cp .env.example .env
 ```
 
-`.env.example` is the canonical reference for every env var the app
-reads. Anything you do not uncomment falls back to a sane default or
-disables the optional subsystem.
+`.env.example` is a short starter with the variables most self-hosts
+touch. The complete reference, with every variable the app reads and what
+it does, is `.env.production.example`; CI checks that file against
+`scripts/env-manifest.json`. Anything you do not set falls back to a sane
+default or leaves the optional subsystem off.
 
 ## 2. Generate the three required secrets
 

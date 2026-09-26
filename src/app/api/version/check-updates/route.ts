@@ -1,5 +1,6 @@
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess } from "@/lib/api-response";
+import { envFlag } from "@/lib/env";
 import { annotate } from "@/lib/logging/context";
 import { getEvent } from "@/lib/logging/context";
 import { safeFetch } from "@/lib/safe-fetch";
@@ -26,6 +27,12 @@ export const dynamic = "force-dynamic";
  *   - `unknown` — couldn't reach GitHub (network issue, rate-limit,
  *     repo missing the release manifest); UI surfaces a non-blocking
  *     warning so the user can retry
+ *
+ * `UPDATE_CHECK_DISABLED` (1, true, yes or on) stops the request to GitHub
+ * entirely: the route answers `unknown` with `reason: "disabled"` and makes
+ * no outbound call. The About page and the admin version tile run this check
+ * on their own once a day, so an instance that promises no third-party
+ * requests needs the switch.
  *
  * Responses are not cached at the route level. The browser bears the
  * load with React Query's `staleTime`, so a single user spamming
@@ -77,6 +84,15 @@ export const GET = apiHandler(async () => {
   annotate({ action: { name: "version.check_updates" } });
 
   const current = packageJson.version;
+
+  if (envFlag("UPDATE_CHECK_DISABLED")) {
+    annotate({ meta: { outcome: "disabled" } });
+    return apiSuccess({
+      status: "unknown" as const,
+      current,
+      reason: "disabled",
+    });
+  }
 
   let release: GithubReleaseShape | null = null;
   const callStart = Date.now();
