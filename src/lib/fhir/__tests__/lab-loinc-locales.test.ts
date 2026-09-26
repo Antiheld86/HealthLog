@@ -35,7 +35,7 @@ describe("resolveLabCoding — the analyte name in every shipped locale", () => 
     ["Ferrytyna", "2276-4"],
     ["Hémoglobine", "718-7"],
     ["Emoglobina", "718-7"],
-    ["Cholestérol LDL", "18262-6"],
+    ["Cholestérol LDL", "2089-1"],
     ["Colesterol HDL", "2085-9"],
     ["Triglycérides", "2571-8"],
     ["Trójglicerydy", "2571-8"],
@@ -80,8 +80,8 @@ describe("resolveLabCoding — the analyte name in every shipped locale", () => 
 describe("resolveLabCoding — the existing English and German behaviour", () => {
   it.each([
     ["HbA1c", "4548-4"],
-    ["LDL-C", "18262-6"],
-    ["LDL Cholesterol", "18262-6"],
+    ["LDL-C", "2089-1"],
+    ["LDL Cholesterol", "2089-1"],
     ["Gesamtcholesterin", "2093-3"],
     ["Kreatinin", "2160-0"],
     ["GPT", "1742-6"],

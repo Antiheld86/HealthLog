@@ -79,8 +79,10 @@ const LAB_LOINC_BY_KEY: Record<string, LabLoincMapping> = {
     display: "Hemoglobin A1c/Hemoglobin.total in Blood",
     ucum: "%",
   },
+  // Method-less LDL: a recorded value does not say whether it was measured
+  // directly (18262-6) or calculated (13457-7).
   ldlc: {
-    loinc: "18262-6",
+    loinc: "2089-1",
     display: "Cholesterol in LDL [Mass/volume] in Serum or Plasma",
     ucum: "mg/dL",
   },
@@ -109,10 +111,11 @@ const LAB_LOINC_BY_KEY: Record<string, LabLoincMapping> = {
     display: "Thyrotropin [Units/volume] in Serum or Plasma",
     ucum: "m[IU]/L",
   },
+  // Total 25-OH vitamin D (D2+D3), the value labs report; 1989-3 is D3 alone.
   vitamind: {
-    loinc: "1989-3",
+    loinc: "62292-8",
     display:
-      "25-hydroxyvitamin D2+25-hydroxyvitamin D3 [Mass/volume] in Serum or Plasma",
+      "25-Hydroxyvitamin D3+25-Hydroxyvitamin D2 [Mass/volume] in Serum or Plasma",
     ucum: "ng/mL",
   },
   creatinine: {
@@ -120,10 +123,12 @@ const LAB_LOINC_BY_KEY: Record<string, LabLoincMapping> = {
     display: "Creatinine [Mass/volume] in Serum or Plasma",
     ucum: "mg/dL",
   },
+  // Formula-less eGFR per 1.73 m2. A recorded value does not name its
+  // formula, and 33914-3 (MDRD) is DISCOURAGED in LOINC.
   egfr: {
-    loinc: "33914-3",
+    loinc: "69405-9",
     display:
-      "Glomerular filtration rate/1.73 sq M.predicted by Creatinine-based formula (MDRD)",
+      "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by based on 1.73 sq M",
     ucum: "mL/min/{1.73_m2}",
   },
   alt: {

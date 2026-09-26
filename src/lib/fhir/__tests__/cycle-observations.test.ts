@@ -4,11 +4,7 @@ import type { DoctorReportData } from "@/lib/doctor-report-data";
 import { computeGlucoseClinicalMetrics } from "@/lib/analytics/glucose-metrics";
 import { cycleObservationsFromReportData } from "@/lib/fhir/resources";
 import { buildFhirDocumentBundle } from "@/lib/fhir/build-bundle";
-import {
-  LMP_LOINC,
-  CYCLE_LENGTH_LOINC,
-  PERIOD_LENGTH_LOINC,
-} from "@/lib/fhir/loinc-map";
+import { LMP_LOINC } from "@/lib/fhir/loinc-map";
 
 function baseData(overrides?: Partial<DoctorReportData>): DoctorReportData {
   return {
@@ -68,9 +64,17 @@ describe("fhir/cycle observations", () => {
     const codes = obs.flatMap((o) =>
       (o.code.coding ?? []).map((c) => c.code).filter(Boolean),
     );
-    expect(codes).toContain(LMP_LOINC);
-    expect(codes).toContain(CYCLE_LENGTH_LOINC);
-    expect(codes).toContain(PERIOD_LENGTH_LOINC);
+    // LMP is the only coded one. The averages are text-only: 64700-8 and
+    // 64698-4, used before, are PhenX questionnaire items, not these values.
+    expect(codes).toEqual([LMP_LOINC]);
+    const cycleLength = obs.find(
+      (o) => o.code.text === "Average menstrual cycle length",
+    );
+    const periodLength = obs.find(
+      (o) => o.code.text === "Average period length",
+    );
+    expect(cycleLength?.code.coding).toBeUndefined();
+    expect(periodLength?.code.coding).toBeUndefined();
 
     const lmp = obs.find((o) =>
       (o.code.coding ?? []).some((c) => c.code === LMP_LOINC),

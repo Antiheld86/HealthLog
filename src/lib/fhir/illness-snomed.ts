@@ -36,8 +36,10 @@ export interface IllnessSnomedCategory {
  * `IllnessType` enum value → broad SNOMED CT category concept.
  *
  *  - INFECTION     → 40733004  "Infectious disease (disorder)"
- *  - ALLERGY       → 106190000 "Allergy (disorder)"
- *  - INJURY        → 417163006 "Traumatic AND/OR non-traumatic injury (disorder)"
+ *  - ALLERGY       → 473011001 "Allergic condition (finding)"
+ *                    (106190000 "Allergy", used before, is inactive since
+ *                    2013)
+ *  - INJURY        → 417163006 "Traumatic or non-traumatic injury (disorder)"
  *                    (spans both, the honest broad class for a journal entry)
  *  - MENTAL_HEALTH → 74732009  "Mental disorder (disorder)"
  *  - AUTOIMMUNE    → 85828009  "Autoimmune disease (disorder)"
@@ -45,16 +47,17 @@ export interface IllnessSnomedCategory {
  *  - OTHER         → 64572001  "Disease (disorder)" — the generic root, the
  *                    correct fallback for an unspecified class.
  *
+ * Every code and display here was checked with the official HL7 FHIR
+ * validator (validator_cli, R4) against tx.fhir.org's SNOMED CT International
+ * edition: active concept, accepted display.
+ *
  * An unknown / future enum value resolves to the generic `DISEASE_SNOMED`
  * root via the builder's fallback, never a guessed specific concept.
  */
 export const ILLNESS_TYPE_SNOMED: Record<string, IllnessSnomedCategory> = {
   INFECTION: { code: "40733004", display: "Infectious disease" },
-  ALLERGY: { code: "106190000", display: "Allergy" },
-  INJURY: {
-    code: "417163006",
-    display: "Traumatic AND/OR non-traumatic injury",
-  },
+  ALLERGY: { code: "473011001", display: "Allergic condition" },
+  INJURY: { code: "417163006", display: "Traumatic or non-traumatic injury" },
   MENTAL_HEALTH: { code: "74732009", display: "Mental disorder" },
   AUTOIMMUNE: { code: "85828009", display: "Autoimmune disease" },
   CHRONIC: { code: "27624003", display: "Chronic disease" },

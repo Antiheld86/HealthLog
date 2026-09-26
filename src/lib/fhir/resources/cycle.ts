@@ -1,18 +1,13 @@
 /**
  * v1.15.0 — the cycle / reproductive-health Observations from the opt-in cycle
- * summary: LMP (LOINC 8665-2, a date value), average cycle length (64700-8,
- * days), average period length (64698-4, days), and the current phase
+ * summary: LMP (LOINC 8665-2, a date value), average cycle length and average
+ * period length (text-only, days; see `loinc-map.ts`), and the current phase
  * (text-only survey finding). Absent when the aggregator carried no cycle
  * summary (toggle off or no observed cycle). Ids run `obs-cycle-N` so they
  * never collide with the main `obs-N` sequence.
  */
 import type { DoctorReportData } from "@/lib/doctor-report-data";
-import {
-  LOINC_SYSTEM,
-  LMP_LOINC,
-  CYCLE_LENGTH_LOINC,
-  PERIOD_LENGTH_LOINC,
-} from "@/lib/fhir/loinc-map";
+import { LOINC_SYSTEM, LMP_LOINC } from "@/lib/fhir/loinc-map";
 import { ucumQuantity } from "@/lib/fhir/ucum";
 import type { FhirObservation } from "@/lib/fhir/types";
 import {
@@ -76,16 +71,9 @@ export function cycleObservationsFromReportData(
       id: next(),
       status: "final",
       category: [categoryConcept("survey")],
-      code: {
-        coding: [
-          {
-            system: LOINC_SYSTEM,
-            code: CYCLE_LENGTH_LOINC,
-            display: "Menstrual cycle length",
-          },
-        ],
-        text: "Average menstrual cycle length",
-      },
+      // Text-only: no LOINC term for a cycle length averaged over the
+      // observed cycles (see `loinc-map.ts`).
+      code: { text: "Average menstrual cycle length" },
       subject: patientRef,
       effectivePeriod,
       valueQuantity: ucumQuantity(cycle.averageCycleLengthDays, "d"),
@@ -107,16 +95,8 @@ export function cycleObservationsFromReportData(
       id: next(),
       status: "final",
       category: [categoryConcept("survey")],
-      code: {
-        coding: [
-          {
-            system: LOINC_SYSTEM,
-            code: PERIOD_LENGTH_LOINC,
-            display: "Length of menses",
-          },
-        ],
-        text: "Average period length",
-      },
+      // Text-only, like the cycle length above.
+      code: { text: "Average period length" },
       subject: patientRef,
       effectivePeriod,
       valueQuantity: ucumQuantity(cycle.averagePeriodLengthDays, "d"),

@@ -328,31 +328,39 @@ export function buildFhirDocumentBundle(
       : []),
   ].join(" ");
 
-  const diagnosticReport: FhirDiagnosticReport = {
-    resourceType: "DiagnosticReport",
-    id: "diagnostic-report-1",
-    status: "final",
-    code: {
-      coding: [
-        {
-          system: LOINC_SYSTEM,
-          code: "85353-1",
-          display:
-            "Vital signs, weight, height, head circumference, oxygen saturation and BMI panel",
-        },
-      ],
-      text: "Vital signs panel",
-    },
-    subject: patientRef,
-    effectivePeriod: { start: data.period.start, end: data.period.end },
-    // A vital-signs panel reports vital signs. Routing labs, adherence rates
-    // and survey scores through it would let a receiver read a questionnaire
-    // total as a vital sign because the panel code said so.
-    result: vitalSignsObservationRefs,
-  };
-  const diagnosticReportRef: FhirReference = {
-    reference: `DiagnosticReport/${diagnosticReport.id}`,
-  };
+  // A vital-signs panel with no vital signs reports nothing, and R4 forbids
+  // the empty `result: []` it would otherwise carry. With no vital-sign
+  // Observation in the window the DiagnosticReport is left out entirely,
+  // together with its Composition entry.
+  const diagnosticReport: FhirDiagnosticReport | null =
+    vitalSignsObservationRefs.length === 0
+      ? null
+      : {
+          resourceType: "DiagnosticReport",
+          id: "diagnostic-report-1",
+          status: "final",
+          code: {
+            coding: [
+              {
+                system: LOINC_SYSTEM,
+                code: "85353-1",
+                display:
+                  "Vital signs, weight, height, head circumference, oxygen saturation and BMI panel",
+              },
+            ],
+            text: "Vital signs panel",
+          },
+          subject: patientRef,
+          effectivePeriod: { start: data.period.start, end: data.period.end },
+          // A vital-signs panel reports vital signs. Routing labs, adherence rates
+          // and survey scores through it would let a receiver read a questionnaire
+          // total as a vital sign because the panel code said so.
+          result: vitalSignsObservationRefs,
+        };
+  const diagnosticReportRefs: FhirReference[] = diagnosticReport
+    ? [{ reference: `DiagnosticReport/${diagnosticReport.id}` }]
+    : [];
+  const vitalSignsEntries = [...observationRefs, ...diagnosticReportRefs];
 
   const composition: FhirComposition = {
     resourceType: "Composition",
@@ -390,7 +398,9 @@ export function buildFhirDocumentBundle(
           status: "generated",
           div: `<div xmlns="http://www.w3.org/1999/xhtml">${escapeXml(narrativeText)}</div>`,
         },
-        entry: [...observationRefs, diagnosticReportRef],
+        // `entry` is omitted rather than empty; the section still carries
+        // its narrative, which satisfies `cmp-2`.
+        ...(vitalSignsEntries.length > 0 ? { entry: vitalSignsEntries } : {}),
       },
       // Medications section carries both the active-medication
       // statements and the per-dose administration records (v1.9.0).
@@ -479,11 +489,13 @@ export function buildFhirDocumentBundle(
   };
 
   // The Composition must be the FIRST entry in a document Bundle; the
-  // DiagnosticReport is the LAST.
+  // DiagnosticReport, when there is one, is the LAST.
   const orderedEntries: FhirBundleEntry[] = [
     { fullUrl: `urn:uuid:${randomUUID()}`, resource: composition },
     ...entries,
-    { fullUrl: `urn:uuid:${randomUUID()}`, resource: diagnosticReport },
+    ...(diagnosticReport
+      ? [{ fullUrl: `urn:uuid:${randomUUID()}`, resource: diagnosticReport }]
+      : []),
   ];
 
   // Every entry identity is known only now, so the reference rewrite runs once

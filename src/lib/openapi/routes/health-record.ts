@@ -647,7 +647,7 @@ export const healthRecordPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["FHIR"],
       summary: "FHIR R4 $everything (v1.11.0)",
       description:
-        "Read-only `Patient/$everything`: every resource the document bundle carries — Composition, Device, Patient, Coverage, Observations (including the cycle ones), MedicationStatements, MedicationAdministrations, Conditions, Encounters, AllergyIntolerances, FamilyMemberHistories and the DiagnosticReport — flattened into one `searchset` Bundle. Scoped to the owner's SAVED report selection; an account that never saved one gets nothing. Auth: `fhir:read` scope. Offset paging via `_count` (≤200) / `_offset`.",
+        "Read-only `Patient/$everything`: every resource the document bundle carries — Composition, Device, Patient, Coverage, Observations (including the cycle ones), MedicationStatements, MedicationAdministrations, Conditions, Encounters, AllergyIntolerances, FamilyMemberHistories and the DiagnosticReport (present when the window holds a vital sign) — flattened into one `searchset` Bundle. Scoped to the owner's SAVED report selection; an account that never saved one gets nothing. Auth: `fhir:read` scope. Offset paging via `_count` (≤200) / `_offset`.",
       requestParams: {
         query: z.object({
           _count: z.coerce.number().optional(),
