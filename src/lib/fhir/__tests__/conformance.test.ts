@@ -100,6 +100,8 @@ function makeData(overrides?: Partial<DoctorReportData>): DoctorReportData {
         lifecycle: "ACUTE",
         onsetAt: "2026-04-01T00:00:00.000Z",
         resolvedAt: "2026-04-10T00:00:00.000Z",
+        bodySite: "Knee",
+        laterality: "LEFT",
       },
     ],
     mood: { avg: 3.8, count: 20 },
@@ -172,6 +174,34 @@ function allTexts(value: unknown, out: string[] = []): string[] {
 function resourcesOf(bundle: FhirBundle): FhirResource[] {
   return bundle.entry.map((e) => e.resource);
 }
+
+// ── Condition.bodySite — the contained BodyStructure resolves in place ───
+
+describe("Condition.bodySite", () => {
+  it("points its extension at a BodyStructure contained in the same Condition, whose patient resolves", () => {
+    const bundle = fullBundle();
+    const patientUrl = bundle.entry.find(
+      (e) => e.resource.resourceType === "Patient",
+    )?.fullUrl;
+    const condition = resourcesOf(bundle).find(
+      (r) => r.resourceType === "Condition",
+    );
+    if (condition?.resourceType !== "Condition")
+      throw new Error("no Condition");
+    const ext = condition.bodySite?.[0]?.extension?.[0];
+    expect(ext?.url).toBe("http://hl7.org/fhir/StructureDefinition/bodySite");
+    const target = ext?.valueReference.reference;
+    const structure = condition.contained?.find((c) => `#${c.id}` === target);
+    expect(structure?.resourceType).toBe("BodyStructure");
+    expect(structure?.patient.reference).toBe(patientUrl);
+    // A code from the R4 core bodysite-laterality value set.
+    expect(
+      ["419161000", "419465000", "51440002"].includes(
+        structure?.locationQualifier?.[0]?.coding?.[0]?.code ?? "",
+      ),
+    ).toBe(true);
+  });
+});
 
 // ── Test 14 — document identity, entry identity, reference resolution ─────
 
