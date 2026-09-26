@@ -39,6 +39,7 @@ import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
+import { SegmentedChoice } from "@/components/documents/sources/segmented-choice";
 import {
   errorCodeOf,
   sourceErrorMessage,
@@ -56,19 +57,28 @@ import {
 } from "@/lib/documents/sources/types";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { invalidateKeys, queryKeys } from "@/lib/query-keys";
-import { cn } from "@/lib/utils";
 
 type Outcome = { tone: "success" | "error"; message: string } | null;
 
 export function DocumentSourcesCard() {
   const { t } = useTranslations();
-  const { eligible, query } = useDocumentSourcesStatus();
-  const [system, setSystem] = useState<DocumentPickerSystem>("PAPERLESS");
+  const { ownRecord, eligible, query } = useDocumentSourcesStatus();
+  const [picked, setPicked] = useState<DocumentPickerSystem>("PAPERLESS");
 
-  if (!eligible || !query.data?.available) return null;
+  const data = query.data;
+  const connections = data?.connections ?? [];
+  // Editing needs the operator's list and the documents module. Without
+  // either, a connection that is still stored stays on the card so its token
+  // can be deleted; with none stored there is nothing to show.
+  const editable = eligible && data?.available === true;
+  if (!ownRecord || !data || (!editable && connections.length === 0)) {
+    return null;
+  }
 
-  const connections = query.data.connections;
-  const connectedCount = connections.length;
+  const options: readonly DocumentPickerSystem[] = editable
+    ? DOCUMENT_PICKER_SYSTEMS
+    : connections.map((c) => c.system);
+  const system = options.includes(picked) ? picked : options[0];
 
   return (
     <SettingsCard data-testid="document-sources-card">
@@ -77,7 +87,7 @@ export function DocumentSourcesCard() {
         title={t("settings.documentSources.title")}
         description={t("settings.documentSources.description")}
         status={
-          connectedCount > 0 ? (
+          connections.length > 0 ? (
             <Badge variant="outline">
               {t("settings.documentSources.statusConnected")}
             </Badge>
@@ -85,62 +95,67 @@ export function DocumentSourcesCard() {
         }
       />
 
-      <p className="text-sm">{t("settings.documentSources.explainer")}</p>
+      <p className="text-sm">
+        {editable
+          ? t("settings.documentSources.explainer")
+          : eligible
+            ? t("settings.documentSources.unavailableExplainer")
+            : t("settings.documentSources.moduleOffExplainer")}
+      </p>
 
-      <div
-        role="radiogroup"
-        aria-label={t("settings.documentSources.systemLabel")}
-        className="bg-muted inline-flex self-start rounded-md p-1"
-      >
-        {DOCUMENT_PICKER_SYSTEMS.map((option) => {
-          const isConnected = connections.some((c) => c.system === option);
-          return (
-            <button
-              key={option}
-              type="button"
-              role="radio"
-              aria-checked={option === system}
-              onClick={() => setSystem(option)}
-              data-slot="document-sources-system"
-              className={cn(
-                "flex min-h-9 items-center gap-1.5 rounded-sm px-3 text-sm font-medium",
-                "focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
-                option === system
-                  ? "bg-background text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
+      {options.length > 1 ? (
+        <SegmentedChoice
+          options={options}
+          value={system}
+          onChange={setPicked}
+          label={t("settings.documentSources.systemLabel")}
+          slot="document-sources-system"
+          renderOption={(option) => (
+            <>
               {systemName(option)}
-              {isConnected ? (
+              {connections.some((c) => c.system === option) ? (
                 <Check
                   className="size-3.5"
                   aria-label={t("settings.documentSources.statusConnected")}
                 />
               ) : null}
-            </button>
-          );
-        })}
-      </div>
+            </>
+          )}
+        />
+      ) : null}
 
       <SourceForm
         // A fresh form per system: nothing typed for one leaks into the other.
         key={system}
         system={system}
         connection={connections.find((c) => c.system === system) ?? null}
-        allowedOrigins={query.data.allowedOrigins}
+        allowedOrigins={data.allowedOrigins}
+        editable={editable}
       />
     </SettingsCard>
   );
+}
+
+/** The origin of an address, or null while it is not one yet. */
+function originOf(value: string): string | null {
+  try {
+    return new URL(value.trim()).origin;
+  } catch {
+    return null;
+  }
 }
 
 function SourceForm({
   system,
   connection,
   allowedOrigins,
+  editable,
 }: {
   system: DocumentPickerSystem;
   connection: DocumentSourceConnectionDto | null;
   allowedOrigins: string[];
+  /** False when only removing the stored connection is possible. */
+  editable: boolean;
 }) {
   const { t } = useTranslations();
   const format = useFormatters();
@@ -225,10 +240,17 @@ function SourceForm({
   });
 
   const busy = save.isPending || test.isPending || disconnect.isPending;
+  // The stored token is reused only on the address's own origin; the server
+  // refuses to send it anywhere else, so the form asks for it again.
+  const keepsToken =
+    connection !== null &&
+    originOf(baseUrl) !== null &&
+    originOf(baseUrl) === originOf(connection.baseUrl);
   const canSave =
+    editable &&
     baseUrl.trim() !== "" &&
     (!isPapra || organizationId.trim() !== "") &&
-    (connection !== null || token.trim() !== "") &&
+    (keepsToken || token.trim() !== "") &&
     dirty;
 
   return (
@@ -253,7 +275,7 @@ function SourceForm({
           : t("settings.documentSources.statusNotConnected")}
       </p>
 
-      {connection && !connection.originAllowed ? (
+      {editable && connection && !connection.originAllowed ? (
         <p
           role="alert"
           className="border-warning/30 bg-warning/10 text-foreground rounded-md border px-3 py-2 text-sm"
@@ -262,71 +284,89 @@ function SourceForm({
         </p>
       ) : null}
 
-      <div className="space-y-1.5">
-        <Label htmlFor={`document-source-url-${slug}`}>
-          {t("settings.documentSources.baseUrl")}
-        </Label>
-        <Input
-          id={`document-source-url-${slug}`}
-          type="url"
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder={allowedOrigins[0] ?? "https://"}
-          maxLength={2048}
-          autoComplete="off"
-          inputMode="url"
-          spellCheck={false}
-          autoCapitalize="none"
-        />
-        <p className="text-muted-foreground text-xs">
-          {t("settings.documentSources.allowedOrigins", {
-            origins: allowedOrigins.join(", "),
-          })}
-        </p>
-      </div>
+      {editable ? (
+        <>
+          <div className="space-y-1.5">
+            <Label htmlFor={`document-source-url-${slug}`}>
+              {t("settings.documentSources.baseUrl")}
+            </Label>
+            <Input
+              id={`document-source-url-${slug}`}
+              type="url"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder={allowedOrigins[0] ?? "https://"}
+              maxLength={2048}
+              autoComplete="off"
+              inputMode="url"
+              spellCheck={false}
+              autoCapitalize="none"
+            />
+            <p className="text-muted-foreground text-xs">
+              {t("settings.documentSources.allowedOrigins", {
+                origins: allowedOrigins.join(", "),
+              })}
+            </p>
+          </div>
 
-      {isPapra ? (
-        <div className="space-y-1.5">
-          <Label htmlFor="document-source-org">
-            {t("settings.documentSources.organizationId")}
-          </Label>
-          <Input
-            id="document-source-org"
-            value={organizationId}
-            onChange={(e) => setOrganizationId(e.target.value)}
-            maxLength={128}
-            autoComplete="off"
-            spellCheck={false}
-            autoCapitalize="none"
-          />
-          <p className="text-muted-foreground text-xs">
-            {t("settings.documentSources.organizationHelp")}
-          </p>
-        </div>
+          {isPapra ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="document-source-org">
+                {t("settings.documentSources.organizationId")}
+              </Label>
+              <Input
+                id="document-source-org"
+                value={organizationId}
+                onChange={(e) => setOrganizationId(e.target.value)}
+                maxLength={128}
+                autoComplete="off"
+                spellCheck={false}
+                autoCapitalize="none"
+              />
+              <p className="text-muted-foreground text-xs">
+                {t("settings.documentSources.organizationHelp")}
+              </p>
+            </div>
+          ) : null}
+
+          <div className="space-y-1.5">
+            <Label htmlFor={`document-source-token-${slug}`}>
+              {t("settings.documentSources.token")}
+            </Label>
+            <PasswordInput
+              id={`document-source-token-${slug}`}
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder={
+                keepsToken
+                  ? t("settings.documentSources.tokenSaved")
+                  : undefined
+              }
+              maxLength={512}
+              autoComplete="off"
+              spellCheck={false}
+              autoCapitalize="none"
+            />
+            <p className="text-muted-foreground text-xs">
+              {isPapra
+                ? t("settings.documentSources.tokenHelpPapra")
+                : t("settings.documentSources.tokenHelpPaperless")}
+            </p>
+            {connection && !keepsToken && baseUrl.trim() !== "" ? (
+              <p
+                className="text-muted-foreground text-xs"
+                data-slot="document-sources-token-again"
+              >
+                {t("settings.documentSources.tokenNewAddress")}
+              </p>
+            ) : null}
+          </div>
+        </>
+      ) : connection ? (
+        <p className="text-sm break-all" data-slot="document-sources-address">
+          {connection.baseUrl}
+        </p>
       ) : null}
-
-      <div className="space-y-1.5">
-        <Label htmlFor={`document-source-token-${slug}`}>
-          {t("settings.documentSources.token")}
-        </Label>
-        <PasswordInput
-          id={`document-source-token-${slug}`}
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder={
-            connection ? t("settings.documentSources.tokenSaved") : undefined
-          }
-          maxLength={512}
-          autoComplete="off"
-          spellCheck={false}
-          autoCapitalize="none"
-        />
-        <p className="text-muted-foreground text-xs">
-          {isPapra
-            ? t("settings.documentSources.tokenHelpPapra")
-            : t("settings.documentSources.tokenHelpPaperless")}
-        </p>
-      </div>
 
       {outcome ? (
         <WrittenOutcomeLine
@@ -371,7 +411,7 @@ function SourceForm({
             </AlertDialogContent>
           </AlertDialog>
         ) : null}
-        {connection ? (
+        {connection && editable ? (
           <Button
             type="button"
             variant="outline"
@@ -389,22 +429,24 @@ function SourceForm({
             {t("settings.documentSources.test")}
           </Button>
         ) : null}
-        <Button
-          type="submit"
-          size="sm"
-          className="min-h-11"
-          disabled={busy || !canSave}
-        >
-          {save.isPending ? (
-            <Loader2
-              className="size-4 animate-spin motion-reduce:animate-none"
-              aria-hidden
-            />
-          ) : null}
-          {save.isPending
-            ? t("settings.documentSources.saving")
-            : t("settings.documentSources.save")}
-        </Button>
+        {editable ? (
+          <Button
+            type="submit"
+            size="sm"
+            className="min-h-11"
+            disabled={busy || !canSave}
+          >
+            {save.isPending ? (
+              <Loader2
+                className="size-4 animate-spin motion-reduce:animate-none"
+                aria-hidden
+              />
+            ) : null}
+            {save.isPending
+              ? t("settings.documentSources.saving")
+              : t("settings.documentSources.save")}
+          </Button>
+        ) : null}
       </SettingsCardActions>
     </form>
   );

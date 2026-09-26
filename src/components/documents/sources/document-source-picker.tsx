@@ -38,12 +38,14 @@ import {
   CircleCheck,
   Loader2,
   Search,
+  SearchX,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,6 +80,7 @@ import {
   isStoppingError,
   sourceErrorMessage,
 } from "./source-errors";
+import { SegmentedChoice } from "./segmented-choice";
 import { systemName } from "./use-document-sources";
 
 export interface DocumentPickerLink {
@@ -134,6 +137,20 @@ export function DocumentSourcePicker({
   const [running, setRunning] = useState(false);
   const [finished, setFinished] = useState(false);
   const [stopMessage, setStopMessage] = useState<string | null>(null);
+  const [atMax, setAtMax] = useState(false);
+  /** The latest per-row result, for screen readers (aria-live below). */
+  const [announcement, setAnnouncement] = useState("");
+
+  // A new search or filter starts over: a selection made in one result list
+  // must not ride along unseen into another, and a finished run's result
+  // lines belong to the list they were made in.
+  const startOver = () => {
+    setSelected(new Map());
+    setRuns(new Map());
+    setFinished(false);
+    setStopMessage(null);
+    setAtMax(false);
+  };
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -145,11 +162,20 @@ export function DocumentSourcePicker({
   const onSearchChange = (value: string) => {
     setSearchDraft(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(
-      () => setQ(value.trim()),
-      SEARCH_DEBOUNCE_MS,
-    );
+    debounceRef.current = setTimeout(() => {
+      const next = value.trim();
+      if (next !== q) {
+        startOver();
+        setQ(next);
+      }
+    }, SEARCH_DEBOUNCE_MS);
   };
+  const filterSetter =
+    (set: (value: string) => void) =>
+    (value: string): void => {
+      startOver();
+      set(value);
+    };
 
   const reset = () => {
     setSearchDraft("");
@@ -157,10 +183,7 @@ export function DocumentSourcePicker({
     setTag("");
     setFrom("");
     setTo("");
-    setSelected(new Map());
-    setRuns(new Map());
-    setFinished(false);
-    setStopMessage(null);
+    startOver();
   };
 
   const switchSystem = (next: DocumentPickerSystem) => {
@@ -225,14 +248,18 @@ export function DocumentSourcePicker({
 
   const toggle = (row: DocumentSourceResultDto) => {
     if (running || finished || !selectable(row)) return;
-    setSelected((prev) => {
-      const next = new Map(prev);
-      if (next.has(row.sourceId)) next.delete(row.sourceId);
-      else if (next.size < DOCUMENT_PICKER_MAX_SELECTION) {
-        next.set(row.sourceId, row.title);
-      }
-      return next;
-    });
+    const next = new Map(selected);
+    if (next.has(row.sourceId)) {
+      next.delete(row.sourceId);
+      setAtMax(false);
+    } else if (next.size < DOCUMENT_PICKER_MAX_SELECTION) {
+      next.set(row.sourceId, row.title);
+    } else {
+      // Said rather than silently ignored: the tick that did not appear.
+      setAtMax(true);
+      return;
+    }
+    setSelected(next);
   };
 
   async function runImport() {
@@ -242,8 +269,12 @@ export function DocumentSourcePicker({
     const order = [...selected.keys()];
     setRuns(new Map(order.map((id) => [id, { state: "waiting" }])));
     const handed: string[] = [];
-    const mark = (id: string, run: RowRun) =>
+    const mark = (id: string, run: RowRun) => {
       setRuns((prev) => new Map(prev).set(id, run));
+      const title = selected.get(id) ?? id;
+      const said = runLabel(t, run);
+      if (said) setAnnouncement(`${title}: ${said}`);
+    };
 
     for (const sourceId of order) {
       mark(sourceId, { state: "working" });
@@ -318,14 +349,26 @@ export function DocumentSourcePicker({
               })}
       </p>
       {finished ? (
-        <Button
-          type="button"
-          size="sm"
-          className="min-h-11 shrink-0 sm:min-h-9"
-          onClick={() => onOpenChange(false)}
-        >
-          {t("documents.sourcePicker.done")}
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-11 sm:min-h-9"
+            onClick={startOver}
+            data-slot="document-source-pick-more"
+          >
+            {t("documents.sourcePicker.pickMore")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="min-h-11 sm:min-h-9"
+            onClick={() => onOpenChange(false)}
+          >
+            {t("documents.sourcePicker.done")}
+          </Button>
+        </div>
       ) : (
         <Button
           type="button"
@@ -363,32 +406,15 @@ export function DocumentSourcePicker({
       footer={footer}
     >
       <div className="space-y-3" data-slot="document-source-picker">
-        {systems.length > 1 ? (
-          <div
-            role="radiogroup"
-            aria-label={t("documents.sourcePicker.sourceLabel")}
-            className="bg-muted inline-flex rounded-md p-1"
-          >
-            {systems.map((option) => (
-              <button
-                key={option}
-                type="button"
-                role="radio"
-                aria-checked={option === active}
-                disabled={running}
-                onClick={() => switchSystem(option)}
-                className={cn(
-                  "min-h-9 rounded-sm px-3 text-sm font-medium",
-                  "focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
-                  option === active
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {systemName(option)}
-              </button>
-            ))}
-          </div>
+        {systems.length > 1 && active ? (
+          <SegmentedChoice
+            options={systems}
+            value={active}
+            onChange={switchSystem}
+            label={t("documents.sourcePicker.sourceLabel")}
+            disabled={running}
+            renderOption={systemName}
+          />
         ) : null}
 
         <div className="space-y-1.5">
@@ -423,7 +449,7 @@ export function DocumentSourcePicker({
             <NativeSelect
               id="document-source-tag"
               value={tag}
-              onChange={(e) => setTag(e.target.value)}
+              onChange={(e) => filterSetter(setTag)(e.target.value)}
               disabled={tags.isPending && !tags.isError}
             >
               <option value="">{t("documents.sourcePicker.tagAny")}</option>
@@ -441,7 +467,7 @@ export function DocumentSourcePicker({
             <DateField
               id="document-source-from"
               value={from}
-              onChange={setFrom}
+              onChange={filterSetter(setFrom)}
               max={to || undefined}
             />
           </div>
@@ -452,7 +478,7 @@ export function DocumentSourcePicker({
             <DateField
               id="document-source-to"
               value={to}
-              onChange={setTo}
+              onChange={filterSetter(setTo)}
               min={from || undefined}
             />
           </div>
@@ -461,6 +487,7 @@ export function DocumentSourcePicker({
           <button
             type="button"
             onClick={() => {
+              startOver();
               setTag("");
               setFrom("");
               setTo("");
@@ -473,12 +500,34 @@ export function DocumentSourcePicker({
         ) : null}
 
         {finished ? (
-          <WrittenOutcomeLine
-            outcome={runOutcome(counts)}
-            message={t("documents.sourcePicker.summary", counts)}
-            testId="document-source-summary"
-          />
+          <div className="space-y-1">
+            <WrittenOutcomeLine
+              outcome={runOutcome(counts)}
+              message={t("documents.sourcePicker.summary", counts)}
+              testId="document-source-summary"
+            />
+            <p className="text-muted-foreground text-xs">
+              {t("documents.sourcePicker.finishedHint")}
+            </p>
+          </div>
         ) : null}
+
+        {atMax ? (
+          <p
+            role="status"
+            className="text-muted-foreground text-xs"
+            data-slot="document-source-at-max"
+          >
+            {t("documents.sourcePicker.maxReached", {
+              max: DOCUMENT_PICKER_MAX_SELECTION,
+            })}
+          </p>
+        ) : null}
+
+        {/* Each row's result as it lands, for a screen reader. */}
+        <div aria-live="polite" className="sr-only">
+          {announcement}
+        </div>
 
         {stopMessage ? (
           <p
@@ -507,11 +556,21 @@ export function DocumentSourcePicker({
             slot="document-source-error"
           />
         ) : results.length === 0 ? (
-          <p className="text-muted-foreground py-6 text-center text-sm">
-            {q || hasFilters
-              ? t("documents.sourcePicker.noMatch")
-              : t("documents.sourcePicker.empty", { name })}
-          </p>
+          <EmptyState
+            variant="plain"
+            size="compact"
+            icon={<SearchX className="size-6" aria-hidden />}
+            title={
+              q || hasFilters
+                ? t("documents.sourcePicker.noMatch")
+                : t("documents.sourcePicker.empty", { name })
+            }
+            description={
+              q || hasFilters
+                ? t("documents.sourcePicker.noMatchHint")
+                : undefined
+            }
+          />
         ) : (
           <ul
             className="max-h-[45vh] space-y-1.5 overflow-y-auto overscroll-contain"
@@ -545,7 +604,10 @@ export function DocumentSourcePicker({
                       on && "border-primary/40 bg-primary/5",
                       // A row that just ran keeps full contrast: its result is
                       // the thing to read.
-                      !allowed && !run && "opacity-50",
+                      // After a run, the rows it did not touch step back:
+                      // the ones with a result are what to read now.
+                      ((!allowed && !run) || (finished && !run)) &&
+                        "opacity-50",
                     )}
                   >
                     <Check
@@ -619,6 +681,30 @@ function runOutcome(counts: {
   const held = counts.imported + counts.present;
   if (counts.failed === 0) return held > 0 ? "success" : "empty";
   return held > 0 ? "partial" : "failed";
+}
+
+/** A row's result in words, or null while it has none yet. */
+function runLabel(
+  t: (key: string, params?: Record<string, string | number>) => string,
+  run: RowRun,
+): string | null {
+  switch (run.state) {
+    case "waiting":
+    case "working":
+      return null;
+    case "failed":
+      return run.message;
+    case "deleted":
+      return t("documents.sourcePicker.result.deleted");
+    case "imported":
+      return run.linked
+        ? t("documents.sourcePicker.result.importedLinked")
+        : t("documents.sourcePicker.result.imported");
+    case "duplicate":
+      return run.linked
+        ? t("documents.sourcePicker.result.duplicateLinked")
+        : t("documents.sourcePicker.result.duplicate");
+  }
 }
 
 /** One row's progress or result, under its title. */

@@ -6713,7 +6713,7 @@
       "organizationId": "Identifiant d'organisation",
       "organizationHelp": "La partie après /organizations/ dans la barre d'adresse de Papra.",
       "token": "Jeton d'API",
-      "tokenSaved": "Enregistré. Laissez vide pour le conserver.",
+      "tokenSaved": "Enregistré pour cette adresse. Laissez vide pour le conserver.",
       "tokenHelpPaperless": "Dans Paperless-ngx : Mon profil, jeton d'API.",
       "tokenHelpPapra": "Dans Papra : une clé d'API avec documents:read et tags:read.",
       "save": "Enregistrer et tester",
@@ -6723,7 +6723,10 @@
       "testOk": "L'archive a répondu en {latency} ms.",
       "disconnect": "Déconnecter",
       "disconnectTitle": "Déconnecter {name} ?",
-      "disconnectDescription": "HealthLog oublie l'adresse et le jeton. Les documents déjà importés restent dans HealthLog."
+      "disconnectDescription": "HealthLog oublie l'adresse et le jeton. Les documents déjà importés restent dans HealthLog.",
+      "unavailableExplainer": "Ce serveur n'autorise plus les archives de documents ; la connexion ci-dessous ne peut donc pas servir. Vous pouvez toujours la supprimer.",
+      "moduleOffExplainer": "Les documents sont désactivés ; la connexion ci-dessous n'est donc pas utilisée. Vous pouvez toujours la supprimer.",
+      "tokenNewAddress": "Une nouvelle adresse demande de saisir à nouveau le jeton d'API."
     }
   },
   "admin": {
@@ -10223,7 +10226,7 @@
         "browserOnly": "Les archives de documents ne s'utilisent que dans le navigateur.",
         "invalidAddress": "Saisissez l'adresse complète, commençant par https:// ou http://.",
         "organizationRequired": "Saisissez l'identifiant d'organisation Papra.",
-        "tokenRequired": "Saisissez le jeton d'API.",
+        "tokenRequired": "Saisissez le jeton d'API. Une nouvelle adresse le demande à nouveau.",
         "fileTooLarge": "Le fichier dépasse la taille acceptée par HealthLog.",
         "quotaExceeded": "Votre espace de documents est plein.",
         "fileType": "HealthLog n'accepte pas ce type de fichier.",
@@ -10231,7 +10234,11 @@
         "uploadBusy": "D'autres envois sont en cours. Réessayez dans un instant.",
         "moduleDisabled": "Les documents sont désactivés dans les réglages.",
         "generic": "Un problème est survenu. Réessayez."
-      }
+      },
+      "pickMore": "En choisir d'autres",
+      "finishedHint": "Cherchez à nouveau ou changez un filtre pour choisir d'autres documents.",
+      "maxReached": "Vous pouvez importer au plus {max} documents à la fois.",
+      "noMatchHint": "Essayez une partie du nom, ou effacez l'étiquette et les dates."
     }
   },
   "selfDescription": {

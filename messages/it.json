@@ -6713,7 +6713,7 @@
       "organizationId": "Id organizzazione",
       "organizationHelp": "La parte dopo /organizations/ nella barra degli indirizzi di Papra.",
       "token": "Token API",
-      "tokenSaved": "Salvato. Lascia vuoto per mantenerlo.",
+      "tokenSaved": "Salvato per questo indirizzo. Lascia vuoto per mantenerlo.",
       "tokenHelpPaperless": "In Paperless-ngx: Il mio profilo, token API.",
       "tokenHelpPapra": "In Papra: una chiave API con documents:read e tags:read.",
       "save": "Salva e prova",
@@ -6723,7 +6723,10 @@
       "testOk": "L'archivio ha risposto in {latency} ms.",
       "disconnect": "Scollega",
       "disconnectTitle": "Scollegare {name}?",
-      "disconnectDescription": "HealthLog dimentica indirizzo e token. I documenti già importati restano in HealthLog."
+      "disconnectDescription": "HealthLog dimentica indirizzo e token. I documenti già importati restano in HealthLog.",
+      "unavailableExplainer": "Questo server non consente più gli archivi di documenti, quindi il collegamento qui sotto non si può usare. Puoi comunque rimuoverlo.",
+      "moduleOffExplainer": "I documenti sono disattivati, quindi il collegamento qui sotto non viene usato. Puoi comunque rimuoverlo.",
+      "tokenNewAddress": "Un nuovo indirizzo richiede di nuovo il token API."
     }
   },
   "admin": {
@@ -10223,7 +10226,7 @@
         "browserOnly": "Gli archivi di documenti si usano solo nel browser.",
         "invalidAddress": "Inserisci l'indirizzo completo, che inizia con https:// o http://.",
         "organizationRequired": "Inserisci l'id dell'organizzazione Papra.",
-        "tokenRequired": "Inserisci il token API.",
+        "tokenRequired": "Inserisci il token API. Un nuovo indirizzo lo richiede di nuovo.",
         "fileTooLarge": "Il file è più grande di quanto HealthLog accetti.",
         "quotaExceeded": "Lo spazio per i documenti è pieno.",
         "fileType": "HealthLog non accetta questo tipo di file.",
@@ -10231,7 +10234,11 @@
         "uploadBusy": "Altri caricamenti sono ancora in corso. Riprova tra un momento.",
         "moduleDisabled": "I documenti sono disattivati nelle impostazioni.",
         "generic": "Qualcosa è andato storto. Riprova."
-      }
+      },
+      "pickMore": "Scegline altri",
+      "finishedHint": "Cerca di nuovo o cambia un filtro per scegliere altri documenti.",
+      "maxReached": "Puoi importare al massimo {max} documenti alla volta.",
+      "noMatchHint": "Prova con parte del nome, oppure azzera etichetta e date."
     }
   },
   "selfDescription": {

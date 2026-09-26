@@ -6713,7 +6713,7 @@
       "organizationId": "Organisations-ID",
       "organizationHelp": "Der Teil nach /organizations/ in der Adresszeile von Papra.",
       "token": "API-Token",
-      "tokenSaved": "Gespeichert. Leer lassen, um es zu behalten.",
+      "tokenSaved": "Für diese Adresse gespeichert. Leer lassen, um es zu behalten.",
       "tokenHelpPaperless": "In Paperless-ngx: Mein Profil, API-Token.",
       "tokenHelpPapra": "In Papra: ein API-Schlüssel mit documents:read und tags:read.",
       "save": "Speichern und testen",
@@ -6723,7 +6723,10 @@
       "testOk": "Das Archiv hat in {latency} ms geantwortet.",
       "disconnect": "Trennen",
       "disconnectTitle": "{name} trennen?",
-      "disconnectDescription": "HealthLog vergisst Adresse und Token. Bereits importierte Dokumente bleiben in HealthLog."
+      "disconnectDescription": "HealthLog vergisst Adresse und Token. Bereits importierte Dokumente bleiben in HealthLog.",
+      "unavailableExplainer": "Dieser Server erlaubt keine Dokumentarchive mehr, die Verbindung unten ist daher nicht nutzbar. Du kannst sie weiterhin entfernen.",
+      "moduleOffExplainer": "Dokumente sind ausgeschaltet, die Verbindung unten wird daher nicht genutzt. Du kannst sie weiterhin entfernen.",
+      "tokenNewAddress": "Für eine neue Adresse wird das API-Token erneut gebraucht."
     }
   },
   "admin": {
@@ -10223,7 +10226,7 @@
         "browserOnly": "Dokumentarchive lassen sich nur im Browser verwenden.",
         "invalidAddress": "Gib die vollständige Adresse ein, beginnend mit https:// oder http://.",
         "organizationRequired": "Gib die Organisations-ID aus Papra ein.",
-        "tokenRequired": "Gib das API-Token ein.",
+        "tokenRequired": "Gib das API-Token ein. Eine neue Adresse braucht es erneut.",
         "fileTooLarge": "Die Datei ist größer, als HealthLog annimmt.",
         "quotaExceeded": "Dein Dokumentenspeicher ist voll.",
         "fileType": "HealthLog nimmt diesen Dateityp nicht an.",
@@ -10231,7 +10234,11 @@
         "uploadBusy": "Andere Uploads laufen noch. Versuche es gleich noch einmal.",
         "moduleDisabled": "Dokumente sind in den Einstellungen ausgeschaltet.",
         "generic": "Etwas ist schiefgelaufen. Versuche es erneut."
-      }
+      },
+      "pickMore": "Weitere auswählen",
+      "finishedHint": "Suche erneut oder ändere einen Filter, um weitere Dokumente auszuwählen.",
+      "maxReached": "Du kannst höchstens {max} Dokumente auf einmal importieren.",
+      "noMatchHint": "Versuche einen Teil des Namens oder setze Tag und Datum zurück."
     }
   },
   "selfDescription": {

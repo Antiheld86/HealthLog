@@ -6713,7 +6713,7 @@
       "organizationId": "Organization id",
       "organizationHelp": "The part after /organizations/ in the Papra address bar.",
       "token": "API token",
-      "tokenSaved": "Saved. Leave empty to keep it.",
+      "tokenSaved": "Saved for this address. Leave empty to keep it.",
       "tokenHelpPaperless": "In Paperless-ngx: My Profile, API token.",
       "tokenHelpPapra": "In Papra: an API key with documents:read and tags:read.",
       "save": "Save and test",
@@ -6723,7 +6723,10 @@
       "testOk": "The archive answered in {latency} ms.",
       "disconnect": "Disconnect",
       "disconnectTitle": "Disconnect {name}?",
-      "disconnectDescription": "HealthLog forgets the address and the token. Documents you already imported stay in HealthLog."
+      "disconnectDescription": "HealthLog forgets the address and the token. Documents you already imported stay in HealthLog.",
+      "unavailableExplainer": "This server no longer allows document archives, so the connection below cannot be used. You can still remove it.",
+      "moduleOffExplainer": "Documents are switched off, so the connection below is not used. You can still remove it.",
+      "tokenNewAddress": "A new address needs the API token again."
     }
   },
   "admin": {
@@ -10223,7 +10226,7 @@
         "browserOnly": "Document archives can only be used in the browser.",
         "invalidAddress": "Enter the full address, starting with https:// or http://.",
         "organizationRequired": "Enter the Papra organization id.",
-        "tokenRequired": "Enter the API token.",
+        "tokenRequired": "Enter the API token. A new address needs it again.",
         "fileTooLarge": "The file is larger than HealthLog accepts.",
         "quotaExceeded": "Your document storage is full.",
         "fileType": "HealthLog does not accept this file type.",
@@ -10231,7 +10234,11 @@
         "uploadBusy": "Other uploads are still running. Try again in a moment.",
         "moduleDisabled": "Documents are switched off in Settings.",
         "generic": "Something went wrong. Try again."
-      }
+      },
+      "pickMore": "Pick more",
+      "finishedHint": "Search again or change a filter to pick more documents.",
+      "maxReached": "You can import up to {max} documents at a time.",
+      "noMatchHint": "Try part of the name, or clear the tag and dates."
     }
   },
   "selfDescription": {

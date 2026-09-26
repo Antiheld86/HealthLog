@@ -6713,7 +6713,7 @@
       "organizationId": "Identyfikator organizacji",
       "organizationHelp": "Część po /organizations/ w pasku adresu Papra.",
       "token": "Token API",
-      "tokenSaved": "Zapisano. Zostaw puste, aby go zachować.",
+      "tokenSaved": "Zapisano dla tego adresu. Zostaw puste, aby go zachować.",
       "tokenHelpPaperless": "W Paperless-ngx: Mój profil, token API.",
       "tokenHelpPapra": "W Papra: klucz API z uprawnieniami documents:read i tags:read.",
       "save": "Zapisz i sprawdź",
@@ -6723,7 +6723,10 @@
       "testOk": "Archiwum odpowiedziało w {latency} ms.",
       "disconnect": "Rozłącz",
       "disconnectTitle": "Rozłączyć {name}?",
-      "disconnectDescription": "HealthLog zapomina adres i token. Zaimportowane już dokumenty zostają w HealthLog."
+      "disconnectDescription": "HealthLog zapomina adres i token. Zaimportowane już dokumenty zostają w HealthLog.",
+      "unavailableExplainer": "Ten serwer nie pozwala już na archiwa dokumentów, więc poniższego połączenia nie da się użyć. Nadal możesz je usunąć.",
+      "moduleOffExplainer": "Dokumenty są wyłączone, więc poniższe połączenie nie jest używane. Nadal możesz je usunąć.",
+      "tokenNewAddress": "Nowy adres wymaga ponownego podania tokenu API."
     }
   },
   "admin": {
@@ -10223,7 +10226,7 @@
         "browserOnly": "Z archiwów dokumentów można korzystać tylko w przeglądarce.",
         "invalidAddress": "Wpisz pełny adres, zaczynający się od https:// lub http://.",
         "organizationRequired": "Wpisz identyfikator organizacji Papra.",
-        "tokenRequired": "Wpisz token API.",
+        "tokenRequired": "Wpisz token API. Nowy adres wymaga go ponownie.",
         "fileTooLarge": "Plik jest większy, niż przyjmuje HealthLog.",
         "quotaExceeded": "Miejsce na dokumenty jest pełne.",
         "fileType": "HealthLog nie przyjmuje tego typu pliku.",
@@ -10231,7 +10234,11 @@
         "uploadBusy": "Trwają jeszcze inne przesyłania. Spróbuj za chwilę.",
         "moduleDisabled": "Dokumenty są wyłączone w ustawieniach.",
         "generic": "Coś poszło nie tak. Spróbuj ponownie."
-      }
+      },
+      "pickMore": "Wybierz więcej",
+      "finishedHint": "Wyszukaj ponownie lub zmień filtr, aby wybrać więcej dokumentów.",
+      "maxReached": "Możesz zaimportować naraz najwyżej {max} dokumentów.",
+      "noMatchHint": "Spróbuj części nazwy albo wyczyść tag i daty."
     }
   },
   "selfDescription": {

@@ -6713,7 +6713,7 @@
       "organizationId": "Id de organización",
       "organizationHelp": "La parte que sigue a /organizations/ en la barra de direcciones de Papra.",
       "token": "Token de la API",
-      "tokenSaved": "Guardado. Déjalo vacío para conservarlo.",
+      "tokenSaved": "Guardado para esta dirección. Déjalo vacío para conservarlo.",
       "tokenHelpPaperless": "En Paperless-ngx: Mi perfil, token de la API.",
       "tokenHelpPapra": "En Papra: una clave de API con documents:read y tags:read.",
       "save": "Guardar y probar",
@@ -6723,7 +6723,10 @@
       "testOk": "El archivo respondió en {latency} ms.",
       "disconnect": "Desconectar",
       "disconnectTitle": "¿Desconectar {name}?",
-      "disconnectDescription": "HealthLog olvida la dirección y el token. Los documentos ya importados se quedan en HealthLog."
+      "disconnectDescription": "HealthLog olvida la dirección y el token. Los documentos ya importados se quedan en HealthLog.",
+      "unavailableExplainer": "Este servidor ya no permite archivos de documentos, así que la conexión de abajo no se puede usar. Aún puedes eliminarla.",
+      "moduleOffExplainer": "Los documentos están desactivados, así que la conexión de abajo no se usa. Aún puedes eliminarla.",
+      "tokenNewAddress": "Una dirección nueva necesita de nuevo el token de la API."
     }
   },
   "admin": {
@@ -10223,7 +10226,7 @@
         "browserOnly": "Los archivos de documentos solo se pueden usar en el navegador.",
         "invalidAddress": "Introduce la dirección completa, empezando por https:// o http://.",
         "organizationRequired": "Introduce el id de organización de Papra.",
-        "tokenRequired": "Introduce el token de la API.",
+        "tokenRequired": "Introduce el token de la API. Una dirección nueva lo necesita de nuevo.",
         "fileTooLarge": "El archivo supera el tamaño que acepta HealthLog.",
         "quotaExceeded": "Tu almacenamiento de documentos está lleno.",
         "fileType": "HealthLog no acepta este tipo de archivo.",
@@ -10231,7 +10234,11 @@
         "uploadBusy": "Aún hay otras subidas en curso. Inténtalo en un momento.",
         "moduleDisabled": "Los documentos están desactivados en Ajustes.",
         "generic": "Algo salió mal. Inténtalo de nuevo."
-      }
+      },
+      "pickMore": "Elegir más",
+      "finishedHint": "Busca de nuevo o cambia un filtro para elegir más documentos.",
+      "maxReached": "Puedes importar como máximo {max} documentos a la vez.",
+      "noMatchHint": "Prueba con parte del nombre o quita la etiqueta y las fechas."
     }
   },
   "selfDescription": {

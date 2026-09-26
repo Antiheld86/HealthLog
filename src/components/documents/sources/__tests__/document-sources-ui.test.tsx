@@ -50,6 +50,7 @@ import { queryKeys } from "@/lib/query-keys";
 
 import { ImportFromSourceButton } from "../import-from-source-button";
 import { mergeIds } from "../merge-ids";
+import { nextChoiceIndex } from "../segmented-choice";
 import { errorCodeOf, sourceErrorMessage } from "../source-errors";
 
 const PAPERLESS = {
@@ -162,11 +163,42 @@ describe("<DocumentSourcesCard>", () => {
     expect(html).toContain(
       "Allowed on this server: http://paperless.lan:8000, https://papra.example.com",
     );
-    expect(html).toContain("Saved. Leave empty to keep it.");
+    expect(html).toContain("Saved for this address. Leave empty to keep it.");
     expect(html).toContain('value="http://paperless.lan:8000"');
     // The password field is empty: the server never sends the token back.
     expect(html).toMatch(/id="document-source-token-paperless"[^>]*value=""/);
     expect(html).toContain("Disconnect");
+  });
+
+  it("keeps a stored connection visible and removable once the operator list is gone", () => {
+    const html = render(<DocumentSourcesCard />, {
+      available: false,
+      allowedOrigins: [],
+      connections: [{ ...PAPERLESS, originAllowed: false }],
+    });
+    expect(html).toContain('data-testid="document-sources-card"');
+    expect(html).toContain("no longer allows document archives");
+    expect(html).toContain("Disconnect");
+    expect(html).not.toContain("Save and test");
+    expect(html).not.toContain('id="document-source-token-paperless"');
+  });
+
+  it("keeps a stored connection removable with the documents module off", () => {
+    modules = { inboundDocuments: false };
+    try {
+      const html = render(<DocumentSourcesCard />, on([PAPERLESS]));
+      expect(html).toContain("Documents are switched off");
+      expect(html).toContain("Disconnect");
+      expect(html).not.toContain("Save and test");
+    } finally {
+      modules = { inboundDocuments: true };
+    }
+  });
+
+  it("uses one tab stop for the system switch", () => {
+    const html = render(<DocumentSourcesCard />, on([PAPERLESS]));
+    expect(html.match(/role="radio"[^>]*tabindex="0"/gi)?.length).toBe(1);
+    expect(html.match(/role="radio"[^>]*tabindex="-1"/gi)?.length).toBe(1);
   });
 
   it("offers no disconnect or test for a system that is not connected", () => {
@@ -220,6 +252,19 @@ describe("source error sentences", () => {
       ),
     ).toBe("documents.sources.authRefused");
     expect(errorCodeOf(new Error("x"))).toBeUndefined();
+  });
+});
+
+describe("nextChoiceIndex", () => {
+  it("moves with the arrows, wraps, and jumps with Home and End", () => {
+    expect(nextChoiceIndex("ArrowRight", 0, 2)).toBe(1);
+    expect(nextChoiceIndex("ArrowRight", 1, 2)).toBe(0);
+    expect(nextChoiceIndex("ArrowLeft", 0, 2)).toBe(1);
+    expect(nextChoiceIndex("ArrowDown", 0, 3)).toBe(1);
+    expect(nextChoiceIndex("ArrowUp", 0, 3)).toBe(2);
+    expect(nextChoiceIndex("Home", 2, 3)).toBe(0);
+    expect(nextChoiceIndex("End", 0, 3)).toBe(2);
+    expect(nextChoiceIndex("Enter", 0, 3)).toBeNull();
   });
 });
 
