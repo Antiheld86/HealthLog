@@ -178,6 +178,17 @@ describe("under an SSO-only policy", () => {
     expect((await linkOf("acct-a")).oidcSub).toBe("idp-sub-1");
   });
 
+  it("answers the same for another account's right and wrong password", async () => {
+    // Refused before the password is checked, so the exception cannot be
+    // used to test passwords of accounts the link does not name.
+    pendingLinkFor("acct-a");
+    const right = await passwordLogin("acct-b");
+    const wrong = await passwordLogin("acct-b", "not the password");
+    expect(right.status).toBe(403);
+    expect(wrong.status).toBe(403);
+    expect(await wrong.json()).toEqual(await right.json());
+  });
+
   it("keeps it closed for any other account", async () => {
     pendingLinkFor("acct-a");
     const res = await passwordLogin("acct-b");

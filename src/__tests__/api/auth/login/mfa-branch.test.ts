@@ -9,6 +9,11 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findFirst: vi.fn() },
     webauthnMfaCredential: { count: vi.fn().mockResolvedValue(0) },
+    // The per-account throttle's reads: no known place, no wait running.
+    trustedDevice: { findUnique: vi.fn(async () => null) },
+    refreshToken: { findFirst: vi.fn(async () => null) },
+    session: { findFirst: vi.fn(async () => null) },
+    rateLimit: { findUnique: vi.fn(async () => null), upsert: vi.fn() },
   },
 }));
 vi.mock("@/lib/auth/password", () => ({
@@ -165,27 +170,26 @@ describe("login MFA branch", () => {
   });
 });
 
-describe("per-account login ceiling", () => {
+describe("per-account login throttle", () => {
   it("refuses a throttled account before any password is verified", async () => {
     const { verifyPasswordOrDummy } = await import("@/lib/auth/password");
     vi.mocked(prisma.user.findFirst).mockResolvedValue({
       ...BASE_USER,
       totpConfirmedAt: null,
     } as never);
-    vi.mocked(checkRateLimit).mockResolvedValueOnce({
-      allowed: false,
-      limit: 10,
-      remaining: 0,
-      resetAt: Date.now() + 1e6,
-    });
+    // A wait is running for this account, set by earlier failures.
+    vi.mocked(prisma.rateLimit.findUnique).mockResolvedValueOnce({
+      resetAt: new Date(Date.now() + 60_000),
+    } as never);
 
     const res = await POST(loginRequest());
     expect(res.status).toBe(429);
     expect(verifyPasswordOrDummy).not.toHaveBeenCalled();
     expect(finishLogin).not.toHaveBeenCalled();
-    expect(vi.mocked(checkRateLimit).mock.calls[0][0]).toBe(
-      "auth:login:account:u:user-1",
-    );
+    expect(vi.mocked(prisma.rateLimit.findUnique).mock.calls[0][0]).toEqual({
+      where: { key: "auth:login:account:u:user-1:wait" },
+      select: { resetAt: true },
+    });
   });
 
   it("keys an unknown identifier on its hash, so a lock says nothing about existence", async () => {

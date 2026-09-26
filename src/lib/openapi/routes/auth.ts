@@ -671,7 +671,8 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Email-or-username login (password)",
       description:
         "Browser callers receive a session cookie. Native callers (X-Client-Type: native or HealthLog-iOS UA prefix) additionally receive a paired access + refresh token.\n\n" +
-        "v1.23 — when the account has a confirmed second factor, the response carries no session/token. It returns HTTP 200 with `data: null, error: null` and `meta.mfaRequired: true` plus a single-use `meta.mfaTicket` and the `meta.methods` list. The client must POST the ticket + a code to `/api/auth/mfa/verify` to obtain the token bundle. Accounts without MFA are unchanged.",
+        "v1.23 — when the account has a confirmed second factor, the response carries no session/token. It returns HTTP 200 with `data: null, error: null` and `meta.mfaRequired: true` plus a single-use `meta.mfaTicket` and the `meta.methods` list. The client must POST the ticket + a code to `/api/auth/mfa/verify` to obtain the token bundle. Accounts without MFA are unchanged.\n\n" +
+        "Two limits apply. Per source address, five attempts in fifteen minutes. Per account, failed passwords from a place the account has not signed in from before make the next attempt wait: five failures a day are free, then each one doubles the wait, from thirty seconds up to at most fifteen minutes. A place the account has signed in from is not counted and not held back: a remembered browser (trusted-device cookie), a phone that sends the `X-Device-Id` a login of this account was issued to, or an address a session or device login of this account came from in the last thirty days. Both answer 429 with `Retry-After`. An identifier that names no account is limited the same way, so a 429 says nothing about whether it exists.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: loginPasswordSchema } },
@@ -691,7 +692,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "403": {
           description:
-            "Password login is disabled — the operator runs `OIDC_ONLY=true`. `meta.errorCode` = `oidc_only`; sign in through SSO instead. The one exception is a browser the SSO callback sent back with a pending link to confirm an existing account: it may sign in with that one account's password, which links the account.",
+            "Password login is disabled — the operator runs `OIDC_ONLY=true`. `meta.errorCode` = `oidc_only`; sign in through SSO instead. The one exception is a browser the SSO callback sent back with a pending link to confirm an existing account: it may sign in with that one account's password, which links the account. A sign-in to any other account on that browser is refused before its password is checked, so the answer is the same whether the password was right or wrong.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
