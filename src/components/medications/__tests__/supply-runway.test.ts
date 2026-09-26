@@ -394,6 +394,26 @@ describe("estimateDailyDoseCount — cadence parts the rate used to drop", () =>
     ).toBeCloseTo(2 / 30, 10);
   });
 
+  it.each([
+    // Every Monday of the month is a weekly dose, not one a month.
+    ["FREQ=MONTHLY;BYDAY=MO", 1 / 7],
+    ["FREQ=MONTHLY;BYDAY=MO,TH", 2 / 7],
+    // With an ordinal it is one day of the month.
+    ["FREQ=MONTHLY;BYDAY=1MO", 1 / 30],
+    ["FREQ=MONTHLY;BYDAY=1MO,-1FR", 2 / 30],
+    // The last weekday of the month: BYSETPOS picks one of the five.
+    ["FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1", 1 / 30],
+    ["FREQ=MONTHLY;INTERVAL=2;BYDAY=MO", 1 / 14],
+    // Every Monday in January, and the first Monday of March and September.
+    ["FREQ=YEARLY;BYMONTH=1;BYDAY=MO", 30 / 7 / 365],
+    ["FREQ=YEARLY;BYMONTH=3,9;BYDAY=1MO", 2 / 365],
+  ])("counts the occurrences of %s", (rrule, perDay) => {
+    expect(estimateDailyDoseCount([schedule({ rrule })])).toBeCloseTo(
+      perDay,
+      10,
+    );
+  });
+
   it("stretches a daily RRULE by its INTERVAL (every other day)", () => {
     expect(
       estimateDailyDoseCount([schedule({ rrule: "FREQ=DAILY;INTERVAL=2" })]),
