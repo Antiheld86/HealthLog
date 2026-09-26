@@ -63,7 +63,12 @@ describe("MFA login flow (real Postgres)", () => {
     const code = codeAt(secret, Date.now());
 
     const first = await verifyMfaFactor(
-      { id: user.id, totpSecretEncrypted: encrypt(secret), totpLastStep: null },
+      {
+        id: user.id,
+        totpSecretEncrypted: encrypt(secret),
+        totpLastStep: null,
+        totpConfirmedAt: user.totpConfirmedAt,
+      },
       "totp",
       code,
     );
@@ -81,6 +86,7 @@ describe("MFA login flow (real Postgres)", () => {
         id: user.id,
         totpSecretEncrypted: encrypt(secret),
         totpLastStep: afterFirst?.totpLastStep ?? null,
+        totpConfirmedAt: user.totpConfirmedAt,
       },
       "totp",
       code,
