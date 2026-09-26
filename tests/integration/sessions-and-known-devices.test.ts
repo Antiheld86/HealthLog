@@ -4,7 +4,9 @@
  *
  * Covers the DB-layer contracts the unit mocks can't pin:
  *   - destroyOtherSessions keeps the current session, deletes the rest, revokes
- *     native refresh tokens, and leaves API tokens untouched.
+ *     native refresh tokens; with `reach: "sign-ins"` it leaves API tokens,
+ *     connections and share links untouched, with `reach: "everything"` it
+ *     ends them too (share links unless kept).
  *   - destroySessionById is scoped to the owning user (no cross-user delete)
  *     and takes the public handle, never the row id.
  *   - the (userId, deviceHash) unique index enforces the login-alert dedupe.
@@ -29,7 +31,7 @@ async function makeUser(username: string) {
 }
 
 describe("destroyOtherSessions", () => {
-  it("keeps the current session, removes the others, revokes refresh tokens, keeps API tokens", async () => {
+  it("sign-ins: keeps the current session, removes the others, revokes refresh tokens, keeps API tokens", async () => {
     const prisma = getPrismaClient();
     const user = await makeUser("sess-owner");
 
@@ -58,10 +60,11 @@ describe("destroyOtherSessions", () => {
       },
     });
 
-    const result = await destroyOtherSessions(user.id, {
-      kind: "session",
-      sessionId: current.id,
-    });
+    const result = await destroyOtherSessions(
+      user.id,
+      { kind: "session", sessionId: current.id },
+      { reach: "sign-ins" },
+    );
     expect(result.sessionsRevoked).toBe(2);
 
     const remaining = await prisma.session.findMany({
@@ -204,10 +207,11 @@ describe("destroyOtherSessions — native device logins", () => {
       },
     });
 
-    const result = await destroyOtherSessions(user.id, {
-      kind: "session",
-      sessionId: current.id,
-    });
+    const result = await destroyOtherSessions(
+      user.id,
+      { kind: "session", sessionId: current.id },
+      { reach: "sign-ins" },
+    );
     expect(result.accessTokensRevoked).toBe(2);
 
     const revoked = await prisma.apiToken.findMany({
@@ -251,10 +255,11 @@ describe("destroyOtherSessions — native device logins", () => {
       data: { userId: user.id, expiresAt: new Date(Date.now() + 1e6) },
     });
 
-    const result = await destroyOtherSessions(user.id, {
-      kind: "accessToken",
-      accessTokenHash: "access-caller",
-    });
+    const result = await destroyOtherSessions(
+      user.id,
+      { kind: "accessToken", accessTokenHash: "access-caller" },
+      { reach: "sign-ins" },
+    );
     // A Bearer caller has no session row, so every browser session goes.
     expect(result.sessionsRevoked).toBe(1);
     expect(result.accessTokensRevoked).toBe(1);
@@ -271,5 +276,185 @@ describe("destroyOtherSessions — native device logins", () => {
       where: { tokenHash: "access-other" },
     });
     expect(otherAccess?.revoked).toBe(true);
+  });
+});
+
+describe("destroyOtherSessions — everything", () => {
+  async function seedCredentials(userId: string) {
+    const prisma = getPrismaClient();
+    const token = await prisma.apiToken.create({
+      data: {
+        userId,
+        name: "ingest",
+        tokenHash: "narrow-hash",
+        permissions: ["measurements:write"],
+      },
+    });
+    const own = await prisma.apiToken.create({
+      data: {
+        userId,
+        name: "caller",
+        tokenHash: "access-caller",
+        permissions: ["*"],
+      },
+    });
+    const connection = await prisma.mcpOAuthConnection.create({
+      data: {
+        userId,
+        clientId: "client",
+        clientName: "Assistant",
+        scope: "health:read",
+        resource: "https://health.example/mcp",
+        currentJti: "jti-1",
+      },
+    });
+    const link = await prisma.clinicianShareLink.create({
+      data: {
+        userId,
+        tokenHash: "share-hash",
+        label: "Clinic",
+        rangeStart: new Date("2026-01-01"),
+        sectionsJson: { v: 2, leaves: [] },
+        expiresAt: new Date(Date.now() + 1e9),
+      },
+    });
+    return { token, own, connection, link };
+  }
+
+  it("revokes every token but the caller's, every connection and every share link", async () => {
+    const prisma = getPrismaClient();
+    const user = await makeUser("sess-everything");
+    const seeded = await seedCredentials(user.id);
+
+    const result = await destroyOtherSessions(
+      user.id,
+      { kind: "accessToken", accessTokenHash: "access-caller" },
+      { reach: "everything" },
+    );
+
+    expect(result.connectorsRevoked).toBe(1);
+    expect(result.shareLinksRevoked).toBe(1);
+    expect(
+      (
+        await prisma.apiToken.findUniqueOrThrow({
+          where: { id: seeded.token.id },
+        })
+      ).revoked,
+    ).toBe(true);
+    expect(
+      (
+        await prisma.apiToken.findUniqueOrThrow({
+          where: { id: seeded.own.id },
+        })
+      ).revoked,
+    ).toBe(false);
+    expect(
+      (
+        await prisma.mcpOAuthConnection.findUniqueOrThrow({
+          where: { id: seeded.connection.id },
+        })
+      ).revokedAt,
+    ).not.toBeNull();
+    expect(
+      (
+        await prisma.clinicianShareLink.findUniqueOrThrow({
+          where: { id: seeded.link.id },
+        })
+      ).revokedAt,
+    ).not.toBeNull();
+  });
+
+  it("keeps the share links when asked to, and still ends the rest", async () => {
+    const prisma = getPrismaClient();
+    const user = await makeUser("sess-keep-links");
+    const seeded = await seedCredentials(user.id);
+
+    const result = await destroyOtherSessions(
+      user.id,
+      { kind: "accessToken", accessTokenHash: "access-caller" },
+      { reach: "everything", keepShareLinks: true },
+    );
+
+    expect(result.shareLinksRevoked).toBe(0);
+    expect(result.connectorsRevoked).toBe(1);
+    expect(
+      (
+        await prisma.clinicianShareLink.findUniqueOrThrow({
+          where: { id: seeded.link.id },
+        })
+      ).revokedAt,
+    ).toBeNull();
+  });
+
+  it("sign-ins leaves connections, tokens and share links alone", async () => {
+    const prisma = getPrismaClient();
+    const user = await makeUser("sess-signins-only");
+    const seeded = await seedCredentials(user.id);
+
+    await destroyOtherSessions(
+      user.id,
+      { kind: "accessToken", accessTokenHash: "access-caller" },
+      { reach: "sign-ins" },
+    );
+
+    expect(
+      (
+        await prisma.apiToken.findUniqueOrThrow({
+          where: { id: seeded.token.id },
+        })
+      ).revoked,
+    ).toBe(false);
+    expect(
+      (
+        await prisma.mcpOAuthConnection.findUniqueOrThrow({
+          where: { id: seeded.connection.id },
+        })
+      ).revokedAt,
+    ).toBeNull();
+  });
+});
+
+describe("destroyAllSessions", () => {
+  it("also ends AI-assistant connections and share links", async () => {
+    const prisma = getPrismaClient();
+    const { destroyAllSessions } = await import("@/lib/auth/session");
+    const user = await makeUser("sess-all");
+    const connection = await prisma.mcpOAuthConnection.create({
+      data: {
+        userId: user.id,
+        clientId: "client",
+        clientName: "Assistant",
+        scope: "health:read",
+        resource: "https://health.example/mcp",
+        currentJti: "jti-1",
+      },
+    });
+    const link = await prisma.clinicianShareLink.create({
+      data: {
+        userId: user.id,
+        tokenHash: "share-hash-all",
+        label: "Clinic",
+        rangeStart: new Date("2026-01-01"),
+        sectionsJson: { v: 2, leaves: [] },
+        expiresAt: new Date(Date.now() + 1e9),
+      },
+    });
+
+    await destroyAllSessions(user.id);
+
+    expect(
+      (
+        await prisma.mcpOAuthConnection.findUniqueOrThrow({
+          where: { id: connection.id },
+        })
+      ).revokedAt,
+    ).not.toBeNull();
+    expect(
+      (
+        await prisma.clinicianShareLink.findUniqueOrThrow({
+          where: { id: link.id },
+        })
+      ).revokedAt,
+    ).not.toBeNull();
   });
 });

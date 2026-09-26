@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAdmin } from "@/lib/api-handler";
+import {
+  apiHandler,
+  requireAdmin,
+  assertRecentCookieProof,
+} from "@/lib/api-handler";
 import { hashPassword, checkPasswordStrength } from "@/lib/auth/password";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -31,7 +35,10 @@ export const POST = apiHandler(
       );
     }
 
-    const { user } = await requireAdmin();
+    const { user, session } = await requireAdmin();
+    // A fresh proof on top of the admin session: this reaches every account's
+    // data, so a stolen admin session alone must not be enough.
+    await assertRecentCookieProof(user, session.id);
 
     const { id } = await params;
     annotate({

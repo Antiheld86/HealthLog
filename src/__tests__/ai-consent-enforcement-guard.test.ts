@@ -183,18 +183,22 @@ describe("every provider-resolving module carries a consent helper", () => {
 });
 
 describe("the consent guard itself stays the single source of the policy", () => {
-  it("keeps the server-managed provider set defined in exactly one place", () => {
-    // Both operator-credential tags must be classified in consent-guard.ts and
-    // nowhere else — a second copy of this list is how the policy drifts.
-    const guard = read("lib/ai/consent-guard.ts");
-    expect(guard).toContain('"admin-openai"');
-    expect(guard).toContain('"admin-codex"');
+  it("keeps the operator-held provider set defined in exactly one place", () => {
+    // The two operator-credential tags are listed in provider-egress.ts and
+    // nowhere else, and the consent guard reads them from there. A second copy
+    // is how the policy drifts. This guard used to match one variable NAME, so
+    // a copy under another name in the capability resolver went unseen for as
+    // long as it existed; it now matches the list itself, in either order.
+    const pair =
+      /\[\s*"admin-(?:openai|codex)"\s*,\s*"admin-(?:openai|codex)"\s*,?\s*\]/;
+    const holders = sourceFiles().filter((rel) => pair.test(read(rel)));
+    expect(holders).toEqual(["lib/ai/provider-egress.ts"]);
 
-    const copies = sourceFiles().filter(
-      (rel) =>
-        rel !== "lib/ai/consent-guard.ts" &&
-        /SERVER_MANAGED_PROVIDER_TYPES/.test(read(rel)),
+    expect(read("lib/ai/consent-guard.ts")).toMatch(
+      /from "@\/lib\/ai\/provider-egress"/,
     );
-    expect(copies).toEqual([]);
+    expect(read("lib/ai/capabilities/resolve.ts")).toMatch(
+      /from "@\/lib\/ai\/provider-egress"/,
+    );
   });
 });

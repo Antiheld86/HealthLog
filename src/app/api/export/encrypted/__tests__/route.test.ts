@@ -75,6 +75,7 @@ vi.mock("@/lib/db", () => ({
     inboundDocument: { findMany: vi.fn().mockResolvedValue([]) },
     session: { findUnique: vi.fn() },
     webauthnMfaCredential: { count: vi.fn() },
+    passkey: { count: vi.fn() },
   },
 }));
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
@@ -114,6 +115,14 @@ beforeEach(() => {
   // Default: no registered security key. Tests that exercise the
   // WebAuthn-only cohort override this.
   vi.mocked(prisma.webauthnMfaCredential.count).mockResolvedValue(0 as never);
+  vi.mocked(prisma.passkey.count).mockResolvedValue(0 as never);
+  // Default: a session that signed in a moment ago. The cases about the
+  // recent-proof gate set their own stamps.
+  vi.mocked(prisma.session.findUnique).mockResolvedValue({
+    createdAt: new Date(),
+    mfaVerifiedAt: null,
+    reproofAt: null,
+  } as never);
 });
 
 describe("POST /api/export/encrypted", () => {
@@ -145,6 +154,38 @@ describe("POST /api/export/encrypted", () => {
       documents: { included: "metadata-only" },
       workouts: { included: "summary-only" },
     });
+  });
+
+  it("refuses a single-factor account whose session is not recent (401 reproof)", async () => {
+    vi.mocked(getSession).mockResolvedValue({
+      user: { id: "user-1", role: "USER", totpConfirmedAt: null },
+      session: { id: "sess-1" },
+    } as never);
+    vi.mocked(prisma.session.findUnique).mockResolvedValue({
+      createdAt: new Date(Date.now() - 60 * 60 * 1000),
+      mfaVerifiedAt: null,
+      reproofAt: null,
+    } as never);
+
+    const res = await POST(mkReq({ passphrase: PASSPHRASE }));
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.meta.errorCode).toBe("auth.reproof.required");
+  });
+
+  it("allows a single-factor account after a password re-proof", async () => {
+    vi.mocked(getSession).mockResolvedValue({
+      user: { id: "user-1", role: "USER", totpConfirmedAt: null },
+      session: { id: "sess-1" },
+    } as never);
+    vi.mocked(prisma.session.findUnique).mockResolvedValue({
+      createdAt: new Date(Date.now() - 60 * 60 * 1000),
+      mfaVerifiedAt: null,
+      reproofAt: new Date(),
+    } as never);
+
+    const res = await POST(mkReq({ passphrase: PASSPHRASE }));
+    expect(res.status).toBe(200);
   });
 
   it("blocks an MFA account without a fresh second factor (401 step-up)", async () => {

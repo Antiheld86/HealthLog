@@ -163,16 +163,21 @@ describe("DELETE /api/auth/me/sessions (sign out everywhere)", () => {
     vi.mocked(destroyOtherSessions).mockResolvedValue({
       sessionsRevoked: 3,
       accessTokensRevoked: 0,
+      connectorsRevoked: 0,
+      shareLinksRevoked: 0,
     });
 
     const res = await DELETE(del());
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.sessionsRevoked).toBe(3);
-    expect(destroyOtherSessions).toHaveBeenCalledWith("user-1", {
-      kind: "session",
-      sessionId: "sess-current",
-    });
+    expect(destroyOtherSessions).toHaveBeenCalledWith(
+      "user-1",
+      { kind: "session", sessionId: "sess-current" },
+      // Everything, share links included, when the client says nothing: the
+      // shipped app sends no parameter and gets the safe default.
+      { reach: "everything", keepShareLinks: false },
+    );
   });
 
   it("names a Bearer caller by its access token so its own device login is spared", async () => {
@@ -198,15 +203,18 @@ describe("DELETE /api/auth/me/sessions (sign out everywhere)", () => {
     vi.mocked(destroyOtherSessions).mockResolvedValue({
       sessionsRevoked: 1,
       accessTokensRevoked: 1,
+      connectorsRevoked: 0,
+      shareLinksRevoked: 0,
     });
 
     const res = await DELETE(del());
 
     expect(res.status).toBe(200);
-    expect(destroyOtherSessions).toHaveBeenCalledWith("user-1", {
-      kind: "accessToken",
-      accessTokenHash: hashToken(raw),
-    });
+    expect(destroyOtherSessions).toHaveBeenCalledWith(
+      "user-1",
+      { kind: "accessToken", accessTokenHash: hashToken(raw) },
+      { reach: "everything", keepShareLinks: false },
+    );
     vi.mocked(headers).mockResolvedValue({ get: () => null } as never);
   });
 });

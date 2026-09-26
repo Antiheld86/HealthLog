@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   prisma: {
+    $queryRaw: vi.fn(),
     authChallenge: {
       findUnique: vi.fn(),
       deleteMany: vi.fn(),
@@ -57,6 +58,9 @@ const VALID_BODY = {
 };
 
 beforeEach(() => {
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([
+    { challenge: "challenge", user_id: null },
+  ] as never);
   vi.mocked(prisma.authChallenge.findUnique).mockResolvedValue({
     id: "ch-1",
     challenge: "challenge",

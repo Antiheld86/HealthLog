@@ -46,6 +46,11 @@ import { cn } from "@/lib/utils";
 import { ImportPanel } from "@/components/settings/import-panel";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
+import {
+  recentProofErrorMessage,
+  throwIfReproofRequired,
+  useRecentProof,
+} from "@/components/settings/security-section/use-recent-proof";
 
 type ExportFormat = "CSV" | "JSON" | "FHIR";
 
@@ -55,7 +60,9 @@ type ExportFormat = "CSV" | "JSON" | "FHIR";
  * one place.
  */
 async function downloadFromUrl(url: string, filename: string): Promise<void> {
-  const res = await apiFetchRaw(url, { credentials: "include" });
+  const res = await throwIfReproofRequired(
+    await apiFetchRaw(url, { credentials: "include" }),
+  );
   if (!res.ok) {
     throw new Error(`Download failed (${res.status})`);
   }
@@ -418,45 +425,55 @@ function FullBackupCard() {
 
   const passphraseTooShort =
     encrypt && passphrase.length < MIN_EXPORT_PASSPHRASE_LENGTH;
+  // The whole record leaves the server here, so it asks for a fresh proof
+  // unless the session signed in or re-proved within five minutes.
+  const recentProof = useRecentProof();
 
   async function handleDownload() {
     setBusy(true);
     setError(null);
     try {
-      const stamp = new Date().toISOString().slice(0, 10);
-      if (encrypt) {
-        const res = await apiFetchRaw("/api/export/encrypted", {
+      await recentProof.run(downloadOnce);
+    } catch (err) {
+      setError(
+        recentProofErrorMessage(
+          err,
+          t("settings.sections.export.downloadFailed"),
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function downloadOnce() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (encrypt) {
+      const res = await throwIfReproofRequired(
+        await apiFetchRaw("/api/export/encrypted", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ passphrase }),
-        });
-        if (res.status === 401) {
-          setError(t("settings.sections.export.cards.fullBackup.stepUpNeeded"));
-          return;
-        }
-        if (!res.ok) {
-          throw new Error(`Download failed (${res.status})`);
-        }
-        const blob = await res.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = objectUrl;
-        a.download = `healthlog-backup-${stamp}.hlx`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(objectUrl);
-      } else {
-        await downloadFromUrl(
-          "/api/export/full-backup",
-          `healthlog-backup-${stamp}.json`,
-        );
+        }),
+      );
+      if (!res.ok) {
+        throw new Error(`Download failed (${res.status})`);
       }
-    } catch {
-      setError(t("settings.sections.export.downloadFailed"));
-    } finally {
-      setBusy(false);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `healthlog-backup-${stamp}.hlx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } else {
+      await downloadFromUrl(
+        "/api/export/full-backup",
+        `healthlog-backup-${stamp}.json`,
+      );
     }
   }
 
@@ -550,6 +567,7 @@ function FullBackupCard() {
           {error}
         </p>
       )}
+      {recentProof.dialog}
     </ExportCardShell>
   );
 }

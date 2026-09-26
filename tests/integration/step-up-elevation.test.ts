@@ -658,10 +658,11 @@ describe("E8 — an elevation does not outlive its anchor", () => {
       data: { userId: USER_ID, expiresAt: new Date(Date.now() + 3_600_000) },
     });
     const { destroyOtherSessions } = await import("@/lib/auth/session");
-    await destroyOtherSessions(USER_ID, {
-      kind: "session",
-      sessionId: session.id,
-    });
+    await destroyOtherSessions(
+      USER_ID,
+      { kind: "session", sessionId: session.id },
+      { reach: "everything" },
+    );
 
     expect(await getPrismaClient().stepUpElevation.count()).toBe(0);
   });

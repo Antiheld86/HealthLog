@@ -13,6 +13,10 @@
  * a client acted on it. They stay a per-call refusal with their own codes.
  */
 import { documentProviderRank } from "@/lib/documents/provider-rank";
+import {
+  isExternalProvider,
+  isOperatorHeldProvider,
+} from "@/lib/ai/provider-egress";
 import type { ModuleKey } from "@/lib/modules/registry";
 import type { ModuleAccessState } from "@/lib/sharing/module-disclosure";
 
@@ -70,14 +74,8 @@ export interface AiCapabilityInputs {
   recordKind: AiRecordKind;
 }
 
-/** Provider tags that egress through a credential the operator holds. */
-const OPERATOR_HELD_PROVIDER_TYPES: ReadonlySet<string> = new Set([
-  "admin-openai",
-  "admin-codex",
-]);
-
-/** The one provider tag that keeps its input on the machine. */
-const LOCAL_PROVIDER_TYPE = "local";
+// Which tags are operator-held and which stays local: `@/lib/ai/provider-egress`,
+// the list the consent gate reads too.
 
 const REASON_RANK: ReadonlyMap<AiUnavailableReason, number> = new Map(
   AI_UNAVAILABLE_REASONS.map((reason, index) => [reason, index]),
@@ -208,18 +206,18 @@ function consentNeeded(
     // A cascade may fall through to any entry, so one operator-held entry
     // anywhere in the chain is enough to need the receipt.
     return provider.entries.some((entry) =>
-      OPERATOR_HELD_PROVIDER_TYPES.has(entry.providerType),
+      isOperatorHeldProvider(entry.providerType),
     );
   }
   if (def.modality === "document") {
     // Document reads call the one picked provider, no cascade.
     const pick = documentPick(def, provider);
-    return pick !== null && pick.providerType !== LOCAL_PROVIDER_TYPE;
+    return pick !== null && isExternalProvider(pick.providerType);
   }
   // Text under the document rule cascades like a snapshot does, so any entry
   // that leaves the machine needs the receipt.
-  return provider.entries.some(
-    (entry) => entry.providerType !== LOCAL_PROVIDER_TYPE,
+  return provider.entries.some((entry) =>
+    isExternalProvider(entry.providerType),
   );
 }
 

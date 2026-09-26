@@ -46,6 +46,7 @@ const EXPECTED = [
   "api/auth/passkey/login-verify/route.ts",
   "api/auth/passkey/register-options/route.ts",
   "api/auth/password/route.ts",
+  "api/auth/reproof/route.ts",
   "api/auth/step-up/route.ts",
 ];
 

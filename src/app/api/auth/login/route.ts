@@ -9,7 +9,12 @@ import {
   safeJson,
   sanitiseZodIssues,
 } from "@/lib/api-response";
-import { checkAuthSurfaceRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import {
+  checkAuthSurfaceRateLimit,
+  checkRateLimit,
+  rateLimitHeaders,
+  refundRateLimit,
+} from "@/lib/rate-limit";
 import { ensureDbCompatibility } from "@/lib/db-compat";
 import { NextRequest, NextResponse } from "next/server";
 import { apiHandler } from "@/lib/api-handler";
@@ -20,6 +25,15 @@ import { consumeTrustedDevice } from "@/lib/auth/trusted-device";
 import { syncMfaEnrollCookie } from "@/lib/auth/mfa-enrollment";
 import { isOidcOnly } from "@/lib/auth/oidc";
 import { readPendingLink } from "@/lib/auth/oidc-pending-link";
+
+/**
+ * Failed password sign-ins one account takes per window, from any number of
+ * addresses. Twice the per-IP ceiling, so the owner mistyping from one network
+ * meets that one first, and small enough that guessing is hopeless.
+ */
+const LOGIN_ACCOUNT_BUCKET = "auth:login:account";
+const LOGIN_ACCOUNT_LIMIT = 10;
+const LOGIN_ACCOUNT_WINDOW_MS = 15 * 60 * 1000;
 
 export const POST = apiHandler(async (request: NextRequest) => {
   // OIDC_ONLY means password login must be a dead end, not just a hidden
@@ -91,6 +105,42 @@ export const POST = apiHandler(async (request: NextRequest) => {
     },
   });
 
+  // A per-account ceiling beside the per-IP one. The IP bucket alone is only
+  // as good as the address it is keyed on, and a guesser with many addresses
+  // (or a proxy that forwards whatever address the caller claims) could try
+  // one account's password without end. This bucket follows the account
+  // wherever the guesses come from.
+  //
+  // Keyed on the account when the identifier resolves and on the identifier's
+  // hash when it does not, with the same ceiling, so a locked answer says
+  // nothing about whether the account exists. Charged before the Argon2id
+  // verification (a locked account costs no hashing) and refunded on a
+  // successful sign-in, so it counts failures: the owner signing in does not
+  // use it up. While it is spent, a passkey or single sign-on still works.
+  const accountBucket = user
+    ? `${LOGIN_ACCOUNT_BUCKET}:u:${user.id}`
+    : `${LOGIN_ACCOUNT_BUCKET}:i:${hashToken(identifier.toLowerCase())}`;
+  const accountRl = await checkRateLimit(
+    accountBucket,
+    LOGIN_ACCOUNT_LIMIT,
+    LOGIN_ACCOUNT_WINDOW_MS,
+  );
+  if (!accountRl.allowed) {
+    await auditLog("auth.login.account_throttled", {
+      userId: user?.id,
+      ipAddress: ip,
+      details: { identifierHash },
+    });
+    annotate({ action: { name: "auth.login.account_throttled" } });
+    return NextResponse.json(
+      {
+        data: null,
+        error: "Too many login attempts. Please try again later.",
+      },
+      { status: 429, headers: rateLimitHeaders(accountRl) },
+    );
+  }
+
   // One verification for every outcome. An unknown identifier and an
   // account carrying no password hash (a passkey-only account) used to
   // return here before any hashing, so the three answers cost one indexed
@@ -131,6 +181,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
       errorCode: "oidc_only",
     });
   }
+
+  // The password was right: this attempt was not a failed guess.
+  await refundRateLimit(accountBucket);
 
   const ua = request.headers.get("user-agent");
 

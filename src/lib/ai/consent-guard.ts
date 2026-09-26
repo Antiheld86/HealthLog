@@ -30,6 +30,10 @@
 import { latestActiveReceipt } from "@/lib/consent/receipts";
 import type { ConsentKind } from "@/lib/validations/consent";
 import type { ProviderChainResolved } from "@/lib/ai/provider-runner";
+import {
+  isExternalProvider,
+  isOperatorHeldProvider,
+} from "@/lib/ai/provider-egress";
 
 /**
  * The two AI surfaces that egress PHI through a chain. Each maps to the consent
@@ -38,17 +42,6 @@ import type { ProviderChainResolved } from "@/lib/ai/provider-runner";
  * capability egress re-check rather than here.
  */
 export type ConsentSurface = "coach" | "insights";
-
-/**
- * Provider tags that egress via an operator-managed credential the user did not
- * personally contract: the operator's global OpenAI key (`admin-openai`) and the
- * operator's shared central Codex / ChatGPT-subscription account (`admin-codex`).
- * Both require an active consent receipt before any PHI leaves for them.
- */
-const SERVER_MANAGED_PROVIDER_TYPES: ReadonlySet<string> = new Set([
-  "admin-openai",
-  "admin-codex",
-]);
 
 /**
  * Error thrown when an external-LLM egress on a server-managed key is
@@ -79,9 +72,7 @@ export class ConsentRequiredError extends Error {
 export function chainRequiresServerManagedConsent(
   chain: ReadonlyArray<ProviderChainResolved>,
 ): boolean {
-  return chain.some((entry) =>
-    SERVER_MANAGED_PROVIDER_TYPES.has(entry.providerType),
-  );
+  return chain.some((entry) => isOperatorHeldProvider(entry.providerType));
 }
 
 /** The consent kinds that satisfy a given surface (the specific + the master). */
@@ -148,13 +139,11 @@ export async function assertConsentForChain(args: {
  * reads the receipt kinds from the capability table; the auto-read toggle is a
  * trigger, never the consent, so a revoked receipt wins over a toggle left on.
  */
-const LOCAL_ONLY_PROVIDER_TYPES: ReadonlySet<string> = new Set(["local"]);
-
 /**
  * True when reading a document through this provider egresses it OFF the machine
  * to a third-party AI service. Only the self-hosted `local` provider keeps the
  * document on the operator's own infrastructure.
  */
 export function isExternalDocumentEgress(providerType: string): boolean {
-  return !LOCAL_ONLY_PROVIDER_TYPES.has(providerType);
+  return isExternalProvider(providerType);
 }

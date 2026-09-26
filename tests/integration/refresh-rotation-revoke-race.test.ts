@@ -81,10 +81,11 @@ describe("refresh rotation — revocation landing between read and consume", () 
       .mockImplementation((async (args: unknown) => {
         if (!revokedInsideTheWindow) {
           revokedInsideTheWindow = true;
-          await destroyOtherSessions(user.id, {
-            kind: "session",
-            sessionId: browser.id,
-          });
+          await destroyOtherSessions(
+            user.id,
+            { kind: "session", sessionId: browser.id },
+            { reach: "everything" },
+          );
         }
         return original(args as never);
       }) as never);

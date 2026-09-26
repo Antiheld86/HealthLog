@@ -5180,7 +5180,6 @@
             "passphrasePlaceholder": "Passphrase (min. 12 characters)",
             "passphraseHelp": "Derives the archive key with Argon2id and seals it with AES-256-GCM. Save the file with a .hlx extension.",
             "noRecoveryWarning": "There is no recovery — if you lose this passphrase, the archive cannot be opened. Keep it somewhere safe.",
-            "stepUpNeeded": "Confirm your second factor, then try again.",
             "detail": "Same shape as the weekly auto-backup. Some record types are not carried yet — the file's manifest names what is in it.",
             "contents": "Your measurements, medications, mood, cycle, labs, illness episodes, allergies, family history, nutrients, workouts, health profile and custom metrics in one JSON file."
           }
@@ -6556,7 +6555,8 @@
       "revokeSessionConfirmTitle": "Sign this device out?",
       "revokeSessionConfirmBody": "{device} will need to sign in again. Nothing recorded on it is affected.",
       "signOutEverywhereConfirmTitle": "Sign out every other device?",
-      "signOutEverywhereConfirmBody": "Every device except this one will need to sign in again. This device stays signed in. Nothing you have recorded is affected."
+      "signOutEverywhereConfirmBody": "Every other device, every connected AI assistant and every API token will need to sign in or be set up again. This device stays signed in. Nothing you have recorded is affected.",
+      "signOutEverywhereShareLinks": "Also end the doctor share links"
     },
     "privacy": {
       "encryption": {
@@ -6739,7 +6739,12 @@
       "moduleOffExplainer": "Documents are switched off, so the connection below is not used. You can still remove it.",
       "tokenNewAddress": "A new address needs the API token again."
     },
-    "emailChangePassword": "Current password (needed to change the email address)"
+    "emailChangePassword": "Current password (needed to change the email address)",
+    "reproof": {
+      "description": "This shares or exports your health data. Confirm it's you to continue.",
+      "signInAgain": "Sign in again, then try once more. Your account has no password or passkey to confirm here.",
+      "failed": "That did not work. Check what you entered and try again."
+    }
   },
   "admin": {
     "title": "Administration",

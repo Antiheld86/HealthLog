@@ -23,7 +23,11 @@
  */
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireCookieAuth } from "@/lib/api-handler";
+import {
+  apiHandler,
+  assertRecentCookieProof,
+  requireCookieAuth,
+} from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -55,7 +59,11 @@ const MINT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const MAX_LIVE_TOKENS = 10;
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireCookieAuth();
+  const { user, session } = await requireCookieAuth();
+  // And a fresh proof on top of the session: the token lives far longer than
+  // a stolen session would, so minting one needs the person, not just the
+  // browser.
+  await assertRecentCookieProof(user, session.id);
   annotate({ action: { name: "tokens.documents.create" } });
 
   if (!(await isApiGloballyEnabled())) {

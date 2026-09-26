@@ -390,9 +390,9 @@ export async function safeJson<T = unknown>(
  * IP-based rate-limits.
  *
  * Trust model (`TRUST_PROXY_HOPS` env):
- *   - "0"          → ignore XFF entirely, fall back to x-real-ip / null
+ *   - "0"          → trust no forwarding header at all, XFF or x-real-ip
  *                    (use this if HealthLog is internet-facing without a
- *                    reverse proxy you control)
+ *                    reverse proxy you control); the IP resolves to null
  *   - "1" (default)→ trust exactly one hop (typical Coolify / Caddy /
  *                    Cloudflare-Tunnel single-proxy deployment); read the
  *                    rightmost XFF entry which is the IP your proxy
@@ -540,18 +540,24 @@ export function getClientIpOrTrustWarning(request: Request): {
       // configured trust. Without this warning the silent degrade was
       // invisible until rate-limits visibly misfired in production.
       warnTrustViolationOnce(hops, chain.length);
-      const realIp = request.headers.get("x-real-ip");
-      return {
-        ip: realIp && looksLikeIp(realIp) ? realIp : null,
-        trustViolation: true,
-      };
+      // Not x-real-ip either. A chain shorter than the configured hops means
+      // the request did not come through the proxies the operator declared,
+      // so whatever x-real-ip it carries was set by the caller.
+      return { ip: null, trustViolation: true };
     }
+    // x-real-ip is a forwarding header like XFF and gets the same trust: only
+    // when the operator declares a proxy in front (hops > 0), and only as the
+    // single-proxy stand-in for a missing XFF. It used to be read on every
+    // path, including `TRUST_PROXY_HOPS=0` ("no proxy, trust no header") and
+    // the broken-chain path above, so a caller sending a fresh x-real-ip per
+    // request got a fresh per-IP rate-limit bucket each time.
+    const realIp = request.headers.get("x-real-ip")?.trim();
+    return {
+      ip: realIp && looksLikeIp(realIp) ? realIp : null,
+      trustViolation: false,
+    };
   }
-  const realIp = request.headers.get("x-real-ip");
-  return {
-    ip: realIp && looksLikeIp(realIp) ? realIp : null,
-    trustViolation: false,
-  };
+  return { ip: null, trustViolation: false };
 }
 
 export function getClientIp(request: Request): string | null {

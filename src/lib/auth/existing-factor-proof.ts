@@ -19,6 +19,7 @@
 import type { User } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { apiError } from "@/lib/api-response";
+import { REPROOF_REQUIRED_CODE } from "@/lib/api-errors";
 import { auditLog } from "@/lib/auth/audit";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
@@ -164,7 +165,7 @@ export async function recordReproofFailure(
 }
 
 /** No proof was presented, and the session carries none recent enough. */
-export const REPROOF_REQUIRED_CODE = "auth.reproof.required";
+export { REPROOF_REQUIRED_CODE };
 /** A proof was presented and did not verify. The session is untouched. */
 export const REPROOF_FAILED_CODE = "auth.reproof.failed";
 
@@ -188,6 +189,9 @@ export const RECENT_PROOF_MAX_AGE_MS = 5 * 60 * 1000;
  *
  *   - the session completed a second factor or passkey sign-in within the last
  *     five minutes (`Session.mfaVerifiedAt`);
+ *   - the session re-proved a credential at `POST /api/auth/reproof` within
+ *     the last five minutes (`Session.reproofAt`), which accepts the same
+ *     proofs this gate takes in the body;
  *   - the session itself was created by a sign-in within the last five
  *     minutes (`Session.createdAt`, which no later write touches) — this is
  *     also what lets an SSO-only account with nothing else to re-prove enroll
@@ -210,12 +214,16 @@ export async function checkCookieEnrollmentProof(args: {
 
   const row = await prisma.session.findUnique({
     where: { id: sessionId },
-    select: { mfaVerifiedAt: true, createdAt: true },
+    select: { mfaVerifiedAt: true, createdAt: true, reproofAt: true },
   });
   const now = Date.now();
   const recent = (d: Date | null | undefined) =>
     d != null && now - d.getTime() <= RECENT_PROOF_MAX_AGE_MS;
-  if (recent(row?.mfaVerifiedAt) || recent(row?.createdAt)) {
+  if (
+    recent(row?.mfaVerifiedAt) ||
+    recent(row?.createdAt) ||
+    recent(row?.reproofAt)
+  ) {
     annotate({ meta: { enrollment_proof: "recent_session" } });
     return null;
   }
@@ -316,12 +324,17 @@ export async function authorizeSensitiveChange(args: {
   if (cookieSessionId) {
     const row = await prisma.session.findUnique({
       where: { id: cookieSessionId },
-      select: { mfaVerifiedAt: true, createdAt: true },
+      select: { mfaVerifiedAt: true, createdAt: true, reproofAt: true },
     });
     const now = Date.now();
     const recent = (d: Date | null | undefined) =>
       d != null && now - d.getTime() <= RECENT_PROOF_MAX_AGE_MS;
-    if (recent(row?.mfaVerifiedAt) || recent(row?.createdAt)) return "ok";
+    if (
+      recent(row?.mfaVerifiedAt) ||
+      recent(row?.createdAt) ||
+      recent(row?.reproofAt)
+    )
+      return "ok";
   }
 
   if (!currentPassword) return "required";

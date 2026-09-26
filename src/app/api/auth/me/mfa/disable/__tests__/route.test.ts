@@ -76,10 +76,14 @@ describe("POST /api/auth/me/mfa/disable", () => {
   it("revokes other sessions + trusted devices (via destroyOtherSessions), keeping the current one", async () => {
     const res = await POST(req());
     expect(res.status).toBe(200);
-    expect(destroyOtherSessions).toHaveBeenCalledWith("u1", {
-      kind: "session",
-      sessionId: "sess-current",
-    });
+    expect(destroyOtherSessions).toHaveBeenCalledWith(
+      "u1",
+      {
+        kind: "session",
+        sessionId: "sess-current",
+      },
+      { reach: "sign-ins" },
+    );
   });
 
   it("spares the CALLER's own device login on the Bearer path", async () => {
@@ -99,10 +103,14 @@ describe("POST /api/auth/me/mfa/disable", () => {
     const res = await POST(req());
 
     expect(res.status).toBe(200);
-    expect(destroyOtherSessions).toHaveBeenCalledWith("u1", {
-      kind: "accessToken",
-      accessTokenHash: "hash-of-caller-access-token",
-    });
+    expect(destroyOtherSessions).toHaveBeenCalledWith(
+      "u1",
+      {
+        kind: "accessToken",
+        accessTokenHash: "hash-of-caller-access-token",
+      },
+      { reach: "sign-ins" },
+    );
   });
 
   it("spends the elevation before tearing the factor down", async () => {

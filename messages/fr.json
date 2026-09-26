@@ -5180,7 +5180,6 @@
             "passphrasePlaceholder": "Phrase secrète (12 caractères min.)",
             "passphraseHelp": "Dérive la clé de l'archive avec Argon2id et la scelle avec AES-256-GCM. Enregistrez le fichier avec l'extension .hlx.",
             "noRecoveryWarning": "Aucune récupération possible : si vous perdez cette phrase secrète, l'archive ne pourra pas être ouverte. Conservez-la en lieu sûr.",
-            "stepUpNeeded": "Confirmez votre second facteur, puis réessayez.",
             "detail": "Même format que la sauvegarde automatique hebdomadaire. Certains types d'enregistrement ne sont pas encore inclus : le manifeste du fichier indique ce qu'il contient.",
             "contents": "Vos mesures, médicaments, humeur, cycle, analyses, épisodes de maladie, allergies, antécédents familiaux, nutriments, séances, votre profil de santé et vos mesures personnalisées dans un seul fichier JSON."
           }
@@ -6556,7 +6555,8 @@
       "revokeSessionConfirmTitle": "Déconnecter cet appareil ?",
       "revokeSessionConfirmBody": "{device} devra se reconnecter. Ce qui y est enregistré n'est pas affecté.",
       "signOutEverywhereConfirmTitle": "Déconnecter tous les autres appareils ?",
-      "signOutEverywhereConfirmBody": "Chaque appareil sauf celui-ci devra se reconnecter. Celui-ci reste connecté. Rien de ce que tu as enregistré n'est affecté."
+      "signOutEverywhereConfirmBody": "Tous les autres appareils, chaque assistant IA connecté et chaque jeton d'API devront se reconnecter ou être reconfigurés. Cet appareil reste connecté. Rien de ce que vous avez enregistré n'est touché.",
+      "signOutEverywhereShareLinks": "Mettre fin aussi aux liens de partage avec les médecins"
     },
     "privacy": {
       "encryption": {
@@ -6739,7 +6739,12 @@
       "moduleOffExplainer": "Les documents sont désactivés ; la connexion ci-dessous n'est donc pas utilisée. Vous pouvez toujours la supprimer.",
       "tokenNewAddress": "Une nouvelle adresse demande de saisir à nouveau le jeton d'API."
     },
-    "emailChangePassword": "Mot de passe actuel (nécessaire pour changer l'adresse e-mail)"
+    "emailChangePassword": "Mot de passe actuel (nécessaire pour changer l'adresse e-mail)",
+    "reproof": {
+      "description": "Cette action partage ou exporte vos données de santé. Confirmez qu'il s'agit bien de vous pour continuer.",
+      "signInAgain": "Reconnectez-vous, puis réessayez. Votre compte n'a ni mot de passe ni clé d'accès à confirmer ici.",
+      "failed": "Cela n'a pas fonctionné. Vérifiez votre saisie et réessayez."
+    }
   },
   "admin": {
     "title": "Administration",

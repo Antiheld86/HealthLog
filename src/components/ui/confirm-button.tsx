@@ -52,6 +52,8 @@ interface ConfirmCopy {
   pending?: boolean;
   /** `data-slot` for tests and the design guards. */
   slot?: string;
+  /** A control that belongs with the question, such as an opt-out checkbox. */
+  extra?: ReactNode;
 }
 
 function ConfirmBody({
@@ -61,6 +63,7 @@ function ConfirmBody({
   onConfirm,
   pending = false,
   slot,
+  extra,
 }: ConfirmCopy) {
   const { t } = useTranslations();
 
@@ -70,6 +73,7 @@ function ConfirmBody({
         <AlertDialogTitle>{title}</AlertDialogTitle>
         <AlertDialogDescription>{body}</AlertDialogDescription>
       </AlertDialogHeader>
+      {extra}
       <AlertDialogFooter>
         <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
         <AlertDialogAction
@@ -102,6 +106,7 @@ export function ConfirmButton({
   icon,
   ariaLabel,
   slot,
+  extra,
 }: ConfirmCopy & {
   /** The control's own label, before the dialog opens. */
   label: string;
@@ -143,6 +148,7 @@ export function ConfirmButton({
         onConfirm={onConfirm}
         pending={pending}
         slot={slot}
+        extra={extra}
       />
     </AlertDialog>
   );

@@ -10,6 +10,15 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     apiToken: { findMany: vi.fn() },
     auditLog: { create: vi.fn() },
+    session: {
+      findUnique: vi.fn(async () => ({
+        createdAt: new Date(),
+        mfaVerifiedAt: null,
+        reproofAt: null,
+      })),
+    },
+    webauthnMfaCredential: { count: vi.fn(async () => 0) },
+    passkey: { count: vi.fn(async () => 0) },
   },
 }));
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
@@ -29,6 +38,7 @@ vi.mock("next/headers", () => ({
 
 import { POST } from "../route";
 import { getSession } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
 import { isApiGloballyEnabled } from "@/lib/app-settings";
 import { issueApiToken } from "@/lib/auth/issue-token";
 
@@ -55,6 +65,20 @@ beforeEach(() => {
     name: "n",
     expiresAt: new Date(),
   } as never);
+});
+
+describe("POST /api/mcp/tokens — fresh proof", () => {
+  it("refuses a browser session with no recent sign-in or re-proof", async () => {
+    vi.mocked(prisma.session.findUnique).mockResolvedValueOnce({
+      createdAt: new Date(Date.now() - 60 * 60 * 1000),
+      mfaVerifiedAt: null,
+      reproofAt: null,
+    } as never);
+    const res = await POST(postReq({ name: "laptop" }));
+    expect(res.status).toBe(401);
+    expect((await res.json()).meta.errorCode).toBe("auth.reproof.required");
+    expect(issueApiToken).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/mcp/tokens — scope minting", () => {

@@ -222,6 +222,22 @@ const signOutEverywhereResponse = z
       .number()
       .int()
       .describe("Number of OTHER sessions removed (the current one is kept)."),
+    accessTokensRevoked: z
+      .number()
+      .int()
+      .describe(
+        "Tokens revoked: the access tokens of other device logins plus every programmatic token (connector, measurement, document), never the caller's own.",
+      ),
+    connectorsRevoked: z
+      .number()
+      .int()
+      .describe("Connected AI-assistant (MCP OAuth) connections revoked."),
+    shareLinksRevoked: z
+      .number()
+      .int()
+      .describe(
+        "Clinician share links revoked; 0 when `keepShareLinks=1` was sent.",
+      ),
   })
   .meta({ id: "SignOutEverywhereResponse" });
 
@@ -817,7 +833,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "WHICH factor you re-prove decides WHAT the elevation reaches. `password` reaches the same routes a plain cookie session reaches. `totp`, `webauthn`, and `passkey` additionally satisfy the fresh-factor routes — MFA disable, recovery-code regeneration, security-key removal — which is precisely the set of ceremonies for which the web marks a session second-factor-verified. The response carries `satisfiesFreshFactor` so a client can choose the right ceremony up front rather than discovering the refusal after spending a proof. A recovery code is NOT accepted here; an account that has lost its authenticator manages its second factor on the web.\n\n" +
         "The elevation is bound to the exact token that minted it (another token, including the same account's, cannot redeem it), single-use, and valid for five minutes — the same window the cookie path uses. Present it as `X-Step-Up: hle_…` alongside the normal `Authorization: Bearer` header. It is spent only when the target route is about to act, so a 429, a 422, or a wrong code does not burn it.\n\n" +
         "Presenting the token alone mints nothing: the body must carry a fresh factor proof. Every failure — wrong password, no password set on an SSO-provisioned account, an assertion for another account, a stale challenge, a replayed TOTP step — returns the same 401 with the same prose, and is audited server-side. Rate-limited per source address and per account (5 / 15 min); the per-account budget is shared with the web's credential-enrollment proofs. A `totp` proof counts only from an authenticator whose enrollment was confirmed: a code from a pending secret is refused like a wrong one.\n\n" +
-        "Accepting routes (the complete set): POST /api/auth/me/mfa/totp/setup; POST /api/auth/me/mfa/totp/confirm; POST /api/auth/me/mfa/disable; POST /api/auth/me/mfa/recovery-codes/regenerate; POST /api/auth/me/mfa/webauthn/register/options; POST /api/auth/me/mfa/webauthn/register/verify; PATCH and DELETE /api/auth/me/mfa/webauthn/{id}; DELETE /api/settings/account; DELETE /api/settings/data. The last three MFA routes, disable, and both erasure routes require a fresh-factor proof. GET /api/auth/me/mfa needs no elevation at all. Nothing else accepts one — admin endpoints stay cookie-only.\n\n" +
+        "Accepting routes (the complete set): POST /api/auth/me/mfa/totp/setup; POST /api/auth/me/mfa/totp/confirm; POST /api/auth/me/mfa/disable; POST /api/auth/me/mfa/recovery-codes/regenerate; POST /api/auth/me/mfa/webauthn/register/options; POST /api/auth/me/mfa/webauthn/register/verify; PATCH and DELETE /api/auth/me/mfa/webauthn/{id}; DELETE /api/settings/account; DELETE /api/settings/data; GET /api/export/full-backup; POST /api/export/encrypted. The last three MFA routes, disable, and both erasure routes require a fresh-factor proof. The two whole-record exports take any elevation on an account without a second factor and a fresh-factor one on an account with one; the full backup requires an elevation on every Bearer call, the encrypted export only on an account with a second factor. GET /api/auth/me/mfa needs no elevation at all. Nothing else accepts one — admin endpoints stay cookie-only.\n\n" +
         "The two erasure routes joined the set so an account with a second factor can be deleted from a native app: their gate was cookie-only, which left an enrolled user unable to delete their own account from the app at all. They take the elevation the same way as the rest — fresh factor required, spent only when the erasure is about to run.",
       requestBody: {
         required: true,
@@ -829,6 +845,61 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: {
             "application/json": {
               schema: dataEnvelope(stepUpMintResponse, "StepUpMintEnvelope"),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/reproof": {
+    post: {
+      tags: ["Auth"],
+      summary: "Re-prove a credential on a browser session (cookie only)",
+      description:
+        "Stamps the calling browser session as recently re-proved, so for the next five minutes it may run the actions that ask for a fresh proof: GET /api/export/full-backup, POST /api/export/encrypted, POST /api/share-links, POST /api/mcp/tokens, POST /api/tokens/measurements, POST /api/tokens/documents, and the admin backup download, upload and restore, the admin data wipe and the admin password reset. Those answer 401 `auth.reproof.required` with `meta.methods` (the proofs this account can give) when the session signed in or re-proved more than five minutes ago.\n\n" +
+        'The body takes the same shapes as POST /api/auth/step-up. On an account with a second factor only `totp`, `webauthn` (a security key) or `passkey` are accepted, because a password has never stood in for the second factor; on one without, `password` or `passkey`. A method the account cannot use here is refused with 422 `auth.reproof.too_weak` and `meta.methods`, before any guess is spent. A second-factor or passkey proof also refreshes the session\'s second-factor stamp, exactly as signing in again would. Assertions begin at POST /api/auth/passkey/register-options with `{ method: "passkey" | "webauthn" }`.\n\n' +
+        "Proofs draw on the account's shared re-proof budget (five per fifteen minutes, 429 once spent). A proof that does not verify is 401 `auth.reproof.failed` and is audited. Bearer callers use POST /api/auth/step-up instead.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: stepUpMintSchema } },
+      },
+      responses: {
+        "200": {
+          description: "Proof accepted; the session is stamped.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z
+                  .object({
+                    method: z.enum(["password", "totp", "webauthn", "passkey"]),
+                    verifiedAt: z.string().datetime(),
+                  })
+                  .meta({ id: "ReproofResponse" }),
+                "ReproofEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    get: {
+      tags: ["Auth"],
+      summary: "Ask whether this browser session's proof is recent",
+      description:
+        "The question the gated routes ask, without acting: 200 `{ recent: true }` when the session signed in or re-proved within five minutes (a second factor on an account that has one), otherwise 401 `auth.reproof.required` with `meta.methods`. Lets a client re-prove before sending a large upload rather than after it was refused.",
+      responses: {
+        "200": {
+          description: "The session's proof is recent.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z
+                  .object({ recent: z.literal(true) })
+                  .meta({ id: "ReproofStatus" }),
+                "ReproofStatusEnvelope",
+              ),
             },
           },
         },
@@ -1257,7 +1328,15 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Auth"],
       summary: "Sign out everywhere else",
       description:
-        "v1.23 — revokes every OTHER web session plus all native refresh tokens, keeping the caller's current session. API tokens are not touched (manage those under /settings/api-tokens).",
+        "Ends every credential except the caller's own: every OTHER web session, every other device login (refresh token and its paired access token), every trusted device and step-up elevation, every connected AI assistant (the OAuth connection, so it cannot mint a new access token), every programmatic token (connector, measurement and document tokens), and every clinician share link. Share links are revoked by default because a link made by whoever held a lost session or device would otherwise keep opening the record; send `keepShareLinks=1` to keep them. A Bearer caller keeps its own device login.",
+      requestParams: {
+        query: z.object({
+          keepShareLinks: z.enum(["1"]).optional().meta({
+            description:
+              "`1` keeps the clinician share links. Anything else, or nothing, revokes them.",
+          }),
+        }),
+      },
       responses: {
         "200": {
           description: "Other sessions revoked.",
@@ -1609,7 +1688,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Mints a Bearer scoped to exactly `measurements:write` and audits the mint. THE RESPONSE CARRIES THE RAW TOKEN — the only place it ever exists; it is stored as an HMAC and no path re-reveals it.\n\n" +
         "**What it can do.** `POST /api/measurements` and `POST /api/measurements/batch`, on its owner's own record. Rows it writes carry `source: EXTERNAL`, resolved from the credential rather than taken from the body, so a reading pushed by a bridge stays distinguishable from one typed in by hand and can be picked out with the source filter. A body naming ANY source is refused 422 rather than relabelled — honouring it would defeat the label, overriding it silently would hand the caller rows it did not ask for. `APPLE_HEALTH` is the one that would do real damage: it is half a dedup key the phone also writes into, it participates in the cross-source merge, and it is what decides the Apple Health card may claim a sync happened. For the same reason a write through this credential does not move the native client's sync checkpoint. The rows stay editable by their owner, unlike a connected provider's — the hardware behind the token is the user's own.\n\n" +
         "**What it cannot do.** Everything else, including the measurement reads on the same paths, the edit and delete legs, and the export — a scope grants what it names and nothing adjacent. It cannot be pointed at a shared record: a request carrying the account selector is refused 403 before any grant is read, whatever grants its holder actually has. And it cannot mint another token, this endpoint included.\n\n" +
-        "Minting requires a COOKIE SESSION. No Bearer credential reaches this endpoint at any scope, wildcard included — not because a wildcard lacks the reach, but because of the lifetimes involved: a native access token lives a day and what it could mint here lives a year, so admitting one would let a short-lived compromise leave behind a credential that outlives revoking it. Gated by the operator's instance-wide API switch. Body capped at 16 KiB; 10 mints per user per minute, and at most 10 live tokens held at once. Tokens appear in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}` like any other — revoking frees a slot against the ceiling.",
+        "Minting requires a COOKIE SESSION with a fresh proof: a sign-in or `POST /api/auth/reproof` within the last five minutes (with a second factor, on an account that has one), otherwise 401 `auth.reproof.required` with `meta.methods`. No Bearer credential reaches this endpoint at any scope, wildcard included — not because a wildcard lacks the reach, but because of the lifetimes involved: a native access token lives a day and what it could mint here lives a year, so admitting one would let a short-lived compromise leave behind a credential that outlives revoking it. Gated by the operator's instance-wide API switch. Body capped at 16 KiB; 10 mints per user per minute, and at most 10 live tokens held at once. Tokens appear in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}` like any other — revoking frees a slot against the ceiling.",
       requestBody: {
         required: true,
         content: {
@@ -1676,7 +1755,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Mints a Bearer scoped to exactly `documents:write` and audits the mint. THE RESPONSE CARRIES THE RAW TOKEN, once; it is stored as an HMAC and no path re-reveals it.\n\n" +
         "**What it can do.** `POST /api/documents/inbound` on its owner's own record, and `GET /api/documents/inbound/source`, which answers whether a source key is already held so an importer can skip a download. Nothing else. It is the door another document system pushes through: a Paperless-ngx workflow posting a newly tagged document, or an import script copying an archive. Uploads through it draw on a bucket of their own, keyed on the token (default 120 an hour, operator-tunable via `DOCUMENT_UPLOAD_LIMIT_PER_HOUR`), and get back a receipt (`id`, `duplicate`, and `deleted` when the source key belongs to a document the owner deleted) rather than the stored row.\n\n" +
         "**What it cannot do.** List, read, download, preview, edit, delete or bulk-act on a document, reach the document-AI routes, act on a shared record, or mint another token. Every other route names no scope and refuses it 403.\n\n" +
-        "Minting requires a COOKIE SESSION, for the reason the measurement mint gives: a day-lived native access token must not be able to leave behind a year-lived credential. Gated by the operator's instance-wide API switch. Body capped at 16 KiB; 10 mints per user per minute, and at most 10 live document tokens held at once. Tokens appear in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}`.",
+        "Minting requires a COOKIE SESSION with a fresh proof, as for the measurement mint, for the reason it gives: a day-lived native access token must not be able to leave behind a year-lived credential. Gated by the operator's instance-wide API switch. Body capped at 16 KiB; 10 mints per user per minute, and at most 10 live document tokens held at once. Tokens appear in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}`.",
       requestBody: {
         required: true,
         content: {

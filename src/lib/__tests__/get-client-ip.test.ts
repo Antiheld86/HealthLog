@@ -72,7 +72,7 @@ describe("getClientIp trusted-proxy semantics (V3 audit)", () => {
     },
   );
 
-  it("with TRUST_PROXY_HOPS=0 ignores XFF entirely", () => {
+  it("with TRUST_PROXY_HOPS=0 trusts no forwarding header, x-real-ip included", () => {
     process.env.TRUST_PROXY_HOPS = "0";
     const ip = getClientIp(
       makeRequest({
@@ -80,7 +80,17 @@ describe("getClientIp trusted-proxy semantics (V3 audit)", () => {
         "x-real-ip": "8.8.8.8",
       }),
     );
-    expect(ip).toBe("8.8.8.8");
+    expect(ip).toBeNull();
+  });
+
+  it("x-real-ip rotation — with no declared proxy a caller cannot mint a fresh bucket per request", () => {
+    process.env.TRUST_PROXY_HOPS = "0";
+    const seen = new Set(
+      ["1.1.1.1", "2.2.2.2", "3.3.3.3"].map((ip) =>
+        getClientIp(makeRequest({ "x-real-ip": ip })),
+      ),
+    );
+    expect(seen).toEqual(new Set([null]));
   });
 
   it("with TRUST_PROXY_HOPS=0 and no x-real-ip returns null", () => {
@@ -277,7 +287,8 @@ describe("getClientIpOrTrustWarning shape (F-6, 2026-05-16)", () => {
     expect(result.ip).toBeNull();
   });
 
-  it("returns trustViolation=true and x-real-ip when chain is short but x-real-ip is set", () => {
+  it("returns trustViolation=true and ignores x-real-ip when the chain is short", () => {
+    // The declared proxies were bypassed, so x-real-ip came from the caller.
     process.env.TRUST_PROXY_HOPS = "2";
     const result = getClientIpOrTrustWarning(
       makeRequest({
@@ -285,7 +296,7 @@ describe("getClientIpOrTrustWarning shape (F-6, 2026-05-16)", () => {
         "x-real-ip": "9.9.9.9",
       }),
     );
-    expect(result).toEqual({ ip: "9.9.9.9", trustViolation: true });
+    expect(result).toEqual({ ip: null, trustViolation: true });
   });
 
   it("returns trustViolation=false when XFF is absent (no chain to validate)", () => {

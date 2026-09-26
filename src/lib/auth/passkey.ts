@@ -201,6 +201,46 @@ export async function consumeRegistrationChallenge(input: {
   };
 }
 
+/**
+ * Claim a WebAuthn challenge: delete it and return its material in one
+ * statement, or return null when it is unknown, expired, of another ceremony,
+ * or (when `userId` is given) minted for another account.
+ *
+ * Every ceremony verifier goes through here. They used to read the challenge,
+ * verify, and delete it in a `finally`, so two requests carrying the same
+ * assertion could both read it before either deleted it and both be
+ * accepted. The guarded DELETE ... RETURNING gives exactly one of them the
+ * challenge; the other finds nothing.
+ */
+export async function claimAuthChallenge(input: {
+  challengeId: string;
+  type: string;
+  userId?: string;
+}): Promise<{ challenge: string; userId: string | null } | null> {
+  const rows = input.userId
+    ? await prisma.$queryRaw<
+        Array<{ challenge: string; user_id: string | null }>
+      >`
+        DELETE FROM auth_challenges
+        WHERE id = ${input.challengeId}
+          AND type = ${input.type}
+          AND user_id = ${input.userId}
+          AND expires_at > NOW()
+        RETURNING challenge, user_id
+      `
+    : await prisma.$queryRaw<
+        Array<{ challenge: string; user_id: string | null }>
+      >`
+        DELETE FROM auth_challenges
+        WHERE id = ${input.challengeId}
+          AND type = ${input.type}
+          AND expires_at > NOW()
+        RETURNING challenge, user_id
+      `;
+  if (rows.length !== 1) return null;
+  return { challenge: rows[0].challenge, userId: rows[0].user_id };
+}
+
 export async function verifyRegistration(
   expectedChallenge: string,
   response: unknown,
@@ -271,11 +311,13 @@ export async function verifyAuthentication(
   verification: VerifiedAuthenticationResponse;
   passkey: { userId: string };
 }> {
-  const challenge = await prisma.authChallenge.findUnique({
-    where: { id: challengeId },
+  // Claimed before anything else: a challenge is good for one verification,
+  // successful or not, and a concurrent second request finds nothing.
+  const challenge = await claimAuthChallenge({
+    challengeId,
+    type: "authentication",
   });
-
-  if (!challenge || challenge.expiresAt < new Date()) {
+  if (!challenge) {
     throw new Error("Challenge expired or not found");
   }
 
@@ -301,37 +343,36 @@ export async function verifyAuthentication(
     throw new Error("Passkey not found");
   }
 
-  try {
-    const verification = await verifyAuthenticationResponse({
-      response: typedResponse,
-      expectedChallenge: challenge.challenge,
-      expectedOrigin: getExpectedOrigin(),
-      expectedRPID: getRpId(),
-      credential: {
-        id: passkey.credentialId,
-        publicKey: passkey.credentialPublicKey,
-        counter: Number(passkey.counter),
-        transports: passkey.transports as Transport[],
+  // A challenge begun for one account (the re-proof arm names the account)
+  // is answered only by that account's passkey.
+  if (challenge.userId !== null && challenge.userId !== passkey.userId) {
+    throw new Error("Challenge expired or not found");
+  }
+
+  const verification = await verifyAuthenticationResponse({
+    response: typedResponse,
+    expectedChallenge: challenge.challenge,
+    expectedOrigin: getExpectedOrigin(),
+    expectedRPID: getRpId(),
+    credential: {
+      id: passkey.credentialId,
+      publicKey: passkey.credentialPublicKey,
+      counter: Number(passkey.counter),
+      transports: passkey.transports as Transport[],
+    },
+  });
+
+  if (verification.verified) {
+    // Update counter + stamp last-used so the management UI can surface
+    // when each passkey was last exercised (v1.23 passkey QoL).
+    await prisma.passkey.update({
+      where: { id: passkey.id },
+      data: {
+        counter: BigInt(verification.authenticationInfo.newCounter),
+        lastUsedAt: new Date(),
       },
     });
-
-    if (verification.verified) {
-      // Update counter + stamp last-used so the management UI can surface
-      // when each passkey was last exercised (v1.23 passkey QoL).
-      await prisma.passkey.update({
-        where: { id: passkey.id },
-        data: {
-          counter: BigInt(verification.authenticationInfo.newCounter),
-          lastUsedAt: new Date(),
-        },
-      });
-    }
-
-    return { verification, passkey: { userId: passkey.userId } };
-  } finally {
-    // Invalidate challenge after first verification attempt (success or failure)
-    await prisma.authChallenge
-      .delete({ where: { id: challengeId } })
-      .catch(() => {});
   }
+
+  return { verification, passkey: { userId: passkey.userId } };
 }

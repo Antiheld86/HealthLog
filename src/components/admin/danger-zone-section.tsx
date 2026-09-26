@@ -23,6 +23,10 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiDelete } from "@/lib/api/api-fetch";
 import { randomId } from "@/lib/random-id";
+import {
+  recentProofErrorMessage,
+  useRecentProof,
+} from "@/components/settings/security-section/use-recent-proof";
 
 /**
  * The literal an admin must type to arm the wipe. Mirrors the Backups
@@ -43,6 +47,10 @@ export function DangerZoneSection() {
   const [typed, setTyped] = useState("");
   const matched = typed.trim() === WIPE_CONFIRM_TOKEN;
 
+  // Wiping every account asks for a fresh proof unless this session signed
+  // in or re-proved within five minutes.
+  const recentProof = useRecentProof();
+
   const wipeAllData = useMutation({
     mutationFn: async () => {
       // Idempotency-Key prevents a double-submit from re-running the
@@ -52,14 +60,16 @@ export function DangerZoneSection() {
       // used to return nine fixed names, which is how nobody noticed the
       // wipe had stopped covering the schema: the result line read the same
       // whether it had cleared nine tables or ninety.
-      return apiDelete<{
-        cleared: boolean;
-        deletedRows: number;
-        models: Record<string, number>;
-      }>(
-        "/api/admin/data",
-        { confirm: WIPE_CONFIRM_TOKEN },
-        { headers: { "Idempotency-Key": idempotencyKey } },
+      return recentProof.run(() =>
+        apiDelete<{
+          cleared: boolean;
+          deletedRows: number;
+          models: Record<string, number>;
+        }>(
+          "/api/admin/data",
+          { confirm: WIPE_CONFIRM_TOKEN },
+          { headers: { "Idempotency-Key": idempotencyKey } },
+        ),
       );
     },
     onSuccess: (data) => {
@@ -72,7 +82,7 @@ export function DangerZoneSection() {
       );
     },
     onError: (err: Error) => {
-      setWipeMsg(err.message);
+      setWipeMsg(recentProofErrorMessage(err, err.message));
     },
   });
 
@@ -84,6 +94,7 @@ export function DangerZoneSection() {
     // are alarm enough. The header keeps the `AlertTriangle` icon so the
     // section still flags its intent.
     <SettingsCard>
+      {recentProof.dialog}
       <SettingsCardHeader
         icon={AlertTriangle}
         title={t("admin.deleteAllData")}

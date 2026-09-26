@@ -40,6 +40,7 @@
  */
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
+import { OPERATOR_HELD_PROVIDER_TYPES } from "@/lib/ai/provider-egress";
 
 /**
  * The whole contract. Three words, no payload.
@@ -68,11 +69,11 @@ export const SERVER_PROVIDER_FRESH_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
  * The provider tags the operator pays for: the instance-wide OpenAI key and
- * the shared central Codex account. These are exactly the two tags
- * `consent-guard.ts` gates on, and that is not a coincidence — the offer
- * this feeds is the consent for these two and for nothing else.
+ * the shared central Codex account. The same set `consent-guard.ts` gates on,
+ * read from the one definition, because the offer this feeds is the consent
+ * for these and for nothing else.
  */
-const SHARED_PROVIDER_TYPES = ["admin-openai", "admin-codex"] as const;
+const SHARED_PROVIDER_TYPES = [...OPERATOR_HELD_PROVIDER_TYPES];
 
 export async function readServerProviderHealth(
   now: Date = new Date(),
@@ -84,7 +85,7 @@ export async function readServerProviderHealth(
   }>;
   try {
     rows = await prisma.providerHealth.findMany({
-      where: { providerType: { in: [...SHARED_PROVIDER_TYPES] } },
+      where: { providerType: { in: SHARED_PROVIDER_TYPES } },
       // Three columns, none of which identifies an account. The absence of
       // `userId` here is load-bearing, not tidiness.
       select: { lastResult: true, lastOkAt: true, nextRetryAt: true },
