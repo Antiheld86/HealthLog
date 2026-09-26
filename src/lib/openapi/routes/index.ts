@@ -50,6 +50,7 @@ import { cyclePaths } from "./cycle";
 import { dashboardWidgetPaths } from "./dashboard";
 import { biomarkerPaths } from "./biomarkers";
 import { inboundDocumentPaths } from "./documents";
+import { documentSourcePaths } from "./document-sources";
 import { devicePaths } from "./devices";
 import { exportPaths } from "./export";
 import { familyHistoryPaths } from "./family-history";
@@ -170,6 +171,10 @@ export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   // discover: a copy this instance can no longer decrypt (appended, spread
   // order is load-bearing).
   ...adminBackupPaths,
+  // v1.39.3 — the document picker: a person's connection to Paperless-ngx or
+  // Papra, searching it and importing picked documents; cookie-only
+  // (appended, spread order is load-bearing).
+  ...documentSourcePaths,
   // The environmental-context overview. Its own module because nothing else
   // owns the surface (appended, spread order is load-bearing).
   //
