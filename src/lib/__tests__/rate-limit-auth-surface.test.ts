@@ -176,8 +176,9 @@ describe("checkAuthSurfaceRateLimit — trust-violation tightening", () => {
         5,
         15 * 60 * 1000,
       );
-      // Falls through to x-real-ip when the chain is too short.
-      expect(result.ip).toBe("9.9.9.9");
+      // A short chain means the declared proxies were bypassed, so the
+      // caller-set x-real-ip is not believed either.
+      expect(result.ip).toBeNull();
       expect(lastKey()).toBe("auth:anon:trust-violation");
     } finally {
       warn.mockRestore();

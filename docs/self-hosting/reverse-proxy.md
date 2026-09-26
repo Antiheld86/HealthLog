@@ -40,17 +40,23 @@ chain from the **right**, counting back `TRUST_PROXY_HOPS` entries.
 This guards against a client rotating `X-Forwarded-For` per request
 to defeat IP-based rate limits.
 
-| Topology                                                  | `TRUST_PROXY_HOPS`         |
-| --------------------------------------------------------- | -------------------------- |
-| App is internet-facing with no proxy                      | `0` (XFF ignored entirely) |
-| Single proxy in front (Caddy / Traefik / Nginx / Coolify) | `1` (default)              |
-| Cloudflare → your proxy → app                             | `2`                        |
-| Cloudflare → Coolify-Tunnel → Coolify → app               | `3`                        |
+| Topology                                                  | `TRUST_PROXY_HOPS`                    |
+| --------------------------------------------------------- | ------------------------------------- |
+| App is internet-facing with no proxy                      | `0` (no forwarding header is trusted) |
+| Single proxy in front (Caddy / Traefik / Nginx / Coolify) | `1` (default)                         |
+| Cloudflare → your proxy → app                             | `2`                                   |
+| Cloudflare → Coolify-Tunnel → Coolify → app               | `3`                                   |
 
 A misconfigured count logs a one-shot warning to stderr and collapses
 every anonymous caller into one shared rate-limit bucket. Match the
-value to the actual hop count or set it to `0` and let `x-real-ip`
-drive the IP resolution.
+value to the actual hop count.
+
+`X-Real-IP` gets the same trust as `X-Forwarded-For`. It is read only
+when `TRUST_PROXY_HOPS` is `1` or more and the request carries no
+`X-Forwarded-For`, which covers a proxy that sets only `X-Real-IP`. With
+`0` neither header is believed, because without a proxy in front both
+come from the caller. If your proxy sets only `X-Real-IP` and you had
+set `0` for it, set `1` instead.
 
 ## Caddy
 
