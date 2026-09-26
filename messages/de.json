@@ -6556,7 +6556,11 @@
       "revokeSessionConfirmBody": "{device} muss sich neu anmelden. An den dort erfassten Daten ändert sich nichts.",
       "signOutEverywhereConfirmTitle": "Alle anderen Geräte abmelden?",
       "signOutEverywhereConfirmBody": "Alle anderen Geräte, jeder verbundene KI-Assistent und jedes API-Token müssen sich neu anmelden oder neu eingerichtet werden. Dieses Gerät bleibt angemeldet. Deine Einträge bleiben unberührt.",
-      "signOutEverywhereShareLinks": "Auch die Freigabelinks für Ärztinnen und Ärzte beenden"
+      "signOutEverywhereShareLinks": "Auch die Freigabelinks für Ärztinnen und Ärzte beenden",
+      "signOutEverywhereInvites": "Einladungen zu deiner Akte, die noch niemand angenommen hat, werden zurückgezogen. Wer schon angenommen hat, behält den Zugriff; du kannst ihn gleich danach beenden.",
+      "signOutEverywhereInvitesDone": "{count} nicht angenommene Einladung(en) zurückgezogen.",
+      "grantsKeptTitle": "Diese Personen sehen deine Akte weiterhin",
+      "grantsKeptBody": "Das Abmelden beendet keinen Zugriff, den du jemandem gegeben hast. Beende ihn hier, wenn du ihn nicht gegeben hast oder nicht mehr willst."
     },
     "privacy": {
       "encryption": {

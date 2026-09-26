@@ -6556,7 +6556,11 @@
       "revokeSessionConfirmBody": "{device} — 다시 로그인해야 해요. 기기에 기록된 내용은 영향받지 않아요.",
       "signOutEverywhereConfirmTitle": "다른 기기를 모두 로그아웃할까요?",
       "signOutEverywhereConfirmBody": "다른 모든 기기, 연결된 모든 AI 어시스턴트와 모든 API 토큰은 다시 로그인하거나 다시 설정해야 합니다. 이 기기는 로그인 상태로 유지됩니다. 기록한 내용에는 영향이 없습니다.",
-      "signOutEverywhereShareLinks": "의료진 공유 링크도 종료"
+      "signOutEverywhereShareLinks": "의료진 공유 링크도 종료",
+      "signOutEverywhereInvites": "아직 아무도 수락하지 않은 기록 공유 초대는 철회됩니다. 이미 수락한 사람은 접근 권한을 유지하며, 이어서 끝낼 수 있어요.",
+      "signOutEverywhereInvitesDone": "수락되지 않은 초대 {count}개를 철회했어요.",
+      "grantsKeptTitle": "이 사람들은 여전히 내 기록을 볼 수 있어요",
+      "grantsKeptBody": "로그아웃해도 다른 사람에게 준 접근 권한은 끝나지 않아요. 직접 준 적이 없거나 더 이상 원하지 않으면 여기에서 끝내세요."
     },
     "privacy": {
       "encryption": {

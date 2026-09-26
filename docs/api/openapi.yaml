@@ -2621,7 +2621,10 @@ paths:
         (the OAuth connection, so it cannot mint a new access token), every programmatic token (connector, measurement
         and document tokens), and every clinician share link. Share links are revoked by default because a link made by
         whoever held a lost session or device would otherwise keep opening the record; send `keepShareLinks=1` to keep
-        them. A Bearer caller keeps its own device login."
+        them. Record-sharing invitations this account offered that nobody has accepted yet are withdrawn too, because an
+        invitation sent from a stolen session would otherwise wait for the thief's own account. Accepted grants are not
+        ended: the response lists them as `grantsKept` so the client can show who can still read the record and offer to
+        end each one. A Bearer caller keeps its own device login."
       parameters:
         - in: query
           name: keepShareLinks
@@ -19394,7 +19397,12 @@ paths:
         (`requireFreshMfaIfEnrolled`, cookie-only): an enrolled account without a fresh factor gets 401
         `auth.stepup.required`, and a Bearer caller gets 403 `sharing.invite.manage_browser_only` before anything else
         happens, because the gate it would hit resolves through the session cookie and would otherwise answer 'not
-        authenticated' to a caller it had just authenticated."
+        authenticated' to a caller it had just authenticated. Every invitation, at any level, also needs a fresh proof:
+        a browser session must have signed in or used `POST /api/auth/reproof` within the last five minutes (with the
+        second factor, on an account that has one), or it gets 401 `auth.reproof.required` with `meta.methods`; a Bearer
+        caller presents an `X-Step-Up` elevation from `POST /api/auth/step-up` (a second-factor one on an account with a
+        second factor) and gets 401 `auth.stepup.required` without it. `DELETE /api/auth/me/sessions` withdraws the
+        invitations nobody has accepted yet."
       requestBody:
         required: true
         content:
@@ -19409,8 +19417,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/AccountGrantEnvelope"
         "401":
-          description: "Offering MANAGE from an MFA-enrolled account without a recent second-factor proof (`meta.errorCode:
-            auth.stepup.required`). Re-prove the factor and retry; READ and WRITE invitations are never gated."
+          description: "No recent proof. A browser session that has not signed in or re-proved within five minutes gets
+            `meta.errorCode: auth.reproof.required` with `meta.methods`; re-prove at POST /api/auth/reproof and retry. A
+            Bearer caller without a valid `X-Step-Up` elevation gets `auth.stepup.required`, as does offering MANAGE
+            from an MFA-enrolled browser session without a recent second-factor proof."
           content:
             application/json:
               schema:
@@ -39023,11 +39033,57 @@ components:
           minimum: -9007199254740991
           maximum: 9007199254740991
           description: Clinician share links revoked; 0 when `keepShareLinks=1` was sent.
+        pendingInvitesRevoked:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: "Record-sharing invitations this account offered that nobody had accepted yet, now withdrawn (`revokedBy:
+            GRANTOR`)."
+        grantsKept:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                description: The grant id, for DELETE /api/account/grants/{id}.
+              account:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  username:
+                    type: string
+                  displayName:
+                    anyOf:
+                      - type: string
+                      - type: "null"
+                required:
+                  - id
+                  - username
+                  - displayName
+                additionalProperties: false
+              access:
+                type: string
+                enum:
+                  - READ
+                  - WRITE
+                  - MANAGE
+            required:
+              - id
+              - account
+              - access
+            additionalProperties: false
+          description: Accepted grants this account gave that are still live. Signing out does not end them, because each is a
+            person the owner chose and ending one silently could cut off a carer; they are listed so a client can show
+            who can still read the record and offer to end each with DELETE /api/account/grants/{id}.
       required:
         - sessionsRevoked
         - accessTokensRevoked
         - connectorsRevoked
         - shareLinksRevoked
+        - pendingInvitesRevoked
+        - grantsKept
       additionalProperties: false
     SessionRevokeEnvelope:
       type: object

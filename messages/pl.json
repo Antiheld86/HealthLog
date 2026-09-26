@@ -6556,7 +6556,11 @@
       "revokeSessionConfirmBody": "{device} będzie musiało zalogować się ponownie. Zapisane na nim dane pozostają bez zmian.",
       "signOutEverywhereConfirmTitle": "Wylogować wszystkie pozostałe urządzenia?",
       "signOutEverywhereConfirmBody": "Wszystkie inne urządzenia, każdy połączony asystent AI i każdy token API będą musiały zalogować się ponownie lub zostać skonfigurowane od nowa. To urządzenie pozostaje zalogowane. Zapisane dane pozostają bez zmian.",
-      "signOutEverywhereShareLinks": "Zakończ także linki udostępniania dla lekarzy"
+      "signOutEverywhereShareLinks": "Zakończ także linki udostępniania dla lekarzy",
+      "signOutEverywhereInvites": "Zaproszenia do Twojej karty, których nikt jeszcze nie przyjął, zostaną wycofane. Osoby, które już je przyjęły, zachowują dostęp; możesz go zakończyć zaraz potem.",
+      "signOutEverywhereInvitesDone": "Wycofano nieprzyjęte zaproszenia: {count}.",
+      "grantsKeptTitle": "Te osoby nadal widzą Twoją kartę",
+      "grantsKeptBody": "Wylogowanie nie kończy dostępu, który komuś dałeś. Zakończ go tutaj, jeśli go nie dawałeś albo już nie chcesz, żeby go miał."
     },
     "privacy": {
       "encryption": {

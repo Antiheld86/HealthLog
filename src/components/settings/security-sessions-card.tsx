@@ -16,6 +16,7 @@ import { ChevronDown, Loader2, MonitorSmartphone } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -23,7 +24,21 @@ import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet, apiDelete } from "@/lib/api/api-fetch";
+import { useRevokeGrant } from "@/lib/queries/use-account-grants";
 import { cn } from "@/lib/utils";
+
+/** An accepted grant sign-out-everywhere left standing (`grantsKept`). */
+interface KeptGrant {
+  id: string;
+  account: { id: string; username: string; displayName: string | null };
+  access: "READ" | "WRITE" | "MANAGE";
+}
+
+const ACCESS_LABEL_KEY: Record<KeptGrant["access"], string> = {
+  READ: "recordSharing.invite.accessReadLabel",
+  WRITE: "recordSharing.invite.accessWriteLabel",
+  MANAGE: "recordSharing.invite.accessManageLabel",
+};
 
 interface SessionRow {
   id: string;
@@ -54,6 +69,12 @@ export function SecuritySessionsCard({
   // state; nothing is persisted across reloads.
   const [open, setOpen] = useState(false);
   const regionId = useId();
+  // The people who can still read this record after "sign out everywhere".
+  // Their access is not ended by it (a carer who still needs the record would
+  // be cut off by a button labelled "sign out"), so they are shown here with
+  // a one-click end instead. Held only until the card unmounts.
+  const [keptGrants, setKeptGrants] = useState<KeptGrant[]>([]);
+  const revokeGrant = useRevokeGrant();
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.sessions(),
@@ -75,17 +96,32 @@ export function SecuritySessionsCard({
 
   const revokeOthers = useMutation({
     mutationFn: () =>
-      apiDelete<{ sessionsRevoked: number }>(
+      apiDelete<{
+        sessionsRevoked: number;
+        pendingInvitesRevoked?: number;
+        grantsKept?: KeptGrant[];
+      }>(
         endShareLinks
           ? "/api/auth/me/sessions"
           : "/api/auth/me/sessions?keepShareLinks=1",
       ),
     onSuccess: (res) => {
+      const invites = res?.pendingInvitesRevoked ?? 0;
       setStatus(
-        t("settings.security.signOutEverywhereDone", {
-          count: res?.sessionsRevoked ?? 0,
-        }),
+        [
+          t("settings.security.signOutEverywhereDone", {
+            count: res?.sessionsRevoked ?? 0,
+          }),
+          invites > 0
+            ? t("settings.security.signOutEverywhereInvitesDone", {
+                count: invites,
+              })
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" "),
       );
+      setKeptGrants(res?.grantsKept ?? []);
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.securityActivity(),
@@ -206,17 +242,24 @@ export function SecuritySessionsCard({
               onConfirm={() => revokeOthers.mutate()}
               pending={revokeOthers.isPending}
               extra={
-                <label className="flex items-start gap-2 text-sm">
-                  <Checkbox
-                    data-testid="sign-out-everywhere-share-links"
-                    checked={endShareLinks}
-                    onCheckedChange={(next) => setEndShareLinks(next === true)}
-                    className="mt-0.5"
-                  />
-                  <span>
-                    {t("settings.security.signOutEverywhereShareLinks")}
-                  </span>
-                </label>
+                <div className="space-y-3">
+                  <label className="flex items-start gap-2 text-sm">
+                    <Checkbox
+                      data-testid="sign-out-everywhere-share-links"
+                      checked={endShareLinks}
+                      onCheckedChange={(next) =>
+                        setEndShareLinks(next === true)
+                      }
+                      className="mt-0.5"
+                    />
+                    <span>
+                      {t("settings.security.signOutEverywhereShareLinks")}
+                    </span>
+                  </label>
+                  <p className="text-sm">
+                    {t("settings.security.signOutEverywhereInvites")}
+                  </p>
+                </div>
               }
             />
           </SettingsCardActions>
@@ -226,6 +269,57 @@ export function SecuritySessionsCard({
           <p role="status" className="text-muted-foreground text-right text-sm">
             {status}
           </p>
+        )}
+
+        {keptGrants.length > 0 && (
+          <div
+            data-slot="sign-out-everywhere-grants-kept"
+            className="space-y-2 border-t pt-4"
+          >
+            <p className="text-sm font-medium">
+              {t("settings.security.grantsKeptTitle")}
+            </p>
+            <p className="text-muted-foreground text-sm">
+              {t("settings.security.grantsKeptBody")}
+            </p>
+            <ul className="divide-y">
+              {keptGrants.map((grant) => (
+                <li
+                  key={grant.id}
+                  className="flex items-center justify-between gap-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm">
+                      {grant.account.displayName ?? grant.account.username}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {t(ACCESS_LABEL_KEY[grant.access])}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11 shrink-0 sm:min-h-9"
+                    disabled={revokeGrant.isPending}
+                    onClick={() =>
+                      revokeGrant.mutate(grant.id, {
+                        onSuccess: () =>
+                          setKeptGrants((current) =>
+                            current.filter((g) => g.id !== grant.id),
+                          ),
+                        onError: () =>
+                          setStatus(
+                            t("recordSharing.actionError.revokeFailed"),
+                          ),
+                      })
+                    }
+                  >
+                    {t("recordSharing.given.revoke")}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
     </SettingsCard>

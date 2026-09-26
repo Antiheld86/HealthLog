@@ -6556,7 +6556,11 @@
       "revokeSessionConfirmBody": "{device} devra se reconnecter. Ce qui y est enregistré n'est pas affecté.",
       "signOutEverywhereConfirmTitle": "Déconnecter tous les autres appareils ?",
       "signOutEverywhereConfirmBody": "Tous les autres appareils, chaque assistant IA connecté et chaque jeton d'API devront se reconnecter ou être reconfigurés. Cet appareil reste connecté. Rien de ce que vous avez enregistré n'est touché.",
-      "signOutEverywhereShareLinks": "Mettre fin aussi aux liens de partage avec les médecins"
+      "signOutEverywhereShareLinks": "Mettre fin aussi aux liens de partage avec les médecins",
+      "signOutEverywhereInvites": "Les invitations à votre dossier que personne n'a encore acceptées sont retirées. Les personnes qui ont déjà accepté gardent leur accès ; vous pourrez y mettre fin ensuite.",
+      "signOutEverywhereInvitesDone": "{count} invitation(s) non acceptée(s) retirée(s).",
+      "grantsKeptTitle": "Ces personnes peuvent toujours voir votre dossier",
+      "grantsKeptBody": "Se déconnecter ne met pas fin à l'accès que vous avez donné à quelqu'un. Mettez-y fin ici si vous ne l'avez pas donné ou si vous ne le souhaitez plus."
     },
     "privacy": {
       "encryption": {

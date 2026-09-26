@@ -238,6 +238,29 @@ const signOutEverywhereResponse = z
       .describe(
         "Clinician share links revoked; 0 when `keepShareLinks=1` was sent.",
       ),
+    pendingInvitesRevoked: z
+      .number()
+      .int()
+      .describe(
+        "Record-sharing invitations this account offered that nobody had accepted yet, now withdrawn (`revokedBy: GRANTOR`).",
+      ),
+    grantsKept: z
+      .array(
+        z.object({
+          id: z
+            .string()
+            .describe("The grant id, for DELETE /api/account/grants/{id}."),
+          account: z.object({
+            id: z.string(),
+            username: z.string(),
+            displayName: z.string().nullable(),
+          }),
+          access: z.enum(["READ", "WRITE", "MANAGE"]),
+        }),
+      )
+      .describe(
+        "Accepted grants this account gave that are still live. Signing out does not end them, because each is a person the owner chose and ending one silently could cut off a carer; they are listed so a client can show who can still read the record and offer to end each with DELETE /api/account/grants/{id}.",
+      ),
   })
   .meta({ id: "SignOutEverywhereResponse" });
 
@@ -1328,7 +1351,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Auth"],
       summary: "Sign out everywhere else",
       description:
-        "Ends every credential except the caller's own: every OTHER web session, every other device login (refresh token and its paired access token), every trusted device and step-up elevation, every connected AI assistant (the OAuth connection, so it cannot mint a new access token), every programmatic token (connector, measurement and document tokens), and every clinician share link. Share links are revoked by default because a link made by whoever held a lost session or device would otherwise keep opening the record; send `keepShareLinks=1` to keep them. A Bearer caller keeps its own device login.",
+        "Ends every credential except the caller's own: every OTHER web session, every other device login (refresh token and its paired access token), every trusted device and step-up elevation, every connected AI assistant (the OAuth connection, so it cannot mint a new access token), every programmatic token (connector, measurement and document tokens), and every clinician share link. Share links are revoked by default because a link made by whoever held a lost session or device would otherwise keep opening the record; send `keepShareLinks=1` to keep them. Record-sharing invitations this account offered that nobody has accepted yet are withdrawn too, because an invitation sent from a stolen session would otherwise wait for the thief's own account. Accepted grants are not ended: the response lists them as `grantsKept` so the client can show who can still read the record and offer to end each one. A Bearer caller keeps its own device login.",
       requestParams: {
         query: z.object({
           keepShareLinks: z.enum(["1"]).optional().meta({

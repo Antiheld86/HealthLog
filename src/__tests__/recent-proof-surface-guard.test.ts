@@ -73,6 +73,8 @@ function callers(exportName: string): string[] {
 
 /** Routes that resolve their own caller and take the recent-proof gate. */
 const RECENT_PROOF_ROUTES: Record<string, string> = {
+  // Offering access to the record. No shipped client calls it on a token.
+  "app/api/account/grants/route.ts": "elevation",
   // `type=all` only; the single-type exports stay on `requireAuth`.
   "app/api/export/route.ts": "elevation",
   "app/api/export/full-backup/route.ts": "elevation",

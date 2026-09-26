@@ -6556,7 +6556,11 @@
       "revokeSessionConfirmBody": "{device} tendrá que iniciar sesión de nuevo. Lo registrado en él no se ve afectado.",
       "signOutEverywhereConfirmTitle": "¿Cerrar la sesión en los demás dispositivos?",
       "signOutEverywhereConfirmBody": "Todos los demás dispositivos, cada asistente de IA conectado y cada token de API tendrán que volver a iniciar sesión o configurarse de nuevo. Este dispositivo sigue con la sesión iniciada. Nada de lo que has registrado se ve afectado.",
-      "signOutEverywhereShareLinks": "Terminar también los enlaces compartidos con profesionales médicos"
+      "signOutEverywhereShareLinks": "Terminar también los enlaces compartidos con profesionales médicos",
+      "signOutEverywhereInvites": "Se retiran las invitaciones a tu historial que nadie ha aceptado todavía. Quien ya aceptó conserva el acceso; puedes quitárselo a continuación.",
+      "signOutEverywhereInvitesDone": "Se retiraron {count} invitación(es) que nadie había aceptado.",
+      "grantsKeptTitle": "Estas personas todavía pueden ver tu historial",
+      "grantsKeptBody": "Cerrar sesión no quita el acceso que diste a alguien. Quítalo aquí si no lo diste o si ya no quieres que lo tenga."
     },
     "privacy": {
       "encryption": {

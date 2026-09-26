@@ -6556,7 +6556,11 @@
       "revokeSessionConfirmBody": "{device} dovrà accedere di nuovo. Quanto registrato su di esso non viene toccato.",
       "signOutEverywhereConfirmTitle": "Disconnettere tutti gli altri dispositivi?",
       "signOutEverywhereConfirmBody": "Tutti gli altri dispositivi, ogni assistente IA collegato e ogni token API dovranno accedere di nuovo o essere configurati di nuovo. Questo dispositivo resta connesso. Nulla di ciò che hai registrato viene toccato.",
-      "signOutEverywhereShareLinks": "Termina anche i link di condivisione con i medici"
+      "signOutEverywhereShareLinks": "Termina anche i link di condivisione con i medici",
+      "signOutEverywhereInvites": "Gli inviti alla tua cartella che nessuno ha ancora accettato vengono ritirati. Chi ha già accettato mantiene l'accesso; puoi revocarlo subito dopo.",
+      "signOutEverywhereInvitesDone": "Ritirati {count} inviti non accettati.",
+      "grantsKeptTitle": "Queste persone possono ancora vedere la tua cartella",
+      "grantsKeptBody": "Disconnettersi non revoca l'accesso che hai dato a qualcuno. Revocalo qui se non l'hai dato tu o se non vuoi più che lo abbia."
     },
     "privacy": {
       "encryption": {
