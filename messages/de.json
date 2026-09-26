@@ -128,6 +128,12 @@
         "emailInUse": "Diese E-Mail-Adresse wird bereits verwendet.",
         "emailRateLimited": "Zu viele Änderungen der E-Mail-Adresse. Versuche es später erneut."
       }
+    },
+    "auth": {
+      "reproof": {
+        "required": "Bestätige dein aktuelles Passwort, um das zu ändern.",
+        "failed": "Die Bestätigung ist fehlgeschlagen. Es wurde nichts geändert."
+      }
     }
   },
   "doctorReport": {
@@ -440,7 +446,8 @@
       "errorEmailUnverified": "Dein Identitätsanbieter hat deine E-Mail-Adresse nicht als bestätigt markiert.",
       "errorIdentityConflict": "Diese E-Mail-Adresse gehört zu einem Konto, das bereits mit einer anderen SSO-Identität verknüpft ist.",
       "errorRegistrationDisabled": "Kein Konto passt zu dieser Identität, und neue Registrierungen sind derzeit geschlossen.",
-      "errorFailed": "Single Sign-On ist fehlgeschlagen. Bitte versuche es erneut."
+      "errorFailed": "Single Sign-On ist fehlgeschlagen. Bitte versuche es erneut.",
+      "errorLinkRequired": "Hier gibt es bereits ein Konto mit dieser E-Mail-Adresse. Melde dich einmal mit seinem Passwort oder Passkey an, um es mit Single Sign-on zu verbinden."
     },
     "native": {
       "signingInToApp": "Anmeldung bei der HealthLog-App"
@@ -5553,7 +5560,9 @@
       "invalidFormat": "Das ist nicht in einer Form geschrieben, die dieses Feld lesen kann.",
       "invalidType": "Der Wert kam nicht in einer Form an, die dieses Feld speichern kann.",
       "rateLimited": "Zu oft geändert. Warte kurz und versuche es dann erneut.",
-      "other": "Dieser Wert wurde nicht angenommen. Bitte prüfen und erneut versuchen."
+      "other": "Dieser Wert wurde nicht angenommen. Bitte prüfen und erneut versuchen.",
+      "reproofRequired": "Gib dein aktuelles Passwort ein, um die E-Mail-Adresse zu ändern.",
+      "reproofFailed": "Das Passwort stimmt nicht, die E-Mail-Adresse wurde nicht geändert."
     },
     "avatar": {
       "title": "Profilfoto",
@@ -5594,7 +5603,9 @@
       "currentPassword": "Aktuelles Passwort",
       "authenticatorCode": "Authenticator-Code",
       "authenticatorPlaceholder": "Sechsstelliger Authenticator-Code",
-      "verifyAndAdd": "Bestätigen und hinzufügen"
+      "verifyAndAdd": "Bestätigen und hinzufügen",
+      "factorDescription": "Bestätige eine vorhandene Anmeldemethode, bevor du einen zweiten Faktor hinzufügst.",
+      "verifyAndContinue": "Bestätigen und fortfahren"
     },
     "passkeyName": "Name",
     "noPasskeys": "Keine Passkeys registriert.",
@@ -6727,7 +6738,8 @@
       "unavailableExplainer": "Dieser Server erlaubt keine Dokumentarchive mehr, die Verbindung unten ist daher nicht nutzbar. Du kannst sie weiterhin entfernen.",
       "moduleOffExplainer": "Dokumente sind ausgeschaltet, die Verbindung unten wird daher nicht genutzt. Du kannst sie weiterhin entfernen.",
       "tokenNewAddress": "Für eine neue Adresse wird das API-Token erneut gebraucht."
-    }
+    },
+    "emailChangePassword": "Aktuelles Passwort (nötig, um die E-Mail-Adresse zu ändern)"
   },
   "admin": {
     "title": "Administration",

@@ -128,6 +128,12 @@
         "emailInUse": "Questo indirizzo email è già in uso.",
         "emailRateLimited": "Troppi cambi di indirizzo email. Riprova più tardi."
       }
+    },
+    "auth": {
+      "reproof": {
+        "required": "Conferma la password attuale per modificarlo.",
+        "failed": "La verifica non è riuscita. Non è stato modificato nulla."
+      }
     }
   },
   "doctorReport": {
@@ -440,7 +446,8 @@
       "errorEmailUnverified": "Il tuo provider di identità non ha contrassegnato il tuo indirizzo email come verificato.",
       "errorIdentityConflict": "Questo indirizzo email appartiene a un account già collegato a un'altra identità SSO.",
       "errorRegistrationDisabled": "Nessun account corrisponde a questa identità e le nuove registrazioni sono attualmente chiuse.",
-      "errorFailed": "L'accesso Single Sign-On non è riuscito. Riprova."
+      "errorFailed": "L'accesso Single Sign-On non è riuscito. Riprova.",
+      "errorLinkRequired": "Esiste già un account con questo indirizzo email. Accedi una volta con la sua password o passkey per collegarlo al single sign-on."
     },
     "native": {
       "signingInToApp": "Accesso all'app HealthLog"
@@ -5553,7 +5560,9 @@
       "invalidFormat": "Non è scritto in un formato che questo campo possa leggere.",
       "invalidType": "Il valore non è arrivato in un formato che questo campo possa salvare.",
       "rateLimited": "Modificato troppe volte. Aspetta un momento e riprova.",
-      "other": "Questo valore non è stato accettato. Controllalo e riprova."
+      "other": "Questo valore non è stato accettato. Controllalo e riprova.",
+      "reproofRequired": "Inserisci la password attuale per cambiare l'indirizzo email.",
+      "reproofFailed": "La password non è corretta, quindi l'indirizzo email non è stato cambiato."
     },
     "avatar": {
       "title": "Foto del profilo",
@@ -5594,7 +5603,9 @@
       "currentPassword": "Password attuale",
       "authenticatorCode": "Codice dell’app di autenticazione",
       "authenticatorPlaceholder": "Codice a 6 cifre dell’app di autenticazione",
-      "verifyAndAdd": "Verifica e aggiungi"
+      "verifyAndAdd": "Verifica e aggiungi",
+      "factorDescription": "Verifica un metodo di accesso esistente prima di aggiungere un secondo fattore.",
+      "verifyAndContinue": "Verifica e continua"
     },
     "passkeyName": "Nome",
     "noPasskeys": "Nessuna passkey registrata.",
@@ -6727,7 +6738,8 @@
       "unavailableExplainer": "Questo server non consente più gli archivi di documenti, quindi il collegamento qui sotto non si può usare. Puoi comunque rimuoverlo.",
       "moduleOffExplainer": "I documenti sono disattivati, quindi il collegamento qui sotto non viene usato. Puoi comunque rimuoverlo.",
       "tokenNewAddress": "Un nuovo indirizzo richiede di nuovo il token API."
-    }
+    },
+    "emailChangePassword": "Password attuale (necessaria per cambiare l'indirizzo email)"
   },
   "admin": {
     "title": "Administration",

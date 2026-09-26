@@ -315,6 +315,17 @@ const successFlagResponse = z
 const MFA_MANAGEMENT_AUTH_NOTE =
   " Accepts a cookie session, or a Bearer token presenting a single-use elevation from POST /api/auth/step-up in the `X-Step-Up` header; a Bearer token alone is still refused.";
 
+const ENROLLMENT_PROOF_NOTE =
+  "\n\nAdding a factor needs a fresh proof, not just a session. On the Bearer path the elevation is that proof (a password-proved one is enough). On the cookie path the request passes when the session signed in, or completed a second factor, within the last five minutes; otherwise the body must carry a proof in the shape POST /api/auth/step-up takes (`password`, a `totp` code from an already confirmed authenticator, or a passkey / security-key assertion begun at POST /api/auth/passkey/register-options). Without one the answer is 401 `auth.reproof.required`; a proof that does not verify is 401 `auth.reproof.failed` and is audited. Proofs draw on the account's shared re-proof budget of five per fifteen minutes (429 once spent), the same budget as the step-up mint.";
+
+const enrollmentProofResponses = {
+  "401": {
+    description:
+      "No session or elevation; or, on the cookie path, `auth.reproof.required` (no recent sign-in and no proof in the body) or `auth.reproof.failed` (the proof did not verify).",
+    content: { "application/json": { schema: errorEnvelope } },
+  },
+} as const;
+
 // ── v1.30.34 step-up elevation (Bearer transport) ────────────────────
 
 const stepUpOptionsResponse = z
@@ -641,7 +652,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "403": {
           description:
-            "Password login is disabled — the operator runs `OIDC_ONLY=true`. `meta.errorCode` = `oidc_only`; sign in through SSO instead.",
+            "Password login is disabled — the operator runs `OIDC_ONLY=true`. `meta.errorCode` = `oidc_only`; sign in through SSO instead. The one exception is a browser the SSO callback sent back with a pending link to confirm an existing account: it may sign in with that one account's password, which links the account.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
@@ -805,7 +816,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Re-prove a factor and receive an opaque elevation that authorises exactly ONE second-factor-management call.\n\n" +
         "WHICH factor you re-prove decides WHAT the elevation reaches. `password` reaches the same routes a plain cookie session reaches. `totp`, `webauthn`, and `passkey` additionally satisfy the fresh-factor routes — MFA disable, recovery-code regeneration, security-key removal — which is precisely the set of ceremonies for which the web marks a session second-factor-verified. The response carries `satisfiesFreshFactor` so a client can choose the right ceremony up front rather than discovering the refusal after spending a proof. A recovery code is NOT accepted here; an account that has lost its authenticator manages its second factor on the web.\n\n" +
         "The elevation is bound to the exact token that minted it (another token, including the same account's, cannot redeem it), single-use, and valid for five minutes — the same window the cookie path uses. Present it as `X-Step-Up: hle_…` alongside the normal `Authorization: Bearer` header. It is spent only when the target route is about to act, so a 429, a 422, or a wrong code does not burn it.\n\n" +
-        "Presenting the token alone mints nothing: the body must carry a fresh factor proof. Every failure — wrong password, no password set on an SSO-provisioned account, an assertion for another account, a stale challenge, a replayed TOTP step — returns the same 401 with the same prose, and is audited server-side. Rate-limited per account (5 / 15 min) and per source address.\n\n" +
+        "Presenting the token alone mints nothing: the body must carry a fresh factor proof. Every failure — wrong password, no password set on an SSO-provisioned account, an assertion for another account, a stale challenge, a replayed TOTP step — returns the same 401 with the same prose, and is audited server-side. Rate-limited per source address and per account (5 / 15 min); the per-account budget is shared with the web's credential-enrollment proofs. A `totp` proof counts only from an authenticator whose enrollment was confirmed: a code from a pending secret is refused like a wrong one.\n\n" +
         "Accepting routes (the complete set): POST /api/auth/me/mfa/totp/setup; POST /api/auth/me/mfa/totp/confirm; POST /api/auth/me/mfa/disable; POST /api/auth/me/mfa/recovery-codes/regenerate; POST /api/auth/me/mfa/webauthn/register/options; POST /api/auth/me/mfa/webauthn/register/verify; PATCH and DELETE /api/auth/me/mfa/webauthn/{id}; DELETE /api/settings/account; DELETE /api/settings/data. The last three MFA routes, disable, and both erasure routes require a fresh-factor proof. GET /api/auth/me/mfa needs no elevation at all. Nothing else accepts one — admin endpoints stay cookie-only.\n\n" +
         "The two erasure routes joined the set so an account with a second factor can be deleted from a native app: their gate was cookie-only, which left an enrolled user unable to delete their own account from the app at all. They take the elevation the same way as the rest — fresh factor required, spent only when the erasure is about to run.",
       requestBody: {
@@ -830,8 +841,13 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Auth"],
       summary: "Begin TOTP enrollment (cookie session or step-up elevation)",
       description:
-        "Generates and stores a pending (encrypted) TOTP secret and returns the otpauth URI + Base32 secret. MFA is not active until /confirm." +
-        MFA_MANAGEMENT_AUTH_NOTE,
+        "Generates and stores a pending (encrypted) TOTP secret and returns the otpauth URI + Base32 secret. MFA is not active until /confirm, and a pending secret is not a factor anywhere: a code from it is refused by every route that verifies one." +
+        MFA_MANAGEMENT_AUTH_NOTE +
+        ENROLLMENT_PROOF_NOTE,
+      requestBody: {
+        required: false,
+        content: { "application/json": { schema: stepUpMintSchema } },
+      },
       responses: {
         "200": {
           description: "Pending secret created.",
@@ -846,6 +862,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+        ...enrollmentProofResponses,
       },
     },
   },
@@ -953,7 +970,12 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Begin registering a security key as a second factor",
       description:
         "Returns SimpleWebAuthn creation options + a challenge id." +
-        MFA_MANAGEMENT_AUTH_NOTE,
+        MFA_MANAGEMENT_AUTH_NOTE +
+        ENROLLMENT_PROOF_NOTE,
+      requestBody: {
+        required: false,
+        content: { "application/json": { schema: stepUpMintSchema } },
+      },
       responses: {
         "200": {
           description: "Registration options issued.",
@@ -967,6 +989,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
+        ...enrollmentProofResponses,
       },
     },
   },
@@ -1880,6 +1903,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "**Browser arm.** No parameters, or `next=<path>` to return somewhere specific afterwards (sanitised to an in-app path — an absolute URL is discarded, not honoured). Redirects to the provider's authorization endpoint. Every failure redirects to `/auth/login?error=<reason>`.\n\n" +
         "**Native arm.** The iOS app opens this URL inside an `ASWebAuthenticationSession` with `client=native` and its own PKCE `code_challenge`. The challenge is mandatory on this arm and must be S256, 43–128 characters; `plain` is structurally unsupported because the exchange only ever verifies S256. `next` is ignored and pinned to `/` — a post-login web path means nothing to the app. Every failure redirects to `healthlog://oidc-callback?error=<reason>`, and an error redirect carries no code, no ticket and no session, which is why it is safe that `client` is caller-supplied.\n\n" +
         "**What comes back.** The provider returns to the server's own callback, not to the app. On success the callback redirects to the compiled-in `healthlog://oidc-callback` with a one-time `code=hlh_…`, which the app exchanges at POST /api/auth/oidc/native/token. When the account has a second factor the callback instead returns `mfa_ticket=…`, which the app completes at /api/auth/mfa/verify to obtain the same bundle. The token pair NEVER rides a URL — only the opaque code or ticket does. There is no `redirect_uri` parameter and no allowlist to configure: the scheme is a compile-time constant, so the open-redirect class is removed by construction.\n\n" +
+        "**An account that exists but is not linked yet.** When the provider's verified email matches a local account with no SSO identity, nothing is linked and nobody is signed in: the local address was never verified, so matching it proves nothing about who owns the account. The browser arm redirects to `/auth/login?error=oidc_link_required` with a sealed, ten-minute, HttpOnly pending-link cookie; the person then signs in to that account once with its own password (and second factor) or passkey, and that sign-in makes the link. Under `OIDC_ONLY=true` the password sign-in is admitted for exactly the account the pending link names. The native arm redirects to `healthlog://oidc-callback?error=oidc_link_required`; the link is confirmed once on the web, after which the app's SSO sign-in works.\n\n" +
         "Two PKCE exchanges run here and must not be confused: the server↔provider verifier the server generates for itself, and the app↔server challenge supplied above. The native flag and the app's challenge travel only inside an AES-256-GCM state cookie, so the callback branches on tamper-authenticated state rather than on anything the provider or a network attacker can flip.",
       requestParams: {
         query: z.object({
@@ -1922,7 +1946,8 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         '**Re-proof arm.** A body of exactly `{ method: "passkey" }` or `{ method: "webauthn" }` begins an assertion ceremony WITHOUT beginning enrollment, and answers with `reauth: true` alongside the options. Use it to obtain the assertion the second arm needs.\n\n' +
         "**Enrollment arm.** Any other body must be a full factor proof (the same shape POST /api/auth/step-up takes): a password, a TOTP code, or a completed passkey / security-key assertion. Only then are registration options issued.\n\n" +
         "Which factor you prove changes the session, and the direction is not the obvious one: a strong proof stamps the session second-factor-verified, while a PASSWORD proof deliberately CLEARS that stamp. Registering with a password is authorised by the single-use, session-bound challenge alone and must not silently upgrade password-only authentication into something the rest of the app reads as a second factor.\n\n" +
-        "Every refusal on the proof path is the same 401 with the same prose — a missing content type, an unparseable body, a body that is not a valid proof shape, and a wrong password are indistinguishable to the caller.",
+        "Every refusal on the proof path is the same 401 with the same prose — a missing content type, an unparseable body, a body that is not a valid proof shape, and a wrong password are indistinguishable to the caller. A `totp` proof counts only from an authenticator whose enrollment was confirmed.\n\n" +
+        "Each proof on the enrollment arm draws on the account's shared re-proof budget (five per fifteen minutes, the same budget as POST /api/auth/step-up), and every failed proof writes an `auth.mfa.failed` audit row. Once the budget is spent the answer is 429 until the window passes, even for a correct proof.",
       requestBody: {
         required: true,
         content: {

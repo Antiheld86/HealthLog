@@ -63,7 +63,10 @@ export function SecuritySection() {
             recoveryCodesRemaining={status.recoveryCodesRemaining}
           />
 
-          <SecurityKeysCard keys={status.webauthn} />
+          <SecurityKeysCard
+            keys={status.webauthn}
+            totpEnabled={status.totp.enabled}
+          />
 
           <PasskeyListSection isAuthenticated={isAuthenticated} />
         </>

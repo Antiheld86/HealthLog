@@ -16,6 +16,11 @@ import { sanitiseZodIssues, type SanitisedZodIssue } from "@/lib/api-response";
 import { checkProfileEmailRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
 import { z } from "zod/v4";
+import {
+  REPROOF_FAILED_CODE,
+  REPROOF_REQUIRED_CODE,
+  type SensitiveChangeProof,
+} from "@/lib/auth/existing-factor-proof";
 
 const extendedProfileSchema = profileSchema.extend({
   displayName: z.string().min(1).max(80).nullable().optional(),
@@ -185,7 +190,19 @@ export interface ApplyProfileError {
 export async function applyProfileUpdate(
   userId: string,
   body: unknown,
-  ipAddress?: string | null,
+  ipAddress: string | null | undefined,
+  opts: {
+    /**
+     * Decides whether this request may move the account to a NEW email
+     * address. The address is what single sign-on links an existing account
+     * by, so changing it asks for a fresh proof (`authorizeSensitiveChange`).
+     * Receives the `currentPassword` the body carried, if any; the password is
+     * never written anywhere.
+     */
+    authorizeEmailChange: (
+      currentPassword: string | null,
+    ) => Promise<SensitiveChangeProof>;
+  },
 ): Promise<ApplyProfileResult | ApplyProfileError> {
   const parsed = extendedProfileSchema.safeParse(body);
 
@@ -258,6 +275,66 @@ export async function applyProfileUpdate(
     const addressOnFile = current?.email?.trim().toLowerCase() ?? null;
 
     if (addressOnFile !== normalizedEmail) {
+      // Asked before the uniqueness probe and before the budget: a caller who
+      // cannot show it is the account owner learns nothing about which
+      // addresses exist here and spends nothing.
+      const rawPassword =
+        typeof body === "object" && body !== null && !Array.isArray(body)
+          ? (body as Record<string, unknown>).currentPassword
+          : undefined;
+      const currentPassword =
+        typeof rawPassword === "string" &&
+        rawPassword.length > 0 &&
+        rawPassword.length <= 512
+          ? rawPassword
+          : null;
+      const proof = await opts.authorizeEmailChange(currentPassword);
+      if (proof !== "ok") {
+        annotate({
+          action: { name: "profile.email.reproof_refused" },
+          meta: { proof },
+        });
+        const code =
+          proof === "rate_limited"
+            ? "rate_limited"
+            : proof === "failed"
+              ? "reproof_failed"
+              : "reproof_required";
+        // Same narrowing as the email budget below: the address is dropped,
+        // the rest of the save lands, and `rejectedFields` says why.
+        const { email: _unproven, ...keepable } = data;
+        if (Object.keys(keepable).length === 0) {
+          return {
+            ok: false,
+            status: proof === "rate_limited" ? 429 : 401,
+            message:
+              proof === "failed"
+                ? "Verification failed"
+                : proof === "rate_limited"
+                  ? "Too many attempts. Please wait 15 minutes."
+                  : "Confirm your current password to change the email address.",
+            errorCode:
+              proof === "failed"
+                ? REPROOF_FAILED_CODE
+                : proof === "rate_limited"
+                  ? "profile.update.emailRateLimited"
+                  : REPROOF_REQUIRED_CODE,
+          };
+        }
+        data = keepable;
+        rejectedFields = [
+          ...rejectedFields,
+          {
+            path: "email",
+            code,
+            message:
+              "Confirm your current password to change the email address.",
+          },
+        ];
+      }
+    }
+
+    if (data.email !== undefined && addressOnFile !== normalizedEmail) {
       // Charged BEFORE the probe, not after: a refused request must not
       // learn the answer it was refused for. The 409 below tells any
       // signed-in caller whether an address is registered here, and until

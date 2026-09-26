@@ -60,6 +60,8 @@ export const ERROR_CODE_CATALOGUE: Readonly<Record<string, readonly string[]>> =
       "auth.refresh.invalid",
       "auth.refresh.reuse",
       "auth.refresh.revoked",
+      "auth.reproof.failed",
+      "auth.reproof.required",
       "auth.scope.insufficient",
       "auth.stepup.required",
       "auth.token.expired",

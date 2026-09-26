@@ -116,7 +116,11 @@ describe("change-password card placement", () => {
       "settings.passwordReset",
       "settings.changePassword",
       "/api/auth/password",
-      "current-password",
+      // A change-password form is the pair current + new. The Account form
+      // asks for the CURRENT password alone, beside a new email address,
+      // which is a proof and not a password change; the new-password half is
+      // what would mean the old form came back.
+      "new-password",
     ]) {
       expect(account, `Account still carries ${marker}`).not.toContain(marker);
     }

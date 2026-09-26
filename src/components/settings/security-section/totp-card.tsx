@@ -33,6 +33,11 @@ import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { ApiError, apiPost } from "@/lib/api/api-fetch";
 import { RecoveryCodesPanel } from "./recovery-codes-panel";
+import {
+  ExistingFactorReauthDialog,
+  isReproofRequired,
+  type ExistingFactorProof,
+} from "./existing-factor-reauth-dialog";
 
 interface SetupData {
   otpauthUri: string;
@@ -118,12 +123,20 @@ export function TotpCard({
     setError(null);
   }
 
+  // Enrollment right after signing in goes straight through; later, the server
+  // asks for a fresh proof first (401 `auth.reproof.required`), and the setup
+  // call is retried with it from the dialog.
+  const [reauthOpen, setReauthOpen] = useState(false);
+  const [reauthError, setReauthError] = useState<string | null>(null);
+
   const beginSetup = useMutation({
-    mutationFn: async () => {
-      return apiPost<SetupData>("/api/auth/me/mfa/totp/setup");
+    mutationFn: async (proof?: ExistingFactorProof) => {
+      return apiPost<SetupData>("/api/auth/me/mfa/totp/setup", proof);
     },
     onSuccess: async (data) => {
       setError(null);
+      setReauthOpen(false);
+      setReauthError(null);
       setSetup(data);
       try {
         const QRCode = (await import("qrcode")).default;
@@ -133,14 +146,21 @@ export function TotpCard({
         setQrDataUrl(null);
       }
     },
-    onError: (err) =>
-      setError(
-        describeError(
-          err,
-          t("settings.security.totp.setupFailed"),
-          t("settings.security.stepUpRequired"),
-        ),
-      ),
+    onError: (err, proof) => {
+      if (isReproofRequired(err)) {
+        setError(null);
+        setReauthError(null);
+        setReauthOpen(true);
+        return;
+      }
+      const message = describeError(
+        err,
+        t("settings.security.totp.setupFailed"),
+        t("settings.security.stepUpRequired"),
+      );
+      if (proof) setReauthError(message);
+      else setError(message);
+    },
   });
 
   const confirm = useMutation({
@@ -241,7 +261,7 @@ export function TotpCard({
             type="button"
             data-testid="totp-setup-start"
             className="min-h-11 sm:min-h-9"
-            onClick={() => beginSetup.mutate()}
+            onClick={() => beginSetup.mutate(undefined)}
             disabled={beginSetup.isPending}
           >
             {beginSetup.isPending ? (
@@ -252,6 +272,17 @@ export function TotpCard({
             {t("settings.security.totp.setUp")}
           </Button>
         )}
+        <ExistingFactorReauthDialog
+          open={reauthOpen}
+          onOpenChange={(open) => {
+            setReauthOpen(open);
+            if (!open) setReauthError(null);
+          }}
+          methods={["password", "passkey", "webauthn"]}
+          pending={beginSetup.isPending}
+          error={reauthError}
+          onProof={(proof) => beginSetup.mutate(proof)}
+        />
 
         {/* ── Enable wizard ── */}
         {setup && (

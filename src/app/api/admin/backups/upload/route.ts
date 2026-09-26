@@ -31,6 +31,7 @@
 import { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
 
+import { BodyTooLargeError, readBoundedBody } from "@/lib/labs/ocr-upload";
 import { NextRequest } from "next/server";
 import { ZodError } from "zod/v4";
 import { prisma } from "@/lib/db";
@@ -64,11 +65,13 @@ export const dynamic = "force-dynamic";
  * is sent as the raw request body, which is read as a stream.
  */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+/** Room for the multipart boundaries and part headers around the file. */
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 
 /**
- * Cap on a file sent as the raw request body, compressed or not. The same
- * ceiling the app sets for any request body (`middlewareClientMaxBodySize` in
- * `next.config.ts`), beyond which the body would arrive truncated. A
+ * Cap on a file sent as the raw request body, compressed or not, counted
+ * while the body streams. The route is left out of the proxy matcher
+ * (`src/lib/http/proxy-bypass-routes.ts`), so this is the only ceiling. A
  * disaster-recovery file of 1.25 million measurements is 662 MB as plain
  * JSON and 64 MB compressed, so large files go up compressed.
  */
@@ -179,10 +182,23 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   let source: AsyncIterable<Uint8Array>;
   if (multipart) {
+    // The multipart parser holds the whole form and counts nothing, so the
+    // bytes are counted first and the form is parsed from what was kept. The
+    // route is outside the proxy matcher, so nothing else bounds this read.
     let formData: FormData;
     try {
-      formData = await request.formData();
+      const bytes = await readBoundedBody(
+        request.body,
+        MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES,
+      );
+      formData = await new Response(new Blob([bytes]), {
+        headers: { "content-type": contentType },
+      }).formData();
     } catch (err) {
+      if (err instanceof BodyTooLargeError) {
+        await denied("stream_size_exceeded");
+        return apiError("Upload exceeds 10 MB limit", 413);
+      }
       return apiError(
         `Invalid multipart body: ${err instanceof Error ? err.message : "unknown"}`,
         400,

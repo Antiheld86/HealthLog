@@ -2,7 +2,12 @@ import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
-import { apiSuccess, apiError, getClientIp } from "@/lib/api-response";
+import {
+  apiSuccess,
+  apiError,
+  getClientIp,
+  readBodyText,
+} from "@/lib/api-response";
 import { encryptNote } from "@/lib/crypto/note-cipher";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { NextRequest } from "next/server";
@@ -65,14 +70,15 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (Number.isFinite(declaredLength) && declaredLength > MAX_CSV_BYTES) {
     return apiError("CSV exceeds the 16 MB limit", 413);
   }
+  // Counted while it is read, so a body without a Content-Length cannot run
+  // past the cap before the check.
   let text: string;
   try {
-    text = await request.text();
+    const read = await readBodyText(request, MAX_CSV_BYTES);
+    if (read.tooLarge) return apiError("CSV exceeds the 16 MB limit", 413);
+    text = read.text;
   } catch {
     return apiError("Could not read the request body", 400);
-  }
-  if (Buffer.byteLength(text, "utf8") > MAX_CSV_BYTES) {
-    return apiError("CSV exceeds the 16 MB limit", 413);
   }
 
   const parsed = parseCsvMeasurements(text);

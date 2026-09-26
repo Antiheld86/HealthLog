@@ -71,6 +71,10 @@ export function AccountSection() {
   );
 
   const [email, setEmail] = useState("");
+  // A new email address needs the current password unless the session signed
+  // in within the last few minutes; the server decides and names the field if
+  // it wanted one. Never stored beyond this form.
+  const [emailPassword, setEmailPassword] = useState("");
   const [height, setHeight] = useState<HeightDraft>(EMPTY_HEIGHT_DRAFT);
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState<string>("");
@@ -185,6 +189,10 @@ export function AccountSection() {
     navigate,
   });
 
+  const emailChanged =
+    email.trim() !== "" &&
+    email.trim().toLowerCase() !== profileSeed.email.trim().toLowerCase();
+
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -212,6 +220,9 @@ export function AccountSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: savedProfile.email || null,
+          ...(emailChanged && emailPassword
+            ? { currentPassword: emailPassword }
+            : {}),
           heightCm: heightAdapter.toCanonicalCm(savedProfile.height),
           dateOfBirth: savedProfile.dateOfBirth || null,
           gender: savedProfile.gender || null,
@@ -228,6 +239,8 @@ export function AccountSection() {
           })
         : Promise.resolve({ ok: true } as Response),
     ]);
+
+    setEmailPassword("");
 
     if (profileRes.ok && tzRes.ok) {
       // Instant same-tab flip of every rendered timestamp (issue #490):
@@ -373,6 +386,24 @@ export function AccountSection() {
                 aria-describedby={fieldErrors.email ? "email-error" : undefined}
               />
               <FieldError id="email-error" message={fieldErrors.email} />
+              {emailChanged && (
+                <div className="space-y-2 pt-1">
+                  <Label htmlFor="email-current-password">
+                    {t("settings.emailChangePassword")}
+                  </Label>
+                  <Input
+                    id="email-current-password"
+                    type="password"
+                    value={emailPassword}
+                    onChange={(e) => {
+                      setEmailPassword(e.target.value);
+                      clearFieldError("email");
+                    }}
+                    autoComplete="current-password"
+                    maxLength={512}
+                  />
+                </div>
+              )}
             </div>
           </div>
 

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import type { AccountGrant, User } from "@/generated/prisma/client";
+import {
+  applyBypassRouteHeaders,
+  bypassRouteRefusal,
+  isProxyBypassRoute,
+} from "@/lib/http/proxy-bypass-routes";
 import { prisma } from "@/lib/db";
 import { WideEventBuilder } from "./logging/event-builder";
 import { annotate, eventStorage, getEvent } from "./logging/context";
@@ -200,6 +205,19 @@ export function apiHandler<T extends (...args: any[]) => Promise<Response>>(
       }
     })();
 
+    // A route the proxy matcher leaves out (large uploads, see
+    // `proxy-bypass-routes.ts`) gets the proxy's refusals and headers here.
+    const isBypassRoute = isProxyBypassRoute(url.pathname);
+    if (isBypassRoute) {
+      const refusal = bypassRouteRefusal(
+        safeRequestProp(request, (r) => r.method, "GET"),
+      );
+      if (refusal) {
+        applyBypassRouteHeaders(refusal.headers);
+        return refusal;
+      }
+    }
+
     const evt = new WideEventBuilder("http");
 
     // Propagate x-request-id if present
@@ -330,6 +348,7 @@ export function apiHandler<T extends (...args: any[]) => Promise<Response>>(
         }
         const nr = response as NextResponse;
         nr.headers.set("x-request-id", evt.getRequestId());
+        if (isBypassRoute) applyBypassRouteHeaders(nr.headers);
         // v1.37.0 — echo the record context this response was actually served
         // under, when one was decided. The value comes from the wide event and
         // from nowhere else: the fence stamps it on every call it makes, so

@@ -33,7 +33,18 @@ vi.mock("@/lib/rate-limit", () => ({
   checkProfileEmailRateLimit: vi.fn(),
 }));
 
-import { applyProfileUpdate } from "../profile-update";
+import { applyProfileUpdate as applyWithProof } from "../profile-update";
+
+/** These suites are about validation and the email budget, not the proof:
+ *  every call is made as an owner who has just proved themselves. */
+const applyProfileUpdate = (
+  userId: string,
+  body: unknown,
+  ipAddress?: string | null,
+) =>
+  applyWithProof(userId, body, ipAddress, {
+    authorizeEmailChange: async () => "ok",
+  });
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
 import { checkProfileEmailRateLimit } from "@/lib/rate-limit";
@@ -236,5 +247,74 @@ describe("applyProfileUpdate — the email conflict is metered", () => {
       expect(result.errorCode).toBe("profile.update.emailInUse");
     }
     expect(checkProfileEmailRateLimit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("applyProfileUpdate — a new address needs a fresh proof", () => {
+  it("refuses an address-only change without asking about the address", async () => {
+    const authorizeEmailChange = vi.fn(async () => "required" as const);
+    const result = await applyWithProof(
+      USER_ID,
+      { email: "someone@example.test" },
+      null,
+      { authorizeEmailChange },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(401);
+      expect(result.errorCode).toBe("auth.reproof.required");
+    }
+    expect(emailProbes()).toHaveLength(0);
+    expect(checkProfileEmailRateLimit).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("drops only the address when the save carries other fields", async () => {
+    const result = await applyWithProof(
+      USER_ID,
+      { email: "someone@example.test", heightCm: 180 },
+      null,
+      { authorizeEmailChange: async () => "failed" },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.rejectedFields).toEqual([
+        expect.objectContaining({ path: "email", code: "reproof_failed" }),
+      ]);
+    }
+    const written = vi.mocked(prisma.user.update).mock.calls[0]?.[0] as {
+      data: Record<string, unknown>;
+    };
+    expect(written.data).not.toHaveProperty("email");
+    expect(written.data).toHaveProperty("heightCm", 180);
+  });
+
+  it("hands the body's current password to the proof and never writes it", async () => {
+    const authorizeEmailChange = vi.fn(async () => "ok" as const);
+    await applyWithProof(
+      USER_ID,
+      { email: "someone@example.test", currentPassword: "hunter2hunter2" },
+      null,
+      { authorizeEmailChange },
+    );
+    expect(authorizeEmailChange).toHaveBeenCalledWith("hunter2hunter2");
+    const written = vi.mocked(prisma.user.update).mock.calls[0]?.[0] as {
+      data: Record<string, unknown>;
+    };
+    expect(JSON.stringify(written.data)).not.toContain("hunter2");
+  });
+
+  it("does not ask when the address on file is re-posted", async () => {
+    const authorizeEmailChange = vi.fn(async () => "required" as const);
+    const result = await applyWithProof(
+      USER_ID,
+      { email: ON_FILE, heightCm: 170 },
+      null,
+      { authorizeEmailChange },
+    );
+    expect(result.ok).toBe(true);
+    expect(authorizeEmailChange).not.toHaveBeenCalled();
   });
 });

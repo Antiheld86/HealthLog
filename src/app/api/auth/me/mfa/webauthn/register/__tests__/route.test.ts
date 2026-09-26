@@ -31,11 +31,16 @@ vi.mock("@/lib/auth/audit", () => ({
 
 vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
 
+vi.mock("@/lib/auth/existing-factor-proof", () => ({
+  checkCookieEnrollmentProof: vi.fn(),
+}));
+
 import { POST as REGISTER_OPTIONS } from "../options/route";
 import { POST as REGISTER_VERIFY } from "../verify/route";
 import { requireMfaManagementAuth } from "@/lib/api-handler";
 import { prisma } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { checkCookieEnrollmentProof } from "@/lib/auth/existing-factor-proof";
 import {
   createMfaRegistrationOptions,
   verifyMfaRegistration,
@@ -63,7 +68,15 @@ beforeEach(() => {
     commitElevation: vi.fn().mockResolvedValue(undefined),
   } as never);
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
+  vi.mocked(checkCookieEnrollmentProof).mockResolvedValue(null);
 });
+
+function optionsRequest(): NextRequest {
+  return new NextRequest(
+    "http://localhost/api/auth/me/mfa/webauthn/register/options",
+    { method: "POST" },
+  );
+}
 
 describe("POST /api/auth/me/mfa/webauthn/register/options", () => {
   it("returns ceremony options + challenge id", async () => {
@@ -72,7 +85,7 @@ describe("POST /api/auth/me/mfa/webauthn/register/options", () => {
       challengeId: "ch-1",
     } as never);
 
-    const res = await REGISTER_OPTIONS();
+    const res = await REGISTER_OPTIONS(optionsRequest());
     const body = (await res.json()) as {
       data: { options: unknown; challengeId: string };
     };
@@ -83,6 +96,40 @@ describe("POST /api/auth/me/mfa/webauthn/register/options", () => {
       "user-1",
       "u@example.com",
     );
+  });
+});
+
+describe("security-key enrollment needs a fresh proof on the cookie arm", () => {
+  it("stops before any challenge exists when the session cannot show one", async () => {
+    vi.mocked(checkCookieEnrollmentProof).mockResolvedValue(
+      new Response(null, { status: 401 }),
+    );
+    const res = await REGISTER_OPTIONS(optionsRequest());
+    expect(res.status).toBe(401);
+    expect(createMfaRegistrationOptions).not.toHaveBeenCalled();
+    expect(checkCookieEnrollmentProof).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "sess-1",
+        stage: "security_key_enroll",
+      }),
+    );
+  });
+
+  it("leaves the Bearer arm to its elevation", async () => {
+    vi.mocked(requireMfaManagementAuth).mockResolvedValue({
+      transport: "bearer",
+      user: USER,
+      apiTokenId: "tok-1",
+      accessTokenHash: "h",
+      commitElevation: vi.fn().mockResolvedValue(undefined),
+    } as never);
+    vi.mocked(createMfaRegistrationOptions).mockResolvedValue({
+      options: {},
+      challengeId: "ch-2",
+    } as never);
+    const res = await REGISTER_OPTIONS(optionsRequest());
+    expect(res.status).toBe(200);
+    expect(checkCookieEnrollmentProof).not.toHaveBeenCalled();
   });
 });
 

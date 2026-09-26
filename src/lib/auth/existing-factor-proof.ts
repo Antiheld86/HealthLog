@@ -1,0 +1,358 @@
+/**
+ * Re-proving a credential the account already holds.
+ *
+ * Several surfaces accept a fresh proof in the request body before they act:
+ * the Bearer step-up mint, the primary-passkey enrollment, TOTP enrollment and
+ * security-key enrollment. They used to verify it each in their own way, and
+ * the copies drifted — one checked who owned a WebAuthn challenge but not its
+ * type, one had no rate limit and wrote no audit row for a wrong password, so
+ * a stolen session could guess the password or a TOTP code there without
+ * limit and without trace. This module is the one verifier and the one
+ * throttle, so every surface refuses, counts and records a failed proof the
+ * same way.
+ *
+ * The throttle is ONE bucket per account shared by every surface: five proofs
+ * in fifteen minutes, the ceiling the step-up mint has used since it shipped
+ * (same key, so its counter carries straight over). A shared bucket means a
+ * guesser cannot multiply the budget by rotating between routes.
+ */
+import type { User } from "@/generated/prisma/client";
+import { prisma } from "@/lib/db";
+import { apiError } from "@/lib/api-response";
+import { auditLog } from "@/lib/auth/audit";
+import { annotate } from "@/lib/logging/context";
+import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import { verifyPassword } from "@/lib/auth/password";
+import { verifyAuthentication } from "@/lib/auth/passkey";
+import { verifyMfaAuthentication } from "@/lib/auth/mfa/webauthn";
+import { verifyMfaFactor } from "@/lib/auth/mfa/verify-factor";
+import {
+  stepUpMintSchema,
+  type StepUpMintRequest,
+} from "@/lib/validations/step-up";
+
+export type ExistingFactorProof = StepUpMintRequest;
+
+export const REPROOF_LIMIT = 5;
+export const REPROOF_WINDOW_MS = 15 * 60 * 1000;
+
+/** The per-account bucket every re-proof surface draws from. */
+export function reproofBucket(userId: string): string {
+  return `auth:step-up:${userId}`;
+}
+
+/**
+ * Charge one attempt to the account's re-proof bucket. Returns the 429 to send
+ * when the bucket is empty (and writes the audit row), or null to proceed.
+ * Call it only when a proof is actually about to be verified, so a request that
+ * needs no proof does not spend one.
+ */
+export async function throttleReproof(
+  userId: string,
+  ipAddress: string | null,
+  stage: string,
+): Promise<Response | null> {
+  const rl = await checkRateLimit(
+    reproofBucket(userId),
+    REPROOF_LIMIT,
+    REPROOF_WINDOW_MS,
+  );
+  if (rl.allowed) return null;
+  await auditLog("auth.reproof.rate_limited", {
+    userId,
+    ipAddress,
+    details: { stage },
+  });
+  annotate({
+    action: { name: "auth.reproof.rate_limited" },
+    meta: { stage },
+  });
+  return apiError("Too many attempts. Please wait 15 minutes.", 429, {
+    headers: rateLimitHeaders(rl),
+  });
+}
+
+export type ProofOutcome = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Verify a proof against the account. Never throws for a bad proof: a
+ * malformed or expired WebAuthn challenge is a failed attempt, not a 500.
+ *
+ * A WebAuthn challenge must belong to this account AND be of the ceremony the
+ * method names, because both ceremony helpers resolve a challenge by id alone.
+ * A TOTP code is accepted only from a confirmed secret (`verifyMfaFactor`).
+ */
+export async function verifyExistingFactorProof(
+  user: Pick<
+    User,
+    | "id"
+    | "passwordHash"
+    | "totpSecretEncrypted"
+    | "totpLastStep"
+    | "totpConfirmedAt"
+  >,
+  proof: ExistingFactorProof,
+): Promise<ProofOutcome> {
+  if (proof.method === "password") {
+    if (!user.passwordHash) return { ok: false, reason: "no_password" };
+    const ok = await verifyPassword(user.passwordHash, proof.password);
+    return ok ? { ok } : { ok: false, reason: "bad_password" };
+  }
+
+  if (proof.method === "totp") {
+    const result = await verifyMfaFactor(user, "totp", proof.code);
+    if (result.ok) return { ok: true };
+    return { ok: false, reason: result.replay ? "totp_replay" : "bad_totp" };
+  }
+
+  const expectedType =
+    proof.method === "passkey" ? "authentication" : "mfa_authentication";
+  const challenge = await prisma.authChallenge.findUnique({
+    where: { id: proof.challengeId },
+    select: { userId: true, type: true },
+  });
+  if (!challenge || challenge.userId !== user.id) {
+    return { ok: false, reason: "foreign_challenge" };
+  }
+  if (challenge.type !== expectedType) {
+    return { ok: false, reason: "wrong_ceremony" };
+  }
+
+  try {
+    if (proof.method === "passkey") {
+      const result = await verifyAuthentication(
+        proof.challengeId,
+        proof.credential,
+      );
+      // Both halves matter: a verified assertion against SOMEONE ELSE'S passkey
+      // proves possession of a factor, just not of this account's.
+      const ok =
+        result.verification.verified && result.passkey.userId === user.id;
+      return ok ? { ok } : { ok: false, reason: "bad_assertion" };
+    }
+    const ok = await verifyMfaAuthentication(
+      proof.challengeId,
+      user.id,
+      proof.credential,
+    );
+    return ok ? { ok } : { ok: false, reason: "bad_assertion" };
+  } catch {
+    return { ok: false, reason: "bad_assertion" };
+  }
+}
+
+/**
+ * Record a refused proof. The machine reason goes to the audit row and the
+ * wide event; the wire carries none of it.
+ */
+export async function recordReproofFailure(
+  userId: string,
+  ipAddress: string | null,
+  stage: string,
+  method: ExistingFactorProof["method"],
+  reason: string,
+): Promise<void> {
+  await auditLog("auth.mfa.failed", {
+    userId,
+    ipAddress,
+    details: { stage, method, reason },
+  });
+  annotate({
+    action: { name: "auth.reproof.failed" },
+    meta: { stage, method, reason },
+  });
+}
+
+/** No proof was presented, and the session carries none recent enough. */
+export const REPROOF_REQUIRED_CODE = "auth.reproof.required";
+/** A proof was presented and did not verify. The session is untouched. */
+export const REPROOF_FAILED_CODE = "auth.reproof.failed";
+
+/**
+ * How recent a sign-in or a second-factor stamp must be to stand in for a
+ * proof in the body. The step-up window, so a fresh login is exactly as good
+ * here as it is on the fresh-factor routes.
+ */
+export const RECENT_PROOF_MAX_AGE_MS = 5 * 60 * 1000;
+
+/**
+ * The cookie-path gate in front of ADDING a sign-in credential or second
+ * factor to an account (TOTP enrollment, security-key enrollment).
+ *
+ * A live session on its own is not enough. If it were, whoever held a stolen
+ * session could enroll their own authenticator, and from then on hold a factor
+ * that satisfies every step-up gate, registers a passkey and survives the
+ * owner changing the password. So the caller must show that the person at the
+ * keyboard can authenticate as the account owner right now, in one of three
+ * ways:
+ *
+ *   - the session completed a second factor or passkey sign-in within the last
+ *     five minutes (`Session.mfaVerifiedAt`);
+ *   - the session itself was created by a sign-in within the last five
+ *     minutes (`Session.createdAt`, which no later write touches) — this is
+ *     also what lets an SSO-only account with nothing else to re-prove enroll
+ *     right after signing in;
+ *   - the body carries a proof: `{ method: "password", password }`,
+ *     `{ method: "totp", code }` or a passkey / security-key assertion, the
+ *     same shapes the step-up mint accepts.
+ *
+ * Returns the refusal to send, or null to proceed. Proofs in the body are
+ * throttled and audited through the shared re-proof bucket.
+ */
+export async function checkCookieEnrollmentProof(args: {
+  user: User;
+  sessionId: string;
+  request: Request;
+  ipAddress: string | null;
+  stage: string;
+}): Promise<Response | null> {
+  const { user, sessionId, request, ipAddress, stage } = args;
+
+  const row = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: { mfaVerifiedAt: true, createdAt: true },
+  });
+  const now = Date.now();
+  const recent = (d: Date | null | undefined) =>
+    d != null && now - d.getTime() <= RECENT_PROOF_MAX_AGE_MS;
+  if (recent(row?.mfaVerifiedAt) || recent(row?.createdAt)) {
+    annotate({ meta: { enrollment_proof: "recent_session" } });
+    return null;
+  }
+
+  const proof = await readProof(request);
+  if (proof === "absent") {
+    annotate({ action: { name: "auth.reproof.required" }, meta: { stage } });
+    return apiError("Confirm it is you before adding a sign-in method", 401, {
+      errorCode: REPROOF_REQUIRED_CODE,
+    });
+  }
+  if (proof === "invalid") {
+    return apiError("Invalid verification", 422, {
+      errorCode: REPROOF_REQUIRED_CODE,
+    });
+  }
+
+  const limited = await throttleReproof(user.id, ipAddress, stage);
+  if (limited) return limited;
+
+  const outcome = await verifyExistingFactorProof(user, proof);
+  if (!outcome.ok) {
+    await recordReproofFailure(
+      user.id,
+      ipAddress,
+      stage,
+      proof.method,
+      outcome.reason,
+    );
+    return apiError("Verification failed", 401, {
+      errorCode: REPROOF_FAILED_CODE,
+    });
+  }
+  annotate({ meta: { enrollment_proof: proof.method } });
+  return null;
+}
+
+async function readProof(
+  request: Request,
+): Promise<ExistingFactorProof | "absent" | "invalid"> {
+  if (!request.headers.get("content-type")?.includes("application/json")) {
+    return "absent";
+  }
+  let raw: string;
+  try {
+    raw = await request.text();
+  } catch {
+    return "invalid";
+  }
+  if (raw.trim() === "") return "absent";
+  if (raw.length > 64 * 1024) return "invalid";
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return "invalid";
+  }
+  if (
+    body === null ||
+    (typeof body === "object" && Object.keys(body).length === 0)
+  ) {
+    return "absent";
+  }
+  const parsed = stepUpMintSchema.safeParse(body);
+  return parsed.success ? parsed.data : "invalid";
+}
+
+export type SensitiveChangeProof =
+  "ok" | "required" | "failed" | "rate_limited";
+
+/**
+ * The proof in front of changing the account's email address.
+ *
+ * The address is what single sign-on matches an existing account by, so it is
+ * part of how the account is reached and a stolen session must not rewrite it.
+ * Accepted: on a cookie session, a sign-in or second factor inside the last
+ * five minutes; on either transport, the current password alongside the
+ * change. The password draws on the shared re-proof budget and a wrong one is
+ * audited like every other refused proof.
+ */
+export async function authorizeSensitiveChange(args: {
+  user: Pick<
+    User,
+    | "id"
+    | "passwordHash"
+    | "totpSecretEncrypted"
+    | "totpLastStep"
+    | "totpConfirmedAt"
+  >;
+  /** The session row id on a cookie request; null on a Bearer request. */
+  cookieSessionId: string | null;
+  currentPassword: string | null;
+  ipAddress: string | null;
+  stage: string;
+}): Promise<SensitiveChangeProof> {
+  const { user, cookieSessionId, currentPassword, ipAddress, stage } = args;
+
+  if (cookieSessionId) {
+    const row = await prisma.session.findUnique({
+      where: { id: cookieSessionId },
+      select: { mfaVerifiedAt: true, createdAt: true },
+    });
+    const now = Date.now();
+    const recent = (d: Date | null | undefined) =>
+      d != null && now - d.getTime() <= RECENT_PROOF_MAX_AGE_MS;
+    if (recent(row?.mfaVerifiedAt) || recent(row?.createdAt)) return "ok";
+  }
+
+  if (!currentPassword) return "required";
+
+  const rl = await checkRateLimit(
+    reproofBucket(user.id),
+    REPROOF_LIMIT,
+    REPROOF_WINDOW_MS,
+  );
+  if (!rl.allowed) {
+    await auditLog("auth.reproof.rate_limited", {
+      userId: user.id,
+      ipAddress,
+      details: { stage },
+    });
+    return "rate_limited";
+  }
+
+  const outcome = await verifyExistingFactorProof(user, {
+    method: "password",
+    password: currentPassword,
+  });
+  if (!outcome.ok) {
+    await recordReproofFailure(
+      user.id,
+      ipAddress,
+      stage,
+      "password",
+      outcome.reason,
+    );
+    return "failed";
+  }
+  return "ok";
+}

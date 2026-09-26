@@ -128,6 +128,12 @@
         "emailInUse": "Esta dirección de correo ya está en uso.",
         "emailRateLimited": "Demasiados cambios de dirección de correo. Inténtalo más tarde."
       }
+    },
+    "auth": {
+      "reproof": {
+        "required": "Confirma tu contraseña actual para cambiar esto.",
+        "failed": "La verificación ha fallado. No se ha cambiado nada."
+      }
     }
   },
   "doctorReport": {
@@ -440,7 +446,8 @@
       "errorEmailUnverified": "Tu proveedor de identidad no marcó tu correo electrónico como verificado.",
       "errorIdentityConflict": "Ese correo electrónico pertenece a una cuenta que ya está vinculada a otra identidad SSO.",
       "errorRegistrationDisabled": "Ninguna cuenta coincide con esa identidad y los nuevos registros están cerrados actualmente.",
-      "errorFailed": "El inicio de sesión único falló. Inténtalo de nuevo."
+      "errorFailed": "El inicio de sesión único falló. Inténtalo de nuevo.",
+      "errorLinkRequired": "Ya existe aquí una cuenta con esta dirección de correo. Inicia sesión en ella una vez con su contraseña o llave de acceso para conectarla al inicio de sesión único."
     },
     "native": {
       "signingInToApp": "Iniciando sesión en la app de HealthLog"
@@ -5553,7 +5560,9 @@
       "invalidFormat": "Eso no está escrito en un formato que este campo pueda leer.",
       "invalidType": "El valor no llegó en un formato que este campo pueda guardar.",
       "rateLimited": "Se ha cambiado demasiadas veces. Espera un poco e inténtalo de nuevo.",
-      "other": "No se aceptó este valor. Revísalo e inténtalo de nuevo."
+      "other": "No se aceptó este valor. Revísalo e inténtalo de nuevo.",
+      "reproofRequired": "Introduce tu contraseña actual para cambiar la dirección de correo.",
+      "reproofFailed": "La contraseña no es correcta, así que la dirección de correo no se ha cambiado."
     },
     "avatar": {
       "title": "Foto de perfil",
@@ -5594,7 +5603,9 @@
       "currentPassword": "Contraseña actual",
       "authenticatorCode": "Código del autenticador",
       "authenticatorPlaceholder": "Código de seis dígitos del autenticador",
-      "verifyAndAdd": "Verificar y añadir"
+      "verifyAndAdd": "Verificar y añadir",
+      "factorDescription": "Verifica un método de inicio de sesión existente antes de añadir un segundo factor.",
+      "verifyAndContinue": "Verificar y continuar"
     },
     "passkeyName": "Nombre",
     "noPasskeys": "No hay claves de acceso registradas.",
@@ -6727,7 +6738,8 @@
       "unavailableExplainer": "Este servidor ya no permite archivos de documentos, así que la conexión de abajo no se puede usar. Aún puedes eliminarla.",
       "moduleOffExplainer": "Los documentos están desactivados, así que la conexión de abajo no se usa. Aún puedes eliminarla.",
       "tokenNewAddress": "Una dirección nueva necesita de nuevo el token de la API."
-    }
+    },
+    "emailChangePassword": "Contraseña actual (necesaria para cambiar la dirección de correo)"
   },
   "admin": {
     "title": "Administration",

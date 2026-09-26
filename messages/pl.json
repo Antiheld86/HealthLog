@@ -128,6 +128,12 @@
         "emailInUse": "Ten adres e-mail jest już używany.",
         "emailRateLimited": "Zbyt wiele zmian adresu e-mail. Spróbuj ponownie później."
       }
+    },
+    "auth": {
+      "reproof": {
+        "required": "Potwierdź obecne hasło, aby to zmienić.",
+        "failed": "Weryfikacja nie powiodła się. Nic nie zostało zmienione."
+      }
     }
   },
   "doctorReport": {
@@ -440,7 +446,8 @@
       "errorEmailUnverified": "Twój dostawca tożsamości nie oznaczył Twojego adresu e-mail jako zweryfikowanego.",
       "errorIdentityConflict": "Ten adres e-mail należy do konta powiązanego już z inną tożsamością SSO.",
       "errorRegistrationDisabled": "Żadne konto nie pasuje do tej tożsamości, a nowe rejestracje są obecnie zamknięte.",
-      "errorFailed": "Logowanie jednokrotne nie powiodło się. Spróbuj ponownie."
+      "errorFailed": "Logowanie jednokrotne nie powiodło się. Spróbuj ponownie.",
+      "errorLinkRequired": "Konto z tym adresem e-mail już tu istnieje. Zaloguj się do niego raz hasłem lub kluczem dostępu, aby połączyć je z logowaniem jednokrotnym."
     },
     "native": {
       "signingInToApp": "Logowanie do aplikacji HealthLog"
@@ -5553,7 +5560,9 @@
       "invalidFormat": "To nie jest zapisane w formacie, który to pole może odczytać.",
       "invalidType": "Wartość nie dotarła w formacie, który to pole może zapisać.",
       "rateLimited": "Zmieniane zbyt często. Odczekaj chwilę i spróbuj ponownie.",
-      "other": "Ta wartość nie została przyjęta. Sprawdź ją i spróbuj ponownie."
+      "other": "Ta wartość nie została przyjęta. Sprawdź ją i spróbuj ponownie.",
+      "reproofRequired": "Wpisz obecne hasło, aby zmienić adres e-mail.",
+      "reproofFailed": "Hasło jest nieprawidłowe, więc adres e-mail nie został zmieniony."
     },
     "avatar": {
       "title": "Zdjęcie profilowe",
@@ -5594,7 +5603,9 @@
       "currentPassword": "Aktualne hasło",
       "authenticatorCode": "Kod z aplikacji uwierzytelniającej",
       "authenticatorPlaceholder": "6-cyfrowy kod z aplikacji uwierzytelniającej",
-      "verifyAndAdd": "Zweryfikuj i dodaj"
+      "verifyAndAdd": "Zweryfikuj i dodaj",
+      "factorDescription": "Potwierdź istniejącą metodę logowania, zanim dodasz drugi składnik.",
+      "verifyAndContinue": "Potwierdź i kontynuuj"
     },
     "passkeyName": "Nazwa",
     "noPasskeys": "Brak zarejestrowanych kluczy dostępu.",
@@ -6727,7 +6738,8 @@
       "unavailableExplainer": "Ten serwer nie pozwala już na archiwa dokumentów, więc poniższego połączenia nie da się użyć. Nadal możesz je usunąć.",
       "moduleOffExplainer": "Dokumenty są wyłączone, więc poniższe połączenie nie jest używane. Nadal możesz je usunąć.",
       "tokenNewAddress": "Nowy adres wymaga ponownego podania tokenu API."
-    }
+    },
+    "emailChangePassword": "Obecne hasło (potrzebne do zmiany adresu e-mail)"
   },
   "admin": {
     "title": "Administracja",

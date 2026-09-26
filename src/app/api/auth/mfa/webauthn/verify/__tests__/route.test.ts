@@ -25,6 +25,7 @@ vi.mock("@/lib/rate-limit", () => ({
 
 vi.mock("@/lib/auth/mfa/challenge", () => ({
   loadActiveChallenge: vi.fn(),
+  reserveChallengeAttempt: vi.fn().mockResolvedValue(true),
   recordChallengeFailure: vi.fn().mockResolvedValue({ exhausted: false }),
   claimChallenge: vi.fn(),
 }));
@@ -50,6 +51,7 @@ import { prisma } from "@/lib/db";
 import { checkAuthSurfaceRateLimit } from "@/lib/rate-limit";
 import {
   loadActiveChallenge,
+  reserveChallengeAttempt,
   claimChallenge,
   recordChallengeFailure,
 } from "@/lib/auth/mfa/challenge";
@@ -93,6 +95,7 @@ beforeEach(() => {
     username: "u",
     onboardingCompletedAt: new Date(),
   } as never);
+  vi.mocked(reserveChallengeAttempt).mockResolvedValue(true);
   vi.mocked(recordChallengeFailure).mockResolvedValue({
     exhausted: false,
     attempts: 1,
@@ -124,6 +127,14 @@ describe("POST /api/auth/mfa/webauthn/verify", () => {
         source: "mfa.webauthn.verify",
       }),
     );
+  });
+
+  it("refuses before the assertion runs when no attempt can be reserved", async () => {
+    vi.mocked(reserveChallengeAttempt).mockResolvedValue(false);
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(401);
+    expect(verifyMfaAuthentication).not.toHaveBeenCalled();
+    expect(finishLogin).not.toHaveBeenCalled();
   });
 
   it("rejects with 401 and burns an attempt when the assertion fails", async () => {
