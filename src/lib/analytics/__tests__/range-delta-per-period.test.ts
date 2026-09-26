@@ -22,7 +22,11 @@ vi.mock("@/lib/tz/resolver", () => ({
   resolveUserTimezone: vi.fn(async () => "UTC"),
 }));
 
-import { computeRangeDelta } from "@/lib/analytics/range-delta";
+import {
+  computeRangeDelta,
+  dailyTotalsEndKey,
+  splitDailyTotals,
+} from "@/lib/analytics/range-delta";
 
 const DAY_MS = 86_400_000;
 const NOW = Date.UTC(2026, 5, 30, 12);
@@ -49,8 +53,9 @@ beforeEach(() => {
 
 describe("computeRangeDelta — per-day and per-night metrics", () => {
   it("compares average daily step totals, not the mean of the readings", async () => {
-    // Six complete days of 8,000 in the previous week, and in the current
-    // week five drained days plus today still arriving as 200 samples.
+    // Six complete days of 8,000 in the previous week and five in the
+    // current one. Today is still arriving as 200 small samples and must not
+    // count: its partial total made every morning's delta read "down".
     mocks.readRollupBuckets.mockResolvedValue([
       ...[8, 9, 10, 11, 12, 13].map((d) => dayRow(d, 8000, 1)),
       ...[1, 2, 3, 4, 5].map((d) => dayRow(d, 8000, 1)),
@@ -61,9 +66,38 @@ describe("computeRangeDelta — per-day and per-night metrics", () => {
 
     expect(result.granularity).toBe("DAY");
     expect(result.previous).toMatchObject({ count: 6, mean: 8000 });
-    expect(result.current.count).toBe(6);
-    expect(result.current.mean).toBeCloseTo((5 * 8000 + 4000) / 6, 6);
-    expect(result.current.sum).toBeCloseTo(44_000, 6);
+    expect(result.current).toMatchObject({ count: 5, mean: 8000, sum: 40_000 });
+    expect(result.delta).toBe(0);
+    const [, , , from, to] = mocks.readRollupBuckets.mock.calls[0]!;
+    expect((from as Date).toISOString()).toBe("2026-06-16T00:00:00.000Z");
+    expect((to as Date).toISOString()).toBe("2026-06-30T00:00:00.000Z");
+  });
+
+  it.each([
+    // West of UTC in the evening: the UTC day already rolled over, the
+    // user's calendar did not.
+    ["America/New_York", "2026-07-01T01:00:00.000Z", "2026-06-29"],
+    // East of UTC in the early morning: the bucket keyed yesterday is still
+    // filling until UTC midnight.
+    ["Asia/Tokyo", "2026-06-29T20:00:00.000Z", "2026-06-28"],
+    ["Europe/Berlin", "2026-06-30T06:00:00.000Z", "2026-06-29"],
+    ["UTC", "2026-06-30T12:00:00.000Z", "2026-06-29"],
+  ])("ends the daily-total window on a completed day in %s", (tz, iso, end) => {
+    expect(dailyTotalsEndKey(Date.parse(iso), tz)).toBe(end);
+  });
+
+  it("splits daily totals on day keys ending at the end key", () => {
+    const points = [
+      { day: "2026-06-30", value: 100 },
+      { day: "2026-06-29", value: 9000 },
+      { day: "2026-06-23", value: 9000 },
+      { day: "2026-06-22", value: 7000 },
+      { day: "2026-06-16", value: 7000 },
+      { day: "2026-06-15", value: 1 },
+    ];
+    const { current, previous } = splitDailyTotals(points, 7, "2026-06-29");
+    expect(current).toMatchObject({ count: 2, mean: 9000 });
+    expect(previous).toMatchObject({ count: 2, mean: 7000 });
   });
 
   it("compares average nights of sleep, not the mean of stage rows", async () => {
