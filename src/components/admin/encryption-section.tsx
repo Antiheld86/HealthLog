@@ -13,7 +13,13 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Loader2, RotateCw, ShieldCheck } from "lucide-react";
+import {
+  Archive,
+  KeyRound,
+  Loader2,
+  RotateCw,
+  ShieldCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -32,7 +38,7 @@ import { StatTile } from "@/components/admin/_stat-tile";
 import { Button } from "@/components/ui/button";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
-import { useTranslations } from "@/lib/i18n/context";
+import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
 import { getApiErrorMessage } from "./_shared";
@@ -60,10 +66,25 @@ interface EncryptionStatus {
     lastCompletedAt: string | null;
     lastResult: { scanned: number; rotated: number; errors: number } | null;
   };
+  /** Which keys the backups still need; see the status route. */
+  backups: {
+    stored: Array<{ keyId: string; copies: number; oldestAt: string }>;
+    unrecorded: { copies: number; oldestAt: string | null };
+    offhost: Array<{
+      keyId: string;
+      firstWrittenAt: string;
+      lastWrittenAt: string;
+      neededUntil: string | null;
+    }>;
+    offhostExpirationDays: number | null;
+    retiredKeysStillNeeded: string[];
+  };
+  safeToDropRetiredKeys: boolean;
 }
 
 export function EncryptionSection() {
   const { t } = useTranslations();
+  const fmt = useFormatters();
   const queryClient = useQueryClient();
 
   const statusQuery = useQuery({
@@ -166,9 +187,19 @@ export function EncryptionSection() {
             value={s.staleRows.toLocaleString()}
           />
         </div>
-        {s.rotationComplete ? (
+        {s.safeToDropRetiredKeys ? (
           <Badge className="border-success/40 bg-success/15 text-success">
             {t("admin.section.encryption.safeToDropLegacy")}
+          </Badge>
+        ) : s.rotationComplete ? (
+          // Every row is on the active key, and that is not the whole
+          // answer: a backup keeps the key its content was written under.
+          <Badge variant="secondary" data-slot="encryption-backups-need-keys">
+            {s.backups.retiredKeysStillNeeded.length > 0
+              ? t("admin.section.encryption.backupsStillNeed", {
+                  keys: s.backups.retiredKeysStillNeeded.join(", "),
+                })
+              : t("admin.section.encryption.backupsUnrecordedBadge")}
           </Badge>
         ) : (
           <Badge variant="secondary">
@@ -177,6 +208,56 @@ export function EncryptionSection() {
             })}
           </Badge>
         )}
+      </SettingsCard>
+
+      {/* ── Keys the backups still need ───────────────────────────── */}
+      <SettingsCard>
+        <SettingsCardHeader
+          icon={Archive}
+          title={t("admin.section.encryption.backupsTitle")}
+          description={t("admin.section.encryption.backupsDescription")}
+        />
+        <p className="text-sm">{t("admin.section.encryption.backupsDetail")}</p>
+        <ul className="space-y-1 text-sm" data-slot="encryption-backup-keys">
+          {s.backups.stored.map((row) => (
+            <li key={`stored-${row.keyId}`}>
+              {t("admin.section.encryption.backupsStoredLine", {
+                key: row.keyId,
+                count: row.copies,
+                when: fmt.dateTime(row.oldestAt),
+              })}
+            </li>
+          ))}
+          {s.backups.unrecorded.copies > 0 && s.backups.unrecorded.oldestAt ? (
+            <li>
+              {t("admin.section.encryption.backupsUnrecordedLine", {
+                count: s.backups.unrecorded.copies,
+                when: fmt.dateTime(s.backups.unrecorded.oldestAt),
+              })}
+            </li>
+          ) : null}
+          {s.backups.offhost.map((row) => (
+            <li key={`offhost-${row.keyId}`}>
+              {row.neededUntil
+                ? t("admin.section.encryption.backupsOffhostLine", {
+                    key: row.keyId,
+                    when: fmt.dateTime(row.lastWrittenAt),
+                    until: fmt.dateTime(row.neededUntil),
+                  })
+                : t("admin.section.encryption.backupsOffhostLineUnknown", {
+                    key: row.keyId,
+                    when: fmt.dateTime(row.lastWrittenAt),
+                  })}
+            </li>
+          ))}
+          {s.backups.stored.length === 0 &&
+          s.backups.unrecorded.copies === 0 &&
+          s.backups.offhost.length === 0 ? (
+            <li className="text-muted-foreground">
+              {t("admin.section.encryption.backupsNone")}
+            </li>
+          ) : null}
+        </ul>
       </SettingsCard>
 
       {/* ── Rotation status + trigger ──────────────────────────────── */}

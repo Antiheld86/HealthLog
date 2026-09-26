@@ -9,6 +9,10 @@ import {
 } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import {
+  kickOffhostPurge,
+  requestOffhostPurge,
+} from "@/lib/jobs/offhost-purge";
+import {
   deleteGuardianAccountWithLifecycle,
   LastManagedGuardianError,
 } from "@/lib/managed-profiles/lifecycle";
@@ -101,6 +105,10 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
       // genuinely complete erasure.
       await tx.auditLog.deleteMany({ where: { userId } });
 
+      // The nightly off-host copies go with the account. The request commits
+      // with the deletion; the purge job deletes the objects.
+      await requestOffhostPurge(tx, userId, "account_deleted");
+
       // Delete user — all other related data is removed via onDelete: Cascade.
       await tx.user.delete({ where: { id: userId } });
     });
@@ -114,6 +122,8 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     }
     throw error;
   }
+
+  await kickOffhostPurge();
 
   annotate({
     action: { name: "settings.account.delete" },

@@ -7276,7 +7276,12 @@
           "neverDetail": "Nothing has landed for this account. Last checked {when}.",
           "unknownDetail": "No nightly run has recorded this account yet.",
           "age": "{hours} h ago",
-          "scheduleNote": "The upload runs every {hours} h. Fresh means inside one run, due means one run produced nothing, stale means two did not."
+          "scheduleNote": "The upload runs every {hours} h. Fresh means inside one run, due means one run produced nothing, stale means two did not.",
+          "lifecycleConfigured": "The bucket deletes copies after {days} days by its own lifecycle rule.",
+          "lifecycleMissing": "The bucket has no lifecycle rule, so every nightly copy is kept forever. Add a rule that expires objects after BACKUP_RETENTION_DAYS.",
+          "lifecycleUnknown": "Whether the bucket deletes old copies could not be read: the credential may not read its lifecycle rule. Check that a rule expires objects after BACKUP_RETENTION_DAYS.",
+          "pendingDeletions": "Copies of {count} deleted or wiped accounts are still in the bucket and are being removed.",
+          "pendingDeletionsFailing": "Copies of {count} deleted or wiped accounts are still in the bucket because it refused to delete them ({error}). Give the credential DeleteObject; the deletion is retried every night."
         },
         "restoreStarted": "Restore started. Its progress shows above the list.",
         "restoreActive": "A restore of this account is already running. Wait for it to finish.",
@@ -7364,7 +7369,17 @@
           "completed": "Completed",
           "failed": "Failed"
         },
-        "coverageDetail": "Only key ids and counts are shown — never key material."
+        "coverageDetail": "Only key ids and counts are shown — never key material.",
+        "backupsTitle": "Keys the backups still need",
+        "backupsDescription": "A retired key stays needed while any backup below still lists it.",
+        "backupsStoredLine": "Key {key}: {count} stored copies, the oldest from {when}",
+        "backupsUnrecordedLine": "{count} stored copies were written before backups recorded their keys (the oldest on {when}). They may need any key that existed then: keep every old key until they are replaced or deleted.",
+        "backupsOffhostLine": "Key {key}: the last off-host copy that needs it went into the bucket on {when}; needed there until {until}",
+        "backupsOffhostLineUnknown": "Key {key}: the last off-host copy that needs it went into the bucket on {when}. The bucket's expiry is unknown, so keep the key until you know that copy is gone.",
+        "backupsNone": "No backup has recorded the keys it needs yet.",
+        "backupsStillNeed": "Every row is rotated, but backups still need {keys}",
+        "backupsUnrecordedBadge": "Every row is rotated, but older backups may still need a retired key",
+        "backupsDetail": "Rotation re-encrypts every row, but a backup keeps the key its content was written under, and restoring it needs that key. Keep a retired key in ENCRYPTION_KEYS until nothing below lists it."
       }
     },
     "carrier": "Carrier",

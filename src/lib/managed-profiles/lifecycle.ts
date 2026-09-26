@@ -1,3 +1,7 @@
+import {
+  kickOffhostPurge,
+  requestOffhostPurge,
+} from "@/lib/jobs/offhost-purge";
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
 import type { Prisma } from "@/generated/prisma/client";
@@ -209,9 +213,11 @@ export async function deleteManagedProfile(input: {
         details: { profileId: profile.id },
         client: tx,
       });
+      await requestOffhostPurge(tx, profile.id, "managed_profile_deleted");
       await tx.user.delete({ where: { id: profile.id } });
     });
   });
+  await kickOffhostPurge();
 }
 
 /**

@@ -27,6 +27,7 @@ import { Readable, Transform } from "node:stream";
 import { createGunzip, createGzip, gunzipSync, gzipSync } from "node:zlib";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { createRawStreamEncryptor, decryptRawStream } from "@/lib/crypto";
+import { createBackupKeyIdTextScanner } from "@/lib/export/backup-key-ids";
 import { streamFullBackupJson } from "@/lib/export/full-backup-stream";
 import { annotate, getEvent } from "@/lib/logging/context";
 
@@ -489,6 +490,24 @@ export interface S3Like {
     prefix: string,
   ): Promise<Array<{ key: string; lastModified?: Date }>>;
   deleteObject(key: string): Promise<void>;
+  /**
+   * The bucket's lifecycle rule, as far as the credential may read it.
+   * Optional so a test double that has no opinion leaves it out.
+   */
+  getLifecycle?(): Promise<OffhostLifecycle>;
+}
+
+/**
+ * Whether the bucket retires old copies by itself.
+ *
+ * `configured` names the shortest expiry of an enabled rule; `missing` means
+ * the bucket answered that it has no rule; `unknown` means it would not say
+ * (a credential without `s3:GetLifecycleConfiguration`, a target that does not
+ * implement the call, a network failure) and says nothing either way.
+ */
+export interface OffhostLifecycle {
+  state: "configured" | "missing" | "unknown";
+  expirationDays: number | null;
 }
 
 export async function getS3Client(cfg: OffhostBackupConfig): Promise<S3Like> {
@@ -601,7 +620,76 @@ export async function getS3Client(cfg: OffhostBackupConfig): Promise<S3Like> {
         new mod.DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }),
       );
     },
+    getLifecycle: async () => {
+      try {
+        const out = await client.send(
+          new mod.GetBucketLifecycleConfigurationCommand({
+            Bucket: cfg.bucket,
+          }),
+          { abortSignal: AbortSignal.timeout(5_000) },
+        );
+        const days = (out.Rules ?? [])
+          .filter((rule) => rule.Status === "Enabled")
+          .map((rule) => rule.Expiration?.Days)
+          .filter((d): d is number => typeof d === "number" && d > 0);
+        return days.length > 0
+          ? { state: "configured", expirationDays: Math.min(...days) }
+          : { state: "missing", expirationDays: null };
+      } catch (err) {
+        const name = (err as { name?: string; Code?: string }).name;
+        const code = (err as { Code?: string }).Code;
+        if (
+          name === "NoSuchLifecycleConfiguration" ||
+          code === "NoSuchLifecycleConfiguration"
+        ) {
+          return { state: "missing", expirationDays: null };
+        }
+        return { state: "unknown", expirationDays: null };
+      }
+    },
   };
+}
+
+const LIFECYCLE_CACHE_MS = 10 * 60 * 1000;
+let lifecycleCache: { at: number; value: OffhostLifecycle } | null = null;
+
+/**
+ * The bucket's lifecycle rule for the admin card, cached for ten minutes so a
+ * page render does not become a bucket call. Never throws.
+ */
+export async function probeOffhostLifecycle(
+  s3Override?: S3Like,
+  now: number = Date.now(),
+): Promise<OffhostLifecycle> {
+  if (
+    !s3Override &&
+    lifecycleCache &&
+    now - lifecycleCache.at < LIFECYCLE_CACHE_MS
+  ) {
+    return lifecycleCache.value;
+  }
+  const cfg = loadOffhostConfigSafe();
+  if (!cfg) return { state: "unknown", expirationDays: null };
+  let value: OffhostLifecycle;
+  try {
+    const s3 = s3Override ?? (await getS3Client(cfg));
+    value = s3.getLifecycle
+      ? await s3.getLifecycle()
+      : { state: "unknown", expirationDays: null };
+  } catch {
+    value = { state: "unknown", expirationDays: null };
+  }
+  if (!s3Override) lifecycleCache = { at: now, value };
+  return value;
+}
+
+/** `loadOffhostConfig`, answering null for a malformed key instead of throwing. */
+function loadOffhostConfigSafe(): OffhostBackupConfig | null {
+  try {
+    return loadOffhostConfig();
+  } catch {
+    return null;
+  }
 }
 
 interface BackupRunReport {
@@ -640,6 +728,30 @@ export interface RunOffhostBackupOptions extends UploadBackupOptions {
    * accounts, before the job's expiry would cut one off halfway.
    */
   shouldStop?: () => boolean;
+}
+
+/**
+ * Note, per key id, that an object needing it went into the bucket now. Never
+ * fails the account: the object is in the bucket whatever this row says.
+ */
+async function recordOffhostKeyUse(
+  prisma: PrismaClient,
+  keyIds: readonly string[],
+  at: Date,
+): Promise<void> {
+  for (const keyId of keyIds) {
+    try {
+      await prisma.offhostBackupKeyUse.upsert({
+        where: { keyId },
+        create: { keyId, firstWrittenAt: at, lastWrittenAt: at },
+        update: { lastWrittenAt: at },
+      });
+    } catch (err) {
+      getEvent()?.addWarning(
+        `offhost-backup key-use write failed: ${(err as Error).message?.slice(0, 200)}`,
+      );
+    }
+  }
 }
 
 export async function runOffhostBackup(
@@ -689,24 +801,54 @@ export async function runOffhostBackup(
       break;
     }
     let objectBytes: number | null = null;
+    const objectKey = `${dateKey}/user-${user.id}.json.enc`;
+    const accountStartedAt = new Date();
+    // The key ids the object's content needs, read as it is written: the
+    // admin encryption view uses them to say how long a retired key is still
+    // needed for what is in the bucket.
+    const keyScanner = createBackupKeyIdTextScanner();
     try {
       objectBytes = await uploadEncryptedBackup(
         s3,
-        `${dateKey}/user-${user.id}.json.enc`,
+        objectKey,
         cfg.encryptionKey,
         // The same writer the weekly in-database pass uses. The payload
         // builder was always shared; everything after it was not, which is why
         // this job kept dying on a record the weekly one had learned to
         // survive.
         (write) =>
-          streamFullBackupJson(prisma, user.id, write, {
-            purpose: "disaster-recovery",
-            exportedAt: now,
-          }),
+          streamFullBackupJson(
+            prisma,
+            user.id,
+            async (chunk) => {
+              keyScanner.feed(chunk);
+              await write(chunk);
+            },
+            {
+              purpose: "disaster-recovery",
+              exportedAt: now,
+            },
+          ),
         options,
       );
+      // The account was deleted or wiped while its copy was being written.
+      // The purge that request started may already have run, so the copy
+      // this run just put there is removed here rather than left behind.
+      const purgedMeanwhile =
+        (await prisma.offhostPurgeRequest.count({
+          where: {
+            subjectId: { in: [user.id, "*"] },
+            requestedAt: { gte: accountStartedAt },
+          },
+        })) > 0 || (await prisma.user.count({ where: { id: user.id } })) === 0;
+      if (purgedMeanwhile) {
+        await s3.deleteObject(objectKey);
+        objectBytes = null;
+        continue;
+      }
       largestObjectBytes = Math.max(largestObjectBytes, objectBytes);
       uploaded++;
+      await recordOffhostKeyUse(prisma, keyScanner.keyIds(), new Date());
     } catch (err) {
       failed++;
       if (err instanceof OffhostBackupTooLargeError) oversized++;

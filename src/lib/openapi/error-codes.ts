@@ -66,6 +66,8 @@ export const ERROR_CODE_CATALOGUE: Readonly<Record<string, readonly string[]>> =
       "auth.token.invalid",
     ],
     backup: [
+      "backup.foreign_reference",
+      "backup.key.missing",
       "backup.payload.undecryptable",
       "backup.restore.active",
       "backup.section.missing",

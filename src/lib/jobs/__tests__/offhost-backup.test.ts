@@ -32,6 +32,14 @@ import {
 const ENC_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
+/** The purge ledger and key-use rows the run touches after each upload. */
+function purgeLedgerMocks() {
+  return {
+    offhostPurgeRequest: { count: vi.fn().mockResolvedValue(0) },
+    offhostBackupKeyUse: { upsert: vi.fn() },
+  };
+}
+
 describe("offhost-backup envelope", () => {
   it("encrypts and decrypts JSON round-trip", () => {
     const key = Buffer.from(ENC_KEY, "hex");
@@ -184,8 +192,10 @@ describe("runOffhostBackup", () => {
     s3.store.set("2020-01-01/user-old.json.enc", Buffer.from([0]));
 
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: { upsert: vi.fn() },
       user: {
+        count: vi.fn().mockResolvedValue(1),
         findMany: vi.fn().mockResolvedValue([{ id: "u1" }, { id: "u2" }]),
       },
       measurement: { findMany: vi.fn().mockResolvedValue([]) },
@@ -248,11 +258,43 @@ describe("runOffhostBackup", () => {
     expect(first.create.lastSuccessAt).toBeInstanceOf(Date);
   });
 
+  it("takes back the copy of an account deleted while it was written", async () => {
+    const s3 = makeS3Mock();
+    const ledger = purgeLedgerMocks();
+    const prisma = {
+      ...ledger,
+      offhostBackupState: { upsert: vi.fn() },
+      user: {
+        // u1 is gone by the time its upload lands; u2 is not.
+        count: vi.fn(async ({ where }: { where: { id: string } }) =>
+          where.id === "u1" ? 0 : 1,
+        ),
+        findMany: vi.fn().mockResolvedValue([{ id: "u1" }, { id: "u2" }]),
+      },
+    };
+    const report = await runOffhostBackup(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      prisma as any,
+      s3,
+      new Date("2026-05-08T03:00:00Z"),
+    );
+    expect(s3.store.has("2026-05-08/user-u1.json.enc")).toBe(false);
+    expect(s3.store.has("2026-05-08/user-u2.json.enc")).toBe(true);
+    expect(s3.deleteObject).toHaveBeenCalledWith("2026-05-08/user-u1.json.enc");
+    expect(report.uploaded).toBe(1);
+    // No ledger row for an account that no longer exists.
+    expect(prisma.offhostBackupState.upsert).toHaveBeenCalledTimes(1);
+  });
+
   it("uploads the canonical builder output without reshaping it", async () => {
     const s3 = makeS3Mock();
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: { upsert: vi.fn() },
-      user: { findMany: vi.fn().mockResolvedValue([{ id: "u1" }]) },
+      user: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([{ id: "u1" }]),
+      },
     };
     const canonicalPayload = {
       schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -310,8 +352,10 @@ describe("runOffhostBackup", () => {
     const s3 = makeS3Mock();
     const upsert = vi.fn();
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: { upsert },
       user: {
+        count: vi.fn().mockResolvedValue(1),
         findMany: vi.fn().mockResolvedValue([{ id: "u1" }, { id: "u2" }]),
       },
     };
@@ -357,10 +401,14 @@ describe("runOffhostBackup", () => {
   it("still reports a landed object as uploaded when the ledger write fails", async () => {
     const s3 = makeS3Mock();
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: {
         upsert: vi.fn().mockRejectedValue(new Error("pool timeout")),
       },
-      user: { findMany: vi.fn().mockResolvedValue([{ id: "u1" }]) },
+      user: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([{ id: "u1" }]),
+      },
     };
 
     const report = await runOffhostBackup(
@@ -382,8 +430,12 @@ describe("runOffhostBackup", () => {
   it("refuses an account whose object outgrows one multipart upload", async () => {
     const s3 = makeS3Mock();
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: { upsert: vi.fn() },
-      user: { findMany: vi.fn().mockResolvedValue([{ id: "u1" }]) },
+      user: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([{ id: "u1" }]),
+      },
     };
     mocks.buildFullBackupPayload.mockResolvedValue({
       payload: {
@@ -419,8 +471,12 @@ describe("runOffhostBackup", () => {
   it("reports the largest object it wrote", async () => {
     const s3 = makeS3Mock();
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: { upsert: vi.fn() },
-      user: { findMany: vi.fn().mockResolvedValue([{ id: "u1" }]) },
+      user: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([{ id: "u1" }]),
+      },
     };
     const report = await runOffhostBackup(
       prisma as never,

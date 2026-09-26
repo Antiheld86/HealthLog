@@ -293,6 +293,10 @@ export const INSTANCE_SCOPED: Readonly<Record<string, string>> = {
   AppSettings: "instance-wide configuration singleton",
   RateLimit: "instance-wide rate-limit buckets, keyed by string, self-expiring",
   HostMetric: "instance-wide host telemetry, not attributable to an account",
+  OffhostBackupKeyUse:
+    "per encryption key, when the nightly off-host run last wrote an object needing it; says nothing about any account",
+  OffhostPurgeRequest:
+    "the deletions an account deletion or wipe asked of the off-host bucket; written by the wipe itself and removed once the bucket holds nothing of the account",
   CycleSymptomCategory:
     "seeded catalogue shared by every account; a user's custom symptoms live on CycleSymptom",
   IllnessSymptom: "seeded symptom catalogue shared by every account",
