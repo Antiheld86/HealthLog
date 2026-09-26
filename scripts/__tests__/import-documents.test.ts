@@ -343,7 +343,7 @@ async function papra() {
       return {
         status: 200,
         json: {
-          documentsCount: 3,
+          documentsCount: 4,
           documents: [
             {
               id: "doc_a",
@@ -364,6 +364,15 @@ async function papra() {
                 { id: "tag_h", name: "Health" },
                 { id: "tag_l", name: "Lab" },
               ],
+            },
+            {
+              id: "doc_huge",
+              name: "Scan.pdf",
+              originalName: "scan.pdf",
+              originalSize: 40_000_000,
+              createdAt: "2025-03-10T12:00:00.000Z",
+              documentDate: "2020-03-10",
+              tags: [{ id: "tag_h", name: "Health" }],
             },
             {
               id: "doc_old",
@@ -677,7 +686,31 @@ describe("import-documents.mjs — Papra", () => {
     );
     expect(pp.seen[0].auth).toBe("Bearer pp_test");
     expect(res.stdout).toMatch(/Imported: 1/);
-    expect(res.stdout).toMatch(/Skipped: 1/);
+    // doc_b answered 413 with the cap; doc_huge is known to be larger than
+    // that and is skipped without being downloaded or sent.
+    expect(res.stdout).toMatch(/Skipped: 2/);
     expect(res.stdout).toMatch(/larger than HealthLog accepts/);
+    expect(pp.seen.some((s) => s.path.includes("doc_huge"))).toBe(false);
+  });
+
+  it("shows small sizes in KB on a dry run", async () => {
+    const pp = await papra();
+    const res = await runScript(
+      [
+        "papra",
+        "--papra-url",
+        pp.url,
+        "--papra-org",
+        "org_1",
+        "--tag",
+        "Health",
+        "--since",
+        "2016-01-01",
+        "--dry-run",
+      ],
+      { PAPRA_TOKEN: "pp_test" },
+    );
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/2\.0 KB\s+Papra doc_a/);
   });
 });
