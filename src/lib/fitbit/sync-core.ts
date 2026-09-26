@@ -24,6 +24,7 @@ import { refreshAccessToken } from "./client";
 import { getUserFitbitCredentials } from "./credentials";
 import { FitbitApiError, classifyFitbitError } from "./response-classifier";
 import type { FitbitClassification } from "./response-classifier";
+import { userDayKey } from "@/lib/tz/format";
 
 /** Refresh the access token this many ms before `tokenExpiresAt`. */
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -384,6 +385,14 @@ export function incrementalStart(
 }
 
 /**
+ * The user's local today as a Date whose UTC calendar date is that day, for
+ * the date-keyed Fitbit range endpoints (`fitbitDate` reads the UTC date).
+ */
+export function localTodayAsDate(tz: string, now: Date = new Date()): Date {
+  return new Date(`${userDayKey(now, tz)}T12:00:00.000Z`);
+}
+
+/**
  * Slice `[start, end]` into consecutive inclusive windows no wider than
  * `maxDays` calendar days, the per-endpoint range cap the classic Web API
  * enforces. Each window is `{ start, end }` with `end` no later than the overall
@@ -626,6 +635,8 @@ export async function upsertFitbitMeasurements(
     r: FitbitMeasurementUpsert;
     /** Set when a key-format migration re-keys the row in place (see below). */
     reKeyTo?: string;
+    /** The row's instant before this write, when the write moves it. */
+    movedFrom?: Date;
   }> = [];
   const touched: Array<{ type: MeasurementType; measuredAt: Date }> = [];
 
@@ -648,7 +659,16 @@ export async function upsertFitbitMeasurements(
         existingRow.unit === r.unit &&
         existingRow.measuredAt.getTime() === r.measuredAt.getTime() &&
         (existingRow.sleepStage ?? null) === (r.sleepStage ?? null);
-      if (!unchanged) toUpdate.push({ id: existingRow.id, r });
+      if (!unchanged) {
+        toUpdate.push({
+          id: existingRow.id,
+          r,
+          movedFrom:
+            existingRow.measuredAt.getTime() !== r.measuredAt.getTime()
+              ? existingRow.measuredAt
+              : undefined,
+        });
+      }
     } else if (!plannedCreateKeys.has(key)) {
       plannedCreateKeys.add(key);
       toCreate.push({
@@ -813,7 +833,7 @@ export async function upsertFitbitMeasurements(
   // `syncVersion`. `deletedAt: null` rides along unconditionally — a no-op on
   // a live row, a deliberate RESURRECTION on a tombstoned one (Fitbit is the
   // source of truth for its own rows; see TOMBSTONES RESURRECT above).
-  for (const { id, r, reKeyTo } of toUpdate) {
+  for (const { id, r, reKeyTo, movedFrom } of toUpdate) {
     try {
       await prisma.measurement.update({
         where: { id },
@@ -833,6 +853,14 @@ export async function upsertFitbitMeasurements(
         type: r.type as MeasurementType,
         measuredAt: r.measuredAt,
       });
+      // A row that moved (a daily anchor re-cut on the user's local noon)
+      // leaves its old day too; that day's rollup needs the refold.
+      if (movedFrom) {
+        touched.push({
+          type: r.type as MeasurementType,
+          measuredAt: movedFrom,
+        });
+      }
       imported++;
     } catch (err) {
       getEvent()?.addWarning(`Fitbit: failed to update measurement: ${err}`);

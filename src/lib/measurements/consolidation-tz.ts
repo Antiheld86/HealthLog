@@ -70,9 +70,9 @@ export function dayKeyForUserTz(date: Date, tz: string): string {
 /**
  * Compute the canonical timestamp for a calendar-day key. With a `tz`,
  * returns the JS-Date instant at the user's local 12:00 noon; without
- * one, returns 12:00 UTC of the day. Either anchor sits a full 12 h
- * inside its calendar day, so it round-trips back to the same day
- * through `userDayKey()` for every zone within ±12 h — which is the
+ * one, returns 12:00 UTC of the day. The local-noon anchor sits a full
+ * 12 h inside its calendar day, so it round-trips back to the same day
+ * through `userDayKey()` in that zone — which is the
  * whole point of anchoring date-only daily records at noon rather than
  * midnight (a UTC-midnight anchor double-shifts the day for west-of-UTC
  * users on read). Matches the Withings activity sync convention (one
@@ -80,10 +80,11 @@ export function dayKeyForUserTz(date: Date, tz: string): string {
  * between same-day spot samples). The string returned by
  * `toISOString()` is UTC.
  *
- * The optional-`tz` shape is what the wearable daily mappers (Oura,
- * Polar, Fitbit) anchor on — they do not have the user's timezone in
- * scope at map time, so they take the noon-UTC fallback, which is
- * correct for every zone within ±12 h.
+ * Every daily row a sync writes (Withings, Fitbit, Google Health, Polar,
+ * Oura) passes the user's zone. The noon-UTC fallback is NOT day-stable
+ * everywhere: from UTC+12 on (New Zealand all year, Fiji, Tonga, Samoa) noon
+ * UTC is already the next local day, which is how those users saw every
+ * synced daily total a day late up to v1.39.2.
  */
 export function canonicalDailyTimestamp(dateKey: string, tz?: string): Date {
   // No timezone in scope: 12:00 UTC is a safe day-stable anchor for

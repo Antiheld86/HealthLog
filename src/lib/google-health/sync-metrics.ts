@@ -51,11 +51,15 @@ import {
 } from "./sync-core";
 import { getEvent } from "@/lib/logging/context";
 import { prisma } from "@/lib/db";
+import { resolveUserTimezone } from "@/lib/tz/resolver";
 
 /** One mappable metric: its data-type encoding + the per-point mapper + a verb. */
 interface MetricResource {
   dataType: GoogleHealthDataType;
-  map: (point: Record<string, unknown>) => GoogleHealthMappedMeasurement[];
+  map: (
+    point: Record<string, unknown>,
+    tz: string,
+  ) => GoogleHealthMappedMeasurement[];
   verb: string;
 }
 
@@ -127,6 +131,9 @@ export async function syncUserMetrics(
   // `syncUserGoogleHealth` — never re-read here, so a sibling resource's stamp
   // can't shrink this one's window. Undefined on a full/backfill run.
   const start = opts.start;
+  // Daily summaries are anchored at local noon of their date, and offset-less
+  // sample times are read on the user's wall clock.
+  const tz = await resolveUserTimezone(userId);
 
   let imported = 0;
 
@@ -155,7 +162,7 @@ export async function syncUserMetrics(
     const readings: GoogleHealthMeasurementUpsert[] = [];
     try {
       for (const point of points) {
-        for (const m of resource.map(point)) {
+        for (const m of resource.map(point, tz)) {
           readings.push({
             type: m.type,
             value: m.value,

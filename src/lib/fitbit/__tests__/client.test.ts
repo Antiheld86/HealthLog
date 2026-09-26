@@ -398,6 +398,56 @@ describe("VO2 max", () => {
   });
 });
 
+describe("mappers in the user's zone", () => {
+  it("reads a weigh-in's logged wall clock in the user's zone", () => {
+    const entry = {
+      weight: [
+        { date: "2026-05-10", time: "07:30:00", weight: 81.4, logId: 7 },
+      ],
+    };
+    expect(
+      mapWeight(entry, "Pacific/Auckland")[0]!.measuredAt.toISOString(),
+    ).toBe("2026-05-09T19:30:00.000Z");
+    expect(
+      mapWeight(entry, "America/New_York")[0]!.measuredAt.toISOString(),
+    ).toBe("2026-05-10T11:30:00.000Z");
+    // The externalId does not depend on the zone.
+    expect(mapWeight(entry, "Pacific/Auckland")[0]!.fieldTag).toBe("7:weight");
+  });
+
+  it("keeps a logId-less weigh-in's externalId as earlier versions spelled it", () => {
+    const out = mapWeight(
+      { weight: [{ date: "2026-05-10", time: "07:30:00", weight: 81.4 }] },
+      "Pacific/Auckland",
+    );
+    expect(out[0]!.fieldTag).toBe("2026-05-10T07:30:00.000Z:weight");
+  });
+
+  it.each([
+    ["Pacific/Tongatapu", "2026-05-09T23:00:00.000Z"],
+    ["Pacific/Auckland", "2026-05-10T00:00:00.000Z"],
+    ["America/Santiago", "2026-05-10T16:00:00.000Z"],
+    ["America/New_York", "2026-05-10T16:00:00.000Z"],
+    ["Europe/Berlin", "2026-05-10T10:00:00.000Z"],
+  ])(
+    "anchors a daily total at local noon in %s, on the same day there",
+    (tz, iso) => {
+      const [steps] = mapSteps(
+        { "activities-steps": [{ dateTime: "2026-05-10", value: "8421" }] },
+        tz,
+      );
+      expect(steps!.measuredAt.toISOString()).toBe(iso);
+      expect(steps!.fieldTag).toBe("steps:2026-05-10");
+      const [spo2] = mapOxygenSaturation(
+        [{ dateTime: "2026-05-10", value: { avg: 97 } }],
+        tz,
+      );
+      expect(spo2!.measuredAt.toISOString()).toBe(iso);
+      expect(spo2!.fieldTag).toBe("2026-05-10:spo2");
+    },
+  );
+});
+
 describe("activity mappers (cumulative daily)", () => {
   it("maps steps from the string value, preserving a zero, with a day-keyed externalId", () => {
     const out = mapSteps({

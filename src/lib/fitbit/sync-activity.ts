@@ -30,6 +30,8 @@ import {
   mapVo2Max,
 } from "./client";
 import type { FitbitMappedMeasurement } from "./client";
+import { resolveUserTimezone } from "@/lib/tz/resolver";
+import { localTodayAsDate } from "./sync-core";
 import {
   chunkDateRanges,
   getValidToken,
@@ -45,7 +47,7 @@ import { annotate } from "@/lib/logging/context";
 /** One mappable activity metric: a range fetcher + a body mapper + a verb. */
 interface ActivityResource {
   fetch: (accessToken: string, start: Date, end: Date) => Promise<unknown>;
-  map: (body: unknown) => FitbitMappedMeasurement[];
+  map: (body: unknown, tz: string) => FitbitMappedMeasurement[];
   verb: string;
 }
 
@@ -90,8 +92,12 @@ export async function syncUserActivity(
   const tokenInfo = await getValidToken(userId);
   if (!tokenInfo) return 0;
 
+  // Daily rows are anchored at local noon of their date in the user's zone,
+  // and the window runs through the user's own today (a UTC "now" is still
+  // yesterday for most of a morning in a zone ahead of UTC).
+  const tz = await resolveUserTimezone(userId);
   const start = opts.start ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const end = opts.end ?? new Date();
+  const end = opts.end ?? localTodayAsDate(tz);
   const windows = chunkDateRanges(start, end, FITBIT_RANGE_DAYS);
 
   let imported = 0;
@@ -112,7 +118,7 @@ export async function syncUserActivity(
         break;
       }
       try {
-        for (const m of resource.map(body)) {
+        for (const m of resource.map(body, tz)) {
           readings.push({
             type: m.type,
             value: m.value,

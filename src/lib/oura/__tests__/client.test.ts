@@ -642,3 +642,23 @@ describe("derivePeriodDaysFromCyclePhases", () => {
     expect(days).toEqual(["2026-06-10"]);
   });
 });
+
+describe("date-only records in the user's zone", () => {
+  it.each([
+    ["Pacific/Tongatapu", "2026-05-09T23:00:00.000Z"],
+    ["Pacific/Auckland", "2026-05-10T00:00:00.000Z"],
+    ["America/New_York", "2026-05-10T16:00:00.000Z"],
+    ["Europe/Berlin", "2026-05-10T10:00:00.000Z"],
+  ])("anchors a date-only record at local noon in %s", (tz, iso) => {
+    const [spo2] = mapDailySpo2(
+      { day: "2026-05-10", spo2_percentage: { average: 97 } } as never,
+      tz,
+    );
+    expect(spo2!.measuredAt.toISOString()).toBe(iso);
+    const [resilience] = mapResilience(
+      { day: "2026-05-10", level: "solid" } as never,
+      tz,
+    );
+    expect(resilience!.measuredAt.toISOString()).toBe(iso);
+  });
+});

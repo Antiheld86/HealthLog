@@ -423,6 +423,13 @@ export interface MappedMeasurement {
    */
   externalId?: string;
   /**
+   * The calendar date a date-keyed row belongs to (`YYYY-MM-DD`). The sync
+   * layer keys the externalId on it rather than on `measuredAt`, which sits at
+   * the date's local noon in the user's zone and so can fall on a different
+   * UTC date.
+   */
+  day?: string;
+  /**
    * `true` on per-segment sleep rows whose ORDER is synthesised. When Polar
    * gives only per-stage duration totals (no per-stage onset timestamps), the
    * timeline is reconstructed in a fixed physiological order; the UI labels such
@@ -444,13 +451,14 @@ function rechargeStatusToScore(status: number): number {
  * Map one Polar Nightly Recharge record. The recovery band → `RECOVERY_SCORE`
  * (source POLAR, distinct from the COMPUTED proxy); HRV → `HRV_RMSSD`; the
  * nightly average HR → `RESTING_HEART_RATE`; breathing rate → `RESPIRATORY_RATE`.
- * `measuredAt` is the record's date anchored at noon (the wake
- * morning the night belongs to).
+ * `measuredAt` is the record's date anchored at local noon in the user's
+ * zone (the wake morning the night belongs to).
  */
 export function mapNightlyRecharge(
   r: PolarNightlyRecharge,
+  tz?: string,
 ): MappedMeasurement[] {
-  const measuredAt = canonicalDailyTimestamp(r.date);
+  const measuredAt = canonicalDailyTimestamp(r.date, tz);
   if (Number.isNaN(measuredAt.getTime())) return [];
   const out: MappedMeasurement[] = [];
 
@@ -507,7 +515,7 @@ export function mapNightlyRecharge(
       fieldTag: "ans_charge",
     });
   }
-  return out;
+  return out.map((m) => ({ ...m, day: r.date }));
 }
 
 /**
@@ -534,7 +542,7 @@ export function mapNightlyRecharge(
  * fall back to a midnight-UTC anchor and emit untimed stage rows — degraded but
  * never wrong-day for the common UTC-positive case, matching the pre-fix shape.
  */
-export function mapSleep(s: PolarSleep): MappedMeasurement[] {
+export function mapSleep(s: PolarSleep, tz?: string): MappedMeasurement[] {
   const out: MappedMeasurement[] = [];
 
   const startMs = s.sleep_start_time ? Date.parse(s.sleep_start_time) : NaN;
@@ -599,10 +607,10 @@ export function mapSleep(s: PolarSleep): MappedMeasurement[] {
     return out;
   }
 
-  // Fallback: no usable window. Anchor at noon of the wake date and emit
-  // untimed stage rows (the pre-v1.17.1 shape) so a record missing the window
-  // fields still contributes a night total.
-  const measuredAt = canonicalDailyTimestamp(s.date);
+  // Fallback: no usable window. Anchor at local noon of the wake date and
+  // emit untimed stage rows (the pre-v1.17.1 shape) so a record missing the
+  // window fields still contributes a night total.
+  const measuredAt = canonicalDailyTimestamp(s.date, tz);
   if (Number.isNaN(measuredAt.getTime())) return [];
   for (const [sec, stage, fieldTag] of stages) {
     if (typeof sec === "number" && sec >= 0) {
@@ -625,15 +633,19 @@ export function mapSleep(s: PolarSleep): MappedMeasurement[] {
       fieldTag: "sleep_score",
     });
   }
-  return out;
+  return out.map((m) => ({ ...m, day: s.date }));
 }
 
 /** Map one current AccessLink daily-activity record: `steps` +
  * `active_calories` where Polar reports them. The active energy portion is
  * used instead of total `calories`, which includes BMR. */
-export function mapActivity(a: PolarActivity): MappedMeasurement[] {
+export function mapActivity(
+  a: PolarActivity,
+  tz?: string,
+): MappedMeasurement[] {
   if (typeof a.start_time !== "string") return [];
-  const measuredAt = canonicalDailyTimestamp(a.start_time.slice(0, 10));
+  const day = a.start_time.slice(0, 10);
+  const measuredAt = canonicalDailyTimestamp(day, tz);
   if (Number.isNaN(measuredAt.getTime())) return [];
   const out: MappedMeasurement[] = [];
   const steps = a.steps;
@@ -669,14 +681,17 @@ export function mapActivity(a: PolarActivity): MappedMeasurement[] {
       fieldTag: "distance",
     });
   }
-  return out;
+  return out.map((m) => ({ ...m, day }));
 }
 
 /** Map one Polar Training Load Pro record: `cardio_load` → `CARDIO_LOAD`
  * (Polar's device-native cardiovascular-strain figure). `0` is a valid load, so
  * guard on `number` only. */
-export function mapCardioLoad(c: PolarCardioLoad): MappedMeasurement[] {
-  const measuredAt = canonicalDailyTimestamp(c.date);
+export function mapCardioLoad(
+  c: PolarCardioLoad,
+  tz?: string,
+): MappedMeasurement[] {
+  const measuredAt = canonicalDailyTimestamp(c.date, tz);
   if (Number.isNaN(measuredAt.getTime())) return [];
   if (typeof c.cardio_load !== "number" || c.cardio_load < 0) return [];
   return [
@@ -686,6 +701,7 @@ export function mapCardioLoad(c: PolarCardioLoad): MappedMeasurement[] {
       unit: "score",
       measuredAt,
       fieldTag: "cardio_load",
+      day: c.date,
     },
   ];
 }

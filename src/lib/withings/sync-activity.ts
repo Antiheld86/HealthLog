@@ -36,6 +36,9 @@
 import type { MeasurementType } from "@/generated/prisma/client";
 
 import { prisma } from "@/lib/db";
+import { canonicalDailyTimestamp } from "@/lib/measurements/consolidation-tz";
+import { shiftDateKey, userDayKey } from "@/lib/tz/format";
+import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { getEvent } from "@/lib/logging/context";
 import { safeFetch } from "@/lib/safe-fetch";
 import { getUnitForType } from "@/lib/validations/measurement";
@@ -112,16 +115,11 @@ const ACTIVITY_FIELD_MAP: ReadonlyArray<{
 ];
 
 /**
- * Anchor a per-day activity row at noon UTC. Chosen so the instant
- * always lands inside the local day for users in the [-11, +12] zone
- * range — anchoring at end-of-day UTC (the v1.4.25 W17b shape) sent
- * Tokyo readings into the *following* local day, mis-bucketing every
- * positive-offset user's "today" tile. Noon UTC is the standard
- * "calendar-day with no clock" representation per RFC 3339 §5.6 and
- * the JS `Date` analytics layer day-keys it cleanly in every
- * supported user timezone.
+ * Where the per-day activity rows sat up to v1.39.2: noon UTC of the date.
+ * Still read, so a row written under that anchor is found and moved to the
+ * local-noon anchor instead of being duplicated.
  */
-function activityMeasuredAt(yyyymmdd: string): Date {
+function legacyActivityMeasuredAt(yyyymmdd: string): Date {
   return new Date(`${yyyymmdd}T12:00:00.000Z`);
 }
 
@@ -268,18 +266,18 @@ export async function syncUserActivity(
   // The webhook-driven path narrows naturally to today/yesterday;
   // the cron fallback walks the full window.
   void opts.fullSync; // reserved for future expansion
-  const now = new Date();
-  const start = new Date(
-    now.getTime() - ACTIVITY_BACKFILL_DAYS * 24 * 60 * 60 * 1000,
-  );
-  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  // Withings activity is keyed by the user's calendar date, so the window
+  // is cut on the user's own days: a UTC cut left "today" out of the fetch
+  // until UTC caught up with a zone ahead of it.
+  const timeZone = await resolveUserTimezone(userId);
+  const today = userDayKey(new Date(), timeZone);
 
   let entries: WithingsActivityEntry[];
   try {
     entries = await fetchWithingsActivity(
       tokenInfo.accessToken,
-      ymd(start),
-      ymd(now),
+      shiftDateKey(today, -ACTIVITY_BACKFILL_DAYS),
+      today,
     );
   } catch (err) {
     // v1.4.43 W7-B3 — typed-classification path. The thrown
@@ -340,13 +338,19 @@ export async function syncUserActivity(
   interface PlannedRow {
     type: MeasurementType;
     measuredAt: Date;
+    /** The pre-v1.39.3 noon-UTC anchor of the same date. */
+    legacyMeasuredAt: Date;
     value: number;
     externalId: string;
   }
   const collected: PlannedRow[] = [];
   for (const entry of entries) {
     if (!entry.date) continue;
-    const measuredAt = activityMeasuredAt(entry.date);
+    // Local noon of the date in the user's zone: the instant reads the same
+    // calendar day there. Noon UTC read as the next day from UTC+13 on
+    // (Auckland in summer, Tonga, Samoa), so every daily total landed a day
+    // late for those users.
+    const measuredAt = canonicalDailyTimestamp(entry.date, timeZone);
     for (const { field, type } of ACTIVITY_FIELD_MAP) {
       const raw = entry[field];
       // Withings returns 0 for "active but no movement" — that's
@@ -356,6 +360,7 @@ export async function syncUserActivity(
       collected.push({
         type,
         measuredAt,
+        legacyMeasuredAt: legacyActivityMeasuredAt(entry.date),
         value: raw,
         externalId: `withings:activity:${userId}:${entry.date}:${field}`,
       });
@@ -377,13 +382,11 @@ export async function syncUserActivity(
 
     try {
       // One read for the whole batch: every existing WITHINGS / non-sleep
-      // row that occupies a slot we intend to write. Keyed by the same
-      // four columns the per-row `findFirst` matched on, so the
-      // overwrite-vs-insert decision is identical — just resolved in
-      // memory instead of N round-trips.
-      const distinctMeasuredAt = [
-        ...new Map(planned.map((p) => [p.measuredAt.getTime(), p.measuredAt])),
-      ].map(([, d]) => d);
+      // row for a planned day, found by its stable `externalId` or, for a
+      // row written before it carried one, by the day's old noon-UTC slot.
+      // A match is rewritten in place, including its `measuredAt`, so a row
+      // written under the old anchor moves to local noon on the next sync
+      // rather than being duplicated beside it.
       const distinctTypes = [...new Set(planned.map((p) => p.type))];
       const existingRows = await prisma.measurement.findMany({
         where: {
@@ -391,40 +394,65 @@ export async function syncUserActivity(
           source: "WITHINGS",
           sleepStage: null,
           type: { in: distinctTypes },
-          measuredAt: { in: distinctMeasuredAt },
+          OR: [
+            { externalId: { in: planned.map((p) => p.externalId) } },
+            {
+              measuredAt: {
+                in: [
+                  ...new Map(
+                    planned.flatMap((p) => [
+                      [p.measuredAt.getTime(), p.measuredAt],
+                      [p.legacyMeasuredAt.getTime(), p.legacyMeasuredAt],
+                    ]),
+                  ).values(),
+                ],
+              },
+            },
+          ],
         },
         select: {
           id: true,
           type: true,
           measuredAt: true,
+          externalId: true,
           value: true,
           deletedAt: true,
         },
       });
-      const existingBySlot = new Map<
-        string,
-        { id: string; value: number; deletedAt: Date | null }
-      >();
+      type Existing = (typeof existingRows)[number];
+      const byExternalId = new Map<string, Existing>();
+      const bySlot = new Map<string, Existing>();
       for (const row of existingRows) {
-        existingBySlot.set(slotKey(row.type, row.measuredAt), {
-          id: row.id,
-          value: row.value,
-          deletedAt: row.deletedAt,
-        });
+        if (row.externalId) byExternalId.set(row.externalId, row);
+        bySlot.set(slotKey(row.type, row.measuredAt), row);
       }
 
       const toCreate: PlannedRow[] = [];
-      const toUpdate: Array<{ id: string; value: number }> = [];
+      const toUpdate: Array<{ id: string; p: PlannedRow }> = [];
       for (const p of planned) {
-        const existing = existingBySlot.get(slotKey(p.type, p.measuredAt));
+        const existing =
+          byExternalId.get(p.externalId) ??
+          bySlot.get(slotKey(p.type, p.measuredAt)) ??
+          bySlot.get(slotKey(p.type, p.legacyMeasuredAt));
         if (existing) {
-          // Only write when the value actually moved — a re-sync of an
-          // unchanged LIVE day is then a pure no-op on the write path. A
-          // TOMBSTONED row always writes: the update is what resurrects it
-          // (`deletedAt: null`) — Withings is the source of truth for its
-          // own rows (mirrors Google / Fitbit).
-          if (existing.value !== p.value || existing.deletedAt !== null) {
-            toUpdate.push({ id: existing.id, value: p.value });
+          // Only write when something moved — a re-sync of an unchanged LIVE
+          // day is then a pure no-op on the write path. A TOMBSTONED row
+          // always writes: the update is what resurrects it (`deletedAt:
+          // null`) — Withings is the source of truth for its own rows
+          // (mirrors Google / Fitbit).
+          const moved =
+            existing.measuredAt.getTime() !== p.measuredAt.getTime();
+          if (
+            existing.value !== p.value ||
+            existing.deletedAt !== null ||
+            moved ||
+            existing.externalId !== p.externalId
+          ) {
+            toUpdate.push({ id: existing.id, p });
+          }
+          // The day the row leaves needs its rollup refolded too.
+          if (moved) {
+            touched.push({ type: p.type, measuredAt: existing.measuredAt });
           }
         } else {
           toCreate.push(p);
@@ -461,7 +489,12 @@ export async function syncUserActivity(
               where: { id: u.id },
               // `deletedAt: null` — no-op on a live row, deliberate
               // RESURRECTION on a tombstoned one (see the skip above).
-              data: { value: u.value, deletedAt: null },
+              data: {
+                value: u.p.value,
+                measuredAt: u.p.measuredAt,
+                externalId: u.p.externalId,
+                deletedAt: null,
+              },
             }),
           ),
         );
