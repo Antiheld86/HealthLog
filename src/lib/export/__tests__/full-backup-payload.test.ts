@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Buffer } from "node:buffer";
-import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { parseBackupPayload } from "@/lib/validations/backup";
 
 process.env.ENCRYPTION_KEY =
