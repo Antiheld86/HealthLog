@@ -77,9 +77,12 @@ describe("innerCiphertextKeyId", () => {
     expect(innerCiphertextKeyId(legacy)?.keyId).toBe("v1");
   });
 
-  it("ignores an empty value and one that is not base64", () => {
+  it("ignores an empty value, a short one, and one that is not base64", () => {
     expect(innerCiphertextKeyId("")).toBeNull();
-    expect(innerCiphertextKeyId("not ciphertext at all!")).toBeNull();
+    expect(innerCiphertextKeyId("yes")).toBeNull();
+    expect(
+      innerCiphertextKeyId("not ciphertext at all, and long enough to count!"),
+    ).toBeNull();
   });
 });
 
@@ -122,7 +125,9 @@ describe("assessBackupKeys", () => {
     useKeys({ old: K1, cur: K2 }, "cur");
     const file = {
       moodEntries: [{ noteEncrypted: bytesString("fine") }],
-      appSettings: { adminAiKeyEncrypted: "gone.QUJDRA==" },
+      appSettings: {
+        adminAiKeyEncrypted: `gone.${Buffer.alloc(40).toString("base64")}`,
+      },
     };
     const collector = new BackupKeyIdCollector();
     collector.visit(file);

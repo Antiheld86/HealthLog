@@ -40,6 +40,7 @@ const VERSIONED = /^([A-Za-z0-9_-]{1,32})\.[A-Za-z0-9+/=]+$/;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const BASE64_TAIL = /^[A-Za-z0-9+/=]*$/;
 const BYTES_CODEC_VERSION = 0x02;
+const MIN_CIPHERTEXT_CHARS = 40;
 
 /** How an inner value is laid out, which decides how a sample is opened. */
 export type InnerCiphertextForm = "string" | "bytes-string" | "binary";
@@ -55,7 +56,10 @@ export interface InnerCiphertext {
  * multi-megabyte document costs the same as a note.
  */
 export function innerCiphertextKeyId(value: string): InnerCiphertext | null {
-  if (value.length === 0) return null;
+  // The shortest ciphertext either codec writes is 28 bytes (nonce and tag),
+  // 40 characters as base64: anything shorter is not ciphertext, and reading
+  // it as a legacy value would demand a key for a field that holds none.
+  if (value.length < MIN_CIPHERTEXT_CHARS) return null;
   const versioned = VERSIONED.exec(value.slice(0, 64));
   if (versioned && value.indexOf(".") === versioned[1].length) {
     return { keyId: versioned[1], form: "string" };
