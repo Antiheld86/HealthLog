@@ -20,6 +20,7 @@ import {
   recomputeUserRollups,
 } from "@/lib/rollups/measurement-rollups";
 import { readLiveBuckets } from "@/lib/measurements/daily-series-read";
+import { readTieredRollupSeries } from "@/lib/rollups/measurement-read-wmy";
 import { readAllTimeExtremes } from "@/lib/insights/feature-blocks";
 import { computeSummariesSlice } from "@/lib/analytics/summaries-slice";
 import type { MeasurementType } from "@/generated/prisma/client";
@@ -365,5 +366,59 @@ describe("coarse buckets — canonical source per day", () => {
     expect(slice.summaries.WEIGHT.count).toBe(2);
     expect(slice.summaries.WEIGHT.max).toBe(90);
     expect(slice.summaries.WEIGHT.mean).toBe(86);
+  });
+
+  it("the long-range chart and the yearly router fold the same canonical days", async () => {
+    const user = await seedUser();
+    const rows: Row[] = [];
+    // Two years of blood pressure: typed in every tenth day, a synced cuff
+    // (higher on the ladder) on every thirtieth day, both on some days.
+    const start = Date.UTC(2024, 0, 1, 8);
+    for (let i = 0; i < 730; i += 10) {
+      rows.push({
+        type: "BLOOD_PRESSURE_SYS",
+        source: "MANUAL",
+        value: 150,
+        at: new Date(start + i * DAY_MS),
+      });
+      if (i % 30 === 0) {
+        rows.push({
+          type: "BLOOD_PRESSURE_SYS",
+          source: "WITHINGS",
+          value: 120,
+          at: new Date(start + i * DAY_MS + 3_600_000),
+        });
+      }
+    }
+    await getPrismaClient().measurement.createMany({
+      data: rows.map((r) => ({
+        userId: user.id,
+        type: r.type,
+        value: r.value,
+        unit: "mmHg",
+        source: r.source,
+        measuredAt: r.at,
+      })),
+    });
+    await recomputeUserRollups(user.id, {
+      from: new Date("2023-12-01T00:00:00.000Z"),
+      to: new Date("2026-02-01T00:00:00.000Z"),
+      granularities: ["DAY"],
+    });
+
+    const tiered = await readTieredRollupSeries({
+      userId: user.id,
+      type: "BLOOD_PRESSURE_SYS",
+      from: new Date("2016-01-01T00:00:00.000Z"),
+      to: new Date("2026-01-31T00:00:00.000Z"),
+      priorityJson: null,
+    });
+    expect(tiered?.granularity).toBe("WEEK");
+    // Every seeded day counts once, with the cuff winning the shared days.
+    const days = 73;
+    const cuffDays = 25;
+    expect(tiered?.rows.reduce((n, r) => n + r.count, 0)).toBe(days);
+    const total = tiered?.rows.reduce((n, r) => n + r.value * r.count, 0) ?? 0;
+    expect(total).toBeCloseTo((days - cuffDays) * 150 + cuffDays * 120, 6);
   });
 });

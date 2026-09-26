@@ -18,6 +18,8 @@ vi.mock("@/lib/db", () => ({
     },
     measurement: { findMany: vi.fn(), count: vi.fn() },
     measurementRollup: { findMany: vi.fn() },
+    // Weekly / monthly / yearly buckets are folded from the DAY tier in SQL.
+    $queryRaw: vi.fn(),
   },
 }));
 
@@ -116,6 +118,7 @@ beforeEach(() => {
     {} as never,
   );
   vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
   // resetAllMocks clears the module-mock default impls too — restore the
   // benign defaults so the relations fetch and the previous-context format
   // are no-ops unless a test overrides them.

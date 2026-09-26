@@ -148,14 +148,36 @@ describe("extractFeatures — v1.4.36 W3 bucketed payload", () => {
   });
 
   it("attaches DAY / WEEK / MONTH buckets from measurement_rollups when includeRaw=true", async () => {
-    // Two WEIGHT DAY buckets in the 0-90d window and one day in the
-    // 365-1825d window, which surfaces as a MONTH bucket. Every window is
-    // folded from the DAY tier, so the mock answers DAY reads by window.
-    const weightDays = [
-      rollupRow(10, 82.5, 2),
-      rollupRow(20, 82.7, 1),
-      rollupRow(400, 85.1, 28),
-    ];
+    // Two WEIGHT DAY buckets in the 0-90d window (the DAY read) and one
+    // month in the 365-1825d window (the SQL fold of the DAY tier).
+    const weightDays = [rollupRow(10, 82.5, 2), rollupRow(20, 82.7, 1)];
+    const monthStart = rollupRow(400, 85.1, 28).bucketStart;
+    prismaMock.$queryRaw.mockImplementation(
+      async (strings: TemplateStringsArray, ...values: unknown[]) => {
+        const sql = JSON.stringify([strings, values]);
+        if (
+          !sql.includes("measurement_rollups") ||
+          !values.includes("WEIGHT") ||
+          !sql.includes("'month'")
+        ) {
+          return [];
+        }
+        return [
+          {
+            bucket_start: monthStart,
+            count: 28,
+            sum_y: 28 * 85.1,
+            min_value: 84,
+            max_value: 86,
+            sum_x: null,
+            sum_xy: null,
+            sum_xx: null,
+            sum_yy: null,
+            computed_at: new Date(),
+          },
+        ];
+      },
+    );
     prismaMock.measurementRollup.findMany.mockImplementation(
       async (args: {
         where: {

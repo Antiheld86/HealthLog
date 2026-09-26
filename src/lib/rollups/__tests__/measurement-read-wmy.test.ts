@@ -3,10 +3,15 @@
  * readers and the auto-router that picks the largest granularity
  * that still resolves a requested window.
  *
- * `prisma.measurementRollup.findMany` is mocked at the module level
- * so the test pins:
- *   - every granularity is folded from the canonical DAY buckets (the
- *     source is chosen per DAY, never once per week / month / year),
+ * Prisma is mocked at the module level (DAY rows through `findMany`, the
+ * coarse fold through `$queryRaw`, the chart span through `aggregate`), so
+ * the test pins:
+ *   - DAY reads the DAY tier; WEEK / MONTH / YEAR read the SQL fold of the
+ *     canonical DAY buckets (the per-day source pick and the fold are SQL,
+ *     pinned against real Postgres in
+ *     `tests/integration/rollup-per-day-canonical.test.ts`),
+ *   - a coarse bucket's spread and slope compose from its days'
+ *     accumulators,
  *   - empty rollups return `null` so the caller can branch on
  *     coverage miss,
  *   - the auto-router picks the coarsest granularity whose floor the
@@ -23,6 +28,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findMany: vi.fn(),
+  aggregate: vi.fn(),
+  queryRaw: vi.fn(),
   userFindUnique: vi.fn(),
 }));
 
@@ -30,10 +37,9 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     measurementRollup: {
       findMany: mocks.findMany,
+      aggregate: mocks.aggregate,
     },
-    // v1.11.1 — readBestGranularityRollups loads the source-priority blob via
-    // loadUserSourcePriority; default to null so the collapse uses the default
-    // ladders (these routing fixtures are single-source per bucket anyway).
+    $queryRaw: mocks.queryRaw,
     user: {
       findUnique: mocks.userFindUnique,
     },
@@ -49,7 +55,9 @@ import {
 } from "../measurement-read-wmy";
 import { pickBucket } from "@/lib/charts/bucket-time-series";
 
-const { findMany } = mocks;
+const { findMany, aggregate, queryRaw } = mocks;
+const DAY_MS = 86_400_000;
+const ORIGIN_DAYS = 18262;
 
 function bucket(
   bucketStart: string,
@@ -69,14 +77,80 @@ function bucket(
   };
 }
 
+/** One stored DAY rollup row, as the DAY `findMany` returns it. */
+function dayRow(day: string, source: string, count: number, mean: number) {
+  const bucketStart = new Date(`${day}T00:00:00.000Z`);
+  return {
+    bucketStart,
+    source,
+    count,
+    mean,
+    minValue: mean,
+    maxValue: mean,
+    sumValue: count * mean,
+    sd: 0,
+    slope: null,
+    r2: null,
+    sumX: null,
+    sumXy: null,
+    sumXx: null,
+    sumYy: null,
+    computedAt: new Date("2026-06-01T00:00:00.000Z"),
+  };
+}
+
+/**
+ * One coarse bucket as the SQL fold returns it, from `(day, value)` single
+ * readings; the accumulators are the sums a real fold would carry.
+ */
+function folded(
+  bucketStart: string,
+  readings: Array<[string, number]>,
+  withAccumulators = true,
+) {
+  let sumX = 0;
+  let sumXy = 0;
+  let sumXx = 0;
+  let sumYy = 0;
+  let sumY = 0;
+  for (const [day, value] of readings) {
+    const x = Date.parse(`${day}T12:00:00.000Z`) / DAY_MS - ORIGIN_DAYS;
+    sumX += x;
+    sumXy += x * value;
+    sumXx += x * x;
+    sumYy += value * value;
+    sumY += value;
+  }
+  const values = readings.map(([, v]) => v);
+  return {
+    bucket_start: new Date(bucketStart),
+    count: readings.length,
+    sum_y: sumY,
+    min_value: Math.min(...values),
+    max_value: Math.max(...values),
+    sum_x: withAccumulators ? sumX : null,
+    sum_xy: withAccumulators ? sumXy : null,
+    sum_xx: withAccumulators ? sumXx : null,
+    sum_yy: withAccumulators ? sumYy : null,
+    computed_at: new Date("2026-06-01T00:00:00.000Z"),
+  };
+}
+
+/** The SQL text and bound values of a `$queryRaw` call, as one string. */
+function sqlOf(call: unknown[]): string {
+  return JSON.stringify(call);
+}
+
 beforeEach(() => {
   findMany.mockReset();
-  // Default to "no coverage" for any read a test did not queue explicitly —
-  // the v1.37.29 span-refinement probe in `readTieredRollupSeries` issues an
-  // extra read when a fixture's rows span less than the requested window,
-  // and an unqueued vi.fn() would resolve `undefined` and crash the reader
-  // instead of modelling an unminted tier.
   findMany.mockResolvedValue([]);
+  aggregate.mockReset();
+  aggregate.mockResolvedValue({
+    _min: { bucketStart: null },
+    _max: { bucketStart: null },
+  });
+  queryRaw.mockReset();
+  queryRaw.mockResolvedValue([]);
   mocks.userFindUnique.mockReset();
   mocks.userFindUnique.mockResolvedValue({ sourcePriorityJson: null });
 });
@@ -84,60 +158,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-/** One stored DAY rollup row, per source, as `findMany` returns it. */
-function dayRow(
-  day: string,
-  source: string,
-  count: number,
-  mean: number,
-  extra: Partial<{ minValue: number; maxValue: number }> = {},
-) {
-  const bucketStart = new Date(`${day}T00:00:00.000Z`);
-  // Accumulators for `count` readings of `mean` at the day's midday.
-  const x = bucketStart.getTime() / DAY_MS_ROWS - 18262 + 0.5;
-  return {
-    bucketStart,
-    source,
-    count,
-    mean,
-    minValue: extra.minValue ?? mean,
-    maxValue: extra.maxValue ?? mean,
-    sumValue: count * mean,
-    sd: 0,
-    slope: null,
-    r2: null,
-    sumX: count * x,
-    sumXy: count * x * mean,
-    sumXx: count * x * x,
-    sumYy: count * mean * mean,
-    computedAt: new Date("2026-06-01T00:00:00.000Z"),
-  };
-}
-const DAY_MS_ROWS = 86_400_000;
-
-/** `n` consecutive days from `start`, one row each. */
-function days(
-  start: string,
-  n: number,
-  source: string,
-  count: number,
-  mean: number,
-) {
-  const out = [];
-  const t0 = new Date(`${start}T00:00:00.000Z`).getTime();
-  for (let i = 0; i < n; i++) {
-    out.push(
-      dayRow(
-        new Date(t0 + i * DAY_MS_ROWS).toISOString().slice(0, 10),
-        source,
-        count,
-        mean,
-      ),
-    );
-  }
-  return out;
-}
 
 describe("readBestGranularityRollups", () => {
   beforeEach(() => {
@@ -153,113 +173,96 @@ describe("readBestGranularityRollups", () => {
     expect(await readBestGranularityRollups("user", "WEIGHT", -10)).toBeNull();
     expect(await readBestGranularityRollups("user", "WEIGHT", NaN)).toBeNull();
     expect(findMany).not.toHaveBeenCalled();
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
+  it("routes a 90-day window to the DAY tier", async () => {
+    findMany.mockResolvedValueOnce([dayRow("2025-12-20", "MANUAL", 1, 80)]);
+    const result = await readBestGranularityRollups("user", "WEIGHT", 90);
+    expect(result?.granularity).toBe("DAY");
+    expect(findMany.mock.calls[0][0].where.granularity).toBe("DAY");
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 
   it.each([
-    [90, "DAY"],
-    [365, "MONTH"],
-    [540, "MONTH"],
-    [1095, "YEAR"],
-    [120, "WEEK"],
+    [120, "WEEK", "week"],
+    [365, "MONTH", "month"],
+    [1095, "YEAR", "year"],
   ] as const)(
-    "routes a %i-day window to %s, folded from the DAY tier",
-    async (windowDays, granularity) => {
-      findMany.mockResolvedValueOnce([dayRow("2025-12-20", "MANUAL", 1, 80)]);
+    "routes a %i-day window to %s, folded from the DAY tier in SQL",
+    async (windowDays, granularity, unit) => {
+      queryRaw.mockResolvedValueOnce([
+        folded("2025-12-01T00:00:00.000Z", [["2025-12-02", 80]]),
+      ]);
       const result = await readBestGranularityRollups(
         "user",
         "WEIGHT",
         windowDays,
       );
       expect(result?.granularity).toBe(granularity);
-      expect(findMany).toHaveBeenCalledTimes(1);
-      expect(findMany.mock.calls[0][0].where.granularity).toBe("DAY");
+      expect(queryRaw).toHaveBeenCalledTimes(1);
+      const sql = sqlOf(queryRaw.mock.calls[0]);
+      expect(sql).toContain(`'${unit}'`);
+      // The fold reads the DAY rows and picks one source per day.
+      expect(sql).toContain(`granularity\\" = 'DAY'`);
+      expect(sql).toContain("DISTINCT ON");
+      expect(findMany).not.toHaveBeenCalled();
     },
   );
 
-  it("returns null when the window holds no DAY buckets", async () => {
-    findMany.mockResolvedValue([]);
+  it("returns null when the window holds no buckets", async () => {
     const result = await readBestGranularityRollups("user", "WEIGHT", 1095);
     expect(result).toBeNull();
-    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
   });
 
-  // The canonical source is a per-DAY decision. Collapsing the stored
-  // per-source MONTH rows picked WITHINGS for the whole month (it leads the
-  // blood-pressure ladder) and reported its one reading: count 1, mean 120.
-  it("keeps every manual day of a month that also carries one synced day", async () => {
-    findMany.mockResolvedValueOnce([
-      ...days("2025-11-01", 20, "MANUAL", 1, 150),
-      dayRow("2025-11-25", "WITHINGS", 1, 120),
-    ]);
-    const result = await readBestGranularityRollups(
-      "user",
-      "BLOOD_PRESSURE_SYS",
-      365,
-    );
-    expect(result?.granularity).toBe("MONTH");
-    expect(result?.rows).toHaveLength(1);
-    expect(result?.rows[0].count).toBe(21);
-    expect(result?.rows[0].mean).toBeCloseTo((20 * 150 + 120) / 21, 9);
-    expect(result?.rows[0].minValue).toBe(120);
-    expect(result?.rows[0].maxValue).toBe(150);
-  });
-
-  it("sums a step month whose days switch device, one source per day", async () => {
-    findMany.mockResolvedValueOnce([
-      ...days("2025-11-01", 10, "FITBIT", 1, 8000),
-      ...days("2025-11-11", 20, "APPLE_HEALTH", 1, 8000),
-    ]);
-    const result = await readBestGranularityRollups(
-      "user",
-      "ACTIVITY_STEPS",
-      365,
-    );
-    expect(aggregateWmyBuckets(result?.rows ?? []).sum).toBe(240_000);
-  });
-
-  it("still keeps one source on a day both sources carry", async () => {
-    findMany.mockResolvedValueOnce([
-      dayRow("2025-11-03", "APPLE_HEALTH", 1, 9000),
-      dayRow("2025-11-03", "FITBIT", 1, 7000),
-      dayRow("2025-11-04", "FITBIT", 1, 7000),
-    ]);
-    const result = await readBestGranularityRollups(
-      "user",
-      "ACTIVITY_STEPS",
-      365,
-    );
-    expect(result?.rows[0].sumValue).toBe(16_000);
-    expect(result?.rows[0].count).toBe(2);
-  });
-
-  it("cuts weeks on the ISO Monday in UTC", async () => {
-    findMany.mockResolvedValueOnce([
-      dayRow("2025-11-02", "MANUAL", 1, 1), // Sunday → week of 2025-10-27
-      dayRow("2025-11-03", "MANUAL", 1, 2), // Monday → week of 2025-11-03
-      dayRow("2025-11-09", "MANUAL", 1, 3), // Sunday → week of 2025-11-03
-    ]);
-    const result = await readBestGranularityRollups("user", "WEIGHT", 120);
-    expect(result?.granularity).toBe("WEEK");
-    expect(result?.rows.map((r) => r.bucketStart.toISOString())).toEqual([
-      "2025-10-27T00:00:00.000Z",
-      "2025-11-03T00:00:00.000Z",
-    ]);
-    expect(result?.rows.map((r) => r.count)).toEqual([1, 2]);
-  });
-
-  it("composes the bucket's spread and slope from the day accumulators", async () => {
-    // Three days of one reading each: 70, 72, 74 → slope 2 per day,
-    // population sd sqrt(8/3), r² 1.
-    findMany.mockResolvedValueOnce([
-      dayRow("2025-11-03", "MANUAL", 1, 70),
-      dayRow("2025-11-04", "MANUAL", 1, 72),
-      dayRow("2025-11-05", "MANUAL", 1, 74),
+  it("composes a coarse bucket's mean, spread and slope from its days", async () => {
+    // Three days of one reading each: 70, 72, 74 → mean 72, slope 2 per
+    // day, population sd sqrt(8/3), r² 1.
+    queryRaw.mockResolvedValueOnce([
+      folded("2025-11-01T00:00:00.000Z", [
+        ["2025-11-03", 70],
+        ["2025-11-04", 72],
+        ["2025-11-05", 74],
+      ]),
     ]);
     const result = await readBestGranularityRollups("user", "WEIGHT", 365);
     const month = result?.rows[0];
+    expect(month?.count).toBe(3);
+    expect(month?.mean).toBeCloseTo(72, 9);
+    expect(month?.sumValue).toBe(216);
     expect(month?.slope).toBeCloseTo(2, 6);
     expect(month?.r2).toBeCloseTo(1, 6);
     expect(month?.sd).toBeCloseTo(Math.sqrt(8 / 3), 6);
+  });
+
+  it("reports no spread or slope for a bucket with a day lacking accumulators", async () => {
+    queryRaw.mockResolvedValueOnce([
+      folded(
+        "2025-11-01T00:00:00.000Z",
+        [
+          ["2025-11-03", 70],
+          ["2025-11-04", 72],
+        ],
+        false,
+      ),
+    ]);
+    const result = await readBestGranularityRollups("user", "WEIGHT", 365);
+    expect(result?.rows[0].mean).toBe(71);
+    expect(result?.rows[0].sd).toBeNull();
+    expect(result?.rows[0].slope).toBeNull();
+  });
+
+  it("leaves out a bucket that starts before the window", async () => {
+    // The 365-day window starts 2025-01-15; January 2025 began before it.
+    queryRaw.mockResolvedValueOnce([
+      folded("2025-01-01T00:00:00.000Z", [["2025-01-20", 80]]),
+      folded("2025-02-01T00:00:00.000Z", [["2025-02-03", 81]]),
+    ]);
+    const result = await readBestGranularityRollups("user", "WEIGHT", 365);
+    expect(result?.rows.map((r) => r.bucketStart.toISOString())).toEqual([
+      "2025-02-01T00:00:00.000Z",
+    ]);
   });
 });
 
@@ -373,15 +376,21 @@ describe("readBestGranularityRollups — cross-consumer routing parity", () => {
  * truncated recent slice; that the finer fallback rescues a coverage
  * miss; and that the wire shape mirrors the daily reader.
  */
+/**
+ * Whole-history series reader. Pins that a very long "Alle" window reads
+ * the display-matching tier (chosen from the real span of the data, WEEK for
+ * 1–2 years, MONTH beyond), that it spans the whole history, and that the
+ * wire shape mirrors the daily reader.
+ */
 describe("readTieredRollupSeries", () => {
-  const DAY_MS = 86_400_000;
-  // A fixed "now-ish" anchor for the current-window cases; the historic case
-  // uses its own explicit past bounds. Nothing in the reader reads
-  // `Date.now()` any more, so these are just span endpoints.
   const NOW = new Date("2026-06-21T00:00:00.000Z");
   const win = (days: number, to: Date = NOW) => ({
     from: new Date(to.getTime() - days * DAY_MS),
     to,
+  });
+  const spanOf = (first: string, last: string) => ({
+    _min: { bucketStart: new Date(first) },
+    _max: { bucketStart: new Date(last) },
   });
 
   it("returns null on a non-positive window without touching the db", async () => {
@@ -393,118 +402,86 @@ describe("readTieredRollupSeries", () => {
         to: NOW,
       }),
     ).toBeNull();
-    expect(findMany).not.toHaveBeenCalled();
-  });
-
-  it("folds a multi-year window into MONTH buckets and spans the whole history", async () => {
-    // Ten years of first-of-January readings → MONTH tier; the oldest
-    // bucket survives (no recent-slice truncation).
-    const rows = [];
-    for (let y = 2017; y <= 2026; y++) {
-      rows.push(dayRow(`${y}-01-01`, "MANUAL", 12, 80));
-    }
-    findMany.mockResolvedValueOnce(rows);
-
-    const result = await readTieredRollupSeries({
-      userId: "u",
-      type: "WEIGHT",
-      ...win(3650),
-    });
-
-    expect(result?.granularity).toBe("MONTH");
-    expect(findMany).toHaveBeenCalledTimes(1);
-    expect(findMany.mock.calls[0][0].where.granularity).toBe("DAY");
-    expect(result?.rows[0].measuredAt).toBe("2017-01-01T00:00:00.000Z");
-    expect(result?.rows.at(-1)?.measuredAt).toBe("2026-01-01T00:00:00.000Z");
-    expect(result?.rows.length).toBe(10);
-  });
-
-  // v1.26.0 SEAM-N2 — a historic window entirely in the past must bound the
-  // rollup read on BOTH ends.
-  it("bounds the DAY read on BOTH ends for a historic past window", async () => {
-    const from = new Date("2020-01-01T00:00:00.000Z");
-    const to = new Date("2022-01-01T00:00:00.000Z");
-    findMany.mockResolvedValueOnce([
-      dayRow("2020-02-01", "MANUAL", 12, 80),
-      dayRow("2021-06-01", "MANUAL", 12, 81),
-      dayRow("2021-12-01", "MANUAL", 12, 82),
-    ]);
-
-    const result = await readTieredRollupSeries({
-      userId: "u",
-      type: "WEIGHT",
-      from,
-      to,
-    });
-
-    expect(findMany.mock.calls[0][0].where.bucketStart).toEqual({
-      gte: from,
-      lte: to,
-    });
-    for (const row of result?.rows ?? []) {
-      const t = new Date(row.measuredAt).getTime();
-      expect(t).toBeGreaterThanOrEqual(from.getTime());
-      expect(t).toBeLessThanOrEqual(to.getTime());
-    }
-    // Data span ≈ 22 months → WEEK (the request alone would call for MONTH).
-    expect(result?.granularity).toBe("WEEK");
+    expect(aggregate).not.toHaveBeenCalled();
   });
 
   it("returns null when the window holds no DAY buckets", async () => {
-    findMany.mockResolvedValue([]);
     const result = await readTieredRollupSeries({
       userId: "u",
       type: "WEIGHT",
       ...win(3650),
     });
     expect(result).toBeNull();
-    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(findMany).not.toHaveBeenCalled();
   });
 
-  it("surfaces the cumulative summed total for SUM metrics and drops the spread", async () => {
-    findMany.mockResolvedValueOnce([
-      ...days("2024-01-01", 30, "APPLE_HEALTH", 1, 8000),
-      dayRow("2026-01-01", "APPLE_HEALTH", 1, 5000),
+  it("serves MONTH buckets over a multi-year history and keeps the oldest", async () => {
+    aggregate.mockResolvedValueOnce(
+      spanOf("2017-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z"),
+    );
+    queryRaw.mockResolvedValueOnce([
+      folded("2017-01-01T00:00:00.000Z", [["2017-01-01", 80]]),
+      folded("2026-01-01T00:00:00.000Z", [["2026-01-01", 82]]),
+    ]);
+
+    const result = await readTieredRollupSeries({
+      userId: "u",
+      type: "WEIGHT",
+      ...win(3650),
+    });
+
+    expect(result?.granularity).toBe("MONTH");
+    expect(sqlOf(queryRaw.mock.calls[0])).toContain("'month'");
+    expect(result?.rows[0].measuredAt).toBe("2017-01-01T00:00:00.000Z");
+    expect(result?.rows).toHaveLength(2);
+  });
+
+  // v1.26.0 SEAM-N2 — a historic window entirely in the past bounds the read
+  // on BOTH ends.
+  it("bounds the span read on both ends for a historic window", async () => {
+    const from = new Date("2020-01-01T00:00:00.000Z");
+    const to = new Date("2022-01-01T00:00:00.000Z");
+    await readTieredRollupSeries({ userId: "u", type: "WEIGHT", from, to });
+    expect(aggregate.mock.calls[0][0].where.bucketStart).toEqual({
+      gte: from,
+      lte: to,
+    });
+  });
+
+  it("serves the summed total for step-like metrics and drops the spread", async () => {
+    aggregate.mockResolvedValueOnce(
+      spanOf("2024-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z"),
+    );
+    queryRaw.mockResolvedValueOnce([
+      folded(
+        "2024-01-01T00:00:00.000Z",
+        Array.from({ length: 30 }, (_, i): [string, number] => [
+          `2024-01-${String(i + 1).padStart(2, "0")}`,
+          8000,
+        ]),
+      ),
     ]);
     const result = await readTieredRollupSeries({
       userId: "u",
       type: "ACTIVITY_STEPS",
       ...win(3650),
     });
-    expect(result?.granularity).toBe("MONTH");
     expect(result?.rows[0].value).toBe(240_000);
     expect(result?.rows[0].minValue).toBeUndefined();
     expect(result?.rows[0].maxValue).toBeUndefined();
   });
 
-  it("carries the count-weighted mean + spread for spot metrics", async () => {
-    findMany.mockResolvedValueOnce([
-      dayRow("2024-01-02", "MANUAL", 2, 80, { minValue: 78, maxValue: 82 }),
-      dayRow("2024-01-03", "MANUAL", 1, 84, { minValue: 84, maxValue: 85 }),
-      dayRow("2026-01-01", "MANUAL", 1, 80),
-    ]);
-    const result = await readTieredRollupSeries({
-      userId: "u",
-      type: "WEIGHT",
-      ...win(3650),
-    });
-    expect(result?.rows[0].value).toBeCloseTo((2 * 80 + 84) / 3, 9);
-    expect(result?.rows[0].count).toBe(3);
-    expect(result?.rows[0].minValue).toBe(78);
-    expect(result?.rows[0].maxValue).toBe(85);
-  });
-
   // v1.37.29 — the tier keys off the ACTUAL data span, not the requested
-  // window width. The "All" tab always requests ~3650 days, so pre-fix a
-  // record whose history spans four months came back as four MONTH means
-  // while the chart captioned them from the real span.
+  // window width.
   describe("span refinement", () => {
     it("serves DAY rows for four months of data on an All request", async () => {
+      aggregate.mockResolvedValueOnce(
+        spanOf("2026-02-03T00:00:00.000Z", "2026-05-28T00:00:00.000Z"),
+      );
       findMany.mockResolvedValueOnce([
         dayRow("2026-02-03", "MANUAL", 1, 80),
-        dayRow("2026-03-14", "MANUAL", 1, 80),
-        dayRow("2026-04-09", "MANUAL", 1, 80),
-        dayRow("2026-05-28", "MANUAL", 1, 80),
+        dayRow("2026-05-28", "MANUAL", 1, 81),
       ]);
       const result = await readTieredRollupSeries({
         userId: "u",
@@ -512,14 +489,16 @@ describe("readTieredRollupSeries", () => {
         ...win(3650),
       });
       expect(result?.granularity).toBe("DAY");
-      expect(result?.rows).toHaveLength(4);
+      expect(queryRaw).not.toHaveBeenCalled();
       expect(result?.rows[0].measuredAt).toBe("2026-02-03T00:00:00.000Z");
     });
 
-    it("serves WEEK rows for a span between one and two years", async () => {
-      findMany.mockResolvedValueOnce([
-        dayRow("2025-01-01", "MANUAL", 1, 80),
-        dayRow("2026-05-01", "MANUAL", 1, 80),
+    it("serves WEEK buckets for a span between one and two years", async () => {
+      aggregate.mockResolvedValueOnce(
+        spanOf("2025-01-01T00:00:00.000Z", "2026-05-01T00:00:00.000Z"),
+      );
+      queryRaw.mockResolvedValueOnce([
+        folded("2024-12-30T00:00:00.000Z", [["2025-01-01", 80]]),
       ]);
       const result = await readTieredRollupSeries({
         userId: "u",
@@ -527,10 +506,7 @@ describe("readTieredRollupSeries", () => {
         ...win(3650),
       });
       expect(result?.granularity).toBe("WEEK");
-      expect(result?.rows.map((r) => r.measuredAt)).toEqual([
-        "2024-12-30T00:00:00.000Z",
-        "2026-04-27T00:00:00.000Z",
-      ]);
+      expect(sqlOf(queryRaw.mock.calls[0])).toContain("'week'");
     });
   });
 });

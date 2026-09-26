@@ -38,8 +38,8 @@ import type {
 
 import { CUMULATIVE_HK_TYPES } from "@/lib/measurements/apple-health-mapping";
 import { annotate } from "@/lib/logging/context";
+import { prisma } from "@/lib/db";
 import {
-  foldCanonicalDays,
   loadUserSourcePriority,
   readCanonicalRollupBuckets,
 } from "@/lib/rollups/measurement-read";
@@ -302,9 +302,9 @@ const TIER_ORDER: RollupGranularity[] = ["DAY", "WEEK", "MONTH", "YEAR"];
  * range band on spot metrics; cumulative metrics (steps, energy,
  * distance) surface the bucket's summed total and drop the spread.
  *
- * Coverage handling: the window's canonical DAY buckets are read once and
- * folded into the chosen tier. Returns `null` when the window holds no DAY
- * buckets; the caller then falls through to its live-SQL path.
+ * Coverage handling: the tier is chosen from the span of the window's DAY
+ * buckets and read folded from them. Returns `null` when the window holds no
+ * DAY buckets; the caller then falls through to its live-SQL path.
  *
  * The result is NOT capped — the tier selection bounds the row count
  * (≤ ~104 weeks for the WEEK tier, ≤ ~12 months/year for MONTH). If a
@@ -342,36 +342,38 @@ export async function readTieredRollupSeries(opts: {
       : await loadUserSourcePriority(userId);
 
   const target = pickRollupGranularityForWindow(windowDays);
-  const days = await readCanonicalRollupBuckets({
-    userId,
-    type,
-    granularity: "DAY",
-    from,
-    to,
-    toInclusive: true,
-    userPriorityJson: priority,
-  });
-  if (days.length === 0) return null;
   // Refine the tier by the ACTUAL data span, not the requested window. The
   // "Alle" tab always requests ~3650 days, so keying the tier off the request
   // width alone handed EVERY account MONTH buckets: a record whose history
   // spans four months came back as four monthly means while the client
   // (which captions from the real span) labelled them "weekly average". The
   // tier is never coarser than the request calls for.
-  const spanDays = Math.ceil(
-    (days[days.length - 1].bucketStart.getTime() -
-      days[0].bucketStart.getTime()) /
-      86_400_000,
-  );
+  const span = await prisma.measurementRollup.aggregate({
+    where: {
+      userId,
+      type,
+      granularity: "DAY",
+      bucketStart: { gte: from, lte: to },
+    },
+    _min: { bucketStart: true },
+    _max: { bucketStart: true },
+  });
+  const first = span._min.bucketStart;
+  const last = span._max.bucketStart;
+  if (!first || !last) return null;
+  const spanDays = Math.ceil((last.getTime() - first.getTime()) / 86_400_000);
   const refined = pickRollupGranularityForWindow(Math.max(1, spanDays));
   const granularity =
     TIER_ORDER.indexOf(refined) < TIER_ORDER.indexOf(target) ? refined : target;
-  // Fold the window's own days; a leading bucket that starts before `from`
-  // would hold only part of its days, so it is left out as the stored coarse
-  // rows were.
-  const rows = foldCanonicalDays(days, granularity).filter(
-    (b) => b.bucketStart.getTime() >= from.getTime(),
-  );
+  const rows = await readCanonicalRollupBuckets({
+    userId,
+    type,
+    granularity,
+    from,
+    to,
+    toInclusive: true,
+    userPriorityJson: priority,
+  });
   if (rows.length === 0) return null;
   const useSum = CUMULATIVE_HK_TYPES.has(type);
   annotate({
