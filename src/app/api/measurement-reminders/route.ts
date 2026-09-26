@@ -21,6 +21,7 @@ import { withIdempotency } from "@/lib/idempotency";
 import { createMeasurementReminderSchema } from "@/lib/validations/measurement-reminders";
 import {
   computeReminderNextDueAt,
+  parseReminderAnchor,
   type ReminderScheduleInput,
 } from "@/lib/measurement-reminders/scheduling";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
@@ -88,7 +89,10 @@ async function postReminder(request: NextRequest): Promise<Response> {
 
   const timezone = await resolveTimezone(user.id);
   const now = new Date();
-  const anchorDate = data.anchorDate != null ? new Date(data.anchorDate) : null;
+  const anchorDate =
+    data.anchorDate != null
+      ? parseReminderAnchor(data.anchorDate, timezone)
+      : null;
 
   // Server-authoritative next-due. No satisfy yet → anchors on
   // anchorDate ?? createdAt (createdAt ≈ now for a fresh row).

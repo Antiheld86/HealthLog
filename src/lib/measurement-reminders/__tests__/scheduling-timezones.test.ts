@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { wallClockInTz, zonedWallClockToUtc } from "@/lib/tz/wall-clock";
 
-import { computeReminderNextDueAt } from "../scheduling";
+import { computeReminderNextDueAt, parseReminderAnchor } from "../scheduling";
 
 const ZONES = [
   "America/New_York",
@@ -73,5 +73,31 @@ describe.each(ZONES)("reminder anchors in %s", (tz) => {
       ),
     );
     expect(localLabel(next, tz)).toBe("2026-09-20 19:00 w0");
+  });
+});
+
+describe.each(ZONES)("a first-due date sent as a calendar date in %s", (tz) => {
+  it("is that day in the user's zone", () => {
+    const anchor = parseReminderAnchor("2026-10-01", tz);
+    expect(anchor).toEqual(localMidnight(tz, 2026, 10, 1));
+    const next = computeReminderNextDueAt(
+      {
+        intervalDays: 30,
+        rrule: null,
+        anchorDate: anchor,
+        notifyHour: 9,
+        lastSatisfiedAt: null,
+        createdAt: new Date("2026-09-01T12:00:00Z"),
+      },
+      tz,
+      new Date("2026-09-26T12:00:00Z"),
+    );
+    expect(localLabel(next, tz)?.slice(0, 16)).toBe("2026-10-01 09:00");
+  });
+
+  it("keeps a date-time as the instant it names", () => {
+    expect(parseReminderAnchor("2026-10-01T00:00:00.000Z", tz)).toEqual(
+      new Date("2026-10-01T00:00:00.000Z"),
+    );
   });
 });

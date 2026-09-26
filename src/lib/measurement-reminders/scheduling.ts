@@ -31,6 +31,7 @@ import {
 } from "@/lib/medications/scheduling/recurrence";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
+import { startOfLocalDayKey } from "@/lib/tz/local-day";
 
 /**
  * The reminder fields this module reads. A subset of the Prisma row so
@@ -50,6 +51,18 @@ export interface ReminderScheduleInput {
    * Coach-suggested time-boxed protocol (ESH/AHA 7-day BP) self-expires.
    */
   endsOn?: Date | null;
+}
+
+/**
+ * A first-due date from a request: a calendar date (`YYYY-MM-DD`) is that
+ * day in the user's zone, stored as its local midnight; a date-time is the
+ * instant it names. A date sent as UTC midnight would read as the evening
+ * before west of UTC, which is why a bare date is accepted at all.
+ */
+export function parseReminderAnchor(value: string, timeZone: string): Date {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? startOfLocalDayKey(value, timeZone || DEFAULT_TIMEZONE)
+    : new Date(value);
 }
 
 /** The calendar day `instant` falls on in `tz`, as UTC midnight of that date. */
