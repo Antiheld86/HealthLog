@@ -74,7 +74,13 @@ describe("LOINC displays accepted by the validator", () => {
   it("names medication adherence as LOINC does", () => {
     const all = codings({
       compliance: {
-        "Example Drug": { total: 10, taken: 9, skipped: 1, missed: 0 },
+        "med-1": {
+          name: "Example Drug",
+          total: 10,
+          taken: 9,
+          skipped: 1,
+          missed: 0,
+        },
       },
     });
     expect(all.find((c) => c.code === "71799-1")?.display).toBe(
