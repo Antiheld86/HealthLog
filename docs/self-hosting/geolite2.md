@@ -127,6 +127,9 @@ addresses they could not place. To remove that remainder too:
 IP_GEO_LOOKUP_DISABLED="1"
 ```
 
+`true` and `yes` work as well. Any other value, including an empty one, leaves
+the lookup on.
+
 The resolver then uses only the local databases and returns nothing when
 they miss, rather than asking anyone. An instance handling other people's
 health data is a reasonable place to make that trade.

@@ -85,6 +85,7 @@
  * not re-send while nothing changed (issue #851) and a genuine re-entry
  * into the unconfigured state does.
  */
+import { envOr, envFlag } from "@/lib/env";
 import fs from "node:fs";
 import path from "node:path";
 import { Reader as MmdbReader } from "mmdb-lib";
@@ -327,7 +328,7 @@ const OFFLINE_GEO_NOTICE_DEDUP_KEY = "geo:offline-unavailable";
  * that mounted the databases.
  */
 function offlineGeoNoticeStateActive(): boolean {
-  return !offlineGeoReady() && process.env.IP_GEO_LOOKUP_DISABLED !== "1";
+  return !offlineGeoReady() && !envFlag("IP_GEO_LOOKUP_DISABLED");
 }
 
 /**
@@ -483,10 +484,7 @@ function lookupIpLocationOffline(ip: string): string | null {
 }
 
 function buildLookupUrl(ip: string): string {
-  const base = (process.env.IP_GEO_LOOKUP_URL ?? DEFAULT_GEO_URL).replace(
-    /\/+$/,
-    "",
-  );
+  const base = envOr("IP_GEO_LOOKUP_URL", DEFAULT_GEO_URL).replace(/\/+$/, "");
   if (base.startsWith("https://")) {
     return `${base}/${encodeURIComponent(ip)}`;
   }
@@ -526,7 +524,7 @@ async function readUtf8Json(res: Response): Promise<unknown> {
 }
 
 async function lookupIpOnline(ip: string): Promise<GeoResolved | null> {
-  if (process.env.IP_GEO_LOOKUP_DISABLED === "1") return null;
+  if (envFlag("IP_GEO_LOOKUP_DISABLED")) return null;
   try {
     const res = await safeFetch(
       buildLookupUrl(ip),

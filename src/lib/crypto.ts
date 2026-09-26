@@ -15,6 +15,7 @@
  * (or the prefix is not a known key id), it falls back to the legacy single
  * key so that rows written before the rotation continue to decrypt.
  */
+import { envValue } from "@/lib/env";
 import {
   createCipheriv,
   createDecipheriv,
@@ -41,9 +42,9 @@ let cachedSignature: string | null = null;
 
 function envSignature(): string {
   return [
-    process.env.ENCRYPTION_KEYS ?? "",
-    process.env.ENCRYPTION_ACTIVE_KEY_ID ?? "",
-    process.env.ENCRYPTION_KEY ?? "",
+    process.env.ENCRYPTION_KEYS || "",
+    process.env.ENCRYPTION_ACTIVE_KEY_ID || "",
+    process.env.ENCRYPTION_KEY || "",
   ].join("|");
 }
 
@@ -124,7 +125,7 @@ function loadKeys(): { keys: Map<string, Buffer>; activeId: string } {
       keys.set(id, decodeKey(value, id));
     }
 
-    activeId = process.env.ENCRYPTION_ACTIVE_KEY_ID ?? null;
+    activeId = envValue("ENCRYPTION_ACTIVE_KEY_ID") ?? null;
     if (!activeId) {
       if (keys.size === 1) {
         activeId = keys.keys().next().value as string;

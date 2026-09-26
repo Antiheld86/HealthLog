@@ -127,7 +127,7 @@ export default async function RootLayout({
           id="healthlog-i18n-boot"
           strategy="beforeInteractive"
           nonce={nonce}
-          src={`/i18n/${initialLocale}.js?v=${process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}`}
+          src={`/i18n/${initialLocale}.js?v=${process.env.NEXT_PUBLIC_APP_VERSION || "dev"}`}
         />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>

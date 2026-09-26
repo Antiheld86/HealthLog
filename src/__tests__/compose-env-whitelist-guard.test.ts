@@ -47,6 +47,13 @@ const DIRECT_READ =
   /process\.env(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*["'`]([A-Za-z_][A-Za-z0-9_]*)["'`]\s*\])/g;
 
 /**
+ * `envValue("NAME")`, `envOr("NAME", …)` and `envFlag("NAME")` from
+ * `src/lib/env.ts` — the one helper every read with a fallback goes through,
+ * so its call shape is a read wherever it appears. Asserted non-empty in T2.
+ */
+const HELPER_READ = /\benv(?:Value|Or|Flag)\(\s*["'`]([A-Z][A-Z0-9_]*)["'`]/g;
+
+/**
  * Modules that index `process.env` through a variable rather than a literal.
  * The direct matcher cannot see their reads at all, so each names the exact
  * call shape that carries the variable name, and each is asserted non-empty
@@ -154,6 +161,7 @@ function runtimeReads(): Set<string> {
   for (const rel of sourceFiles()) {
     const src = read(rel);
     for (const m of src.matchAll(DIRECT_READ)) names.add(m[1] ?? m[2]);
+    for (const m of src.matchAll(HELPER_READ)) names.add(m[1]);
   }
   for (const reader of INDIRECT_READERS) {
     for (const m of read(reader.file).matchAll(reader.pattern)) names.add(m[1]);
@@ -191,6 +199,13 @@ describe("compose env whitelist", () => {
   });
 
   it("T2 — every indirect reader still matches its call shape", () => {
+    const helperReads = sourceFiles().flatMap((rel) =>
+      [...read(rel).matchAll(HELPER_READ)].map((m) => m[1]),
+    );
+    // The env helper is the common path for reads with a fallback; a matcher
+    // that stopped seeing it would drop those names from the read set.
+    expect(helperReads.length).toBeGreaterThan(10);
+    expect(helperReads).toContain("IP_GEO_LOOKUP_URL");
     for (const reader of INDIRECT_READERS) {
       const found = [...read(reader.file).matchAll(reader.pattern)].map(
         (m) => m[1],

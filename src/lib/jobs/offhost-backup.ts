@@ -21,6 +21,7 @@
  * `AbortMultipartUpload` can only touch an upload this worker started, never
  * a finished object. See docs/ops/backup-restore.md.
  */
+import { envOr } from "@/lib/env";
 import { Buffer } from "node:buffer";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { Readable, Transform } from "node:stream";
@@ -102,7 +103,7 @@ export function loadOffhostConfig(): OffhostBackupConfig | null {
     bucket,
     accessKey,
     secretKey,
-    region: process.env.BACKUP_S3_REGION ?? "auto",
+    region: envOr("BACKUP_S3_REGION", "auto"),
     encryptionKey: decodeBackupKey(encRaw),
   };
 }

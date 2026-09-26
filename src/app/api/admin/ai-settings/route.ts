@@ -1,3 +1,4 @@
+import { envOr } from "@/lib/env";
 import { NextRequest } from "next/server";
 import { apiHandler, requireAdmin, HttpError } from "@/lib/api-handler";
 import { prisma } from "@/lib/db";
@@ -95,7 +96,7 @@ export const PUT = apiHandler(async (request: NextRequest) => {
       "api.groq.com",
       "openrouter.ai",
     ]);
-    for (const h of (process.env.ADMIN_AI_BASE_URL_ALLOWLIST ?? "")
+    for (const h of envOr("ADMIN_AI_BASE_URL_ALLOWLIST", "")
       .split(",")
       .map((h) => h.trim())
       .filter(Boolean)) {
