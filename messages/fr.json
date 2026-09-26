@@ -128,6 +128,12 @@
         "emailInUse": "Cette adresse e-mail est déjà utilisée.",
         "emailRateLimited": "Trop de changements d'adresse e-mail. Réessayez plus tard."
       }
+    },
+    "auth": {
+      "reproof": {
+        "required": "Confirmez votre mot de passe actuel pour modifier ceci.",
+        "failed": "La vérification a échoué. Rien n'a été modifié."
+      }
     }
   },
   "doctorReport": {
@@ -439,6 +445,7 @@
       "errorNoEmail": "Votre fournisseur d'identité n'a pas transmis d'adresse e-mail vérifiée.",
       "errorEmailUnverified": "Votre fournisseur d'identité n'a pas marqué votre adresse e-mail comme vérifiée.",
       "errorIdentityConflict": "Cette adresse e-mail appartient à un compte déjà lié à une autre identité SSO.",
+      "errorLinkRequired": "Un compte avec cette adresse e-mail existe déjà ici. Connectez-vous-y une fois avec son mot de passe ou sa clé d'accès pour le relier à l'authentification unique.",
       "errorRegistrationDisabled": "Aucun compte ne correspond à cette identité et les nouvelles inscriptions sont actuellement fermées.",
       "errorFailed": "L'authentification unique a échoué. Veuillez réessayer."
     },
@@ -5553,7 +5560,9 @@
       "invalidFormat": "Ce n'est pas écrit dans un format que ce champ peut lire.",
       "invalidType": "La valeur n'est pas arrivée dans un format que ce champ peut enregistrer.",
       "rateLimited": "Modifié trop souvent. Patientez un peu et réessayez.",
-      "other": "Cette valeur n'a pas été acceptée. Vérifiez-la et réessayez."
+      "other": "Cette valeur n'a pas été acceptée. Vérifiez-la et réessayez.",
+      "reproofRequired": "Saisissez votre mot de passe actuel pour changer l'adresse e-mail.",
+      "reproofFailed": "Ce mot de passe est incorrect, l'adresse e-mail n'a donc pas été modifiée."
     },
     "avatar": {
       "title": "Photo de profil",
@@ -6700,7 +6709,8 @@
       "showChecklist": "Réafficher la liste de départ",
       "checklistShown": "La liste de départ est de retour sur le tableau de bord.",
       "checklistNothingHidden": "La liste n'était pas masquée ; elle s'ouvre sur le tableau de bord."
-    }
+    },
+    "emailChangePassword": "Mot de passe actuel (nécessaire pour changer l'adresse e-mail)"
   },
   "admin": {
     "title": "Administration",

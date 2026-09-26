@@ -32,7 +32,14 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { t } = useTranslations();
-  const [mode, setMode] = useState<"passkey" | "password">("passkey");
+  // The SSO callback sends a browser here when its email matches an account
+  // that exists but is not linked yet: the person signs in to that account
+  // once with its own credential, which links it. Under an SSO-only policy
+  // this is the one case the password form is shown for.
+  const linkPending = searchParams.get("error") === "oidc_link_required";
+  const [mode, setMode] = useState<"passkey" | "password">(
+    linkPending ? "password" : "passkey",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(() => {
@@ -43,6 +50,7 @@ export default function LoginPage() {
       oidc_no_email: "auth.oidc.errorNoEmail",
       oidc_email_unverified: "auth.oidc.errorEmailUnverified",
       oidc_identity_conflict: "auth.oidc.errorIdentityConflict",
+      oidc_link_required: "auth.oidc.errorLinkRequired",
       oidc_registration_disabled: "auth.oidc.errorRegistrationDisabled",
     };
     return t(key[oidcError] ?? "auth.oidc.errorFailed");
@@ -394,33 +402,37 @@ export default function LoginPage() {
               </div>
             )}
 
-            {!oidcStatus?.only && (
+            {(!oidcStatus?.only || linkPending) && (
               <>
                 {/* Phase A5 / B-mobile: bumped from default size (h-9, 36px)
                   to size="lg" so the login CTAs meet WCAG 2.5.5 (44px
                   minimum) on mobile. Login is the most-tapped flow on a
                   fresh install. */}
-                <Button
-                  onClick={handlePasskeyLogin}
-                  className="min-h-11 w-full"
-                  size="lg"
-                  disabled={loading}
-                >
-                  {loading && mode === "passkey" ? (
-                    <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-                  ) : (
-                    <KeyRound className="h-4 w-4" />
-                  )}
-                  {t("auth.loginWithPasskey")}
-                </Button>
+                {!oidcStatus?.only && (
+                  <>
+                    <Button
+                      onClick={handlePasskeyLogin}
+                      className="min-h-11 w-full"
+                      size="lg"
+                      disabled={loading}
+                    >
+                      {loading && mode === "passkey" ? (
+                        <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+                      ) : (
+                        <KeyRound className="h-4 w-4" />
+                      )}
+                      {t("auth.loginWithPasskey")}
+                    </Button>
 
-                <div className="flex items-center gap-3">
-                  <Separator className="flex-1" />
-                  <span className="text-muted-foreground text-xs">
-                    {t("common.or")}
-                  </span>
-                  <Separator className="flex-1" />
-                </div>
+                    <div className="flex items-center gap-3">
+                      <Separator className="flex-1" />
+                      <span className="text-muted-foreground text-xs">
+                        {t("common.or")}
+                      </span>
+                      <Separator className="flex-1" />
+                    </div>
+                  </>
+                )}
 
                 {mode === "passkey" ? (
                   <Button
@@ -488,13 +500,15 @@ export default function LoginPage() {
                       )}
                       {t("auth.login")}
                     </Button>
-                    <button
-                      type="button"
-                      onClick={() => setMode("passkey")}
-                      className="text-muted-foreground hover:text-foreground inline-flex min-h-11 w-full items-center justify-center text-center text-xs"
-                    >
-                      {t("auth.backToPasskey")}
-                    </button>
+                    {!oidcStatus?.only && (
+                      <button
+                        type="button"
+                        onClick={() => setMode("passkey")}
+                        className="text-muted-foreground hover:text-foreground inline-flex min-h-11 w-full items-center justify-center text-center text-xs"
+                      >
+                        {t("auth.backToPasskey")}
+                      </button>
+                    )}
                   </form>
                 )}
               </>

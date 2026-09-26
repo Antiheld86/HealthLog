@@ -128,6 +128,12 @@
         "emailInUse": "Diese E-Mail-Adresse wird bereits verwendet.",
         "emailRateLimited": "Zu viele Änderungen der E-Mail-Adresse. Versuche es später erneut."
       }
+    },
+    "auth": {
+      "reproof": {
+        "required": "Bestätige dein aktuelles Passwort, um das zu ändern.",
+        "failed": "Die Bestätigung ist fehlgeschlagen. Es wurde nichts geändert."
+      }
     }
   },
   "doctorReport": {
@@ -439,6 +445,7 @@
       "errorNoEmail": "Dein Identitätsanbieter hat keine bestätigte E-Mail-Adresse übermittelt.",
       "errorEmailUnverified": "Dein Identitätsanbieter hat deine E-Mail-Adresse nicht als bestätigt markiert.",
       "errorIdentityConflict": "Diese E-Mail-Adresse gehört zu einem Konto, das bereits mit einer anderen SSO-Identität verknüpft ist.",
+      "errorLinkRequired": "Hier gibt es bereits ein Konto mit dieser E-Mail-Adresse. Melde dich einmal mit seinem Passwort oder Passkey an, um es mit Single Sign-on zu verbinden.",
       "errorRegistrationDisabled": "Kein Konto passt zu dieser Identität, und neue Registrierungen sind derzeit geschlossen.",
       "errorFailed": "Single Sign-On ist fehlgeschlagen. Bitte versuche es erneut."
     },
@@ -5553,7 +5560,9 @@
       "invalidFormat": "Das ist nicht in einer Form geschrieben, die dieses Feld lesen kann.",
       "invalidType": "Der Wert kam nicht in einer Form an, die dieses Feld speichern kann.",
       "rateLimited": "Zu oft geändert. Warte kurz und versuche es dann erneut.",
-      "other": "Dieser Wert wurde nicht angenommen. Bitte prüfen und erneut versuchen."
+      "other": "Dieser Wert wurde nicht angenommen. Bitte prüfen und erneut versuchen.",
+      "reproofRequired": "Gib dein aktuelles Passwort ein, um die E-Mail-Adresse zu ändern.",
+      "reproofFailed": "Das Passwort stimmt nicht, die E-Mail-Adresse wurde nicht geändert."
     },
     "avatar": {
       "title": "Profilfoto",
@@ -6700,7 +6709,8 @@
       "showChecklist": "Checkliste wieder anzeigen",
       "checklistShown": "Die Checkliste ist wieder auf dem Dashboard.",
       "checklistNothingHidden": "Die Checkliste war nicht ausgeblendet; sie öffnet sich auf dem Dashboard."
-    }
+    },
+    "emailChangePassword": "Aktuelles Passwort (nötig, um die E-Mail-Adresse zu ändern)"
   },
   "admin": {
     "title": "Administration",

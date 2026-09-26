@@ -1853,8 +1853,9 @@ paths:
                   - $ref: "#/components/schemas/MfaRequiredResponse"
         "401": *a1
         "403":
-          description: Password login is disabled — the operator runs `OIDC_ONLY=true`. `meta.errorCode` = `oidc_only`; sign in
-            through SSO instead.
+          description: "Password login is disabled — the operator runs `OIDC_ONLY=true`. `meta.errorCode` = `oidc_only`; sign in
+            through SSO instead. The one exception is a browser the SSO callback sent back with a pending link to
+            confirm an existing account: it may sign in with that one account's password, which links the account."
           content:
             application/json:
               schema:
@@ -3292,6 +3293,16 @@ paths:
         `mfa_ticket=…`, which the app completes at /api/auth/mfa/verify to obtain the same bundle. The token pair NEVER
         rides a URL — only the opaque code or ticket does. There is no `redirect_uri` parameter and no allowlist to
         configure: the scheme is a compile-time constant, so the open-redirect class is removed by construction.
+
+
+        **An account that exists but is not linked yet.** When the provider's verified email matches a local account
+        with no SSO identity, nothing is linked and nobody is signed in: the local address was never verified, so
+        matching it proves nothing about who owns the account. The browser arm redirects to
+        `/auth/login?error=oidc_link_required` with a sealed, ten-minute, HttpOnly pending-link cookie; the person then
+        signs in to that account once with its own password (and second factor) or passkey, and that sign-in makes the
+        link. Under `OIDC_ONLY=true` the password sign-in is admitted for exactly the account the pending link names.
+        The native arm redirects to `healthlog://oidc-callback?error=oidc_link_required`; the link is confirmed once on
+        the web, after which the app's SSO sign-in works.
 
 
         Two PKCE exchanges run here and must not be confused: the server↔provider verifier the server generates for
@@ -22435,6 +22446,16 @@ components:
           anyOf:
             - type: string
             - type: "null"
+        currentPassword:
+          description: "The account password, sent only alongside a NEW `email`. Moving the account to a new address needs a fresh
+            proof because single sign-on links an existing account by it: a browser session that signed in or completed
+            a second factor in the last five minutes needs nothing more, otherwise this field must carry the current
+            password. Without an accepted proof the address is not changed and comes back in `rejectedFields` as
+            `reproof_required` or `reproof_failed` (or, when the address was the only field sent, 401
+            `auth.reproof.required` / `auth.reproof.failed`). Attempts draw on the account's shared re-proof budget of
+            five per fifteen minutes. Never stored."
+          type: string
+          maxLength: 512
       description: Partial profile update. Every field is optional and an omitted field is left untouched. An explicit null
         clears any nullable field; an empty string also clears `displayName`, `dateOfBirth`, `gender`, `fullName`,
         `insurerName`, `insuranceNumber` and `insurerIkNumber`. `email` is not among them — it is validated as an

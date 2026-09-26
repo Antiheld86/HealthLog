@@ -37,6 +37,7 @@ import {
   buildNativeCallbackUrl,
   mintNativeHandoff,
 } from "@/lib/auth/oidc-native-handoff";
+import { setPendingLinkCookie } from "@/lib/auth/oidc-pending-link";
 
 const LOGIN_ERROR_URL = "/auth/login";
 
@@ -340,14 +341,29 @@ export const GET = apiHandler(async (req: NextRequest) => {
           annotate({ meta: { reason: "identity_conflict" } });
           return failRedirect("oidc_identity_conflict");
         }
-        user = await prisma.user.update({
-          where: { id: byEmail.id },
-          data: { oidcIssuer: metadata.issuer, oidcSub: identity.sub },
-        });
-        await auditLog("auth.oidc.linked", {
-          userId: user.id,
+        // (2b) Never link on the email alone. The local address was never
+        // verified — anyone can register with it or type it into a profile —
+        // so matching it proves nothing about who owns the account. Record
+        // the link this login would make and send the browser to sign in to
+        // the account with its own credential; the link is made there
+        // (`completePendingOidcLink`), and only for this account.
+        await auditLog("auth.oidc.link_pending", {
+          userId: byEmail.id,
           ipAddress: ip,
         });
+        annotate({ meta: { reason: "link_confirmation_required" } });
+        if (isNative) {
+          // The native sign-in sheet cannot run the confirmation; the person
+          // signs in on the web once, after which the app's SSO works.
+          return failRedirect("oidc_link_required");
+        }
+        const response = errorRedirect("oidc_link_required");
+        setPendingLinkCookie(response, {
+          userId: byEmail.id,
+          issuer: metadata.issuer,
+          sub: identity.sub,
+        });
+        return response;
       } else {
         // (3) Provision.
         const userCount = await prisma.user.count();

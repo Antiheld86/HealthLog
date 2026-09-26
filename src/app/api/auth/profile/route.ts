@@ -9,16 +9,30 @@ import { NextRequest } from "next/server";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { applyProfileUpdate } from "@/lib/auth/profile-update";
+import { authorizeSensitiveChange } from "@/lib/auth/existing-factor-proof";
 
 export const PUT = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const auth = await requireAuth();
+  const { user } = auth;
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,
   });
   if (jsonError) return jsonError;
 
-  const result = await applyProfileUpdate(user.id, body, getClientIp(request));
+  const ip = getClientIp(request);
+  const result = await applyProfileUpdate(user.id, body, ip, {
+    // A new email address needs a fresh proof: the address is what single
+    // sign-on links an existing account by.
+    authorizeEmailChange: (currentPassword) =>
+      authorizeSensitiveChange({
+        user,
+        cookieSessionId: auth.authMethod === "cookie" ? auth.session.id : null,
+        currentPassword,
+        ipAddress: ip,
+        stage: "email_change",
+      }),
+  });
   if (!result.ok) {
     const meta = result.errorCode ? { errorCode: result.errorCode } : undefined;
     return result.issues

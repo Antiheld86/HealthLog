@@ -19,12 +19,19 @@ import { createMfaChallenge } from "@/lib/auth/mfa/challenge";
 import { consumeTrustedDevice } from "@/lib/auth/trusted-device";
 import { syncMfaEnrollCookie } from "@/lib/auth/mfa-enrollment";
 import { isOidcOnly } from "@/lib/auth/oidc";
+import { readPendingLink } from "@/lib/auth/oidc-pending-link";
 
 export const POST = apiHandler(async (request: NextRequest) => {
   // OIDC_ONLY means password login must be a dead end, not just a hidden
   // button — otherwise a pre-existing password (or a leaked/reused one)
   // stays a live bypass of the operator's SSO-only policy.
-  if (isOidcOnly()) {
+  //
+  // One exception, and only for one account: a browser the SSO callback sent
+  // here to confirm an existing account carries a sealed pending link naming
+  // that account. It may prove that account's password (checked again once
+  // the account is resolved) so the link can be made; nothing else opens.
+  const pendingLink = isOidcOnly() ? await readPendingLink() : null;
+  if (isOidcOnly() && !pendingLink) {
     return apiError("Password login is disabled. Sign in with SSO.", 403, {
       errorCode: "oidc_only",
     });
@@ -117,6 +124,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
       details: { reason: "invalid_password", identifierHash },
     });
     return apiError("Invalid credentials", 401);
+  }
+
+  if (pendingLink && pendingLink.userId !== user.id) {
+    return apiError("Password login is disabled. Sign in with SSO.", 403, {
+      errorCode: "oidc_only",
+    });
   }
 
   const ua = request.headers.get("user-agent");

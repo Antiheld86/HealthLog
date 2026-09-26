@@ -16,7 +16,18 @@ vi.mock("@/lib/auth/audit", () => ({
   auditLog: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { applyProfileUpdate } from "../profile-update";
+import { applyProfileUpdate as applyWithProof } from "../profile-update";
+
+/** These suites are about validation and the email budget, not the proof:
+ *  every call is made as an owner who has just proved themselves. */
+const applyProfileUpdate = (
+  userId: string,
+  body: unknown,
+  ipAddress?: string | null,
+) =>
+  applyWithProof(userId, body, ipAddress, {
+    authorizeEmailChange: async () => "ok",
+  });
 import { prisma } from "@/lib/db";
 
 const USER_ID = "user-1";

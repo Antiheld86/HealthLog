@@ -128,6 +128,12 @@
         "emailInUse": "This email address is already in use.",
         "emailRateLimited": "Too many email-address changes. Try again later."
       }
+    },
+    "auth": {
+      "reproof": {
+        "required": "Confirm your current password to change this.",
+        "failed": "That did not verify. Nothing was changed."
+      }
     }
   },
   "doctorReport": {
@@ -439,6 +445,7 @@
       "errorNoEmail": "Your identity provider did not share a verified email address.",
       "errorEmailUnverified": "Your identity provider did not mark your email address as verified.",
       "errorIdentityConflict": "That email address belongs to an account that is already linked to a different SSO identity.",
+      "errorLinkRequired": "An account with this email address already exists here. Sign in to it once with its password or passkey to connect it to single sign-on.",
       "errorRegistrationDisabled": "No account matches that identity, and new sign-ups are currently closed.",
       "errorFailed": "Single sign-on failed. Please try again."
     },
@@ -5553,7 +5560,9 @@
       "invalidFormat": "That is not written in a form this field can read.",
       "invalidType": "That value did not arrive in a form this field can store.",
       "rateLimited": "Changed too often. Wait a little and try again.",
-      "other": "This value was not accepted. Check it and try again."
+      "other": "This value was not accepted. Check it and try again.",
+      "reproofRequired": "Enter your current password to change the email address.",
+      "reproofFailed": "That password is not correct, so the email address was not changed."
     },
     "avatar": {
       "title": "Profile photo",
@@ -6700,7 +6709,8 @@
       "showChecklist": "Show the checklist again",
       "checklistShown": "The checklist is back on the dashboard.",
       "checklistNothingHidden": "The checklist was not hidden; it opens on the dashboard."
-    }
+    },
+    "emailChangePassword": "Current password (needed to change the email address)"
   },
   "admin": {
     "title": "Administration",

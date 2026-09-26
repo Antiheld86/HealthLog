@@ -128,6 +128,12 @@
         "emailInUse": "이미 사용 중인 이메일 주소예요.",
         "emailRateLimited": "이메일 주소를 너무 자주 변경했어요. 잠시 후 다시 시도해 주세요."
       }
+    },
+    "auth": {
+      "reproof": {
+        "required": "변경하려면 현재 비밀번호를 확인하세요.",
+        "failed": "확인에 실패했습니다. 아무것도 변경되지 않았습니다."
+      }
     }
   },
   "doctorReport": {
@@ -439,6 +445,7 @@
       "errorNoEmail": "제공자가 인증된 이메일 주소를 전달하지 않았어요.",
       "errorEmailUnverified": "제공자가 이메일 주소를 인증됨으로 표시하지 않았어요.",
       "errorIdentityConflict": "그 이메일 주소는 다른 SSO 계정에 이미 연결돼 있어요.",
+      "errorLinkRequired": "이 이메일 주소를 사용하는 계정이 이미 있습니다. 싱글 사인온에 연결하려면 해당 계정의 비밀번호나 패스키로 한 번 로그인하세요.",
       "errorRegistrationDisabled": "일치하는 계정이 없고, 지금은 회원가입이 닫혀 있어요.",
       "errorFailed": "싱글 사인온에 실패했어요. 다시 시도해 주세요."
     },
@@ -5553,7 +5560,9 @@
       "invalidFormat": "이 항목이 읽을 수 있는 형식이 아니에요.",
       "invalidType": "이 항목이 저장할 수 있는 형식으로 오지 않았어요.",
       "rateLimited": "너무 자주 바꿨어요. 잠시 후 다시 시도해 주세요.",
-      "other": "이 값은 저장하지 못했어요. 확인한 뒤 다시 시도해 주세요."
+      "other": "이 값은 저장하지 못했어요. 확인한 뒤 다시 시도해 주세요.",
+      "reproofRequired": "이메일 주소를 변경하려면 현재 비밀번호를 입력하세요.",
+      "reproofFailed": "비밀번호가 올바르지 않아 이메일 주소가 변경되지 않았습니다."
     },
     "avatar": {
       "title": "프로필 사진",
@@ -6700,7 +6709,8 @@
       "showChecklist": "체크리스트 다시 표시",
       "checklistShown": "체크리스트가 대시보드에 다시 표시됩니다.",
       "checklistNothingHidden": "체크리스트는 숨겨져 있지 않았습니다. 대시보드에서 열립니다."
-    }
+    },
+    "emailChangePassword": "현재 비밀번호 (이메일 주소를 변경하려면 필요)"
   },
   "admin": {
     "title": "관리자",

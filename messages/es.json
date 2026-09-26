@@ -128,6 +128,12 @@
         "emailInUse": "Esta dirección de correo ya está en uso.",
         "emailRateLimited": "Demasiados cambios de dirección de correo. Inténtalo más tarde."
       }
+    },
+    "auth": {
+      "reproof": {
+        "required": "Confirma tu contraseña actual para cambiar esto.",
+        "failed": "La verificación ha fallado. No se ha cambiado nada."
+      }
     }
   },
   "doctorReport": {
@@ -439,6 +445,7 @@
       "errorNoEmail": "Tu proveedor de identidad no compartió un correo electrónico verificado.",
       "errorEmailUnverified": "Tu proveedor de identidad no marcó tu correo electrónico como verificado.",
       "errorIdentityConflict": "Ese correo electrónico pertenece a una cuenta que ya está vinculada a otra identidad SSO.",
+      "errorLinkRequired": "Ya existe aquí una cuenta con esta dirección de correo. Inicia sesión en ella una vez con su contraseña o llave de acceso para conectarla al inicio de sesión único.",
       "errorRegistrationDisabled": "Ninguna cuenta coincide con esa identidad y los nuevos registros están cerrados actualmente.",
       "errorFailed": "El inicio de sesión único falló. Inténtalo de nuevo."
     },
@@ -5553,7 +5560,9 @@
       "invalidFormat": "Eso no está escrito en un formato que este campo pueda leer.",
       "invalidType": "El valor no llegó en un formato que este campo pueda guardar.",
       "rateLimited": "Se ha cambiado demasiadas veces. Espera un poco e inténtalo de nuevo.",
-      "other": "No se aceptó este valor. Revísalo e inténtalo de nuevo."
+      "other": "No se aceptó este valor. Revísalo e inténtalo de nuevo.",
+      "reproofRequired": "Introduce tu contraseña actual para cambiar la dirección de correo.",
+      "reproofFailed": "La contraseña no es correcta, así que la dirección de correo no se ha cambiado."
     },
     "avatar": {
       "title": "Foto de perfil",
@@ -6700,7 +6709,8 @@
       "showChecklist": "Mostrar la lista de nuevo",
       "checklistShown": "La lista vuelve a estar en el panel.",
       "checklistNothingHidden": "La lista no estaba oculta; se abre en el panel."
-    }
+    },
+    "emailChangePassword": "Contraseña actual (necesaria para cambiar la dirección de correo)"
   },
   "admin": {
     "title": "Administration",

@@ -282,3 +282,76 @@ async function readProof(
   const parsed = stepUpMintSchema.safeParse(body);
   return parsed.success ? parsed.data : "invalid";
 }
+
+export type SensitiveChangeProof = "ok" | "required" | "failed" | "rate_limited";
+
+/**
+ * The proof in front of changing the account's email address.
+ *
+ * The address is what single sign-on matches an existing account by, so it is
+ * part of how the account is reached and a stolen session must not rewrite it.
+ * Accepted: on a cookie session, a sign-in or second factor inside the last
+ * five minutes; on either transport, the current password alongside the
+ * change. The password draws on the shared re-proof budget and a wrong one is
+ * audited like every other refused proof.
+ */
+export async function authorizeSensitiveChange(args: {
+  user: Pick<
+    User,
+    | "id"
+    | "passwordHash"
+    | "totpSecretEncrypted"
+    | "totpLastStep"
+    | "totpConfirmedAt"
+  >;
+  /** The session row id on a cookie request; null on a Bearer request. */
+  cookieSessionId: string | null;
+  currentPassword: string | null;
+  ipAddress: string | null;
+  stage: string;
+}): Promise<SensitiveChangeProof> {
+  const { user, cookieSessionId, currentPassword, ipAddress, stage } = args;
+
+  if (cookieSessionId) {
+    const row = await prisma.session.findUnique({
+      where: { id: cookieSessionId },
+      select: { mfaVerifiedAt: true, createdAt: true },
+    });
+    const now = Date.now();
+    const recent = (d: Date | null | undefined) =>
+      d != null && now - d.getTime() <= RECENT_PROOF_MAX_AGE_MS;
+    if (recent(row?.mfaVerifiedAt) || recent(row?.createdAt)) return "ok";
+  }
+
+  if (!currentPassword) return "required";
+
+  const rl = await checkRateLimit(
+    reproofBucket(user.id),
+    REPROOF_LIMIT,
+    REPROOF_WINDOW_MS,
+  );
+  if (!rl.allowed) {
+    await auditLog("auth.reproof.rate_limited", {
+      userId: user.id,
+      ipAddress,
+      details: { stage },
+    });
+    return "rate_limited";
+  }
+
+  const outcome = await verifyExistingFactorProof(user, {
+    method: "password",
+    password: currentPassword,
+  });
+  if (!outcome.ok) {
+    await recordReproofFailure(
+      user.id,
+      ipAddress,
+      stage,
+      "password",
+      outcome.reason,
+    );
+    return "failed";
+  }
+  return "ok";
+}
