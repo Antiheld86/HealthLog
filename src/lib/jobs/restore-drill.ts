@@ -30,6 +30,7 @@ import {
 } from "@/lib/export/backup-key-ids";
 import {
   openBackupObject,
+  offhostKeyRing,
   getS3Client,
   loadOffhostConfig,
   OffhostBackupNotConfiguredError,
@@ -114,7 +115,7 @@ export async function runRestoreDrill(
   // Read as a stream, never as one string: the JSON of a large record is
   // longer than any string V8 can hold (#1031). The bulk tables are counted,
   // not kept.
-  const source = openBackupObject(ciphertext, cfg.encryptionKey);
+  const source = openBackupObject(ciphertext, offhostKeyRing(cfg), objectKey);
   let plaintextBytes = 0;
   async function* counted() {
     for await (const chunk of source()) {

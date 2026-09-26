@@ -224,7 +224,11 @@ describe("runOffhostBackup", () => {
     expect(s3.deleteObject).not.toHaveBeenCalled();
 
     const ct = s3.store.get("2026-05-08/user-u1.json.enc")!;
-    const decoded = decryptBackup(ct, Buffer.from(ENC_KEY, "hex"));
+    const decoded = decryptBackup(
+      ct,
+      Buffer.from(ENC_KEY, "hex"),
+      "2026-05-08/user-u1.json.enc",
+    );
     const parsed = JSON.parse(decoded);
     expect(parsed.userId).toBe("u1");
     expect(() => backupPayloadSchema.parse(parsed)).not.toThrow();
@@ -343,7 +347,13 @@ describe("runOffhostBackup", () => {
     expect(report.uploaded).toBe(1);
     const ciphertext = s3.store.get("2026-05-08/user-u1.json.enc")!;
     expect(
-      JSON.parse(decryptBackup(ciphertext, Buffer.from(ENC_KEY, "hex"))),
+      JSON.parse(
+        decryptBackup(
+          ciphertext,
+          Buffer.from(ENC_KEY, "hex"),
+          "2026-05-08/user-u1.json.enc",
+        ),
+      ),
     ).toEqual(canonicalPayload);
     expect(() => backupPayloadSchema.parse(canonicalPayload)).not.toThrow();
   });
@@ -509,8 +519,8 @@ describe("uploadEncryptedBackup", () => {
 
     const stored = s3.store.get("k")!;
     expect(stored.byteLength).toBe(bytes);
-    expect(stored.subarray(0, 5).toString("binary")).toBe("HLBK\x03");
-    expect(decryptBackup(stored, key)).toBe(document);
+    expect(stored.subarray(0, 5).toString("binary")).toBe("HLBK\x04");
+    expect(decryptBackup(stored, key, "k")).toBe(document);
   });
 
   it("restores an object of the old shape and one of the new one alike", async () => {
@@ -526,10 +536,53 @@ describe("uploadEncryptedBackup", () => {
     const oldBytes = s3.store.get("old")!;
     const newBytes = s3.store.get("new")!;
     expect(oldBytes.subarray(0, 5).toString("binary")).toBe("HLBK\x02");
-    expect(newBytes.subarray(0, 5).toString("binary")).toBe("HLBK\x03");
+    expect(newBytes.subarray(0, 5).toString("binary")).toBe("HLBK\x04");
     // Different framing, same record, one reader.
     expect(decryptBackup(oldBytes, key)).toBe(document);
-    expect(decryptBackup(newBytes, key)).toBe(document);
+    expect(decryptBackup(newBytes, key, "new")).toBe(document);
+  });
+
+  it("binds a new object to its key in the bucket", async () => {
+    const s3 = makeS3Mock();
+    const document = JSON.stringify({ userId: "u1" });
+    await uploadEncryptedBackup(
+      s3,
+      "2026-09-01/user-u1.json.enc",
+      key,
+      (write) => write(document),
+    );
+    const stored = s3.store.get("2026-09-01/user-u1.json.enc")!;
+    expect(decryptBackup(stored, key, "2026-09-01/user-u1.json.enc")).toBe(
+      document,
+    );
+    // The same bytes presented as another account's copy, or another night's,
+    // do not open.
+    expect(() =>
+      decryptBackup(stored, key, "2026-09-01/user-u2.json.enc"),
+    ).toThrow();
+    expect(() =>
+      decryptBackup(stored, key, "2026-09-02/user-u1.json.enc"),
+    ).toThrow();
+  });
+
+  it("reads objects under a retired key through the previous-keys ring", async () => {
+    const s3 = makeS3Mock();
+    const document = JSON.stringify({ userId: "u1" });
+    const oldKey = Buffer.alloc(32, 7);
+    const newKey = Buffer.alloc(32, 9);
+    await uploadEncryptedBackup(s3, "k4", oldKey, (write) => write(document));
+    await s3.putObject("k2", encryptBackup(document, oldKey));
+    const ring = { active: newKey, previous: [oldKey] };
+    expect(decryptBackup(s3.store.get("k4")!, ring, "k4")).toBe(document);
+    expect(decryptBackup(s3.store.get("k2")!, ring)).toBe(document);
+    // Without the retired key the new-format object names the key it needs.
+    expect(() =>
+      decryptBackup(
+        s3.store.get("k4")!,
+        { active: newKey, previous: [] },
+        "k4",
+      ),
+    ).toThrow(/BACKUP_ENCRYPTION_PREVIOUS_KEYS/);
   });
 
   it("rejects a tampered version-3 object rather than returning a partial one", async () => {

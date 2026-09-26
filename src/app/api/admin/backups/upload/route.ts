@@ -29,7 +29,6 @@
  * Phase B1 / criterion 2 of the v1.4.15 backup-completeness work.
  */
 import { Readable } from "node:stream";
-import { createGunzip } from "node:zlib";
 
 import { NextRequest } from "next/server";
 import { ZodError } from "zod/v4";
@@ -38,6 +37,10 @@ import { apiHandler, HttpError, requireAdmin } from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { BackupJsonError, scanBackupJson } from "@/lib/export/backup-json-scan";
+import {
+  BackupUploadDecodeError,
+  decodeBackupUpload,
+} from "@/lib/export/backup-upload-decode";
 import {
   assessBackupKeys,
   BACKUP_KEY_MISSING_CODE,
@@ -99,50 +102,22 @@ class UploadRefused extends Error {
   }
 }
 
-/** Bytes → bytes, gunzipped when the file starts with the gzip magic. */
+/** The file's bytes, gunzipped and counted on both ends. */
 async function* decodedBytes(
   source: AsyncIterable<Uint8Array>,
   limit: number,
 ): AsyncGenerator<Uint8Array> {
-  let seen = 0;
-  async function* counted() {
-    for await (const chunk of source) {
-      seen += chunk.byteLength;
-      if (seen > limit) {
-        throw new UploadRefused(
-          413,
-          `Upload exceeds ${Math.round(limit / 1024 / 1024)} MB limit`,
-          { reason: "file_size_exceeded", size: seen },
-        );
-      }
-      yield chunk;
-    }
-  }
-  const iterator = counted()[Symbol.asyncIterator]();
-  const first = await iterator.next();
-  if (first.done) return;
-  const rest = (async function* () {
-    yield first.value;
-    for (;;) {
-      const next = await iterator.next();
-      if (next.done) return;
-      yield next.value;
-    }
-  })();
-  const head = first.value;
-  if (head.byteLength >= 2 && head[0] === 0x1f && head[1] === 0x8b) {
-    const gunzip = Readable.from(rest).pipe(createGunzip());
-    try {
-      for await (const chunk of gunzip) yield chunk as Buffer;
-    } catch (err) {
-      if (err instanceof UploadRefused) throw err;
-      throw new UploadRefused(422, "Uploaded file is not valid gzip", {
-        reason: "invalid_gzip",
+  try {
+    yield* decodeBackupUpload(source, { compressedLimit: limit });
+  } catch (err) {
+    if (err instanceof BackupUploadDecodeError) {
+      throw new UploadRefused(err.status, err.message, {
+        reason: err.reason,
+        ...(err.size !== undefined ? { size: err.size } : {}),
       });
     }
-    return;
+    throw err;
   }
-  yield* rest;
 }
 
 export const POST = apiHandler(async (request: NextRequest) => {
