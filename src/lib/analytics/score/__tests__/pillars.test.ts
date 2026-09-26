@@ -25,6 +25,16 @@ function days(count: number, value: number) {
   }));
 }
 
+/** `count` completed days ending yesterday (activity leaves today out). */
+function completedDays(count: number, value: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    day: new Date(NOW.getTime() - (index + 1) * 86_400_000)
+      .toISOString()
+      .slice(0, 10),
+    value,
+  }));
+}
+
 describe("reference-score pillars", () => {
   it("requires twelve fresh paired blood-pressure readings", () => {
     const below = computeBloodPressurePillar({
@@ -174,7 +184,7 @@ describe("reference-score pillars", () => {
         ...live,
         asOf: NOW,
         ageYears: 40,
-        days: days(20, 10_000),
+        days: completedDays(20, 10_000),
         sources: ["APPLE_HEALTH"],
       }).status,
     ).toBe("insufficient");
@@ -183,14 +193,14 @@ describe("reference-score pillars", () => {
       ...live,
       asOf: NOW,
       ageYears: 40,
-      days: days(21, 12_000),
+      days: completedDays(21, 12_000),
       sources: ["APPLE_HEALTH"],
     });
     const older = computeActivityPillar({
       ...live,
       asOf: NOW,
       ageYears: 68,
-      days: days(21, 8_000),
+      days: completedDays(21, 8_000),
       sources: ["APPLE_HEALTH"],
     });
     expect(younger.status).toBe("ok");
@@ -209,7 +219,7 @@ describe("reference-score pillars", () => {
       asOf: NOW,
       timezone: "Europe/Berlin",
       ageYears: 40,
-      days: days(21, 8_500),
+      days: completedDays(21, 8_500),
       sources: ["APPLE_HEALTH"],
     };
     const liveResult = computeActivityPillar({ ...input, source: "live" });
@@ -224,7 +234,7 @@ describe("reference-score pillars", () => {
   });
 
   it("scores exactly 28 activity calendar keys", () => {
-    const points = days(29, 10_000);
+    const points = completedDays(29, 10_000);
     points[28] = { ...points[28], value: 0 };
     const result = computeActivityPillar({
       ...live,
@@ -235,6 +245,64 @@ describe("reference-score pillars", () => {
     });
     expect(result.status).toBe("ok");
     if (result.status === "ok") expect(result.value.score).toBe(100);
+  });
+
+  it("leaves today's partial step total out of the window", () => {
+    const withToday = [
+      { day: "2026-07-28", value: 400 },
+      ...completedDays(21, 10_000),
+    ];
+    const result = computeActivityPillar({
+      ...live,
+      asOf: NOW,
+      ageYears: 40,
+      days: withToday,
+      sources: ["APPLE_HEALTH"],
+    });
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") expect(result.value.score).toBe(100);
+
+    // Twenty completed days plus today are not enough days.
+    expect(
+      computeActivityPillar({
+        ...live,
+        asOf: NOW,
+        ageYears: 40,
+        days: [{ day: "2026-07-28", value: 400 }, ...completedDays(20, 10_000)],
+        sources: ["APPLE_HEALTH"],
+      }).status,
+    ).toBe("insufficient");
+  });
+
+  it.each([
+    ["America/New_York", "2026-03-09T03:30:00.000Z", "2026-03-08"],
+    ["Pacific/Auckland", "2026-04-05T11:00:00.000Z", "2026-04-05"],
+    ["Pacific/Tongatapu", "2026-07-28T11:30:00.000Z", "2026-07-29"],
+    ["America/Santiago", "2026-09-06T04:30:00.000Z", "2026-09-06"],
+    ["Europe/Berlin", "2026-10-25T23:30:00.000Z", "2026-10-26"],
+  ])("cuts the window on local days in %s", (timezone, iso, today) => {
+    const asOf = new Date(iso);
+    const [y, m, d] = today.split("-").map(Number);
+    const key = (back: number) =>
+      new Date(Date.UTC(y, m - 1, d - back)).toISOString().slice(0, 10);
+    const window = Array.from({ length: 28 }, (_, i) => ({
+      day: key(i + 1),
+      value: 10_000,
+    }));
+    const result = computeActivityPillar({
+      source: "live",
+      readFailed: false,
+      timezone,
+      asOf,
+      ageYears: 40,
+      days: [{ day: today, value: 0 }, { day: key(29), value: 0 }, ...window],
+      sources: ["APPLE_HEALTH"],
+    });
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.value.score).toBe(100);
+      expect(result.coverage.historyDays).toBe(28);
+    }
   });
 
   it("requires fourteen sleep nights, never penalises long sleep, and adds regularity at 21 nights", () => {
