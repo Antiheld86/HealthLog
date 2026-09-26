@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Buffer } from "node:buffer";
-import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { parseBackupPayload } from "@/lib/validations/backup";
 
 process.env.ENCRYPTION_KEY =
@@ -1286,11 +1286,22 @@ describe("buildFullBackupPayload — profile and custom metrics", () => {
             value: 44.5,
             unit: "kg",
             measuredAt: "2026-07-19T06:30:00.000Z",
-            note: "felt strong",
+            // v1.39.3 — a DR file carries the note sealed, never readable,
+            // including for a row the backfill has not reached yet.
+            note: null,
+            noteEncrypted: expect.any(String),
           }),
         ],
       }),
     ]);
+    const [sealedMetric] = payload.customMetrics as Array<{
+      entries: Array<{ noteEncrypted: string }>;
+    }>;
+    expect(
+      decryptFromBytes(
+        Buffer.from(sealedMetric.entries[0].noteEncrypted, "base64"),
+      ),
+    ).toBe("felt strong");
     expect(counts.customMetrics).toBe(1);
     expect(counts.customMetricEntries).toBe(1);
     expect(payload.correlationPatterns).toEqual([

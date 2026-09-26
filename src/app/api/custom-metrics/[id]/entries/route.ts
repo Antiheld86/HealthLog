@@ -13,6 +13,7 @@ import { checkRecordWriteRateLimit } from "@/lib/rate-limit";
 import { auditLog } from "@/lib/auth/audit";
 import { invalidateUserCorrelationPatterns } from "@/lib/cache/invalidate";
 import { serialiseCustomMetricEntry } from "@/lib/custom-metrics/custom-metric-store";
+import { encryptNote } from "@/lib/crypto/note-cipher";
 import { prisma } from "@/lib/db";
 import { withIdempotency } from "@/lib/idempotency";
 import { annotate } from "@/lib/logging/context";
@@ -161,7 +162,8 @@ async function postCustomMetricEntry(
       value,
       unit: metric.unit,
       measuredAt,
-      note: note ?? null,
+      // v1.39.3 — the note is stored encrypted; the readable column stays NULL.
+      noteEncrypted: encryptNote(note),
     },
   });
 

@@ -107,6 +107,7 @@ describe("maintenance registrar queue policies", () => {
     ["INTAKE_SLOT_DEDUP_QUEUE", "exclusive"],
     ["NOTE_ENCRYPTION_BACKFILL_QUEUE", "exclusive"],
     ["MED_NOTES_ENCRYPTION_BACKFILL_QUEUE", "exclusive"],
+    ["FREE_TEXT_ENCRYPTION_BACKFILL_QUEUE", "exclusive"],
     ["DOCUMENT_THUMBNAIL_BACKFILL_QUEUE", "exclusive"],
     ["CONTENT_INDEX_BACKFILL_QUEUE", "exclusive"],
     ["ENCRYPTION_KEY_ROTATE_QUEUE", "exclusive"],

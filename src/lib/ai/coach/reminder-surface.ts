@@ -119,7 +119,10 @@ export async function surfaceCoachReminders(
 
     await prisma.$transaction(async (tx) => {
       const conversation = await tx.coachConversation.create({
-        data: { userId, title: title.slice(0, 80) },
+        data: {
+          userId,
+          titleEncrypted: encryptToBytes(title.slice(0, 80)),
+        },
       });
       await tx.coachMessage.create({
         data: {

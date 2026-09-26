@@ -96,10 +96,14 @@ describe("recordProactiveNudge", () => {
       createdAt: now,
     });
 
-    // Conversation owned by the user, title summarised.
-    expect(txCreate.coachConversation.create).toHaveBeenCalledWith({
-      data: { userId: "user_1", title: "Time to weigh in" },
-    });
+    // Conversation owned by the user, title summarised and stored as
+    // ciphertext only (v1.39.3); the readable column is never written.
+    const convArg = txCreate.coachConversation.create.mock.calls[0][0];
+    expect(convArg.data.userId).toBe("user_1");
+    expect(convArg.data).not.toHaveProperty("title");
+    expect(new TextDecoder().decode(convArg.data.titleEncrypted)).toBe(
+      "enc:Time to weigh in",
+    );
 
     // The body is encrypted at rest (Bytes), role is assistant, and the
     // message hangs off the new conversation. No raw plaintext column.
