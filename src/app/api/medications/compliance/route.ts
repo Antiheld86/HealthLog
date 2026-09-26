@@ -12,6 +12,7 @@ import {
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { TRACKED_INTAKE_WHERE } from "@/lib/medications/intake-tracking";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * Batched card-compliance read: one round trip for every medication the
@@ -43,7 +44,7 @@ export const GET = apiHandler(async () => {
     return apiError("Too many compliance requests. Please retry later.", 429);
   }
 
-  const userTz = user.timezone || "Europe/Berlin";
+  const userTz = user.timezone || DEFAULT_TIMEZONE;
 
   // Same ordering as the medications list so the page's card order and
   // this payload walk the same sequence.

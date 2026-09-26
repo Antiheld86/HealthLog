@@ -22,7 +22,8 @@ import {
   dayKeyAgeInDays,
   isCurrentForTodayClaim,
 } from "@/lib/insights/measurement-freshness";
-import { DEFAULT_TIMEZONE, moodDateKey } from "@/lib/mood/date-key";
+import { moodDateKey } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 import type { FeatureContribution } from "./forecast";
 import { countQualifyingDays } from "./load";

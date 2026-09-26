@@ -1518,7 +1518,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         return { present: false };
       }
 
-      const userTz = user?.timezone || "Europe/Berlin";
+      const userTz = user?.timezone || DEFAULT_TIMEZONE;
 
       // Same feeder reads + horizon the medications list route / dashboard
       // builder use, so the open-overdue detection matches the in-app cards.

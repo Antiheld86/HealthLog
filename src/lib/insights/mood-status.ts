@@ -305,7 +305,7 @@ export async function prepareMoodStatusForUser(
   // `applyPayloadBudget` daily buckets drive the in-target %, latest,
   // and correlations; the compact graded series reaches the prompt.
   const moodSeries = applyPayloadBudget(moodPoints, { now, tz: userTz });
-  const moodGraded = buildGradedSeriesFromPoints(moodPoints, now);
+  const moodGraded = buildGradedSeriesFromPoints(moodPoints, now, userTz);
   const moodSummary = summarizeSeries(
     moodSeries.daily.map((bucket) => ({ value: bucket.value })),
   );
@@ -490,6 +490,7 @@ export async function prepareMoodStatusForUser(
     measurements,
     now,
     userPriorityJson,
+    timeZone: userTz,
   });
 
   // v1.8.6 — the same threshold-gated narrative feed the user sees on

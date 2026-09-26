@@ -76,6 +76,7 @@ import type {
   MeasurementSource,
   GlucoseContext,
 } from "@/generated/prisma/client";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const { user } = await requireRecordAuth("read", "measurements");
@@ -192,7 +193,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     const tz =
       user.timezone && user.timezone.length > 0
         ? user.timezone
-        : "Europe/Berlin";
+        : DEFAULT_TIMEZONE;
     // Resolve `[dayStart, dayEnd)` for the requested calendar day in
     // the user's local zone. v1.4.37 W10 — `localDayWindow` honours
     // DST: the previous shape (`canonicalDailyTimestamp ± 12 h`)
@@ -242,7 +243,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     const tz =
       user.timezone && user.timezone.length > 0
         ? user.timezone
-        : "Europe/Berlin";
+        : DEFAULT_TIMEZONE;
     // v1.29.6 — DESC + take so a long history returns the MOST RECENT
     // window of raw samples for bucketing. The previous `orderBy: asc`
     // + `take: limit` sliced the OLDEST page of rows before the

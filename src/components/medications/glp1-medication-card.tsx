@@ -37,6 +37,7 @@ import {
 } from "@/components/medications/detail/supply-runway";
 import { useAuth } from "@/hooks/use-auth";
 import { useMedicationComplianceSummary } from "@/lib/queries/use-medication-compliance-summary";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * v1.4.25 W4d — GLP-1 medication card variant.
@@ -202,7 +203,7 @@ export function Glp1MedicationCard({
   // v1.16.9 — the card reasons in the PROFILE timezone; Berlin stays the
   // last-resort fallback for logged-out mounts and legacy fixtures.
   const { user } = useAuth();
-  const userTz = user?.timezone || "Europe/Berlin";
+  const userTz = user?.timezone || DEFAULT_TIMEZONE;
   const fmt = useFormatters();
   // Issue #490 — the zone `fmt` renders dates in (mirror → Berlin). The
   // weekday name paired with `fmt.dateShort` must be derived in this SAME

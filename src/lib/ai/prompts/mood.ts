@@ -57,12 +57,12 @@ export function getMoodUserPrompt(
       ? `\nOPENER HINT: ${openerHint}`
       : "";
   if (instructionLocale(locale) === "en") {
-    return `Date: ${todayKey} (Europe/Berlin)${openerLine}
+    return `Date: ${todayKey}${openerLine}
 Write one short assessment of this person's mood. Open with what the recent pattern MEANS in plain words — the read, not the number (e.g. "a brighter stretch than usual", "steady, holding where it's been") — then bring in the recent level right after as support, placed against their own weekly/monthly baseline; never lead with the value. Close with one kind, doable step only when the finding genuinely implies one; when nothing is, skip the step rather than manufacture filler. Judge confidence from the entry count and recency.${ctxBlock}${extraBlock}
 
 ${snapshotJson}`;
   }
-  return `Datum: ${todayKey} (Europe/Berlin)${openerLine}
+  return `Datum: ${todayKey}${openerLine}
 Schreibe eine kurze Einschätzung zur Stimmung dieser Person. Beginne mit der BEDEUTUNG des jüngsten Musters in klaren Worten — dem Eindruck, nicht der Zahl (z. B. "eine hellere Phase als sonst", "stabil, hält sich, wo sie war") — und bring danach das jüngste Niveau als Beleg, gegen die eigene Wochen-/Monats-Baseline eingeordnet; führe nie mit dem Wert. Schließe nur dann mit einem freundlichen, machbaren Schritt, wenn der Befund wirklich einen hergibt; ist nichts umsetzbar, lass den Schritt weg statt Fülltext zu erfinden. Konfidenz aus Eintragsanzahl und Aktualität ableiten.${ctxBlock}${extraBlock}
 
 ${snapshotJson}`;

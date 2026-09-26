@@ -29,7 +29,6 @@ import {
   resolveRestingPulseSeries,
   type PulseSample,
 } from "@/lib/analytics/resting-pulse";
-import { toBerlinDayKey } from "@/lib/tz/resolver";
 import { userDayKey } from "@/lib/tz/format";
 import { percentile } from "@/lib/insights/strain-score";
 import { localDayWindow } from "@/lib/tz/local-day";
@@ -96,7 +95,7 @@ describe("loadIntradayPulse", () => {
     // Sanity: under the OLD hardcoded-Berlin bug all six samples fall on the
     // SAME Berlin day — proving the two tz groupings genuinely diverge.
     const berlinDays = new Set(
-      [...dayA, ...dayB].map((d) => toBerlinDayKey(d)),
+      [...dayA, ...dayB].map((d) => userDayKey(d, "Europe/Berlin")),
     );
     expect(berlinDays.size).toBe(1);
 
@@ -151,7 +150,7 @@ describe("loadIntradayPulse", () => {
     const buggyBerlin = resolveRestingPulseSeries({
       restingSamples: [],
       pulseSamples: pulseHistory as PulseSample[],
-      dayKeyOf: (d) => toBerlinDayKey(d),
+      dayKeyOf: (d) => userDayKey(d, "Europe/Berlin"),
     });
     const buggyBaseline = median(
       buggyBerlin.series.slice(-30).map((p) => p.value),

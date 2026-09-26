@@ -15,6 +15,7 @@ describe("buildBriefingPersonalisationBlock", () => {
       "user-1",
       null,
       "en",
+      "UTC",
       day("2026-06-27T08:00:00Z"),
     );
     expect(en).toContain("OPENER HINT:");
@@ -22,6 +23,7 @@ describe("buildBriefingPersonalisationBlock", () => {
       "user-1",
       null,
       "de",
+      "UTC",
       day("2026-06-27T08:00:00Z"),
     );
     expect(de).toContain("OPENER-HINWEIS:");
@@ -33,6 +35,7 @@ describe("buildBriefingPersonalisationBlock", () => {
         "user-1",
         null,
         "en",
+        "UTC",
         day(`2026-06-${String(d).padStart(2, "0")}T08:00:00Z`),
       );
       expect(out).not.toContain("NAME:");
@@ -47,6 +50,7 @@ describe("buildBriefingPersonalisationBlock", () => {
         "user-42",
         "Alex Rivera",
         "en",
+        "UTC",
         day(`2026-06-${String(d).padStart(2, "0")}T08:00:00Z`),
       );
       if (out.includes('"Alex"')) withName += 1;
@@ -62,6 +66,7 @@ describe("buildBriefingPersonalisationBlock", () => {
       "user-42",
       "Alex Rivera",
       "en",
+      "UTC",
       day("2026-06-30T08:00:00Z"),
     );
     expect(out).not.toContain("Rivera");

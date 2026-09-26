@@ -37,7 +37,8 @@ import type { MeasurementType } from "@/generated/prisma/client";
 import { emitInsertedMeasurementArrivals } from "@/lib/arrivals/measurement-emit";
 import { maybeEnqueueMorningRefresh } from "@/lib/daily/morning-refresh-trigger";
 import { isP2002, isP2025 } from "@/lib/prisma-errors";
-import { DEFAULT_TIMEZONE, moodDateKey } from "@/lib/mood/date-key";
+import { moodDateKey } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { deriveA1 } from "@/lib/mood/level-a";
 import { zonedWallClockToUtc } from "@/lib/tz/wall-clock";
 

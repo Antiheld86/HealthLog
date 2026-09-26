@@ -47,6 +47,7 @@ import {
   outlookContract,
   formattingContract,
 } from "./shared-contracts";
+import { userDayKey } from "@/lib/tz/format";
 
 /**
  * Stable identifier for the active system prompt revision.
@@ -62,16 +63,6 @@ import {
  * surfaces. Clause order only — grounding untouched.
  */
 export const PROMPT_VERSION = "5.1.0" as const;
-
-/** Europe/Berlin YYYY-MM-DD day key — the rotation boundary for the opener. */
-function berlinDayKey(now: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Berlin",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
-}
 
 /**
  * v1.22 (W6) — the daily-briefing personalization SYSTEM CONTEXT block.
@@ -92,9 +83,11 @@ export function buildBriefingPersonalisationBlock(
   userId: string,
   displayName: string | null,
   locale: Locale,
+  /** The user's zone: the opener rotates at the user's own midnight. */
+  timeZone: string,
   now: Date = new Date(),
 ): string {
-  const dayKey = berlinDayKey(now);
+  const dayKey = userDayKey(now, timeZone);
   const hint = openerArchetypeHint(`${userId}:briefing:${dayKey}`, locale);
   const firstName = firstNameFromDisplayName(displayName);
   const useName =

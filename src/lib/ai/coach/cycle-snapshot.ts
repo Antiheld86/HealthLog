@@ -41,7 +41,8 @@ import {
 import type { CrossMetricMeasurement } from "@/lib/insights/mood-aggregates";
 import { addDays } from "@/lib/cycle/day-math";
 import { readSourceDayAggregates } from "@/lib/measurements/day-aggregates";
-import { DEFAULT_TIMEZONE, moodDateKey } from "@/lib/mood/date-key";
+import { moodDateKey } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /** Trailing window the phase contrast walks (days). Mirrors the read route. */
 const WINDOW_DAYS = 365;
@@ -200,12 +201,13 @@ export async function buildCycleSnapshotBlock(
       // many readings to hold as objects (#1023). The crosstab only needs
       // each day's sum and count per source and device, which is what the
       // per-source picker decides on, so the fold runs in SQL. Days are the
-      // Berlin days `metricDayMap` keys on.
+      // user's days, the ones `metricDayMap` keys on and the phase days are
+      // dated in.
       readSourceDayAggregates({
         userId,
         types: PHASE_CROSSTAB_METRIC_TYPES,
         since: new Date(Date.parse(`${from}T00:00:00Z`)),
-        timeZone: "Europe/Berlin",
+        timeZone: tz,
       }),
       prisma.user.findUnique({
         where: { id: userId },
@@ -292,6 +294,7 @@ export async function buildCycleSnapshotBlock(
       phaseByDay,
       measurements,
       userPriorityJson: userRow?.sourcePriorityJson ?? null,
+      timeZone: tz,
     }),
   );
 

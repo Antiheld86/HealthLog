@@ -9,6 +9,8 @@ import {
   type SleepStageRow,
 } from "@/lib/analytics/sleep-night";
 
+const TZ = "Europe/Berlin";
+
 const dayMs = 24 * 60 * 60 * 1000;
 
 function dailyPoints(
@@ -34,7 +36,7 @@ describe("buildGradedSeriesFromPoints", () => {
   const now = new Date("2026-05-31T12:00:00Z");
 
   it("keeps the last ~14-21 days at daily granularity", () => {
-    const s = buildGradedSeriesFromPoints(dailyPoints(400, now), now);
+    const s = buildGradedSeriesFromPoints(dailyPoints(400, now), now, TZ);
     expect(s.recent.length).toBeGreaterThan(0);
     expect(s.recent.length).toBeLessThanOrEqual(21);
     // Each recent bucket carries daily aggregates.
@@ -51,7 +53,7 @@ describe("buildGradedSeriesFromPoints", () => {
   });
 
   it("folds the weeks after the recent window into ~8-10 ISO-week buckets", () => {
-    const s = buildGradedSeriesFromPoints(dailyPoints(400, now), now);
+    const s = buildGradedSeriesFromPoints(dailyPoints(400, now), now, TZ);
     expect(s.weekly.length).toBeGreaterThan(0);
     expect(s.weekly.length).toBeLessThanOrEqual(12);
     for (const w of s.weekly) {
@@ -64,7 +66,7 @@ describe("buildGradedSeriesFromPoints", () => {
   });
 
   it("folds older history into ~9-12 monthly buckets", () => {
-    const s = buildGradedSeriesFromPoints(dailyPoints(730, now), now);
+    const s = buildGradedSeriesFromPoints(dailyPoints(730, now), now, TZ);
     expect(s.monthly.length).toBeGreaterThan(0);
     expect(s.monthly.length).toBeLessThanOrEqual(14);
     for (const m of s.monthly) {
@@ -77,7 +79,7 @@ describe("buildGradedSeriesFromPoints", () => {
 
   it("folds multi-year history into yearly buckets with a trend slope", () => {
     // 3+ years so at least one year lands in the yearly bucket.
-    const s = buildGradedSeriesFromPoints(dailyPoints(1200, now), now);
+    const s = buildGradedSeriesFromPoints(dailyPoints(1200, now), now, TZ);
     expect(s.yearly.length).toBeGreaterThan(0);
     for (const y of s.yearly) {
       expect(y).toHaveProperty("year");
@@ -87,7 +89,7 @@ describe("buildGradedSeriesFromPoints", () => {
   });
 
   it("collapses a 2-year daily weigher into <= ~50 buckets, not 730", () => {
-    const s = buildGradedSeriesFromPoints(dailyPoints(730, now), now);
+    const s = buildGradedSeriesFromPoints(dailyPoints(730, now), now, TZ);
     // ~21 recent + ~10 weekly + ~12 monthly + ~2-3 yearly. Worst-case
     // boundary slack lands ~46; the point is the order-of-magnitude
     // collapse from 730 daily readings, not an exact bucket count.
@@ -95,12 +97,12 @@ describe("buildGradedSeriesFromPoints", () => {
   });
 
   it("returns empty buckets for an empty input", () => {
-    const s = buildGradedSeriesFromPoints([], now);
+    const s = buildGradedSeriesFromPoints([], now, TZ);
     expect(countBuckets(s)).toBe(0);
   });
 
   it("does not duplicate a day across recent and weekly", () => {
-    const s = buildGradedSeriesFromPoints(dailyPoints(120, now), now);
+    const s = buildGradedSeriesFromPoints(dailyPoints(120, now), now, TZ);
     // The most recent ISO week of the recent window must not also be a
     // weekly bucket — recent days are excluded from the weekly fold.
     const recentDates = new Set(s.recent.map((r) => r.date));
@@ -115,7 +117,7 @@ describe("buildGradedSeriesFromPoints", () => {
       { measuredAt: new Date(now.getTime() - 1000), value: 90 },
       { measuredAt: new Date(now.getTime() - 2000), value: 80 },
     ];
-    const s = buildGradedSeriesFromPoints(points, now);
+    const s = buildGradedSeriesFromPoints(points, now, TZ);
     expect(s.recent.length).toBe(1);
     expect(s.recent[0].min).toBe(70);
     expect(s.recent[0].max).toBe(90);
@@ -174,9 +176,27 @@ describe("buildGradedSeriesFromPoints", () => {
     const points = reconstructSleepNights(rows, "UTC")
       .filter((n) => n.asleepMinutes > 0)
       .map((n) => ({ measuredAt: n.measuredAt, value: n.asleepMinutes }));
-    const graded = buildGradedSeriesFromPoints(points, sleepNow);
+    const graded = buildGradedSeriesFromPoints(points, sleepNow, TZ);
     const recentMean = graded.recent.at(-1)?.mean ?? 0;
     expect(recentMean).toBe(480); // night total, not ~1218 (stage sum)
     expect(recentMean).toBeLessThan(960); // < 16 h — never impossible
+  });
+});
+
+describe("buildGradedSeriesFromPoints — the user's calendar", () => {
+  it.each([
+    // 23:30 on 9 June in New York is already 10 June in UTC and Berlin.
+    ["America/New_York", "2026-06-10T03:30:00.000Z", "2026-06-09"],
+    // 08:00 on 10 June in Auckland and Tonga is still 9 June in UTC.
+    ["Pacific/Auckland", "2026-06-09T20:00:00.000Z", "2026-06-10"],
+    ["Pacific/Tongatapu", "2026-06-09T19:00:00.000Z", "2026-06-10"],
+  ])("keys a reading on its local day in %s", (tz, iso, day) => {
+    const now = new Date("2026-06-12T12:00:00.000Z");
+    const s = buildGradedSeriesFromPoints(
+      [{ measuredAt: new Date(iso), value: 70 }],
+      now,
+      tz,
+    );
+    expect(s.recent.map((r) => r.date)).toEqual([day]);
   });
 });

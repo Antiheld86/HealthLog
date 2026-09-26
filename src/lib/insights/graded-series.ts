@@ -57,7 +57,7 @@ import {
   readDayAggregates,
   type DayAggregateRow,
 } from "@/lib/measurements/day-aggregates";
-import { toBerlinYmd } from "@/lib/tz/resolver";
+import { userDayKey } from "@/lib/tz/format";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -87,7 +87,7 @@ const MONTHLY_WINDOW_MS = WEEKLY_WINDOW_MS + MONTHLY_MONTHS * 30 * MS_PER_DAY;
 const COLD_FALLBACK_WINDOW_DAYS = 1095;
 
 export interface RecentDayBucket {
-  /** Berlin YYYY-MM-DD. */
+  /** YYYY-MM-DD in the user's zone. */
   date: string;
   min: number;
   max: number;
@@ -96,7 +96,7 @@ export interface RecentDayBucket {
 }
 
 export interface WeeklyBucket {
-  /** ISO week key like 2026-W19 (Berlin-anchored). */
+  /** ISO week key like 2026-W19 (the user's calendar). */
   weekISO: string;
   min: number;
   max: number;
@@ -105,7 +105,7 @@ export interface WeeklyBucket {
 }
 
 export interface MonthlyBucket {
-  /** Berlin YYYY-MM. */
+  /** YYYY-MM (the user's calendar; UTC for rollup months). */
   month: string;
   min: number;
   max: number;
@@ -114,7 +114,7 @@ export interface MonthlyBucket {
 }
 
 export interface YearlyBucket {
-  /** Berlin YYYY. */
+  /** YYYY (the user's calendar; UTC for rollup years). */
   year: string;
   min: number;
   max: number;
@@ -141,28 +141,13 @@ function round(value: number, digits = 2): number {
   return Math.round(value * factor) / factor;
 }
 
-function berlinDayKey(date: Date): string {
-  const { year, month, day } = toBerlinYmd(date);
-  return `${year}-${month}-${day}`;
-}
-
-function berlinMonthKey(date: Date): string {
-  const { year, month } = toBerlinYmd(date);
-  return `${year}-${month}`;
-}
-
-function berlinYearKey(date: Date): string {
-  return toBerlinYmd(date).year;
-}
-
-/**
- * ISO week key (Berlin-anchored). Mirrors the Coach's `isoWeekKey` but
- * fixed to the user's Berlin display day so the week label agrees with
- * the rest of the snapshot.
- */
-function berlinIsoWeekKey(date: Date): string {
-  const { year, month, day } = toBerlinYmd(date);
-  return isoWeekKeyOfYmd(year, month, day);
+/** The `YYYY-MM-DD` day `date` falls on in `timeZone`, as its parts. */
+function localYmd(
+  date: Date,
+  timeZone: string,
+): { year: string; month: string; day: string } {
+  const [year, month, day] = userDayKey(date, timeZone).split("-");
+  return { year, month, day };
 }
 
 /** ISO week key of a calendar date given as `YYYY`, `MM`, `DD`. */
@@ -228,6 +213,7 @@ function leastSquaresSlope(values: number[]): number | null {
 export function buildGradedSeriesFromPoints(
   points: Point[],
   now: Date,
+  timeZone: string,
 ): GradedSeries {
   const nowMs = now.getTime();
 
@@ -242,14 +228,16 @@ export function buildGradedSeriesFromPoints(
     const ageMs = nowMs - p.measuredAt.getTime();
     if (ageMs < 0) continue; // future reading — ignore
 
+    // Every bucket is a period of the user's own calendar.
+    const { year, month, day } = localYmd(p.measuredAt, timeZone);
     if (ageMs < RECENT_WINDOW_MS) {
-      foldInto(recentAgg, berlinDayKey(p.measuredAt), p.value);
+      foldInto(recentAgg, `${year}-${month}-${day}`, p.value);
     } else if (ageMs < WEEKLY_WINDOW_MS) {
-      foldInto(weeklyAgg, berlinIsoWeekKey(p.measuredAt), p.value);
+      foldInto(weeklyAgg, isoWeekKeyOfYmd(year, month, day), p.value);
     } else if (ageMs < MONTHLY_WINDOW_MS) {
-      foldInto(monthlyAgg, berlinMonthKey(p.measuredAt), p.value);
+      foldInto(monthlyAgg, `${year}-${month}`, p.value);
     } else {
-      const yk = berlinYearKey(p.measuredAt);
+      const yk = year;
       foldInto(yearlyAgg, yk, p.value);
       const list = yearlyValues.get(yk);
       if (list) list.push(p.value);
@@ -336,7 +324,7 @@ function gradedSegmentStarts(now: Date): Date[] {
  *
  * Replaces the raw `findMany` over the window (#1023): a watch that streams
  * heart rate every few seconds put a million rows into that read, which is
- * what exhausted the worker's heap. The rows here are one per Berlin day per
+ * what exhausted the worker's heap. The rows here are one per local day per
  * age segment, and their sum / count / min / max are exact, so the recent,
  * weekly and monthly slices come out identical to folding the raw rows.
  *
@@ -349,6 +337,7 @@ async function readGradedDayAggregates(
   type: MeasurementType,
   since: Date,
   now: Date,
+  timeZone: string,
 ): Promise<DayAggregateRow[]> {
   return readDayAggregates({
     userId,
@@ -356,7 +345,7 @@ async function readGradedDayAggregates(
     since,
     // Future-dated readings were skipped by the in-memory fold.
     until: now,
-    timeZone: "Europe/Berlin",
+    timeZone,
     // `readDayAggregates` puts a row at segment k when it is older than k
     // starts (`measured_at < start`). The in-memory fold treats an age of
     // exactly the window as the older bucket, so shift each start by 1 ms.
@@ -435,10 +424,12 @@ export function buildGradedSeriesFromDayAggregates(
 /**
  * Project a rollup bucket row to a monthly/yearly graded bucket. The
  * tier already carries min/max/mean/slope per bucket — no JS folding.
+ * Rollup buckets are UTC months and years, so the label is read off the
+ * bucket start in UTC: read in a zone west of UTC it named the month before.
  */
 function rollupMonthly(rows: RollupBucketRow[]): MonthlyBucket[] {
   return rows.map((r) => ({
-    month: berlinMonthKey(r.bucketStart),
+    month: r.bucketStart.toISOString().slice(0, 7),
     min: round(r.minValue),
     max: round(r.maxValue),
     mean: round(r.mean),
@@ -448,7 +439,7 @@ function rollupMonthly(rows: RollupBucketRow[]): MonthlyBucket[] {
 
 function rollupYearly(rows: RollupBucketRow[]): YearlyBucket[] {
   return rows.map((r) => ({
-    year: berlinYearKey(r.bucketStart),
+    year: r.bucketStart.toISOString().slice(0, 4),
     min: round(r.minValue),
     max: round(r.maxValue),
     mean: round(r.mean),
@@ -485,10 +476,11 @@ export async function buildGradedSeriesWithRollups(
   userId: string,
   type: MeasurementType,
   now: Date,
+  timeZone: string,
 ): Promise<GradedSeries> {
   const since = new Date(now.getTime() - WEEKLY_WINDOW_MS);
   const recentGraded = buildGradedSeriesFromDayAggregates(
-    await readGradedDayAggregates(userId, type, since, now),
+    await readGradedDayAggregates(userId, type, since, now, timeZone),
   );
 
   // v1.11.2 — load the source-priority blob once and thread it into both
@@ -548,7 +540,7 @@ export async function buildGradedSeriesWithRollups(
       now.getTime() - COLD_FALLBACK_WINDOW_DAYS * MS_PER_DAY,
     );
     const fullGraded = buildGradedSeriesFromDayAggregates(
-      await readGradedDayAggregates(userId, type, fallbackSince, now),
+      await readGradedDayAggregates(userId, type, fallbackSince, now, timeZone),
     );
     if (!monthlyCovered) monthly = fullGraded.monthly;
     if (!yearlyCovered) yearly = fullGraded.yearly;

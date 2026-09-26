@@ -10,7 +10,7 @@
  * `fetchMoodAggregates`.
  */
 
-import { dayOffsetToBerlinDayKey } from "@/lib/insights/bucket-series";
+import { dayOffsetToDayKey } from "@/lib/insights/bucket-series";
 import {
   MOOD_GREEN_MAX,
   MOOD_GREEN_MIN,
@@ -87,7 +87,7 @@ export function computeWeekdayAverages(
 ): WeekdayRow[] {
   const sums = new Map<number, { sum: number; count: number }>();
   for (const bucket of daily) {
-    const dayKey = dayOffsetToBerlinDayKey(now, bucket.dayOffset, tz);
+    const dayKey = dayOffsetToDayKey(now, bucket.dayOffset, tz);
     const d = new Date(dayKey + "T00:00:00Z");
     const weekday = (d.getUTCDay() + 6) % 7; // Monday = 0
     const cur = sums.get(weekday) ?? { sum: 0, count: 0 };

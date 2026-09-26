@@ -9,22 +9,14 @@
  * (jobs, API routes, PDF generation) pass the locale explicitly through
  * `makeFormatters(locale)`. The optional second argument carries the
  * per-user timezone (v1.4.25 W7) — when omitted the formatter falls back
- * to `DISPLAY_TIMEZONE` so legacy callers keep rendering in Europe/Berlin.
+ * to `DEFAULT_TIMEZONE` so legacy callers keep rendering in the default zone.
  *
  * UTC is always preserved in the database.
  */
 
 import type { Locale } from "./i18n/config";
 import { getDateTimeFormat, getNumberFormat } from "./intl/formatter-cache";
-import { isValidTimezone } from "./tz/format";
-
-/**
- * Fallback timezone for surfaces that are not yet user-scoped (admin
- * tables, audit log viewer, anything without a resolved user). User-
- * scoped surfaces should call `makeFormatters(locale, userTz)` with
- * the value from `resolveUserTimezone()`.
- */
-export const DISPLAY_TIMEZONE = "Europe/Berlin";
+import { DEFAULT_TIMEZONE, isValidTimezone } from "./tz/format";
 
 /**
  * Map our short locale ("de" / "en") to a full BCP-47 tag suitable for
@@ -185,7 +177,7 @@ export interface Formatters {
  * `useFormatters()` silently took the default. A caller with nothing to
  * pass writes "AUTO" and thereby says so. Same for `userTz`: pass the
  * resolved profile zone, or an explicit `undefined` to accept the
- * `DISPLAY_TIMEZONE` fallback.
+ * `DEFAULT_TIMEZONE` fallback.
  */
 export function makeFormatters(
   locale: Locale,
@@ -199,7 +191,7 @@ export function makeFormatters(
   // every page that renders a timestamp. Validate here (cheap — the
   // probe memoises successful constructions) and fall back to Berlin,
   // matching `formatInUserTz` / `hourInTz` / `isNearUtc`.
-  const tz = userTz && isValidTimezone(userTz) ? userTz : DISPLAY_TIMEZONE;
+  const tz = userTz && isValidTimezone(userTz) ? userTz : DEFAULT_TIMEZONE;
   const hourOpts = hourCycleOptions(timeFormat);
   // Field-order locale for the numeric date renderers. AUTO keeps the
   // user's own locale; DMY/MDY/YMD pin a canonical locale whose default

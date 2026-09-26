@@ -44,6 +44,7 @@ import {
   LIVE_ERA_REVISION_ARGS,
   liveEraStart as liveEraStartOf,
 } from "@/lib/medications/scheduling/live-era";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 export interface ReminderCheckPayload {
   triggeredAt: string;
@@ -198,7 +199,7 @@ export async function handleReminderCheck(
       let notificationsFailed = 0;
 
       for (const med of medications) {
-        const userTz = med.user.timezone || "Europe/Berlin";
+        const userTz = med.user.timezone || DEFAULT_TIMEZONE;
         const { start: todayStart, end: todayEnd } = getUserTodayBounds(
           now,
           userTz,

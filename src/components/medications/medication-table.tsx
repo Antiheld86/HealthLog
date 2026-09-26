@@ -43,6 +43,7 @@ import {
 } from "@/lib/queries/use-medication-compliance-summary";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * v1.16.10 — the compact table view for /medications (issue #316 item 3).
@@ -194,7 +195,7 @@ export function MedicationTable({
 }: MedicationTableProps) {
   const { t, locale } = useTranslations();
   const { user } = useAuth();
-  const userTz = user?.timezone || "Europe/Berlin";
+  const userTz = user?.timezone || DEFAULT_TIMEZONE;
   const [sort, setSort] = useState<MedicationTableSort | null>(initialSort);
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
 

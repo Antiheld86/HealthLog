@@ -31,6 +31,7 @@ import {
   intakeToastOptions,
   runUndoIntake,
 } from "@/components/medications/use-medication-intake";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * v1.4.37 W7b — dashboard "Hinzufügen" → "Medikamenteneinnahme" quick-add.
@@ -115,7 +116,7 @@ export function MedicationIntakeQuickAdd({
   // source the cards use); Berlin stays the last-resort fallback so
   // logged-out mounts behave unchanged.
   const { user } = useAuth();
-  const userTz = user?.timezone || "Europe/Berlin";
+  const userTz = user?.timezone || DEFAULT_TIMEZONE;
   // The record this dose lands in, or null in the caller's own.
   const recordName = useActiveRecordName();
 

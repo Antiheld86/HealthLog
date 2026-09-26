@@ -40,7 +40,7 @@ import {
   type UnstableExternalIdShape,
 } from "@/lib/validations/external-id";
 import { upsertCycleDayLog } from "@/lib/cycle/day-log-write";
-import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 const BATCH_RATE_LIMIT_MAX = 60;
 const BATCH_RATE_LIMIT_WINDOW_MS = 60 * 1000;

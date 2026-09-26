@@ -165,12 +165,12 @@ export function getMetricArchetypeUserPrompt(
       ? `\nOPENER HINT: ${openerHint}`
       : "";
   if (instructionLocale(locale) === "en") {
-    return `Date: ${todayKey} (Europe/Berlin)${openerLine}
+    return `Date: ${todayKey}${openerLine}
 Write one short assessment of this person's ${meta.displayName.toLowerCase()}. Open with what it MEANS in plain words — the read, not the number (e.g. "running a little calmer than usual", "steady and right where it's been") — then bring in ONE concrete number from the snapshot right after as support, placed against their own weekly/monthly baseline; never lead with the value. Close with one doable step only when the finding genuinely implies one; when nothing is, skip the step rather than manufacture filler. Judge confidence from the measurement count and recency.${ctxBlock}${extraBlock}${interpBlock}
 
 ${snapshotJson}`;
   }
-  return `Datum: ${todayKey} (Europe/Berlin)${openerLine}
+  return `Datum: ${todayKey}${openerLine}
 Schreibe eine kurze Einschätzung zu ${meta.displayName} dieser Person. Beginne mit der BEDEUTUNG in klaren Worten — dem Eindruck, nicht der Zahl (z. B. "läuft gerade etwas ruhiger als sonst", "stabil und genau da, wo es war") — und bring danach EINE konkrete Zahl aus dem Snapshot als Beleg, gegen die eigene Wochen-/Monats-Baseline eingeordnet; führe nie mit dem Wert. Schließe nur dann mit einem machbaren Schritt, wenn der Befund wirklich einen hergibt; ist nichts umsetzbar, lass den Schritt weg statt Fülltext zu erfinden. Konfidenz aus Messanzahl und Aktualität ableiten.${ctxBlock}${extraBlock}${interpBlock}
 
 ${snapshotJson}`;

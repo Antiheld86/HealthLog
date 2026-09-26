@@ -14,7 +14,6 @@ import {
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { locales, defaultLocale, type Locale } from "./config";
 import {
-  DISPLAY_TIMEZONE,
   makeFormatters,
   type Formatters,
   type TimeFormatPreference,
@@ -32,6 +31,7 @@ import {
   primeMessages,
   type MessageBundle,
 } from "./load-locale";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 interface I18nContextValue {
   locale: Locale;
@@ -370,7 +370,7 @@ export function useDateFormatPreference(): DateFormatPreference {
 
 /**
  * The user's mirrored profile timezone, resolved to a renderable IANA zone:
- * valid mirror value → `DISPLAY_TIMEZONE` (Europe/Berlin). Reactive to
+ * valid mirror value → `DEFAULT_TIMEZONE` (Europe/Berlin). Reactive to
  * mirror changes (profile save, cross-tab, `/api/auth/me` re-fetch) via the
  * same localStorage-mirror pattern as the hour-cycle preference. SSR and the
  * pre-fetch state resolve Berlin — deliberately NO browser-timezone rung
@@ -386,7 +386,7 @@ export function useDisplayTimezone(): string {
     readStoredTimezone,
     () => "",
   );
-  return stored !== "" ? stored : DISPLAY_TIMEZONE;
+  return stored !== "" ? stored : DEFAULT_TIMEZONE;
 }
 
 /**

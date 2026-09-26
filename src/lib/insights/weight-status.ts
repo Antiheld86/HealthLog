@@ -24,7 +24,7 @@ import {
 import { getRelevantCorrelationsForMetric } from "@/lib/insights/metric-correlation-context";
 import {
   applyPayloadBudget,
-  dayOffsetToBerlinDayKey,
+  dayOffsetToDayKey,
   type DailyBucket,
 } from "@/lib/insights/bucket-series";
 import {
@@ -59,6 +59,7 @@ import {
 import { annotate } from "@/lib/logging/context";
 import { resolveUserTimezone, userDayKey } from "@/lib/tz/resolver";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
+import { canonicalDailyTimestamp } from "@/lib/measurements/consolidation-tz";
 
 /**
  * Cap on the embedded correlation pair arrays. The Pearson coefficient
@@ -70,7 +71,7 @@ const CORRELATION_PAIR_CAP = 30;
 /**
  * Pair two daily-bucket series on `dayOffset`. The synthesised `date`
  * field is anchored at the UTC midnight of the Berlin calendar day —
- * `dayOffsetToBerlinDayKey()` is the source of truth so DST boundaries
+ * `dayOffsetToDayKey()` is the source of truth so DST boundaries
  * don't slip the day-key by one. Each pair also carries `dayKey`
  * directly so callers can label points without re-formatting.
  */
@@ -86,7 +87,7 @@ function pairDailyBuckets(
     .map((entry) => {
       const b = mapB.get(entry.dayOffset);
       if (b == null) return null;
-      const dayKey = dayOffsetToBerlinDayKey(now, entry.dayOffset, tz);
+      const dayKey = dayOffsetToDayKey(now, entry.dayOffset, tz);
       const [y, m, d] = dayKey.split("-").map(Number);
       return {
         a: entry.value,
@@ -370,16 +371,20 @@ export async function prepareWeightStatusForUser(
   // on a cold-tier coverage miss). Mood has no rollup tier, so it stays
   // an in-memory fold.
   const [weightGraded, sysGraded, diaGraded] = await Promise.all([
-    buildGradedSeriesWithRollups(userId, "WEIGHT", now),
-    buildGradedSeriesWithRollups(userId, "BLOOD_PRESSURE_SYS", now),
-    buildGradedSeriesWithRollups(userId, "BLOOD_PRESSURE_DIA", now),
+    buildGradedSeriesWithRollups(userId, "WEIGHT", now, userTz),
+    buildGradedSeriesWithRollups(userId, "BLOOD_PRESSURE_SYS", now, userTz),
+    buildGradedSeriesWithRollups(userId, "BLOOD_PRESSURE_DIA", now, userTz),
   ]);
   const moodGraded = buildGradedSeriesFromPoints(
     moodSeries.daily.map((b) => ({
-      measuredAt: new Date(dayOffsetToBerlinDayKey(now, b.dayOffset, userTz)),
+      measuredAt: canonicalDailyTimestamp(
+        dayOffsetToDayKey(now, b.dayOffset, userTz),
+        userTz,
+      ),
       value: b.value,
     })),
     now,
+    userTz,
   );
 
   const weightVsSystolicPairs = pairDailyBuckets(
@@ -408,7 +413,7 @@ export async function prepareWeightStatusForUser(
   // pairDailyBuckets — derive dayOffset from the offsets in sysSeries.
   const sysOffsetByDay = new Map(
     sysSeries.daily.map((bucket) => {
-      const dayKey = dayOffsetToBerlinDayKey(now, bucket.dayOffset, userTz);
+      const dayKey = dayOffsetToDayKey(now, bucket.dayOffset, userTz);
       return [dayKey, bucket.dayOffset];
     }),
   );
@@ -433,7 +438,7 @@ export async function prepareWeightStatusForUser(
   const latestWeight = weightSeries.daily[0] ?? null;
   const previousWeight = weightSeries.daily[1] ?? null;
   const latestWeightDay = latestWeight
-    ? dayOffsetToBerlinDayKey(now, latestWeight.dayOffset, userTz)
+    ? dayOffsetToDayKey(now, latestWeight.dayOffset, userTz)
     : null;
   const sameDayBp = latestWeightDay
     ? (pairedSystolicDiastolic.find((entry) => entry.day === latestWeightDay) ??

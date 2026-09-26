@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyPayloadBudget,
   bucketSeries,
-  dayOffsetToBerlinDayKey,
+  dayOffsetToDayKey,
 } from "../bucket-series";
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -75,7 +75,7 @@ describe("bucketSeries()", () => {
   });
 });
 
-describe("dayOffsetToBerlinDayKey() across DST boundaries", () => {
+describe("dayOffsetToDayKey() across DST boundaries", () => {
   // Europe/Berlin DST in 2024: spring-forward at 2024-03-31 02:00 → 03:00,
   // fall-back at 2024-10-27 03:00 → 02:00. Naive `now − dayOffset·86_400_000`
   // would crawl past those boundaries by an hour and silently land on the
@@ -85,8 +85,8 @@ describe("dayOffsetToBerlinDayKey() across DST boundaries", () => {
   it("produces today's Berlin date for dayOffset 0 around the spring-forward", () => {
     // 2024-03-31 11:30 Berlin (= 09:30 UTC, after the gap).
     const now = new Date("2024-03-31T09:30:00.000Z");
-    expect(dayOffsetToBerlinDayKey(now, 0)).toBe("2024-03-31");
-    expect(dayOffsetToBerlinDayKey(now, 1)).toBe("2024-03-30");
+    expect(dayOffsetToDayKey(now, 0)).toBe("2024-03-31");
+    expect(dayOffsetToDayKey(now, 1)).toBe("2024-03-30");
   });
 
   it("crossing the spring-forward DST boundary stays on the correct Berlin calendar day", () => {
@@ -96,10 +96,10 @@ describe("dayOffsetToBerlinDayKey() across DST boundaries", () => {
     // 11:30 CET → still 2024-03-30. That happens to look right here, so
     // the killer case is dayOffset 2 from a moment LATE on the day before
     // the gap.
-    expect(dayOffsetToBerlinDayKey(now, 0)).toBe("2024-04-02");
-    expect(dayOffsetToBerlinDayKey(now, 1)).toBe("2024-04-01");
-    expect(dayOffsetToBerlinDayKey(now, 2)).toBe("2024-03-31");
-    expect(dayOffsetToBerlinDayKey(now, 3)).toBe("2024-03-30");
+    expect(dayOffsetToDayKey(now, 0)).toBe("2024-04-02");
+    expect(dayOffsetToDayKey(now, 1)).toBe("2024-04-01");
+    expect(dayOffsetToDayKey(now, 2)).toBe("2024-03-31");
+    expect(dayOffsetToDayKey(now, 3)).toBe("2024-03-30");
   });
 
   it("crossing the spring-forward boundary from late-evening Berlin time does not slip a day", () => {
@@ -108,9 +108,9 @@ describe("dayOffsetToBerlinDayKey() across DST boundaries", () => {
     // 23:30 CET, which Intl formats as 2024-03-30. The CALENDAR-day
     // answer is 2024-03-31 — one Berlin calendar day earlier than today.
     const now = new Date("2024-03-31T22:30:00.000Z");
-    expect(dayOffsetToBerlinDayKey(now, 0)).toBe("2024-04-01");
-    expect(dayOffsetToBerlinDayKey(now, 1)).toBe("2024-03-31");
-    expect(dayOffsetToBerlinDayKey(now, 2)).toBe("2024-03-30");
+    expect(dayOffsetToDayKey(now, 0)).toBe("2024-04-01");
+    expect(dayOffsetToDayKey(now, 1)).toBe("2024-03-31");
+    expect(dayOffsetToDayKey(now, 2)).toBe("2024-03-30");
   });
 
   it("crossing the fall-back boundary from late-evening Berlin time does not slip a day", () => {
@@ -120,9 +120,9 @@ describe("dayOffsetToBerlinDayKey() across DST boundaries", () => {
     // 01:30 → 2024-10-27. That's actually correct by coincidence, so we
     // probe the dayOffset where the bias bites:
     const now = new Date("2024-10-27T23:30:00.000Z");
-    expect(dayOffsetToBerlinDayKey(now, 0)).toBe("2024-10-28");
-    expect(dayOffsetToBerlinDayKey(now, 1)).toBe("2024-10-27");
-    expect(dayOffsetToBerlinDayKey(now, 2)).toBe("2024-10-26");
+    expect(dayOffsetToDayKey(now, 0)).toBe("2024-10-28");
+    expect(dayOffsetToDayKey(now, 1)).toBe("2024-10-27");
+    expect(dayOffsetToDayKey(now, 2)).toBe("2024-10-26");
   });
 
   it("crossing the fall-back boundary the other direction (early-morning) stays put", () => {
@@ -131,9 +131,9 @@ describe("dayOffsetToBerlinDayKey() across DST boundaries", () => {
     // is what naive 24h subtraction gives because the day was 25 hours
     // long).
     const now = new Date("2024-10-27T01:30:00.000Z");
-    expect(dayOffsetToBerlinDayKey(now, 0)).toBe("2024-10-27");
-    expect(dayOffsetToBerlinDayKey(now, 1)).toBe("2024-10-26");
-    expect(dayOffsetToBerlinDayKey(now, 7)).toBe("2024-10-20");
+    expect(dayOffsetToDayKey(now, 0)).toBe("2024-10-27");
+    expect(dayOffsetToDayKey(now, 1)).toBe("2024-10-26");
+    expect(dayOffsetToDayKey(now, 7)).toBe("2024-10-20");
   });
 });
 
@@ -174,16 +174,14 @@ describe("bucketSeries() honours the per-user timezone (M-TZ3)", () => {
     expect(berlin).toEqual(def);
   });
 
-  it("dayOffsetToBerlinDayKey resolves the offset in the passed timezone", () => {
+  it("dayOffsetToDayKey resolves the offset in the passed timezone", () => {
     // `now` is 05-09 in LA but 05-10 in Berlin.
-    expect(dayOffsetToBerlinDayKey(reading, 0, "America/Los_Angeles")).toBe(
+    expect(dayOffsetToDayKey(reading, 0, "America/Los_Angeles")).toBe(
       "2026-05-09",
     );
     // Default (no tz) and explicit Berlin agree.
-    expect(dayOffsetToBerlinDayKey(reading, 0)).toBe("2026-05-10");
-    expect(dayOffsetToBerlinDayKey(reading, 0, "Europe/Berlin")).toBe(
-      "2026-05-10",
-    );
+    expect(dayOffsetToDayKey(reading, 0)).toBe("2026-05-10");
+    expect(dayOffsetToDayKey(reading, 0, "Europe/Berlin")).toBe("2026-05-10");
   });
 
   it("applyPayloadBudget threads the timezone through to the buckets", () => {

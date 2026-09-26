@@ -43,7 +43,8 @@ import {
   type SymptomDay,
 } from "@/lib/cycle/symptom-phase";
 import { addDays } from "@/lib/cycle/day-math";
-import { DEFAULT_TIMEZONE, moodDateKey } from "@/lib/mood/date-key";
+import { moodDateKey } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /** Trailing window the phase-contrast walks (days). */
 const WINDOW_DAYS = 365;
@@ -228,6 +229,7 @@ export const GET = apiHandler(async () => {
     phaseByDay,
     measurements,
     userPriorityJson,
+    timeZone: tz,
   });
   const headline = selectHeadlinePhaseRow(rows);
   // The lagged rows are served with their narrated `interpretation` intact, so
@@ -239,6 +241,7 @@ export const GET = apiHandler(async () => {
     phaseByDay,
     measurements,
     userPriorityJson,
+    timeZone: tz,
     locale,
   });
 

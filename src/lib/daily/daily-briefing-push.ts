@@ -33,7 +33,7 @@ import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import type { ServerTranslator } from "@/lib/i18n/server-translator";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
-import { userDayKey } from "@/lib/tz/format";
+import { userDayKey, DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
 import { loadDailyDigest } from "@/lib/daily/load-digest";
 import type { DailyDigest } from "@/lib/daily/digest";
@@ -175,7 +175,7 @@ export async function maybeDispatchDailyBriefing(
       return "opted-out";
     }
 
-    const tz = user.timezone || "Europe/Berlin";
+    const tz = user.timezone || DEFAULT_TIMEZONE;
     const { hour } = wallClockInTz(now, tz);
     if (
       hour < DAILY_BRIEFING_MORNING_EARLIEST_HOUR ||

@@ -308,11 +308,12 @@ export async function generateMetricStatus(args: {
   // straight from the deduped per-night TIME-ASLEEP `points` instead, so every
   // recent/weekly/monthly/yearly bucket is a night total, not a stage sum.
   const graded = isSleep
-    ? buildGradedSeriesFromPoints(points, now)
+    ? buildGradedSeriesFromPoints(points, now, userTz)
     : await buildGradedSeriesWithRollups(
         args.userId,
         meta.measurementType,
         now,
+        userTz,
       );
   const summary = summarizeSeries(
     series.daily.map((bucket) => ({ value: bucket.value })),

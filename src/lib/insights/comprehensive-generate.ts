@@ -886,6 +886,7 @@ export async function generateComprehensiveInsight(
     userId,
     dbUser?.displayName ?? null,
     locale,
+    await resolveUserTimezone(userId),
   );
   const systemPrompt = buildSystemPromptWithReferences(
     locale,

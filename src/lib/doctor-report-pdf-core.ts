@@ -22,7 +22,6 @@ import {
 import { getUnitForType } from "./validations/measurement";
 import {
   makeFormatters,
-  DISPLAY_TIMEZONE,
   type DateFormatPreference,
   type TimeFormatPreference,
 } from "./format-locale";
@@ -39,6 +38,7 @@ import {
   pdfCursorState,
   type DoctorReportPdfRenderContext,
 } from "./doctor-report-pdf/render-context";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type T = (key: string, params?: Record<string, string | number>) => string;
 
@@ -236,7 +236,7 @@ export function buildDoctorReportPdfDocument(
     formatters.number(value, decimals);
   const fmtDate = (iso: string) => formatters.date(iso);
   const footerTz =
-    userTz && isValidTimezone(userTz) ? userTz : DISPLAY_TIMEZONE;
+    userTz && isValidTimezone(userTz) ? userTz : DEFAULT_TIMEZONE;
 
   const unitFor = (type: string): string => {
     const staticUnit = DOCTOR_REPORT_TYPE_UNIT_KEYS[type];

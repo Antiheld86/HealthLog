@@ -40,7 +40,8 @@ import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutati
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
 import { MOOD_ENUM_BY_SCORE } from "@/lib/mood/labels";
 import { getScoreForMood } from "@/lib/validations/mood";
-import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { moodDateKey } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { deriveA1 } from "@/lib/mood/level-a";
 import {
   classifyExternalId,

@@ -42,6 +42,7 @@ import {
   enqueueNarrativeWarm,
   type PeriodNarrativePayload,
 } from "@/lib/jobs/period-narrative-shared";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 export { PERIOD_NARRATIVE_QUEUE, PERIOD_NARRATIVE_CRON, enqueueNarrativeWarm };
 export type { PeriodNarrativePayload };
@@ -74,7 +75,7 @@ export interface NarrativeWarmRunResult {
  */
 export function periodsForDay(
   now: Date,
-  tz = "Europe/Berlin",
+  tz = DEFAULT_TIMEZONE,
 ): NarrativePeriod[] {
   // Resolve the local weekday + day-of-month in the maintenance-window tz so
   // the boundary matches the user-facing calendar, not UTC.

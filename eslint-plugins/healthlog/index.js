@@ -10,6 +10,8 @@
  *                              and no off-scale `5` step on a bg-card shell.
  *   - `job-handler-outcome`  — pg-boss bindings route through createAndWork,
  *                              whose handler returns a JobOutcome.
+ *   - `no-default-zone-literal` — the default zone is DEFAULT_TIMEZONE from
+ *                              src/lib/tz/format, never written out.
  */
 
 "use strict";
@@ -20,6 +22,7 @@ const apiFetchRequired = require("./api-fetch-required.js");
 const noRawPaletteColor = require("./no-raw-palette-color.js");
 const spacingScale = require("./spacing-scale.js");
 const jobHandlerOutcome = require("./job-handler-outcome.js");
+const noDefaultZoneLiteral = require("./no-default-zone-literal.js");
 
 module.exports = {
   rules: {
@@ -34,5 +37,6 @@ module.exports = {
     // the semantic sweep). See the rule header.
     "no-dracula-utility": noRawPaletteColor,
     "job-handler-outcome": jobHandlerOutcome,
+    "no-default-zone-literal": noDefaultZoneLiteral,
   },
 };

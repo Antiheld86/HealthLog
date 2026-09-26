@@ -46,6 +46,7 @@ import {
   isRecordOnly,
   scheduleWireFields,
 } from "@/lib/medications/intake-tracking";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -175,7 +176,7 @@ export const GET = apiHandler(
       },
       schedules: liveSchedules,
       now,
-      userTz: user.timezone || "Europe/Berlin",
+      userTz: user.timezone || DEFAULT_TIMEZONE,
       lastIntakeAt: lastIntake?.takenAt ?? null,
       resolvedSlots: resolvedRows.map(toResolvedSlotMark),
       eraStart: latestRevision?.validUntil ?? null,
@@ -603,7 +604,7 @@ export const PUT = apiHandler(
       // `syncVersion` so delta-sync clients drop them. The projector and
       // the reminder worker re-mint the anchors for the new times on their
       // next pass — the route does not pre-create them.
-      const userTz = user.timezone || "Europe/Berlin";
+      const userTz = user.timezone || DEFAULT_TIMEZONE;
       const { start: todayStart } = getUserTodayBounds(new Date(), userTz);
       const tombstoneWhere = {
         userId: user.id,

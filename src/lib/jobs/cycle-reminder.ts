@@ -48,6 +48,7 @@ import { dispatchNotification } from "@/lib/notifications/dispatcher";
 import type { EventType } from "@/lib/notifications/types";
 import { isCycleReminderClientManaged } from "@/lib/validations/notification-prefs";
 import { getEvent } from "@/lib/logging/context";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * Local-time hour (0–23) at which the daily cycle reminder fires. 09:00 is
@@ -138,7 +139,7 @@ export function cycleReminderLocalDate(
   now: Date,
   timezone: string,
 ): string | null {
-  const parts = wallClockInTz(now, timezone || "Europe/Berlin");
+  const parts = wallClockInTz(now, timezone || DEFAULT_TIMEZONE);
   if (parts.hour !== CYCLE_REMINDER_LOCAL_HOUR) return null;
   return `${parts.year.toString().padStart(4, "0")}-${parts.month
     .toString()
@@ -386,7 +387,7 @@ export async function runCycleReminderTick(
         continue;
       }
 
-      const timezone = user.timezone || "Europe/Berlin";
+      const timezone = user.timezone || DEFAULT_TIMEZONE;
       const today = cycleReminderLocalDate(now, timezone);
       if (!today) {
         summary.skippedOutsideWindow += 1;
