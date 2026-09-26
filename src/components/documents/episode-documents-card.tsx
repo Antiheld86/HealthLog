@@ -32,6 +32,7 @@ import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import type { InboundDocumentDto } from "@/lib/validations/inbound-documents";
 import { DocumentLinkPicker } from "./document-link-picker";
+import { ImportFromSourceButton } from "./sources/import-from-source-button";
 import { DOCUMENT_KIND_ICONS } from "./document-kind-meta";
 import { documentDateKey } from "./vault-utils";
 
@@ -167,6 +168,9 @@ export function EpisodeDocumentsCard({ episodeId }: { episodeId: string }) {
                     {t("documents.episodeCard.upload")}
                   </Link>
                 </Button>
+                <ImportFromSourceButton
+                  link={{ kind: "conditionEpisode", id: episodeId }}
+                />
               </>
             ) : null}
             {hasMore ? (

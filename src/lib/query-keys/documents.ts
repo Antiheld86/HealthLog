@@ -81,4 +81,27 @@ export const documentKeys = {
    * toggle; a flip invalidates the document AI capability probe.
    */
   documentsAutoAiRead: () => ["documents", "auto-ai-read"] as const,
+  /**
+   * The document picker (#1038): its own top-level prefix, deliberately NOT
+   * under `["documents"]`. Every vault write invalidates that prefix, and a
+   * search or tag read here is a request to the person's Paperless-ngx or
+   * Papra instance; a filing action in the vault must not re-send them.
+   */
+  documentSources: () => ["documentSources"] as const,
+  /** Availability + the person's connections (`GET /api/documents/sources`). */
+  documentSourcesStatus: () => ["documentSources", "status"] as const,
+  /** One source's tags for the filter. */
+  documentSourceTags: (system: string) =>
+    ["documentSources", "tags", system] as const,
+  /** One page of one source's search. */
+  documentSourceSearch: (system: string, search: DocumentSourceSearchKey) =>
+    ["documentSources", "search", system, search] as const,
 };
+
+/** The facets that make one picker search distinct from another. */
+export interface DocumentSourceSearchKey {
+  q: string;
+  tag?: string;
+  from?: string;
+  to?: string;
+}

@@ -67,6 +67,7 @@ import { DocumentShareSheet } from "./document-share-sheet";
 import { DocumentFilterBar, type ConditionChip } from "./document-filter-bar";
 import { DocumentTimeline } from "./document-timeline";
 import { UploadZone } from "./upload-zone";
+import { ImportFromSourceButton } from "./sources/import-from-source-button";
 import { useReindexAll } from "./use-content-index";
 import { useDocumentUpload } from "./use-document-upload";
 import { usePageFileDrop } from "./use-page-file-drop";
@@ -876,13 +877,17 @@ export function DocumentsView() {
         description={t("documents.subtitle")}
         actions={
           canManageDocuments ? (
-            <Button
-              className="min-h-11 sm:min-h-9"
-              onClick={() => uploadInputRef.current?.click()}
-            >
-              <Upload className="size-4" aria-hidden />
-              {t("documents.pageUpload")}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Renders only with a connected Paperless-ngx or Papra. */}
+              <ImportFromSourceButton className="min-h-11 sm:min-h-9" />
+              <Button
+                className="min-h-11 sm:min-h-9"
+                onClick={() => uploadInputRef.current?.click()}
+              >
+                <Upload className="size-4" aria-hidden />
+                {t("documents.pageUpload")}
+              </Button>
+            </div>
           ) : null
         }
       />
