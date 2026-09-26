@@ -29,6 +29,9 @@ const eslintConfig = defineConfig([
     "coverage/**",
     "playwright-report/**",
     "test-results/**",
+    // Third-party OCR engine copied from node_modules at prebuild/predev by
+    // scripts/stage-tesseract-assets.mjs; gitignored, minified, not ours.
+    "public/tesseract/**",
   ]),
   // Factory enforcement for every client module: all components/hooks plus
   // `"use client"` app/lib modules. Tests and `src/lib/query-keys/**` own
