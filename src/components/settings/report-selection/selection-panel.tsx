@@ -48,6 +48,11 @@ import { ReportVisitOffer } from "./report-visit-offer";
 import { Switch } from "@/components/ui/switch";
 import { useRovingRadioGroup } from "@/hooks/use-roving-radio-group";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
+import {
+  recentProofErrorMessage,
+  throwIfReproofRequired,
+  useRecentProof,
+} from "@/components/settings/security-section/use-recent-proof";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
@@ -66,6 +71,9 @@ type ExportFormat = "pdf" | "fhir" | "package";
 
 const EXPORT_FORMATS: readonly ExportFormat[] = ["pdf", "fhir", "package"];
 const PRESET_RANGES = [30, 90, 180, 365] as const;
+
+/** A refusal already worded for the panel; shown as it is. */
+class ReportRequestError extends Error {}
 
 export function HealthRecordExportPanel() {
   const { t, locale } = useTranslations();
@@ -119,18 +127,40 @@ export function HealthRecordExportPanel() {
     onSelect: (index) => setFormat(EXPORT_FORMATS[index]!),
   });
 
+  // The report is built from the whole record, so it asks for a fresh proof
+  // unless the session signed in or re-proved within five minutes.
+  const recentProof = useRecentProof();
+
   async function handleGenerate() {
     setBusy(true);
     setError(null);
     try {
-      const range =
-        customRange && startDate && endDate
-          ? {
-              startDate: new Date(`${startDate}T00:00:00Z`).toISOString(),
-              endDate: new Date(`${endDate}T23:59:59Z`).toISOString(),
-            }
-          : { days };
-      const res = await apiFetchRaw("/api/export/health-record", {
+      await recentProof.run(generateOnce);
+    } catch (err) {
+      if (err instanceof ReportRequestError) {
+        setError(err.message);
+        return;
+      }
+      const message = recentProofErrorMessage(
+        err,
+        err instanceof Error ? err.message : String(err),
+      );
+      if (message) setError(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generateOnce() {
+    const range =
+      customRange && startDate && endDate
+        ? {
+            startDate: new Date(`${startDate}T00:00:00Z`).toISOString(),
+            endDate: new Date(`${endDate}T23:59:59Z`).toISOString(),
+          }
+        : { days };
+    const res = await throwIfReproofRequired(
+      await apiFetchRaw("/api/export/health-record", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -144,38 +174,33 @@ export function HealthRecordExportPanel() {
           includeCharts,
           selection: { v: 2, leaves: orderLeaves(selected) },
         }),
-      });
-      if (!res.ok) {
-        setError(
-          res.status === 429
-            ? t("settings.healthRecord.errorRateLimit")
-            : res.status === 403
-              ? t("settings.healthRecord.errorModuleDisabled")
-              : t("settings.healthRecord.errorGeneric"),
-        );
-        return;
-      }
-      const blob = await res.blob();
-      const ext = format === "pdf" ? "pdf" : format === "fhir" ? "json" : "zip";
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `healthlog-health-record-${new Date()
-        .toISOString()
-        .slice(0, 10)}.${ext}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      // The route just persisted the practice name and the selection, so the
-      // cached `/me` payload is stale. Refresh it, or a remount would seed from
-      // the previous values.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
+      }),
+    );
+    if (!res.ok) {
+      throw new ReportRequestError(
+        res.status === 429
+          ? t("settings.healthRecord.errorRateLimit")
+          : res.status === 403
+            ? t("settings.healthRecord.errorModuleDisabled")
+            : t("settings.healthRecord.errorGeneric"),
+      );
     }
+    const blob = await res.blob();
+    const ext = format === "pdf" ? "pdf" : format === "fhir" ? "json" : "zip";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `healthlog-health-record-${new Date()
+      .toISOString()
+      .slice(0, 10)}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    // The route just persisted the practice name and the selection, so the
+    // cached `/me` payload is stale. Refresh it, or a remount would seed from
+    // the previous values.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
   }
 
   return (
@@ -397,6 +422,7 @@ export function HealthRecordExportPanel() {
           </p>
         )}
       </div>
+      {recentProof.dialog}
     </SettingsCard>
   );
 }

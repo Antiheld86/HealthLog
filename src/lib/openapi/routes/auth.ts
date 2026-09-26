@@ -332,7 +332,7 @@ const MFA_MANAGEMENT_AUTH_NOTE =
   " Accepts a cookie session, or a Bearer token presenting a single-use elevation from POST /api/auth/step-up in the `X-Step-Up` header; a Bearer token alone is still refused.";
 
 const ENROLLMENT_PROOF_NOTE =
-  "\n\nAdding a factor needs a fresh proof, not just a session. On the Bearer path the elevation is that proof (a password-proved one is enough). On the cookie path the request passes when the session signed in, or completed a second factor, within the last five minutes; otherwise the body must carry a proof in the shape POST /api/auth/step-up takes (`password`, a `totp` code from an already confirmed authenticator, or a passkey / security-key assertion begun at POST /api/auth/passkey/register-options). Without one the answer is 401 `auth.reproof.required`; a proof that does not verify is 401 `auth.reproof.failed` and is audited. Proofs draw on the account's shared re-proof budget of five per fifteen minutes (429 once spent), the same budget as the step-up mint.";
+  "\n\nAdding a factor needs a fresh proof, not just a session. On the Bearer path the elevation is that proof: a password-proved one is enough on an account without a second factor, and on an account that already has one the elevation must come from that factor or a passkey. On the cookie path, for an account without a second factor, the request passes when the session signed in, or completed a passkey sign-in, within the last five minutes; otherwise the body must carry a proof in the shape POST /api/auth/step-up takes (`password`, or a passkey assertion begun at POST /api/auth/passkey/register-options). For an account that already has a second factor, only that factor counts: a second factor completed within the last five minutes, or a `totp` code, security-key or passkey assertion in the body. A password or a young session (for example one that skipped the factor on a remembered browser) is not enough there. Without one the answer is 401 `auth.reproof.required` with `meta.methods` naming the proofs the account can give; a proof that does not verify is 401 `auth.reproof.failed` and is audited. Proofs draw on the account's shared re-proof budget of five per fifteen minutes (429 once spent), the same budget as the step-up mint.";
 
 const enrollmentProofResponses = {
   "401": {
@@ -2023,7 +2023,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Cookie-only — a Bearer token cannot enroll a sign-in credential on this surface at any scope. The route has TWO arms and the body decides which.\n\n" +
         '**Re-proof arm.** A body of exactly `{ method: "passkey" }` or `{ method: "webauthn" }` begins an assertion ceremony WITHOUT beginning enrollment, and answers with `reauth: true` alongside the options. Use it to obtain the assertion the second arm needs.\n\n' +
-        "**Enrollment arm.** Any other body must be a full factor proof (the same shape POST /api/auth/step-up takes): a password, a TOTP code, or a completed passkey / security-key assertion. Only then are registration options issued.\n\n" +
+        "**Enrollment arm.** Any other body must be a full factor proof (the same shape POST /api/auth/step-up takes): a password, a TOTP code, or a completed passkey / security-key assertion. Only then are registration options issued. On an account that already has a second factor a password is refused before it is checked, with 422 `auth.reproof.too_weak` and `meta.methods` naming the proofs that work: a passkey added on the password alone would sign in without the second factor from then on.\n\n" +
         "Which factor you prove changes the session, and the direction is not the obvious one: a strong proof stamps the session second-factor-verified, while a PASSWORD proof deliberately CLEARS that stamp. Registering with a password is authorised by the single-use, session-bound challenge alone and must not silently upgrade password-only authentication into something the rest of the app reads as a second factor.\n\n" +
         "Every refusal on the proof path is the same 401 with the same prose — a missing content type, an unparseable body, a body that is not a valid proof shape, and a wrong password are indistinguishable to the caller. A `totp` proof counts only from an authenticator whose enrollment was confirmed.\n\n" +
         "Each proof on the enrollment arm draws on the account's shared re-proof budget (five per fifteen minutes, the same budget as POST /api/auth/step-up), and every failed proof writes an `auth.mfa.failed` audit row. Once the budget is spent the answer is 429 until the window passes, even for a correct proof.",
@@ -2060,6 +2060,11 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+        "422": {
+          description:
+            "`auth.reproof.too_weak`: a password on an account that already has a second factor. `meta.methods` names the proofs that would be accepted. Refused before the password is checked, so it spends no attempt.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "401": {
           description:
             "No cookie session, or no acceptable existing-factor proof. One message covers every proof failure so the response cannot be used to probe which part was wrong.",

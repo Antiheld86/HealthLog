@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecentProof } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { apiError, getClientIp } from "@/lib/api-response";
@@ -24,12 +24,23 @@ import { NextRequest, NextResponse } from "next/server";
  * Export user data.
  * Query params:
  *   format: "csv" | "json" (default: json)
- *   type: "measurements" | "medications" | "intake" | "all" (default: all)
+ *   type: "measurements" | "medications" | "intake" | "mood" | "all"
+ *         (default: all)
  *
- * Re-authentication is required via session (user must be logged in).
+ * `type=all` (the default) is the whole record in one file, so it takes the
+ * same fresh-proof gate as every other whole-record export
+ * (`requireRecentProof`): a browser session must have signed in or re-proved
+ * within five minutes, a token must present a step-up elevation. No shipped
+ * client calls this route with a token. The single-type exports stay on the
+ * session alone, like their dedicated routes under `/api/export/*`.
  */
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const wholeRecord =
+    (new URL(request.url).searchParams.get("type") ?? "all") === "all";
+  const auth = wholeRecord
+    ? await requireRecentProof({ bearer: "elevation" })
+    : { ...(await requireAuth()), commitElevation: async () => {} };
+  const { user } = auth;
 
   const rl = await checkRateLimit(`export:${user.id}`, 10, 60 * 60 * 1000);
   if (!rl.allowed) {
@@ -53,6 +64,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
       422,
     );
   }
+
+  // Spend a Bearer elevation only once the request is about to act.
+  await auth.commitElevation();
 
   const userId = user.id;
   await auditLog("export.download", {

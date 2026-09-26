@@ -13,12 +13,17 @@
  * resolves inside the response and the operation can never quietly carry less
  * than the document does.
  *
- * Read-only; `userId` narrowed from `requireAuth`. Offset paging applies across
+ * Read-only; `userId` narrowed from `requireAuth`. A browser session needs a
+ * recent sign-in or re-proof (`assertRecentCookieProof`). Offset paging applies across
  * the flattened resource list via `_count` (clamped ≤200) / `_offset`.
  */
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import {
+  apiHandler,
+  assertRecentCookieProof,
+  requireAuth,
+} from "@/lib/api-handler";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -32,7 +37,16 @@ import {
 } from "@/lib/fhir/rest";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth(FHIR_READ_SCOPE);
+  const auth = await requireAuth(FHIR_READ_SCOPE);
+  const { user } = auth;
+  // The whole record in one response: a browser session must have signed in
+  // or re-proved within five minutes, like every other whole-record export.
+  // A token is its own proof here, as before: the shipped app and the FHIR
+  // read tokens call this route without an elevation, and a refusal would
+  // read to the app as a dead session.
+  if (auth.authMethod === "cookie") {
+    await assertRecentCookieProof(user, auth.session.id);
+  }
   annotate({ action: { name: "fhir.everything.read" } });
 
   // v1.30 — the FHIR REST face serves the SAME whole-record aggregate as

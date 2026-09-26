@@ -22,7 +22,11 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 
-import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
+import {
+  apiHandler,
+  assertRecentCookieProof,
+  requireRecordAuth,
+} from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -88,7 +92,17 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // v1.37.0 — MANAGE: the doctor report is the one export an invited manager
   // reaches, because it renders a prepared artefact from a declared selection
   // rather than handing over the record whole.
-  const { user, actor } = await requireRecordAuth("manage", "record");
+  const auth = await requireRecordAuth("manage", "record");
+  const { user, actor } = auth;
+  // A whole-record artefact: a browser session must have signed in or
+  // re-proved within five minutes, the gate every whole-record export takes.
+  // The proof is the person at the keyboard, so it is the actor's session
+  // that is asked, whether they export their own record or one they manage.
+  // A token is its own proof here, as before: the shipped app calls this
+  // route with its token and no elevation.
+  if (auth.authMethod === "cookie") {
+    await assertRecentCookieProof(actor, auth.session.id);
+  }
   annotate({ action: { name: "export.health-record.build" } });
 
   // The whole doctor-report surface is the `doctorReport` module. Refuse with

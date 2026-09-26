@@ -73,6 +73,8 @@ function callers(exportName: string): string[] {
 
 /** Routes that resolve their own caller and take the recent-proof gate. */
 const RECENT_PROOF_ROUTES: Record<string, string> = {
+  // `type=all` only; the single-type exports stay on `requireAuth`.
+  "app/api/export/route.ts": "elevation",
   "app/api/export/full-backup/route.ts": "elevation",
   "app/api/export/encrypted/route.ts": "elevation-if-enrolled",
   // The shipped iOS app calls these two on its token without an elevation and
@@ -81,6 +83,17 @@ const RECENT_PROOF_ROUTES: Record<string, string> = {
   "app/api/share-links/route.ts": "token",
   "app/api/mcp/tokens/route.ts": "token",
 };
+
+/**
+ * Routes that resolve a cookie OR a token through their own resolver
+ * (`requireAuth` with a scope, `requireRecordAuth`) and add the cookie arm
+ * only. Their Bearer arm is the token, as with the `token` rule above: the
+ * shipped app calls both with its token and no elevation.
+ */
+const TOKEN_ARM_COOKIE_PROOF_ROUTES = [
+  "app/api/export/health-record/route.ts",
+  "app/api/fhir/Patient/$everything/route.ts",
+].sort();
 
 /** Cookie-only routes that add the gate after their own resolver. */
 const COOKIE_PROOF_ROUTES = [
@@ -112,10 +125,20 @@ describe("the recent-proof gate", () => {
     expect(found).toEqual(RECENT_PROOF_ROUTES);
   });
 
-  it("the cookie arm is added by exactly the known cookie-only routes", () => {
+  it("the cookie arm is added by exactly the known routes", () => {
     const found = callers("assertRecentCookieProof");
     expect(found.length).toBeGreaterThan(0);
-    expect(found).toEqual(COOKIE_PROOF_ROUTES);
+    expect(found).toEqual(
+      [...COOKIE_PROOF_ROUTES, ...TOKEN_ARM_COOKIE_PROOF_ROUTES].sort(),
+    );
+  });
+
+  it("a route that resolves either transport asks only on the cookie", () => {
+    for (const rel of TOKEN_ARM_COOKIE_PROOF_ROUTES) {
+      expect(read(rel), rel).toMatch(
+        /if \(auth\.authMethod === "cookie"\) \{\s*await assertRecentCookieProof\(/,
+      );
+    }
   });
 
   it("each cookie-only route resolves a cookie before it asks", () => {

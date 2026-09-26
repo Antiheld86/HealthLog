@@ -864,7 +864,11 @@ paths:
         `selection` is REQUIRED and carries the leaf inclusion list — membership is inclusion, absence is exclusion, and
         there is no server-side default. An unknown leaf id is a 422 that names it; the retired grouped `sections` shape
         is a 422 too, because accepting it would mean choosing a scope the caller did not express. Auth via cookie or
-        Bearer; shared `export:<userId>` rate bucket (10/h). Strict validation: unknown keys 422."
+        Bearer; shared `export:<userId>` rate bucket (10/h). Strict validation: unknown keys 422. A browser session
+        needs a fresh proof as well as a live one: a sign-in or `POST /api/auth/reproof` within the last five minutes
+        (with a second factor, on an account that has one). Without it the answer is 401 `auth.reproof.required`, with
+        `meta.methods` naming the proofs the account can give. When a manager exports a record they manage, it is their
+        own session that is asked. A Bearer caller is not asked for more than its token."
       requestBody:
         required: true
         content:
@@ -1489,7 +1493,10 @@ paths:
         Conditions, Encounters, AllergyIntolerances, FamilyMemberHistories and the DiagnosticReport (present when the
         window holds a vital sign) — flattened into one `searchset` Bundle. Scoped to the owner's SAVED report
         selection; an account that never saved one gets nothing. Auth: `fhir:read` scope. Offset paging via `_count`
-        (≤200) / `_offset`."
+        (≤200) / `_offset`. A browser session needs a fresh proof as well as a live one: a sign-in or `POST
+        /api/auth/reproof` within the last five minutes (with a second factor, on an account that has one). Without it
+        the answer is 401 `auth.reproof.required`, with `meta.methods` naming the proofs the account can give. A token,
+        including a `fhir:read` one, is not asked for more."
       parameters:
         - in: query
           name: _count
@@ -1524,7 +1531,13 @@ paths:
         notes ride their exported column. Shares the `export:<userId>` bucket with the encrypted variant (10 per hour)
         and audits every attempt as `export.download`. Cookie or Bearer auth; the caller is always resolved as
         themselves, so this download cannot be delegated to a shared record. Not module-gated: a disabled module's rows
-        are still exported, because this is the account's own data leaving on request."
+        are still exported, because this is the account's own data leaving on request. `type=all`, the default, is the
+        whole record and asks for a fresh proof like the full backup; the single-type exports do not. A browser session
+        needs a fresh proof as well as a live one: a sign-in or `POST /api/auth/reproof` within the last five minutes
+        (with a second factor, on an account that has one). Without it the answer is 401 `auth.reproof.required`, with
+        `meta.methods` naming the proofs the account can give. A Bearer caller asking for `type=all` presents an
+        `X-Step-Up` elevation from `POST /api/auth/step-up` (a second-factor one on an account with a second factor) and
+        receives 401 `auth.stepup.required` without it."
       parameters:
         - in: query
           name: format
@@ -2172,14 +2185,18 @@ paths:
         /api/auth/step-up in the `X-Step-Up` header; a Bearer token alone is still refused.
 
 
-        Adding a factor needs a fresh proof, not just a session. On the Bearer path the elevation is that proof (a
-        password-proved one is enough). On the cookie path the request passes when the session signed in, or completed a
-        second factor, within the last five minutes; otherwise the body must carry a proof in the shape POST
-        /api/auth/step-up takes (`password`, a `totp` code from an already confirmed authenticator, or a passkey /
-        security-key assertion begun at POST /api/auth/passkey/register-options). Without one the answer is 401
-        `auth.reproof.required`; a proof that does not verify is 401 `auth.reproof.failed` and is audited. Proofs draw
-        on the account's shared re-proof budget of five per fifteen minutes (429 once spent), the same budget as the
-        step-up mint.
+        Adding a factor needs a fresh proof, not just a session. On the Bearer path the elevation is that proof: a
+        password-proved one is enough on an account without a second factor, and on an account that already has one the
+        elevation must come from that factor or a passkey. On the cookie path, for an account without a second factor,
+        the request passes when the session signed in, or completed a passkey sign-in, within the last five minutes;
+        otherwise the body must carry a proof in the shape POST /api/auth/step-up takes (`password`, or a passkey
+        assertion begun at POST /api/auth/passkey/register-options). For an account that already has a second factor,
+        only that factor counts: a second factor completed within the last five minutes, or a `totp` code, security-key
+        or passkey assertion in the body. A password or a young session (for example one that skipped the factor on a
+        remembered browser) is not enough there. Without one the answer is 401 `auth.reproof.required` with
+        `meta.methods` naming the proofs the account can give; a proof that does not verify is 401 `auth.reproof.failed`
+        and is audited. Proofs draw on the account's shared re-proof budget of five per fifteen minutes (429 once
+        spent), the same budget as the step-up mint.
       requestBody:
         required: false
         content:
@@ -2316,14 +2333,18 @@ paths:
         refused.
 
 
-        Adding a factor needs a fresh proof, not just a session. On the Bearer path the elevation is that proof (a
-        password-proved one is enough). On the cookie path the request passes when the session signed in, or completed a
-        second factor, within the last five minutes; otherwise the body must carry a proof in the shape POST
-        /api/auth/step-up takes (`password`, a `totp` code from an already confirmed authenticator, or a passkey /
-        security-key assertion begun at POST /api/auth/passkey/register-options). Without one the answer is 401
-        `auth.reproof.required`; a proof that does not verify is 401 `auth.reproof.failed` and is audited. Proofs draw
-        on the account's shared re-proof budget of five per fifteen minutes (429 once spent), the same budget as the
-        step-up mint.
+        Adding a factor needs a fresh proof, not just a session. On the Bearer path the elevation is that proof: a
+        password-proved one is enough on an account without a second factor, and on an account that already has one the
+        elevation must come from that factor or a passkey. On the cookie path, for an account without a second factor,
+        the request passes when the session signed in, or completed a passkey sign-in, within the last five minutes;
+        otherwise the body must carry a proof in the shape POST /api/auth/step-up takes (`password`, or a passkey
+        assertion begun at POST /api/auth/passkey/register-options). For an account that already has a second factor,
+        only that factor counts: a second factor completed within the last five minutes, or a `totp` code, security-key
+        or passkey assertion in the body. A password or a young session (for example one that skipped the factor on a
+        remembered browser) is not enough there. Without one the answer is 401 `auth.reproof.required` with
+        `meta.methods` naming the proofs the account can give; a proof that does not verify is 401 `auth.reproof.failed`
+        and is audited. Proofs draw on the account's shared re-proof budget of five per fifteen minutes (429 once
+        spent), the same budget as the step-up mint.
       requestBody:
         required: false
         content:
@@ -3453,7 +3474,9 @@ paths:
 
         **Enrollment arm.** Any other body must be a full factor proof (the same shape POST /api/auth/step-up takes): a
         password, a TOTP code, or a completed passkey / security-key assertion. Only then are registration options
-        issued.
+        issued. On an account that already has a second factor a password is refused before it is checked, with 422
+        `auth.reproof.too_weak` and `meta.methods` naming the proofs that work: a passkey added on the password alone
+        would sign in without the second factor from then on.
 
 
         Which factor you prove changes the session, and the direction is not the obvious one: a strong proof stamps the
@@ -3500,7 +3523,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": *a4
+        "422":
+          description: "`auth.reproof.too_weak`: a password on an account that already has a second factor. `meta.methods` names
+            the proofs that would be accepted. Refused before the password is checked, so it spends no attempt."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "429": *a5
   /api/auth/passkey/register-verify:
     post:
