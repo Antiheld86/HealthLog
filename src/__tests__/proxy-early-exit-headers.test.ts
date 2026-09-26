@@ -23,6 +23,7 @@ vi.mock("@/lib/process-type", () => ({
 }));
 
 import { proxy } from "../proxy";
+import { applyBypassRouteHeaders } from "@/lib/http/proxy-bypass-routes";
 
 function makeRequest(
   pathname: string,
@@ -60,6 +61,10 @@ function expectBaselineHeaders(res: Response) {
   );
   expect(res.headers.get("Permissions-Policy")).toContain("camera=()");
   expect(res.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
+  expect(res.headers.get("Cross-Origin-Resource-Policy")).toBe("same-origin");
+  expect(res.headers.get("Cross-Origin-Embedder-Policy")).toBe(
+    "credentialless",
+  );
   expect(res.headers.get("X-Permitted-Cross-Domain-Policies")).toBe("none");
   expect(res.headers.get("Strict-Transport-Security")).toContain(
     "max-age=31536000",
@@ -115,5 +120,24 @@ describe("proxy early exits carry the baseline security headers", () => {
     expect(res.headers.get("Strict-Transport-Security")).toBeNull();
     // The non-transport-dependent headers still attach.
     expect(res.headers.get("X-Frame-Options")).toBe("DENY");
+  });
+});
+
+describe("the routes that bypass the proxy", () => {
+  it("carry the same cross-origin headers the proxy sets on a full response", () => {
+    const viaProxy = proxy(makeRequest("/api/health"));
+    const headers = new Headers();
+    applyBypassRouteHeaders(headers);
+    for (const name of [
+      "Cross-Origin-Opener-Policy",
+      "Cross-Origin-Resource-Policy",
+      "Cross-Origin-Embedder-Policy",
+      "X-Content-Type-Options",
+      "X-Frame-Options",
+      "X-Permitted-Cross-Domain-Policies",
+      "Strict-Transport-Security",
+    ]) {
+      expect(headers.get(name), name).toBe(viaProxy.headers.get(name));
+    }
   });
 });

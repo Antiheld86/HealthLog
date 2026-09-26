@@ -70,6 +70,12 @@ export function setBaselineSecurityHeaders(headers: Headers): void {
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  // The same pair the proxy sets on every page and API response. The bypass
+  // routes (uploads, imports, native batches) answered without them, so a
+  // cross-origin page could embed one of their JSON answers as a no-cors
+  // subresource where every other route refuses it.
+  headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  headers.set("Cross-Origin-Embedder-Policy", "credentialless");
   headers.set("X-Permitted-Cross-Domain-Policies", "none");
   if (process.env.NODE_ENV !== "development") {
     headers.set(

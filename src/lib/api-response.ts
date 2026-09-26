@@ -491,6 +491,33 @@ function warnTrustViolationOnce(hops: number, chainLength: number): void {
 }
 
 /**
+ * Once per process: forwarding headers arrived that the configured trust
+ * does not let us read, so the client address resolves to nothing. The
+ * common cause is `TRUST_PROXY_HOPS=0` behind a proxy that sends only
+ * `X-Real-IP` (nginx's usual setup), or `TRUST_PROXY_HOPS` of 2 or more with
+ * no `X-Forwarded-For`. Every anonymous caller then shares one rate-limit
+ * bucket, so one person mistyping a password can hold the sign-in back for
+ * everybody, and the operator had no way to see why.
+ */
+let unreadProxyHeadersWarned = false;
+
+/** Test-only reset for {@link warnUnreadProxyHeadersOnce}. */
+export function _resetUnreadProxyHeadersWarningForTests(): void {
+  unreadProxyHeadersWarned = false;
+}
+
+function warnUnreadProxyHeadersOnce(hops: number, header: string): void {
+  if (unreadProxyHeadersWarned) return;
+  unreadProxyHeadersWarned = true;
+  console.warn(
+    `[getClientIp] requests carry ${header} but TRUST_PROXY_HOPS=${hops} does not allow reading it, so client addresses resolve to nothing and every anonymous caller shares one rate-limit bucket. ` +
+      (hops === 0
+        ? "If a proxy you control sits in front of HealthLog, set TRUST_PROXY_HOPS=1."
+        : "X-Real-IP is only read with TRUST_PROXY_HOPS=1; with more hops, have the proxies send X-Forwarded-For."),
+  );
+}
+
+/**
  * Tagged return shape so a caller can apply a tighter universal
  * rate-limit when the trust chain is misconfigured. F-6 (mobile security
  * audit, 2026-05-16): callers today fall back to a literal `"unknown"`
@@ -546,17 +573,32 @@ export function getClientIpOrTrustWarning(request: Request): {
       return { ip: null, trustViolation: true };
     }
     // x-real-ip is a forwarding header like XFF and gets the same trust: only
-    // when the operator declares a proxy in front (hops > 0), and only as the
+    // when the operator declares a proxy in front, and only as the
     // single-proxy stand-in for a missing XFF. It used to be read on every
     // path, including `TRUST_PROXY_HOPS=0` ("no proxy, trust no header") and
     // the broken-chain path above, so a caller sending a fresh x-real-ip per
     // request got a fresh per-IP rate-limit bucket each time.
+    //
+    // Exactly one hop, not "one or more". X-Real-IP holds a single address,
+    // set by whichever proxy wrote it last; with two or more hops declared,
+    // the outer proxy may pass through whatever the caller put there, and
+    // the chain the hop count describes is the XFF chain, which is absent.
     const realIp = request.headers.get("x-real-ip")?.trim();
-    return {
-      ip: realIp && looksLikeIp(realIp) ? realIp : null,
-      trustViolation: false,
-    };
+    if (hops === 1) {
+      return {
+        ip: realIp && looksLikeIp(realIp) ? realIp : null,
+        trustViolation: false,
+      };
+    }
+    if (realIp) warnUnreadProxyHeadersOnce(hops, "X-Real-IP");
+    return { ip: null, trustViolation: false };
   }
+  const unread = request.headers.has("x-forwarded-for")
+    ? "X-Forwarded-For"
+    : request.headers.has("x-real-ip")
+      ? "X-Real-IP"
+      : null;
+  if (unread) warnUnreadProxyHeadersOnce(hops, unread);
   return { ip: null, trustViolation: false };
 }
 

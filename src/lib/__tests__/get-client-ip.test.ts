@@ -3,6 +3,7 @@ import {
   getClientIp,
   getClientIpOrTrustWarning,
   _resetTrustViolationWarningForTests,
+  _resetUnreadProxyHeadersWarningForTests,
 } from "../api-response";
 
 const ORIGINAL_HOPS = process.env.TRUST_PROXY_HOPS;
@@ -12,6 +13,7 @@ beforeEach(() => {
   delete process.env.TRUST_PROXY_HOPS;
   delete process.env.TRUST_CF_CONNECTING_IP;
   _resetTrustViolationWarningForTests();
+  _resetUnreadProxyHeadersWarningForTests();
 });
 
 afterEach(() => {
@@ -202,6 +204,49 @@ describe("getClientIp trust-violation warning (F-6, 2026-05-16)", () => {
  * without Cloudflare in front cannot be tricked by an attacker
  * setting the header directly.
  */
+describe("X-Real-IP with two or more hops, and headers the trust cannot read", () => {
+  it("does not read X-Real-IP when two hops are declared and XFF is missing", () => {
+    process.env.TRUST_PROXY_HOPS = "2";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // A caller behind the outer proxy could have written it.
+      expect(getClientIp(makeRequest({ "x-real-ip": "9.9.9.9" }))).toBeNull();
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toMatch(/X-Real-IP/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("warns once when TRUST_PROXY_HOPS=0 and a proxy sends only X-Real-IP", () => {
+    process.env.TRUST_PROXY_HOPS = "0";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (let i = 0; i < 3; i++) {
+        expect(
+          getClientIp(makeRequest({ "x-real-ip": `10.0.0.${i}` })),
+        ).toBeNull();
+      }
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toMatch(/TRUST_PROXY_HOPS=0/);
+      expect(warn.mock.calls[0][0]).toMatch(/TRUST_PROXY_HOPS=1/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("stays quiet with TRUST_PROXY_HOPS=0 and no forwarding header", () => {
+    process.env.TRUST_PROXY_HOPS = "0";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(getClientIp(makeRequest({}))).toBeNull();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
 describe("getClientIp Cloudflare cf-connecting-ip branch (v1.4.37)", () => {
   it("returns cf-connecting-ip when the env flag is on and the header is present", () => {
     process.env.TRUST_CF_CONNECTING_IP = "1";
