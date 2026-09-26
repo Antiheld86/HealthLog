@@ -35,6 +35,8 @@ vi.mock("../client", async (importOriginal) => {
 
 import { syncUserOuraCyclePhases } from "../cycle-sync";
 
+const WINDOW = { startDate: "2026-09-20", endDate: "2026-09-27" };
+
 function uniqueViolation() {
   const err = new Error("Unique constraint failed") as Error & {
     code: string;
@@ -52,7 +54,7 @@ beforeEach(() => {
 
 describe("syncUserOuraCyclePhases", () => {
   it("no-ops without touching the DB when the collection is empty", async () => {
-    const created = await syncUserOuraCyclePhases("u1", "tok", 7);
+    const created = await syncUserOuraCyclePhases("u1", "tok", WINDOW);
     expect(created).toBe(0);
     expect(isCycleAvailableMock).not.toHaveBeenCalled();
     expect(createMock).not.toHaveBeenCalled();
@@ -63,7 +65,7 @@ describe("syncUserOuraCyclePhases", () => {
       { day: "2026-06-08", phase: "luteal" },
       { day: "2026-06-09", phase: "luteal" },
     ]);
-    const created = await syncUserOuraCyclePhases("u1", "tok", 7);
+    const created = await syncUserOuraCyclePhases("u1", "tok", WINDOW);
     expect(created).toBe(0);
     expect(isCycleAvailableMock).not.toHaveBeenCalled();
   });
@@ -73,7 +75,7 @@ describe("syncUserOuraCyclePhases", () => {
       { day: "2026-06-05", phase: "menstrual" },
     ]);
     isCycleAvailableMock.mockResolvedValue(false);
-    const created = await syncUserOuraCyclePhases("u1", "tok", 7);
+    const created = await syncUserOuraCyclePhases("u1", "tok", WINDOW);
     expect(created).toBe(0);
     expect(createMock).not.toHaveBeenCalled();
   });
@@ -82,7 +84,7 @@ describe("syncUserOuraCyclePhases", () => {
     fetchCyclePhasesMock.mockResolvedValue([
       { day: "2026-06-05", phase: "menstrual" },
     ]);
-    const created = await syncUserOuraCyclePhases("u1", "tok", 7);
+    const created = await syncUserOuraCyclePhases("u1", "tok", WINDOW);
     expect(created).toBe(1);
     expect(createMock).toHaveBeenCalledWith({
       data: {
@@ -100,7 +102,7 @@ describe("syncUserOuraCyclePhases", () => {
       { day: "2026-06-05", phase: "menstrual" },
     ]);
     createMock.mockRejectedValue(uniqueViolation());
-    const created = await syncUserOuraCyclePhases("u1", "tok", 7);
+    const created = await syncUserOuraCyclePhases("u1", "tok", WINDOW);
     expect(created).toBe(0);
   });
 
@@ -112,7 +114,7 @@ describe("syncUserOuraCyclePhases", () => {
     createMock
       .mockRejectedValueOnce(uniqueViolation()) // 06-05 already logged (manual)
       .mockResolvedValueOnce({ id: "cdl-2" }); // 06-06 genuinely empty
-    const created = await syncUserOuraCyclePhases("u1", "tok", 7);
+    const created = await syncUserOuraCyclePhases("u1", "tok", WINDOW);
     expect(created).toBe(1);
     expect(createMock).toHaveBeenCalledTimes(2);
   });
@@ -125,7 +127,7 @@ describe("syncUserOuraCyclePhases", () => {
     createMock
       .mockRejectedValueOnce(new Error("connection reset"))
       .mockResolvedValueOnce({ id: "cdl-2" });
-    const created = await syncUserOuraCyclePhases("u1", "tok", 7);
+    const created = await syncUserOuraCyclePhases("u1", "tok", WINDOW);
     // The failing day is skipped (warned, not thrown); the healthy sibling
     // still writes.
     expect(created).toBe(1);
@@ -133,7 +135,7 @@ describe("syncUserOuraCyclePhases", () => {
 
   it("propagates the Oura fetch error to the caller (the sync layer decides how to swallow it)", async () => {
     fetchCyclePhasesMock.mockRejectedValue(new Error("403 forbidden"));
-    await expect(syncUserOuraCyclePhases("u1", "tok", 7)).rejects.toThrow(
+    await expect(syncUserOuraCyclePhases("u1", "tok", WINDOW)).rejects.toThrow(
       "403 forbidden",
     );
     expect(createMock).not.toHaveBeenCalled();
@@ -144,7 +146,7 @@ describe("syncUserOuraCyclePhases", () => {
       { day: "2026-06-05", phase: "menstrual" },
     ]);
     findUserMock.mockResolvedValue(null);
-    await syncUserOuraCyclePhases("u1", "tok", 7);
+    await syncUserOuraCyclePhases("u1", "tok", WINDOW);
     expect(createMock).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ tz: null }) }),
     );
@@ -155,7 +157,7 @@ describe("syncUserOuraCyclePhases", () => {
       { day: "2026-06-08", phase: "luteal" },
       { day: "2026-06-09", phase: "follicular" },
     ]);
-    const created = await syncUserOuraCyclePhases("u1", "tok", 7);
+    const created = await syncUserOuraCyclePhases("u1", "tok", WINDOW);
     expect(created).toBe(1);
     expect(createMock).toHaveBeenCalledWith(
       expect.objectContaining({

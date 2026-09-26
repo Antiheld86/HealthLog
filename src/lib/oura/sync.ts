@@ -509,11 +509,14 @@ export async function syncUserOura(
   try {
     const freshConn = await getOuraConnection(userId);
     if (freshConn) {
-      await syncUserOuraCyclePhases(
-        userId,
-        freshConn.accessToken,
-        lookbackDays,
+      const cycleToday = userDayKey(
+        new Date(),
+        await resolveUserTimezone(userId),
       );
+      await syncUserOuraCyclePhases(userId, freshConn.accessToken, {
+        startDate: shiftDateKey(cycleToday, -lookbackDays),
+        endDate: cycleToday,
+      });
     }
   } catch (err) {
     getEvent()?.addWarning(
