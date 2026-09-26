@@ -52,6 +52,7 @@ import { annotate } from "@/lib/logging/context";
 import {
   REPROOF_FAILED_CODE,
   recordReproofFailure,
+  refundReproof,
   throttleReproof,
   verifyExistingFactorProof,
 } from "@/lib/auth/existing-factor-proof";
@@ -109,6 +110,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
       errorCode: REPROOF_FAILED_CODE,
     });
   }
+
+  await refundReproof(user.id);
 
   const now = new Date();
   await prisma.session.update({

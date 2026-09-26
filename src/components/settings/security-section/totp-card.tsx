@@ -36,7 +36,9 @@ import { RecoveryCodesPanel } from "./recovery-codes-panel";
 import {
   ExistingFactorReauthDialog,
   isReproofRequired,
+  offeredReauthMethods,
   type ExistingFactorProof,
+  type ReauthMethod,
 } from "./existing-factor-reauth-dialog";
 
 interface SetupData {
@@ -128,6 +130,11 @@ export function TotpCard({
   // call is retried with it from the dialog.
   const [reauthOpen, setReauthOpen] = useState(false);
   const [reauthError, setReauthError] = useState<string | null>(null);
+  const [reauthMethods, setReauthMethods] = useState<ReauthMethod[]>([
+    "password",
+    "passkey",
+    "webauthn",
+  ]);
 
   const beginSetup = useMutation({
     mutationFn: async (proof?: ExistingFactorProof) => {
@@ -148,6 +155,8 @@ export function TotpCard({
     },
     onError: (err, proof) => {
       if (isReproofRequired(err)) {
+        const offered = offeredReauthMethods(err);
+        if (offered) setReauthMethods(offered);
         setError(null);
         setReauthError(null);
         setReauthOpen(true);
@@ -278,7 +287,7 @@ export function TotpCard({
             setReauthOpen(open);
             if (!open) setReauthError(null);
           }}
-          methods={["password", "passkey", "webauthn"]}
+          methods={reauthMethods}
           pending={beginSetup.isPending}
           error={reauthError}
           onProof={(proof) => beginSetup.mutate(proof)}

@@ -44,6 +44,28 @@ export function isReproofRequired(err: unknown): boolean {
   );
 }
 
+const REAUTH_METHODS: readonly ReauthMethod[] = [
+  "password",
+  "totp",
+  "passkey",
+  "webauthn",
+];
+
+/**
+ * The proofs the refusal says this account can give, or null when it names
+ * none. On an account with a second factor the server leaves the password out,
+ * so the dialog does not offer a choice that can only be refused.
+ */
+export function offeredReauthMethods(err: unknown): ReauthMethod[] | null {
+  if (!(err instanceof ApiError)) return null;
+  const raw = err.meta?.methods;
+  if (!Array.isArray(raw)) return null;
+  const offered = raw.filter((m): m is ReauthMethod =>
+    REAUTH_METHODS.includes(m as ReauthMethod),
+  );
+  return offered.length > 0 ? offered : null;
+}
+
 /**
  * Collect a fresh proof of a credential the account already holds, before a
  * new factor is added. A passkey or security-key assertion begins at the

@@ -12,6 +12,13 @@ import { annotate, eventStorage, getEvent } from "./logging/context";
 import { emitIfSampled } from "./logging/transports";
 import { redactOptional, redactSecrets } from "./logging/redact";
 import { getSession } from "./auth/session";
+import {
+  hasSecondFactorEnrolled,
+  recentProofMethods,
+  type RecentProofMethod,
+} from "./auth/second-factor";
+
+export { recentProofMethods, type RecentProofMethod };
 import { auditLog, recordDelegatedAccess } from "./auth/audit";
 import {
   resolveBearerToken,
@@ -1389,13 +1396,6 @@ export async function requireFreshMfaOrElevationIfEnrolled(
 }
 
 /**
- * A proof the recent-proof gate can ask for. `password` and `passkey` on an
- * account without a second factor; `totp`, `webauthn` and `passkey` on one
- * with a second factor, where a password alone has never been enough.
- */
-export type RecentProofMethod = "password" | "totp" | "webauthn" | "passkey";
-
-/**
  * How the recent-proof gate treats a Bearer caller.
  *
  *   `elevation` — the Bearer twin of the cookie rule: an `X-Step-Up` elevation
@@ -1506,63 +1506,6 @@ export async function assertRecentCookieProof(
     "Confirm it is you to continue",
     { methods },
   );
-}
-
-/**
- * The proofs that would satisfy {@link assertRecentCookieProof} for this
- * account. Also what `POST /api/auth/reproof` accepts, so the dialog and the
- * endpoint cannot disagree.
- */
-export async function recentProofMethods(
-  user: Pick<User, "id" | "totpConfirmedAt" | "passwordHash">,
-  enrolled?: boolean,
-): Promise<RecentProofMethod[]> {
-  const hasSecond = enrolled ?? (await hasSecondFactorEnrolled(user));
-  const [keys, passkeys] = await Promise.all([
-    prisma.webauthnMfaCredential.count({ where: { userId: user.id } }),
-    prisma.passkey.count({ where: { userId: user.id } }),
-  ]);
-  const methods: RecentProofMethod[] = [];
-  if (hasSecond) {
-    if (user.totpConfirmedAt) methods.push("totp");
-    if (keys > 0) methods.push("webauthn");
-  } else if (user.passwordHash) {
-    methods.push("password");
-  }
-  if (passkeys > 0) methods.push("passkey");
-  return methods;
-}
-
-/**
- * Does this account have a SECOND FACTOR at all?
- *
- * Either factor enrols it: a confirmed TOTP secret OR a registered WebAuthn
- * security key. A webauthn-only account must clear step-up too, so every
- * boundary that asks this question tracks `requireFreshMfa`'s either-factor
- * rule rather than reading `totpConfirmedAt` alone. It was written out three
- * times before it was a function, which is two more places for the second arm
- * to be forgotten.
- *
- * DELIBERATELY DOES NOT COUNT A PRIMARY PASSKEY, even though a passkey login
- * stamps `mfaVerifiedAt` and could therefore satisfy the gate. This predicate
- * answers "is there a second factor", and that is the question
- * `requireFreshMfaIfEnrolled` asks before deciding whether account deletion, the
- * data reset, the password change, the encrypted export and key rotation demand
- * a step-up at all. Counting a passkey here would silently pull every
- * passkey-holding account into a gate those routes have never applied to them —
- * a behaviour change to five destructive actions, made in passing, for the
- * benefit of a sixth. {@link canProveFreshFactor} is where the wider question
- * lives.
- */
-async function hasSecondFactorEnrolled(user: {
-  id: string;
-  totpConfirmedAt: Date | null;
-}): Promise<boolean> {
-  if (user.totpConfirmedAt) return true;
-  const webauthnKeyCount = await prisma.webauthnMfaCredential.count({
-    where: { userId: user.id },
-  });
-  return webauthnKeyCount > 0;
 }
 
 /**
@@ -1719,10 +1662,17 @@ export type MfaManagementContext = {
  *   set. Passkey removal passes `"any-possession"` because a primary passkey IS
  *   the proof there — see {@link FreshFactorProofSource}. It changes only the
  *   reachability pre-check; the gate itself is identical either way.
+ * @param options.freshFactorIfEnrolled the Bearer arm of ADDING a factor
+ *   (TOTP setup, security-key registration). On an account that already has a
+ *   second factor, the elevation must come from a second-factor or passkey
+ *   proof, the rule `checkCookieEnrollmentProof` holds on the cookie arm; on
+ *   one without, a password-proved elevation is still enough. The cookie arm
+ *   is not changed by it: those routes run their own enrollment proof there.
  */
 export async function requireMfaManagementAuth(
   options: {
     freshFactor?: boolean;
+    freshFactorIfEnrolled?: boolean;
     proofSource?: FreshFactorProofSource;
   } = {},
 ): Promise<MfaManagementContext> {
@@ -1747,9 +1697,13 @@ export async function requireMfaManagementAuth(
   // Bearer path. Resolution first: an unknown, revoked, expired, or narrow-scope
   // token is refused here and never gets as far as presenting an elevation.
   const auth = await requireBearerAuth();
+  const bearerFreshFactor =
+    freshFactor ||
+    (options.freshFactorIfEnrolled === true &&
+      (await hasSecondFactorEnrolled(auth.user)));
   const commitElevation = await resolveBearerElevation(
     { user: auth.user, apiTokenId: auth.apiTokenId },
-    { freshFactor, proofSource },
+    { freshFactor: bearerFreshFactor, proofSource },
   );
 
   return {
