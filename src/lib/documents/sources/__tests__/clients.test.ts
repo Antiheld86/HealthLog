@@ -402,6 +402,68 @@ describe("Papra, as it answers for real", () => {
     );
   });
 
+  it("dates a search row by its document date only, as Papra's date filter does", async () => {
+    serve({
+      "/api/organizations/org_a1b2c3d4e5f6g7h8i9j0k1l2/documents": () =>
+        json({
+          documentsCount: 2,
+          documents: [
+            {
+              id: "doc_dated",
+              name: "A.pdf",
+              documentDate: "2024-05-01",
+              createdAt: "2025-01-01T00:00:00.000Z",
+            },
+            {
+              id: "doc_undated",
+              name: "B.pdf",
+              createdAt: "2025-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+    });
+    const all = await sourceClient(PAPRA).search({
+      q: "",
+      tagId: null,
+      from: null,
+      to: null,
+      page: 1,
+    });
+    expect(all.items.map((i) => [i.sourceId, i.date])).toEqual([
+      ["doc_dated", "2024-05-01"],
+      ["doc_undated", null],
+    ]);
+    const ranged = await sourceClient(PAPRA).search({
+      q: "",
+      tagId: null,
+      from: "2024-01-01",
+      to: "2025-12-31",
+      page: 1,
+    });
+    // Papra's date: filter never matches a document without a document date;
+    // the per-row check agrees instead of re-admitting it by upload day.
+    expect(ranged.items.map((i) => i.sourceId)).toEqual(["doc_dated"]);
+  });
+
+  it("still files an undated Papra document under the day it was added on import", async () => {
+    serve({
+      "/api/organizations/org_a1b2c3d4e5f6g7h8i9j0k1l2/documents/doc_undated":
+        () =>
+          json({
+            document: {
+              id: "doc_undated",
+              name: "B.pdf",
+              createdAt: "2025-01-01T09:00:00.000Z",
+            },
+          }),
+    });
+    await expect(
+      sourceClient(PAPRA).document("doc_undated"),
+    ).resolves.toMatchObject({
+      date: "2025-01-01",
+    });
+  });
+
   it("refuses an organization id Papra would not issue", () => {
     for (const org of ["org_123", "../admin", "ORG_A1B2C3D4E5F6G7H8I9J0K1L2"]) {
       expect(() => sourceClient({ ...PAPRA, organizationId: org })).toThrow(
@@ -471,6 +533,7 @@ describe("Papra", () => {
               name: "Blood test.pdf",
               originalName: "Blood test.pdf",
               originalSize: 1234,
+              documentDate: "2025-03-04",
               createdAt: "2025-03-04T09:00:00.000Z",
               tags: [{ id: "tag_b", name: "Lab results" }],
             },

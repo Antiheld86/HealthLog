@@ -464,9 +464,12 @@ function papra(connection: SourceConnection): SourceClient {
         if (params.tagId && !tags.some((t) => asText(t.id) === params.tagId)) {
           continue;
         }
-        // Papra's search date syntax differs between versions; the range is
-        // applied here instead of trusting a query syntax.
-        const date = dayOf(doc.documentDate) ?? dayOf(doc.createdAt);
+        // The row shows the document date only, the field Papra's `date:`
+        // filter reads, so the list and the filter agree: an undated document
+        // shows no date and falls out of any range. The check below is the net
+        // for a server that ignores the filter. The upload day is used only
+        // on import, where a filing date is needed (see `document()`).
+        const date = dayOf(doc.documentDate);
         if (!withinRange(date, params.from, params.to)) continue;
         const size = doc.originalSize;
         items.push({
