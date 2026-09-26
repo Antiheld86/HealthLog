@@ -4591,7 +4591,7 @@
       "sampleBody": "Peso in calo di 1,2 kg in due settimane. Battito a riposo stabile a 58 bpm. Pressione nel range in 6 giorni su 7 — l'unico valore alto è arrivato dopo una cena tardiva e salata.",
       "sampleCaption": "Solo un esempio — non i tuoi dati. Ecco come si legge un briefing quando gli insight sono attivi.",
       "ladderTitle": "Tre modi per attivarlo",
-      "ladderLocalTitle": "Modello locale — nulla lascia la tua rete",
+      "ladderLocalTitle": "Modello locale — le richieste all’IA restano nella tua rete",
       "ladderLocalBody": "Punta HealthLog su Ollama o LM Studio sulla tua macchina. Gratis e del tutto privato — la scelta tranquilla di default.",
       "ladderByokTitle": "Usa la tua chiave",
       "ladderByokBody": "Usa la tua chiave OpenAI o Anthropic. Gira sul tuo account e sulla tua fatturazione, e il piano API tiene i tuoi dati fuori dall'addestramento in modo predefinito.",
@@ -5655,10 +5655,10 @@
     "codexConnected": "ChatGPT connesso correttamente! Insights è ora attivo.",
     "codexDisconnected": "Connessione a ChatGPT rimossa.",
     "codexConnectionFailed": "Connessione a ChatGPT non riuscita. Riprova.",
-    "rawData": "Invia dati grezzi",
-    "rawDataOnDescription": "Vengono inviate metriche aggregate più punti individuali anonimizzati degli ultimi 30 giorni con contesto temporale — mai nome, e-mail o identificatori diretti dell’account.",
-    "rawDataOffDescription": "Vengono inviate solo metriche riassuntive (ad esempio medie, tendenze, minimo/massimo) — nessun punto individuale e nessun contesto temporale preciso.",
-    "rawDataWarning": "Modalità grezza attiva: il provider riceve ulteriori punti anonimizzati degli ultimi 30 giorni per un’analisi più precisa.",
+    "rawData": "Invia cronologia dettagliata",
+    "rawDataOnDescription": "Oltre ai riepiloghi, il provider riceve le medie delle tue misurazioni: per giorno negli ultimi 90 giorni, per settimana nell’anno precedente e per mese fino a 5 anni fa, ciascuna con data e numero di misurazioni. Le singole misurazioni, il tuo nome e la tua e-mail non vengono inviati.",
+    "rawDataOffDescription": "Vengono inviati solo riepiloghi: l’ultimo valore, medie, tendenze, minimo e massimo su finestre fisse. Nessuna serie di misurazioni.",
+    "rawDataWarning": "Cronologia dettagliata attiva: ogni analisi invia anche le medie giornaliere degli ultimi 90 giorni, le medie settimanali dell’anno precedente e le medie mensili fino a 5 anni fa.",
     "regenerateInsights": "Rigenera i report",
     "regenerateSuccess": "Report rigenerati correttamente",
     "regenerateRateLimit": "Attendi — hai raggiunto il limite orario di analisi.",
@@ -7267,7 +7267,7 @@
           "description": "Quando questo host ha messo per l'ultima volta la copia cifrata di ogni account nel tuo bucket.",
           "loadError": "Impossibile caricare lo stato fuori host.",
           "notConfiguredTitle": "Il backup fuori host non è configurato",
-          "notConfiguredDescription": "Non sono impostati né bucket né chiave, quindi nulla lascia questo host. Imposta BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY e BACKUP_ENCRYPTION_KEY per attivare il caricamento notturno.",
+          "notConfiguredDescription": "Non sono impostati né bucket né chiave, quindi nessun backup lascia questo host. Imposta BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY e BACKUP_ENCRYPTION_KEY per attivare il caricamento notturno.",
           "stateFresh": "Recente",
           "stateDue": "Attesa",
           "stateStale": "Obsoleta",
@@ -10150,7 +10150,7 @@
     }
   },
   "selfDescription": {
-    "dataPosture": "HealthLog è self-hosted: i tuoi dati di salute restano sulla tua istanza, cifrati a riposo. Le funzioni di IA usano una chiave del provider che fornisci tu o un modello locale, quindi nulla lascia la tua istanza oltre il provider che configuri, e non c'è alcuna analisi di terze parti sui tuoi dati di salute."
+    "dataPosture": "HealthLog è self-hosted: i tuoi dati di salute si trovano nel database della tua istanza. Note e altri testi liberi, documenti, risposte ai questionari, testi scritti dall'IA e token di accesso sono cifrati a riposo; valori delle misurazioni, valori di laboratorio, nomi dei farmaci e punteggi dell'umore sono salvati in chiaro e dipendono dalla sicurezza del tuo server. Le funzioni di IA inviano dati solo al provider di IA configurato per il tuo account, e non c'è alcuna analisi di terze parti sui tuoi dati di salute."
   },
   "customMetrics": {
     "sectionTitle": "Metriche personalizzate",

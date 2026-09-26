@@ -4591,7 +4591,7 @@
       "sampleBody": "Poids en baisse de 1,2 kg en deux semaines. Pouls au repos stable à 58 bpm. Tension dans la plage 6 jours sur 7 — la seule valeur élevée a suivi un dîner tardif et salé.",
       "sampleCaption": "Exemple uniquement — pas vos données. Voilà à quoi ressemble un briefing une fois les insights activés.",
       "ladderTitle": "Trois façons de l'activer",
-      "ladderLocalTitle": "Modèle local — rien ne quitte votre réseau",
+      "ladderLocalTitle": "Modèle local — les requêtes d’IA restent sur votre réseau",
       "ladderLocalBody": "Pointez HealthLog vers Ollama ou LM Studio sur votre propre machine. Gratuit et totalement privé — le choix calme par défaut.",
       "ladderByokTitle": "Apportez votre clé",
       "ladderByokBody": "Utilisez votre propre clé OpenAI ou Anthropic. Elle fonctionne avec votre compte et votre facturation, et le niveau API exclut vos données de l'entraînement par défaut.",
@@ -5655,10 +5655,10 @@
     "codexConnected": "ChatGPT connecté ! Insights est maintenant actif.",
     "codexDisconnected": "Connexion à ChatGPT supprimée.",
     "codexConnectionFailed": "Échec de la connexion à ChatGPT. Veuillez réessayer.",
-    "rawData": "Envoyer les données brutes",
-    "rawDataOnDescription": "Des métriques agrégées et des points individuels anonymisés des 30 derniers jours avec contexte temporel sont envoyés — jamais le nom, l’e-mail ni les identifiants de compte directs.",
-    "rawDataOffDescription": "Seules des métriques résumées sont envoyées (par exemple moyennes, tendances, minimum/maximum) — aucun point individuel ni contexte temporel exact.",
-    "rawDataWarning": "Mode brut activé : le fournisseur reçoit des points anonymisés supplémentaires des 30 derniers jours pour une analyse plus précise.",
+    "rawData": "Envoyer l’historique détaillé",
+    "rawDataOnDescription": "En plus des résumés, le fournisseur reçoit des moyennes de vos mesures : par jour sur les 90 derniers jours, par semaine sur l’année précédente et par mois jusqu’à 5 ans en arrière, chacune avec sa date et son nombre de mesures. Les mesures individuelles, votre nom et votre e-mail ne sont pas envoyés.",
+    "rawDataOffDescription": "Seuls des résumés sont envoyés : la dernière valeur, des moyennes, des tendances, le minimum et le maximum sur des fenêtres fixes. Aucune série de mesures.",
+    "rawDataWarning": "Historique détaillé activé : chaque analyse envoie aussi les moyennes journalières des 90 derniers jours, les moyennes hebdomadaires de l’année précédente et les moyennes mensuelles jusqu’à 5 ans en arrière.",
     "regenerateInsights": "Régénérer les rapports",
     "regenerateSuccess": "Rapports régénérés",
     "regenerateRateLimit": "Veuillez patienter — vous avez atteint la limite horaire d’analyses.",
@@ -7267,7 +7267,7 @@
           "description": "Quand cet hôte a déposé pour la dernière fois la copie chiffrée de chaque compte dans votre bucket.",
           "loadError": "Impossible de charger l'état hors hôte.",
           "notConfiguredTitle": "La sauvegarde hors hôte n'est pas configurée",
-          "notConfiguredDescription": "Aucun bucket ni clé ne sont définis, donc rien ne quitte cet hôte. Définissez BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY et BACKUP_ENCRYPTION_KEY pour activer l'envoi nocturne.",
+          "notConfiguredDescription": "Aucun bucket ni clé ne sont définis, donc aucune sauvegarde ne quitte cet hôte. Définissez BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY et BACKUP_ENCRYPTION_KEY pour activer l'envoi nocturne.",
           "stateFresh": "Récente",
           "stateDue": "Attendue",
           "stateStale": "Périmée",
@@ -10150,7 +10150,7 @@
     }
   },
   "selfDescription": {
-    "dataPosture": "HealthLog est auto-hébergé : vos données de santé restent sur votre propre instance, chiffrées au repos. Les fonctions d'IA utilisent une clé de fournisseur que vous apportez ou un modèle local, donc rien ne quitte votre instance au-delà du fournisseur que vous configurez, et il n'y a aucune analyse tierce de vos données de santé."
+    "dataPosture": "HealthLog est auto-hébergé : vos données de santé se trouvent dans la base de données de votre propre instance. Les notes et autres textes libres, les documents, les réponses aux questionnaires, les textes rédigés par l'IA et les jetons d'accès sont chiffrés au repos ; les valeurs de mesure, les résultats de laboratoire, les noms de médicaments et les scores d'humeur sont stockés en clair et dépendent de la sécurité de votre serveur. Les fonctions d'IA n'envoient des données qu'au fournisseur d'IA configuré pour votre compte, et il n'y a aucune analyse tierce de vos données de santé."
   },
   "customMetrics": {
     "sectionTitle": "Mesures personnalisées",
