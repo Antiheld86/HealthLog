@@ -493,11 +493,11 @@ describe("buildFhirDocumentBundle", () => {
     const coding = stmt?.medicationCodeableConcept.coding;
     expect(stmt?.medicationCodeableConcept.text).toBe("Mounjaro");
     expect(coding).toHaveLength(2);
-    // ATC is primary (first), with the name as display.
+    // ATC is primary (first). No display: the user's name is not the ATC
+    // name for the code, and the validator rejects it; the name is `.text`.
     expect(coding?.[0]).toEqual({
       system: "http://www.whocc.no/atc",
       code: "A10BX10",
-      display: "Mounjaro",
     });
     // RxNorm is secondary, no display.
     expect(coding?.[1]).toEqual({
@@ -578,7 +578,7 @@ describe("buildFhirDocumentBundle", () => {
     expect(a.dosage?.site?.coding?.[0]).toEqual({
       system: "http://snomed.info/sct",
       code: "818983003",
-      display: "Abdomen structure",
+      display: "Abdomen",
     });
   });
 
@@ -712,14 +712,14 @@ describe("buildFhirDocumentBundle", () => {
 
   it("maps every InjectionSite enum value to its body-region SNOMED concept, preserving laterality in `.text`", () => {
     const cases: Array<[string, string, string]> = [
-      ["ABDOMEN_LEFT", "818983003", "Abdomen structure"],
-      ["ABDOMEN_RIGHT", "818983003", "Abdomen structure"],
-      ["ABDOMEN_UPPER_LEFT", "818983003", "Abdomen structure"],
-      ["ABDOMEN_UPPER_RIGHT", "818983003", "Abdomen structure"],
+      ["ABDOMEN_LEFT", "818983003", "Abdomen"],
+      ["ABDOMEN_RIGHT", "818983003", "Abdomen"],
+      ["ABDOMEN_UPPER_LEFT", "818983003", "Abdomen"],
+      ["ABDOMEN_UPPER_RIGHT", "818983003", "Abdomen"],
       ["THIGH_LEFT", "68367000", "Thigh structure"],
       ["THIGH_RIGHT", "68367000", "Thigh structure"],
-      ["UPPER_ARM_LEFT", "40983000", "Structure of upper arm"],
-      ["UPPER_ARM_RIGHT", "40983000", "Structure of upper arm"],
+      ["UPPER_ARM_LEFT", "40983000", "Upper arm structure"],
+      ["UPPER_ARM_RIGHT", "40983000", "Upper arm structure"],
     ];
     for (const [site, code, display] of cases) {
       const bundle = buildFhirDocumentBundle(
@@ -846,13 +846,12 @@ describe("buildFhirDocumentBundle", () => {
     expect(stmtCoding?.[0]).toEqual({
       system: "http://www.whocc.no/atc",
       code: "A10BK03",
-      display: "Empagliflozin",
     });
     expect(stmtCoding?.[1]).toEqual({
       system: "http://fhir.de/CodeSystem/bfarm/atc",
       code: "A10BK03",
-      display: "Empagliflozin",
     });
+    expect(stmt?.medicationCodeableConcept.text).toBe("Empagliflozin");
 
     // The administration concept reflects the flag identically; RxNorm follows.
     const adminCoding =
@@ -909,8 +908,12 @@ describe("buildFhirDocumentBundle", () => {
     const moodObs = bundle.entry
       .map((e) => e.resource)
       .filter((r): r is FhirObservation => r.resourceType === "Observation")
-      .find((o) => o.code.coding?.some((c) => c.code === "76542-6"));
+      .find((o) => o.code.text === "Mood (average over period)");
     expect(moodObs?.valueQuantity?.value).toBe(3.6);
+    // 76542-6 does not exist in LOINC: text-only, and a survey finding, not
+    // a vital sign (so the vital-signs panel does not claim it).
+    expect(moodObs?.code.coding).toBeUndefined();
+    expect(moodObs?.category?.[0]?.coding?.[0]?.code).toBe("survey");
   });
 
   it("emits no Observation for a type with no readings (empty domain)", () => {
@@ -953,7 +956,7 @@ describe("buildFhirDocumentBundle", () => {
     expect(spo2?.valueQuantity?.code).toBe("%");
   });
 
-  it("maps VO2max to 96402-2 with the iOS display", () => {
+  it("maps VO2max to the HealthKit identifier, not the nonexistent LOINC 96402-2", () => {
     const bundle = buildFhirDocumentBundle(
       makeData({
         measurements: {
@@ -963,10 +966,15 @@ describe("buildFhirDocumentBundle", () => {
       { insuranceNumber: null },
       FIXED_NOW,
     );
-    const coding = observationsOf(bundle)
-      .flatMap((o) => o.code.coding ?? [])
-      .find((c) => c.code === "96402-2");
-    expect(coding?.display).toBe("Oxygen consumption maximum during exercise");
+    const codings = observationsOf(bundle).flatMap((o) => o.code.coding ?? []);
+    expect(codings.some((c) => c.code === "96402-2")).toBe(false);
+    const coding = codings.find(
+      (c) => c.code === "HKQuantityTypeIdentifierVO2Max",
+    );
+    expect(coding?.system).toBe(
+      "https://healthlog.dev/fhir/CodeSystem/healthkit",
+    );
+    expect(coding?.display).toBe("VO2 max (estimated)");
   });
 
   it("emits steps with UCUM {steps}", () => {
@@ -1008,7 +1016,7 @@ describe("buildFhirDocumentBundle", () => {
     expect(sleep?.valueQuantity?.value).toBe(7.5);
   });
 
-  it("maps body water + bone mass to the iOS-locked LOINC codes", () => {
+  it("maps body water + bone mass to the LOINC body-composition terms", () => {
     const bundle = buildFhirDocumentBundle(
       makeData({
         measurements: {
@@ -1022,10 +1030,14 @@ describe("buildFhirDocumentBundle", () => {
       FIXED_NOW,
     );
     const water = observationsOf(bundle).find((o) =>
-      o.code.coding?.some((c) => c.code === "73704-9"),
+      o.code.coding?.some(
+        (c) => c.code === "101683-1" && c.display === "Body water mass",
+      ),
     );
     const bone = observationsOf(bundle).find((o) =>
-      o.code.coding?.some((c) => c.code === "73708-0"),
+      o.code.coding?.some(
+        (c) => c.code === "101685-6" && c.display === "Body bone mass",
+      ),
     );
     expect(water?.valueQuantity?.code).toBe("kg");
     expect(bone?.valueQuantity?.code).toBe("kg");
@@ -1049,8 +1061,11 @@ describe("buildFhirDocumentBundle", () => {
     const energy = observationsOf(bundle).find((o) =>
       o.code.coding?.some((c) => c.code === "41981-2"),
     );
+    // Not 41957-2 (a 24-hour mean): a HealthKit walking-speed reading.
     const speed = observationsOf(bundle).find((o) =>
-      o.code.coding?.some((c) => c.code === "41957-2"),
+      o.code.coding?.some(
+        (c) => c.code === "HKQuantityTypeIdentifierWalkingSpeed",
+      ),
     );
     expect(energy?.valueQuantity?.code).toBe("kcal");
     // Walking speed FHIR value stays m/s (no km/h conversion).

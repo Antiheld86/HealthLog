@@ -48,8 +48,8 @@
     "category": "vital-signs"
   },
   "VO2_MAX": {
-    "loinc": "96402-2",
-    "display": "Oxygen consumption maximum during exercise",
+    "loinc": "HKQuantityTypeIdentifierVO2Max",
+    "display": "VO2 max (estimated)",
     "unit": "mL/min/kg",
     "category": "vital-signs"
   },
@@ -78,32 +78,32 @@
     "category": "activity"
   },
   "WALKING_SPEED": {
-    "loinc": "41957-2",
-    "display": "Gait speed [Velocity] Measured",
+    "loinc": "HKQuantityTypeIdentifierWalkingSpeed",
+    "display": "Walking speed",
     "unit": "m/s",
     "category": "vital-signs"
   },
   "WALKING_ASYMMETRY": {
-    "loinc": "91557-1",
+    "loinc": "HKQuantityTypeIdentifierWalkingAsymmetryPercentage",
     "display": "Walking asymmetry percentage",
     "unit": "%",
     "category": "vital-signs"
   },
   "WALKING_STEP_LENGTH": {
-    "loinc": "41955-6",
-    "display": "Step length Measured",
+    "loinc": "HKQuantityTypeIdentifierWalkingStepLength",
+    "display": "Walking step length",
     "unit": "m",
     "category": "vital-signs"
   },
   "TOTAL_BODY_WATER": {
-    "loinc": "73704-9",
-    "display": "Body water by Bioelectrical impedance analysis",
+    "loinc": "101683-1",
+    "display": "Body water mass",
     "unit": "kg",
     "category": "vital-signs"
   },
   "BONE_MASS": {
-    "loinc": "73708-0",
-    "display": "Bone mineral content by DXA",
+    "loinc": "101685-6",
+    "display": "Body bone mass",
     "unit": "kg",
     "category": "vital-signs"
   },

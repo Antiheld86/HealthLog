@@ -15,7 +15,6 @@ import {
   GLUCOSE_TIR_LOINC,
   GLUCOSE_GMI_LOINC,
   GLUCOSE_MEAN_LOINC,
-  GLUCOSE_EA1C_LOINC,
 } from "@/lib/fhir/loinc-map";
 import { ucumQuantity } from "@/lib/fhir/ucum";
 import type { FhirObservation } from "@/lib/fhir/types";
@@ -92,7 +91,8 @@ export function glucoseClinicalObservations(
   const observations: FhirObservation[] = [];
 
   const push = (opts: {
-    loinc?: string;
+    /** LOINC code and its LOINC display; absent for a text-only concept. */
+    loinc?: { code: string; display: string };
     text: string;
     value: number;
     unit: string;
@@ -106,7 +106,11 @@ export function glucoseClinicalObservations(
       code: opts.loinc
         ? {
             coding: [
-              { system: LOINC_SYSTEM, code: opts.loinc, display: opts.text },
+              {
+                system: LOINC_SYSTEM,
+                code: opts.loinc.code,
+                display: opts.loinc.display,
+              },
             ],
             text: opts.text,
           }
@@ -128,7 +132,11 @@ export function glucoseClinicalObservations(
 
   if (clinical.distribution) {
     push({
-      loinc: GLUCOSE_TIR_LOINC,
+      loinc: {
+        code: GLUCOSE_TIR_LOINC,
+        display:
+          "Glucose measurements in range out of Total glucose measurements during reporting period",
+      },
       text: timeInRangeDisplay(glucoseUnit),
       value: Math.round(clinical.distribution.tir * 1000) / 10,
       unit: "%",
@@ -136,7 +144,11 @@ export function glucoseClinicalObservations(
   }
   if (clinical.meanMgdl !== null) {
     push({
-      loinc: GLUCOSE_MEAN_LOINC,
+      loinc: {
+        code: GLUCOSE_MEAN_LOINC,
+        display:
+          "Average glucose [Mass/volume] in Interstitial fluid during Reporting Period",
+      },
       text: "Mean glucose",
       value: convertGlucose(clinical.meanMgdl, glucoseUnit),
       unit: glucoseUnit,
@@ -144,7 +156,10 @@ export function glucoseClinicalObservations(
   }
   if (clinical.gmi !== null) {
     push({
-      loinc: GLUCOSE_GMI_LOINC,
+      loinc: {
+        code: GLUCOSE_GMI_LOINC,
+        display: "Glucose management indicator",
+      },
       text: "Glucose Management Indicator (GMI)",
       value: Math.round(clinical.gmi * 10) / 10,
       unit: "%",
@@ -152,7 +167,8 @@ export function glucoseClinicalObservations(
   }
   if (clinical.estimatedA1c !== null) {
     push({
-      loinc: GLUCOSE_EA1C_LOINC,
+      // Text-only: no LOINC term exists for an A1C estimated from mean
+      // glucose (see `loinc-map.ts`).
       text: "Estimated A1C",
       value: Math.round(clinical.estimatedA1c * 10) / 10,
       unit: "%",

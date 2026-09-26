@@ -22,7 +22,6 @@ import {
   BP_DIA_LOINC,
   BP_UNIT,
   MEDICATION_ADHERENCE_LOINC,
-  MOOD_LOINC,
 } from "@/lib/fhir/loinc-map";
 import { ucumQuantity } from "@/lib/fhir/ucum";
 import type { FhirObservation } from "@/lib/fhir/types";
@@ -104,7 +103,7 @@ function bloodPressureObservation(
           {
             system: LOINC_SYSTEM,
             code: BP_PANEL_LOINC,
-            display: "Blood pressure panel",
+            display: "Blood pressure panel with all children optional",
           },
         ],
         text: "Blood pressure",
@@ -116,7 +115,11 @@ function bloodPressureObservation(
         {
           code: {
             coding: [
-              { system: LOINC_SYSTEM, code: BP_SYS_LOINC, display: "Systolic" },
+              {
+                system: LOINC_SYSTEM,
+                code: BP_SYS_LOINC,
+                display: "Systolic blood pressure",
+              },
             ],
           },
           valueQuantity: ucumQuantity(sys.value, BP_UNIT),
@@ -127,7 +130,7 @@ function bloodPressureObservation(
               {
                 system: LOINC_SYSTEM,
                 code: BP_DIA_LOINC,
-                display: "Diastolic",
+                display: "Diastolic blood pressure",
               },
             ],
           },
@@ -194,7 +197,8 @@ function adherenceObservations(
           {
             system: LOINC_SYSTEM,
             code: MEDICATION_ADHERENCE_LOINC,
-            display: "Medication adherence",
+            display:
+              "Adherence to prescribed medication instructions [Reported]",
           },
         ],
         text: `Medication adherence — ${name}`,
@@ -207,7 +211,13 @@ function adherenceObservations(
   return observations;
 }
 
-/** The opt-in mood average; absent when the toggle is off. */
+/**
+ * The opt-in mood average; absent when the toggle is off.
+ *
+ * Text-only, under `survey`: LOINC has no term for a self-rated mood score
+ * averaged over a period (76542-6, used before, does not exist in LOINC), and
+ * a mood score is not a vital sign, so it must not ride the vital-signs panel.
+ */
 function moodObservation(
   data: DoctorReportData,
   nextId: () => string,
@@ -218,11 +228,8 @@ function moodObservation(
       resourceType: "Observation",
       id: nextId(),
       status: "final",
-      category: [categoryConcept("vital-signs")],
-      code: {
-        coding: [{ system: LOINC_SYSTEM, code: MOOD_LOINC, display: "Mood" }],
-        text: "Mood (average over period)",
-      },
+      category: [categoryConcept("survey")],
+      code: { text: "Mood (average over period)" },
       subject: patientRef,
       effectivePeriod: reportingPeriod(data),
       valueQuantity: ucumQuantity(

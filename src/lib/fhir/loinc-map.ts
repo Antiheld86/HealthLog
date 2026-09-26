@@ -95,18 +95,21 @@ export const GLUCOSE_TIR_LOINC = "97510-2";
 export const GLUCOSE_GMI_LOINC = "97506-0";
 /** Mean glucose over the reporting period. */
 export const GLUCOSE_MEAN_LOINC = "97507-8";
-/** Estimated A1C (ADAG, derived from mean glucose). */
-export const GLUCOSE_EA1C_LOINC = "41995-2";
+/*
+ * Estimated A1C (ADAG, derived from mean glucose) has no LOINC term of its
+ * own: 41995-2, used here before, is a measured "Hemoglobin A1c
+ * [Mass/volume] in Blood". The builder emits it text-only.
+ */
 
 /** Medication-adherence Observation LOINC. */
 export const MEDICATION_ADHERENCE_LOINC = "71799-1";
-/** Mood Observation LOINC (opt-in only). */
-export const MOOD_LOINC = "76542-6";
 
 /* ── Cycle / reproductive-health LOINCs (v1.15.0, opt-in only) ──────── */
 /** Last menstrual period (LMP) start date. */
 export const LMP_LOINC = "8665-2";
-/** Menstrual cycle length [time]. */
-export const CYCLE_LENGTH_LOINC = "64700-8";
-/** Length of menses (period / bleeding duration). */
-export const PERIOD_LENGTH_LOINC = "64698-4";
+/*
+ * Average cycle length and average period length have no LOINC term for a
+ * value computed over many cycles. 64700-8 and 64698-4, used before, are
+ * PhenX questionnaire items (a remembered typical cycle; a breastfeeding
+ * question), so both Observations are text-only.
+ */

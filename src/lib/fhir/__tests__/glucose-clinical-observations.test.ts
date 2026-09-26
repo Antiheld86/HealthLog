@@ -6,7 +6,6 @@ import {
   GLUCOSE_TIR_LOINC,
   GLUCOSE_GMI_LOINC,
   GLUCOSE_MEAN_LOINC,
-  GLUCOSE_EA1C_LOINC,
 } from "@/lib/fhir/loinc-map";
 
 import { buildFhirDocumentBundle } from "../build-bundle";
@@ -89,7 +88,28 @@ describe("clinical glucose-panel FHIR Observations", () => {
     expect(codes).toContain(GLUCOSE_TIR_LOINC);
     expect(codes).toContain(GLUCOSE_GMI_LOINC);
     expect(codes).toContain(GLUCOSE_MEAN_LOINC);
-    expect(codes).toContain(GLUCOSE_EA1C_LOINC);
+
+    // Each coded term carries the display LOINC publishes for it.
+    const displayOf = (code: string) =>
+      observationsOf(bundle)
+        .flatMap((o) => o.code.coding ?? [])
+        .find((c) => c.code === code)?.display;
+    expect(displayOf(GLUCOSE_TIR_LOINC)).toBe(
+      "Glucose measurements in range out of Total glucose measurements during reporting period",
+    );
+    expect(displayOf(GLUCOSE_GMI_LOINC)).toBe("Glucose management indicator");
+    expect(displayOf(GLUCOSE_MEAN_LOINC)).toBe(
+      "Average glucose [Mass/volume] in Interstitial fluid during Reporting Period",
+    );
+
+    // Estimated A1C is text-only: 41995-2, used before, is a measured
+    // "Hemoglobin A1c [Mass/volume] in Blood".
+    const ea1c = observationsOf(bundle).find(
+      (o) => o.code.text === "Estimated A1C",
+    );
+    expect(ea1c).toBeDefined();
+    expect(ea1c?.code.coding).toBeUndefined();
+    expect(codes).not.toContain("41995-2");
   });
 
   it("emits a percent-valued, UCUM-coded TIR Observation", () => {
@@ -122,6 +142,8 @@ describe("clinical glucose-panel FHIR Observations", () => {
     expect(codes).not.toContain(GLUCOSE_TIR_LOINC);
     expect(codes).not.toContain(GLUCOSE_GMI_LOINC);
     expect(codes).not.toContain(GLUCOSE_MEAN_LOINC);
-    expect(codes).not.toContain(GLUCOSE_EA1C_LOINC);
+    expect(
+      observationsOf(bundle).some((o) => o.code.text === "Estimated A1C"),
+    ).toBe(false);
   });
 });

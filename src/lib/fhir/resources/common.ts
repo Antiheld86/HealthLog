@@ -84,6 +84,24 @@ export function categoryConcept(category: string): FhirCodeableConcept {
   };
 }
 
+/**
+ * R4 vital-signs profiles require a "magic" LOINC code on `Observation.code`
+ * and allow a more specific code beside it
+ * (https://hl7.org/fhir/R4/observation-vitalsigns.html). A resting heart rate
+ * is a heart rate (8867-4) and a pulse-oximetry SpO2 is an oxygen saturation
+ * (2708-6); without the magic code the validator rejects both Observations.
+ */
+const VITAL_SIGNS_MAGIC_CODE: Record<
+  string,
+  { code: string; display: string }
+> = {
+  "40443-4": { code: "8867-4", display: "Heart rate" },
+  "59408-5": {
+    code: "2708-6",
+    display: "Oxygen saturation in Arterial blood",
+  },
+};
+
 export function codeableFromMapping(m: LoincMapping): FhirCodeableConcept {
   if (m.loinc) {
     // HealthKit placeholder codes have no published LOINC term; they must not
@@ -93,8 +111,15 @@ export function codeableFromMapping(m: LoincMapping): FhirCodeableConcept {
     const system = m.loinc.startsWith("HKQuantityTypeIdentifier")
       ? HEALTHKIT_CODESYSTEM
       : LOINC_SYSTEM;
+    const magic =
+      system === LOINC_SYSTEM ? VITAL_SIGNS_MAGIC_CODE[m.loinc] : undefined;
     return {
-      coding: [{ system, code: m.loinc, display: m.display }],
+      coding: [
+        { system, code: m.loinc, display: m.display },
+        ...(magic
+          ? [{ system: LOINC_SYSTEM, code: magic.code, display: magic.display }]
+          : []),
+      ],
       text: m.display,
     };
   }
