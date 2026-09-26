@@ -4,10 +4,9 @@
  * Single source of truth for "what dose slots does this schedule emit
  * between A and B?" The canonical engine is introduced in this release;
  * the v1.5.0 cut wires only the reminder worker (via
- * `worker-helpers.ts`) through it. The today-projector
- * (`expandTodayIntakes`), the cadence chart (`expandScheduleSlots`),
- * and the form-level helpers continue on the legacy walker through
- * v1.5.x and migrate per the read-flip plan. The medication card's
+ * `worker-helpers.ts`) through it. The today-projector, the cadence
+ * chart (`expandScheduleSlots`), and the form-level helpers continue on
+ * the legacy walker through v1.5.x and migrate per the read-flip plan. The medication card's
  * "next intake" line reads the server-computed `nextDueAt` (this engine
  * via `computeNextDueAt`) directly as of v1.8.4.
  *
@@ -30,7 +29,7 @@
  *      are NULL and `oneShot` is false. Decodes the legacy
  *      `daysOfWeek` string via `parseScheduleRecurrence` and emits
  *      weekly slots. **Honours `intervalWeeks > 1` correctly** —
- *      the existing `expandTodayIntakes` skipped it (the legacy
+ *      the retired today-projector walker skipped it (the legacy
  *      bi-weekly worker bug R-3 finding 5 calls out); this engine
  *      anchors the week phase to `startsOn ?? createdAt` and emits
  *      on the matching weeks only.
@@ -60,6 +59,8 @@ import { annotate } from "@/lib/logging/context";
 import { parseScheduleRecurrence } from "@/lib/medication-schedule";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import { startOfLocalDayInTz } from "@/lib/tz/local-day";
+import { tzOffsetMinutes } from "@/lib/tz/format";
+import { startOfUtcDay } from "@/lib/tz/start-of-utc-day";
 import { hhmmToMinutesOrNull } from "@/lib/medications/scheduling/hhmm";
 
 /**
@@ -906,8 +907,7 @@ function startOfCivilWeek(day: Date): Date {
 
 /**
  * Materialise an "HH:mm" on a civil day in the user's IANA timezone,
- * returning the corresponding UTC instant. DST-aware via the two-pass
- * solver pattern from `medication-schedule.ts`: a wall-clock time that
+ * returning the corresponding UTC instant. DST-aware: a wall-clock time that
  * does not exist on a spring-forward day resolves forward (02:30 in
  * Europe/Berlin on 2026-03-29 becomes 03:30).
  *
@@ -955,19 +955,6 @@ function applyTimeOfDayToCivilDay(day: Date, hhmm: string, tz: string): Date {
   return before;
 }
 
-function tzOffsetMinutes(date: Date, tz: string): number {
-  const parts = wallClockInTz(date, tz);
-  const asIfUtc = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-  );
-  return Math.round((asIfUtc - date.getTime()) / 60_000);
-}
-
 function buildOccurrence(
   at: Date,
   timeOfDay: string,
@@ -1010,12 +997,6 @@ function graceWindowMs(schedule: CanonicalSchedule): number {
 // ────────────────────────────────────────────────────────────────────
 // UTC date helpers (RRULE day-anchor + endsOn cap arithmetic)
 // ────────────────────────────────────────────────────────────────────
-
-function startOfUtcDay(d: Date): Date {
-  return new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0),
-  );
-}
 
 function endOfUtcDay(d: Date): Date {
   return new Date(
