@@ -161,6 +161,14 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
   { model: "GoogleHealthConnection", field: "accessToken", kind: "string" },
   { model: "GoogleHealthConnection", field: "refreshToken", kind: "string" },
 
+  // ───── Document picker (v1.39.3, #1038) ─────
+  // A person's API token for their Paperless-ngx or Papra instance.
+  {
+    model: "DocumentSourceConnection",
+    field: "tokenEncrypted",
+    kind: "string",
+  },
+
   // ───── AppSettings — operator credentials ─────
   { model: "AppSettings", field: "adminAiKeyEncrypted", kind: "string" },
   {

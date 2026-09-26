@@ -246,6 +246,17 @@
       ]
     },
     {
+      "name": "Document picker",
+      "description": "Operator grant for the document picker, which lets a person search their own Paperless-ngx or Papra instance and import picked documents. Unset, the picker is off. Optional.",
+      "required": false,
+      "variables": [
+        {
+          "name": "DOCUMENT_SOURCE_ORIGINS",
+          "purpose": "Comma-separated exact origins (scheme://host[:port], no path, no wildcard, no CIDR), e.g. \"https://paperless.example.com,http://papra.lan:1221\". Only listed origins are contacted, public or private; redirects are not followed; link-local, metadata and unspecified addresses stay refused even when listed; a malformed entry is logged once and grants nothing."
+        }
+      ]
+    },
+    {
       "name": "Off-host backups",
       "description": "Required ALL-OR-NONE: any of these without the rest disables backups silently.",
       "required": false,

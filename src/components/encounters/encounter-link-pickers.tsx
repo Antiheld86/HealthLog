@@ -32,6 +32,8 @@ import {
   type EntityLinkOption,
 } from "@/components/links/entity-link-picker";
 import { useVaultDocumentOptions } from "@/components/links/vault-document-options";
+import { ImportFromSourceButton } from "@/components/documents/sources/import-from-source-button";
+import { mergeIds } from "@/components/documents/sources/merge-ids";
 
 /** Fetch cap for the picker — the grouped sheet needs enough rows to group. */
 export const PICKER_FETCH_LIMIT = 200;
@@ -152,6 +154,17 @@ export function EncounterLinkPickers({
           options={documents.options}
           searchPlaceholder={t("links.picker.searchPlaceholder")}
           emptyLabel={t("encounters.form.linkNothingToOffer")}
+          extraAction={
+            // The form owns its selection and replaces the visit's links on
+            // save, so imported documents join the selection rather than
+            // being linked on the server.
+            <ImportFromSourceButton
+              className="min-h-9"
+              onImported={(ids) =>
+                onChange({ documentIds: mergeIds(documentIds, ids) })
+              }
+            />
+          }
         />
       ) : null}
 

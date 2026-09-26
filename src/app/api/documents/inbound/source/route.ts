@@ -57,6 +57,7 @@ export const GET = apiHandler(async (request: Request) => {
   const parsed = documentSourceKeySchema.safeParse({
     sourceSystem: url.searchParams.get("sourceSystem") ?? undefined,
     sourceId: url.searchParams.get("sourceId") ?? undefined,
+    sourceInstance: url.searchParams.get("sourceInstance") ?? undefined,
   });
   if (!parsed.success) {
     return apiValidationError(
@@ -71,6 +72,7 @@ export const GET = apiHandler(async (request: Request) => {
     user.id,
     parsed.data.sourceSystem,
     parsed.data.sourceId,
+    parsed.data.sourceInstance ?? null,
   );
   annotate({
     action: { name: "documents.vault.sourceLookup" },

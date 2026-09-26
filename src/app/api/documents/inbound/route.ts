@@ -32,7 +32,6 @@
  * instruction inside it. Storing it does nothing with its contents.
  */
 import { Buffer } from "node:buffer";
-import { createHash } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
@@ -51,42 +50,38 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { getAiCapability } from "@/lib/ai/capabilities/gate";
-import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { hashQueryTokens } from "@/lib/documents/content-index";
 import {
+  ingestDocument,
+  isoDateToUtc,
+  personalUploadBucket,
+  UPLOAD_LIMIT_PER_HOUR,
+  UPLOAD_WINDOW_MS,
+} from "@/lib/documents/ingest";
+import {
   loadConditionLinks,
   loadDocumentEncounterLinks,
-  narrowOwnedEncounterIds,
-  narrowOwnedEpisodeIds,
 } from "@/lib/documents/links";
 import {
-  encryptDocumentContent,
   serialiseDocument,
   type SerialisableDocument,
 } from "@/lib/documents/store";
-import { enqueueDocumentIndex } from "@/lib/jobs/document-index";
-import { enqueueDocumentSummary } from "@/lib/jobs/document-summary";
-import { enqueueDocumentThumbnail } from "@/lib/jobs/document-thumbnail";
 import { DOCUMENTS_WRITE_SCOPE } from "@/lib/documents/scopes";
 import {
   checkSourceLookupRateLimit,
   findSourceKey,
-  rememberSourceAlias,
   type SourceKeyMatch,
 } from "@/lib/documents/source-key";
 import {
   acquireDocumentUploadSlot,
-  detectDocumentType,
   resolveDocumentLimits,
   resolveDocumentUploadLimitPerHour,
 } from "@/lib/documents/upload-policy";
 import { withIdempotency } from "@/lib/idempotency";
 import { BodyTooLargeError, readBoundedBody } from "@/lib/labs/ocr-upload";
-import { linkTargets } from "@/lib/links";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
-import { isP2002 } from "@/lib/prisma-errors";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import {
   documentCreateSchema,
@@ -100,24 +95,12 @@ import type { Prisma } from "@/generated/prisma/client";
 export const dynamic = "force-dynamic";
 
 /**
- * A store-only upload touches no provider — the only abuse vector is disk, so
- * a generous per-user ceiling is enough (extraction has its own tight gate).
- */
-const UPLOAD_LIMIT_PER_HOUR = 60;
-const UPLOAD_WINDOW_MS = 60 * 60 * 1000;
-
-/**
  * Multipart envelope allowance on top of the per-file cap: boundaries plus
  * the small metadata fields (title / kind / documentDate / episodeIds). The
  * exact per-file cap is re-enforced on the extracted file bytes below.
  */
 const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 const UPLOAD_BODY_TIMEOUT_MS = 30_000;
-
-/** Parse a YYYY-MM-DD form field into a UTC midnight Date. */
-function isoDateToUtc(value: string): Date {
-  return new Date(`${value}T00:00:00.000Z`);
-}
 
 /** §3.2 — 413 fileTooLarge with the configured limit in `meta`. */
 function fileTooLarge(maxFileBytes: number): NextResponse {
@@ -126,14 +109,6 @@ function fileTooLarge(maxFileBytes: number): NextResponse {
     reason: "fileTooLarge",
     maxFileBytes,
   });
-}
-
-/** Internal signal: the quota gate inside the insert transaction tripped. */
-class QuotaExceededError extends Error {
-  constructor(public readonly usedBytes: number) {
-    super("Document quota exceeded");
-    this.name = "QuotaExceededError";
-  }
 }
 
 /** What a single upload asked for, carried into the annotations. */
@@ -299,14 +274,17 @@ async function processUpload(
   const url = new URL(request.url);
   const querySystem = url.searchParams.get("sourceSystem");
   const queryId = url.searchParams.get("sourceId");
+  const queryInstance = url.searchParams.get("sourceInstance");
   let queryKey: {
     sourceSystem: DocumentSourceSystemValue;
     sourceId: string;
+    sourceInstance?: string;
   } | null = null;
   if (querySystem !== null || queryId !== null) {
     const parsedKey = documentSourceKeySchema.safeParse({
       sourceSystem: querySystem ?? undefined,
       sourceId: queryId ?? undefined,
+      sourceInstance: queryInstance ?? undefined,
     });
     if (!parsedKey.success) {
       return apiValidationError(
@@ -337,6 +315,7 @@ async function processUpload(
       user.id,
       queryKey.sourceSystem,
       queryKey.sourceId,
+      queryKey.sourceInstance ?? null,
     );
     if (match) {
       return answerSourceKey(
@@ -357,7 +336,7 @@ async function processUpload(
   // draw on. The cookie / wildcard bucket is unchanged.
   const bucketKey = scoped
     ? `documents-upload:token:${auth.session.id}`
-    : `documents-upload:${user.id}`;
+    : personalUploadBucket(user.id);
   const rl = await checkRateLimit(
     bucketKey,
     scoped ? resolveDocumentUploadLimitPerHour() : UPLOAD_LIMIT_PER_HOUR,
@@ -433,6 +412,7 @@ async function processUpload(
     encounterIds: rawEncounterIds.length > 0 ? rawEncounterIds : undefined,
     sourceSystem: formData.get("sourceSystem") ?? undefined,
     sourceId: formData.get("sourceId") ?? undefined,
+    sourceInstance: formData.get("sourceInstance") ?? undefined,
     aiRead: formData.get("aiRead") ?? undefined,
   });
   if (!parsed.success) {
@@ -450,10 +430,14 @@ async function processUpload(
   // both they have to agree.
   const formSystem = parsed.data.sourceSystem ?? null;
   const formId = formSystem ? (parsed.data.sourceId ?? null) : null;
+  const formInstance = formId ? (parsed.data.sourceInstance ?? null) : null;
   if (
     queryKey &&
     formSystem !== null &&
-    (formSystem !== queryKey.sourceSystem || formId !== queryKey.sourceId)
+    (formSystem !== queryKey.sourceSystem ||
+      formId !== queryKey.sourceId ||
+      (formInstance !== null &&
+        formInstance !== (queryKey.sourceInstance ?? null)))
   ) {
     return apiError(
       "The source key in the address and in the form differ.",
@@ -463,6 +447,9 @@ async function processUpload(
   }
   const sourceSystem = queryKey?.sourceSystem ?? formSystem;
   const sourceId = queryKey?.sourceId ?? formId;
+  const sourceInstance = sourceId
+    ? (queryKey?.sourceInstance ?? formInstance ?? null)
+    : null;
   const ctx: UploadContext = {
     userId: user.id,
     scoped,
@@ -476,7 +463,12 @@ async function processUpload(
   // count (the unique index has no `deleted_at` predicate), and past the purge
   // the ledger remembers.
   if (sourceSystem && sourceId && !queryKey) {
-    const match = await findSourceKey(user.id, sourceSystem, sourceId);
+    const match = await findSourceKey(
+      user.id,
+      sourceSystem,
+      sourceId,
+      sourceInstance,
+    );
     if (match) return answerSourceKey(ctx, match);
   }
 
@@ -486,157 +478,59 @@ async function processUpload(
   } catch {
     return apiError("Failed to read uploaded file", 400);
   }
-  if (buffer.byteLength > limits.maxFileBytes) {
-    return fileTooLarge(limits.maxFileBytes);
-  }
-  if (buffer.byteLength === 0) {
-    return apiError("Uploaded file is empty", 422, {
-      errorCode: "documents.inbound.invalidMetadata",
-    });
-  }
 
-  // §3.1 — magic-byte classification; the wire Content-Type is never trusted.
-  const detected = detectDocumentType(
-    buffer,
-    typeof file.name === "string" ? file.name : null,
-  );
-  if (!detected) {
-    return apiError("This file type is not supported.", 415, {
-      errorCode: "documents.inbound.fileType",
-      reason: "unsupportedType",
-    });
-  }
-
-  // Pre-linking: every episode id must be a LIVE episode of the caller.
-  const episodeIds = await narrowOwnedEpisodeIds(
-    user.id,
-    parsed.data.episodeIds ?? [],
-  );
-  if (episodeIds === null) {
-    return apiError("Episode not found", 404, {
-      errorCode: "documents.inbound.episodeNotFound",
-    });
-  }
-
-  // Same for the visit ids the review step offered. A refusal rather than a
-  // silent drop: the person saw a visit named and would otherwise watch the
-  // upload succeed without the link they asked for.
-  const encounterIds = await narrowOwnedEncounterIds(
-    user.id,
-    parsed.data.encounterIds ?? [],
-  );
-  if (encounterIds === null) {
-    return apiError("Visit not found", 404, {
-      errorCode: "documents.inbound.encounterNotFound",
-    });
-  }
-
-  // sha256 of the PLAINTEXT for same-user duplicate detection.
-  const contentSha256 = createHash("sha256").update(buffer).digest("hex");
-
-  // Fast-path dedupe check; the partial unique index closes the race below.
-  const existing = await prisma.inboundDocument.findFirst({
-    where: { userId: user.id, contentSha256, deletedAt: null },
-    omit: { contentEncrypted: true },
+  // Everything from here to the stored row is the shared ingest path
+  // (`src/lib/documents/ingest.ts`), the one the document picker's import
+  // stores through as well.
+  const result = await ingestDocument({
+    userId: user.id,
+    scoped,
+    ipAddress: getClientIp(request),
+    bytes: buffer,
+    filename: typeof file.name === "string" ? file.name : null,
+    title: parsed.data.title ?? null,
+    kind: parsed.data.kind ?? null,
+    documentDate: parsed.data.documentDate ?? null,
+    episodeIds: parsed.data.episodeIds ?? [],
+    encounterIds: parsed.data.encounterIds ?? [],
+    sourceSystem,
+    sourceId,
+    sourceInstance,
+    aiDeferred: ctx.aiDeferred,
+    sourceKeyChecked: true,
+    limits,
+    // Only the AI work queued after a fresh insert follows the capability;
+    // the upload itself is data and always accepted.
+    documentAi: () => getAiCapability("documentAi"),
   });
-  if (existing) {
-    // An import sending bytes that are already stored under another key (or
-    // none) is answered with that document — and the key is remembered for
-    // it, so once the person deletes the document this key stays deleted too.
-    if (sourceSystem && sourceId) {
-      const remembered = await rememberSourceAlias(
-        user.id,
-        existing.id,
-        sourceSystem,
-        sourceId,
-      );
-      if (remembered === "limit") return aliasLimitResponse();
-    }
-    return duplicateResponse(ctx, existing);
-  }
 
-  // Quota gate + insert + pre-links in ONE transaction. Usage counts every
-  // non-purged row — tombstones still hold TOAST bytes, so "deleted" bytes
-  // are never invisible weight (undo-delete never changes usage).
-  let document: SerialisableDocument;
-  try {
-    document = await prisma.$transaction(async (tx) => {
-      // Serialise the quota gate per user: without this, N concurrent
-      // uploads all read the same SUM before any of them commits and the
-      // quota can be overshot by up to N × cap in one burst. The advisory
-      // lock is transaction-scoped (released on commit/rollback) and keyed
-      // on the user id, so uploads by different users never queue on each
-      // other.
-      // (`pg_advisory_xact_lock` returns void, which the client cannot
-      // deserialize as a column — selecting FROM it yields a plain int row.)
-      await tx.$queryRaw`
-        SELECT 1 AS locked
-        FROM pg_advisory_xact_lock(hashtextextended('documents-quota:' || ${user.id}, 0))
-      `;
-      const rows = await tx.$queryRaw<Array<{ used: bigint }>>`
-        SELECT COALESCE(SUM(byte_size), 0)::bigint AS used
-        FROM inbound_documents
-        WHERE user_id = ${user.id}
-      `;
-      const usedBytes = Number(rows[0]?.used ?? 0);
-      if (usedBytes + buffer.byteLength > limits.quotaBytes) {
-        throw new QuotaExceededError(usedBytes);
-      }
-
-      const { content, codec } = encryptDocumentContent(buffer);
-
-      // No mass assignment — every column is set field-by-field; `userId`
-      // comes from the session, never the body. `documentDate` defaults to
-      // the upload day so display == sort == filter (user-editable later).
-      const created = await tx.inboundDocument.create({
-        data: {
-          userId: user.id,
-          kind: parsed.data.kind ?? "OTHER",
-          // Stored plaintext on purpose (mirrors `filename`) so the list can
-          // ILIKE-search + ORDER BY it. It MAY hold PHI the user types; that
-          // is the accepted tradeoff for server-side search/sort — the
-          // document body stays encrypted.
-          title: parsed.data.title ?? null,
-          filename:
-            typeof file.name === "string" ? file.name.slice(0, 255) : null,
-          mimeType: detected.mimeType,
-          byteSize: buffer.byteLength,
-          contentEncrypted: content,
-          contentCodec: codec,
-          contentSha256,
-          status: "STORED",
-          documentDate: parsed.data.documentDate
-            ? isoDateToUtc(parsed.data.documentDate)
-            : new Date(),
-          sourceSystem,
-          sourceId,
-          aiReadDeferred: ctx.aiDeferred,
-        },
-        omit: { contentEncrypted: true },
+  switch (result.kind) {
+    case "sourceKey":
+      return answerSourceKey(ctx, result.match);
+    case "tooLarge":
+      return fileTooLarge(result.maxFileBytes);
+    case "empty":
+      return apiError("Uploaded file is empty", 422, {
+        errorCode: "documents.inbound.invalidMetadata",
       });
-
-      if (episodeIds.length > 0) {
-        await linkTargets(tx, {
-          userId: user.id,
-          sourceKind: "document",
-          sourceId: created.id,
-          targetKind: "conditionEpisode",
-          targetIds: episodeIds,
-        });
-      }
-      if (encounterIds.length > 0) {
-        await linkTargets(tx, {
-          userId: user.id,
-          sourceKind: "document",
-          sourceId: created.id,
-          targetKind: "encounter",
-          targetIds: encounterIds,
-        });
-      }
-      return created;
-    });
-  } catch (err) {
-    if (err instanceof QuotaExceededError) {
+    case "unsupportedType":
+      return apiError("This file type is not supported.", 415, {
+        errorCode: "documents.inbound.fileType",
+        reason: "unsupportedType",
+      });
+    case "episodeNotFound":
+      return apiError("Episode not found", 404, {
+        errorCode: "documents.inbound.episodeNotFound",
+      });
+    case "encounterNotFound":
+      return apiError("Visit not found", 404, {
+        errorCode: "documents.inbound.encounterNotFound",
+      });
+    case "aliasLimit":
+      return aliasLimitResponse();
+    case "duplicate":
+      return duplicateResponse(ctx, result.document);
+    case "quotaExceeded":
       // The figures are the owner's; a write-only token learns only that the
       // vault is full.
       return apiError("Storage quota exceeded.", 413, {
@@ -644,107 +538,13 @@ async function processUpload(
         reason: "quotaExceeded",
         ...(scoped
           ? {}
-          : { quotaBytes: limits.quotaBytes, usedBytes: err.usedBytes }),
+          : { quotaBytes: result.quotaBytes, usedBytes: result.usedBytes }),
       });
-    }
-    if (isP2002(err)) {
-      // A racing upload won one of the two partial unique indexes — the same
-      // source key, or the same bytes. Surface the winner exactly as the fast
-      // paths above would have.
-      if (sourceSystem && sourceId) {
-        const match = await findSourceKey(user.id, sourceSystem, sourceId);
-        if (match) return answerSourceKey(ctx, match);
-      }
-      const winner = await prisma.inboundDocument.findFirst({
-        where: { userId: user.id, contentSha256, deletedAt: null },
-        omit: { contentEncrypted: true },
-      });
-      if (winner) {
-        if (sourceSystem && sourceId) {
-          const remembered = await rememberSourceAlias(
-            user.id,
-            winner.id,
-            sourceSystem,
-            sourceId,
-          );
-          if (remembered === "limit") return aliasLimitResponse();
-        }
-        return duplicateResponse(ctx, winner);
-      }
-    }
-    throw err;
+    case "stored":
+      break;
   }
 
-  await auditLog("documents.inbound.store", {
-    userId: user.id,
-    ipAddress: getClientIp(request),
-    details: {
-      documentId: document.id,
-      mime: detected.mimeType,
-      ...(scoped ? { scoped: true } : {}),
-      ...(sourceSystem ? { sourceSystem } : {}),
-    },
-  });
-
-  annotate({
-    action: { name: "documents.vault.upload" },
-    meta: {
-      documentId: document.id,
-      byteSize: document.byteSize,
-      servingClass: detected.servingClass,
-      linked: episodeIds.length,
-      linkedVisits: encounterIds.length,
-      scoped,
-      sourceSystem,
-      aiDeferred: ctx.aiDeferred,
-    },
-  });
-
-  // Auto-index the freshly stored document for content search: enqueue a
-  // fire-and-forget background job (provider-first, local text-layer fallback).
-  // The upload response never blocks on or fails because of indexing — the
-  // enqueue is not awaited and swallows its own errors (a missing boss or a
-  // transient send failure is a silent no-op). Only fresh inserts enqueue — a
-  // duplicate upload returns early above and never reaches here.
-  //
-  // `aiRead=defer` narrows it to the local text layer: an import of a whole
-  // archive must not turn into one provider call per file. The person reads
-  // them later, deliberately, from the document itself.
-  if (ctx.aiDeferred) {
-    void enqueueDocumentIndex(user.id, document.id, { localOnly: true });
-  } else {
-    void enqueueDocumentIndex(user.id, document.id);
-  }
-
-  // Render a preview thumbnail in the background too (pure local compute — no
-  // egress). Same fire-and-forget contract: the upload never blocks on or fails
-  // because of it, and a dropped enqueue is recoverable via the boot backfill.
-  // Only fresh inserts reach here (a duplicate returns early above).
-  void enqueueDocumentThumbnail(user.id, document.id);
-
-  // Summarise the freshly stored document in the background — but ONLY when the
-  // `documentsAutoAiRead` opt-in is ON (the job re-checks it and the egress
-  // consent, and no-ops otherwise) and the `documentAi` capability is open for
-  // this record. The upload itself never depends on AI: the document is stored
-  // above whatever the capability says, and the index job still runs its
-  // provider-free text-layer path. The persisted summary shows on the detail
-  // view. Same fire-and-forget contract: the upload never blocks on or fails
-  // because of it. Only fresh inserts reach here (a duplicate returns early).
-  //
-  // A deferred upload skips it outright and keeps `summaryState: NONE`, so
-  // the detail sheet offers "Generate summary" rather than a pending state.
-  const documentAi = ctx.aiDeferred
-    ? { available: false as const, reason: "deferred" }
-    : await getAiCapability("documentAi");
-  if (documentAi.available) {
-    void enqueueDocumentSummary(user.id, document.id);
-  } else {
-    annotate({
-      action: { name: "documents.summary.enqueueSkipped" },
-      meta: { documentId: document.id, reason: documentAi.reason },
-    });
-  }
-
+  const document = result.document;
   if (scoped) return receiptResponse(document.id, 201, { duplicate: false });
 
   const [links, visitLinks] = await Promise.all([

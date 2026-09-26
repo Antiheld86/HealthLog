@@ -928,6 +928,9 @@ model User {
   // v1.39.2 — further source keys an import answered with an existing
   // document (same bytes under another key). See DocumentSourceAlias.
   documentSourceAliases                     DocumentSourceAlias[]
+  // v1.39.3 — the person's own connection to a Paperless-ngx or Papra
+  // instance for the document picker. See DocumentSourceConnection.
+  documentSourceConnections                 DocumentSourceConnection[]
   extractedFacts                            ExtractedFact[]
   documentConditionLinks                    DocumentConditionLink[]
   documentContentIndexes                    DocumentContentIndex[]
@@ -8008,15 +8011,24 @@ model InboundDocument {
   /// and the Paperless workflow recipe; shown on the detail sheet.
   sourceSystem       String?               @map("source_system") @db.VarChar(16)
   /// v1.39.2 (#1038) — the document's id in `sourceSystem`. Together with
-  /// `userId` + `sourceSystem` it is unique across live AND tombstoned rows
-  /// (raw SQL in migration 0353, not expressible in Prisma):
-  ///   CREATE UNIQUE INDEX inbound_documents_user_source_key
-  ///     ON inbound_documents (user_id, source_system, source_id)
-  ///     WHERE source_id IS NOT NULL;
+  /// `userId`, `sourceSystem` and `sourceInstance` it is unique across live
+  /// AND tombstoned rows (raw SQL in migrations 0353 and 0356, not expressible
+  /// in Prisma; see `sourceInstance` for the current definition).
   /// Including tombstones is the point: re-running an importer must not bring
   /// back a document the person deleted. The purge carries the key over to
   /// `DocumentImportKey` when it removes the row.
   sourceId           String?               @map("source_id") @db.VarChar(128)
+  /// v1.39.3 (#1038) — which instance of `sourceSystem` the document came
+  /// from: the normalised origin (`scheme://host[:port]`) of the Paperless-ngx
+  /// or Papra it was fetched from, so id 123 on one Paperless and id 123 on
+  /// another are two keys. Plaintext; an address, not health data. Null for a
+  /// key sent without one (every v1.39.2 import, an older script, a workflow
+  /// that does not send it): such a key matches any instance of its system,
+  /// and a lookup without an instance matches any stored instance. Part of the
+  /// source-key unique index since migration 0356, which rebuilt it as
+  ///   (user_id, source_system, source_instance, source_id) NULLS NOT DISTINCT
+  ///   WHERE source_id IS NOT NULL.
+  sourceInstance     String?               @map("source_instance") @db.VarChar(512)
   /// v1.39.2 (#1038) — the upload asked for `aiRead=defer`: nothing may send
   /// this document to an AI provider on its own (the summary catch-up, the
   /// summary job, lab auto-staging all skip it). Cleared when the person
@@ -8078,18 +8090,24 @@ model InboundDocument {
 /// own, so deleting the document keeps every key that ever reached it deleted.
 /// Cascades with the document; the purge copies it first.
 model DocumentSourceAlias {
-  id           String   @id @default(cuid())
-  userId       String   @map("user_id")
-  documentId   String   @map("document_id")
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  documentId     String   @map("document_id")
   /// Same closed vocabulary as `InboundDocument.sourceSystem`.
-  sourceSystem String   @map("source_system") @db.VarChar(16)
-  sourceId     String   @map("source_id") @db.VarChar(128)
-  createdAt    DateTime @default(now()) @map("created_at")
+  sourceSystem   String   @map("source_system") @db.VarChar(16)
+  sourceId       String   @map("source_id") @db.VarChar(128)
+  /// v1.39.3 — the source instance, as on `InboundDocument.sourceInstance`
+  /// (null matches any instance of the system).
+  sourceInstance String?  @map("source_instance") @db.VarChar(512)
+  createdAt      DateTime @default(now()) @map("created_at")
 
   user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   document InboundDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, sourceSystem, sourceId])
+  // NULLS NOT DISTINCT in migration 0356 (hand-written; Prisma would
+  // regenerate it NULLS DISTINCT): a key stored without an instance still
+  // collides with the same key without one.
+  @@unique([userId, sourceSystem, sourceInstance, sourceId])
   @@index([documentId])
   @@map("document_source_aliases")
 }
@@ -8101,17 +8119,60 @@ model DocumentSourceAlias {
 /// "deleted" instead of storing the document again. Written by the purge only;
 /// read by the upload route's source-key check. Holds no document content.
 model DocumentImportKey {
-  id           String   @id @default(cuid())
-  userId       String   @map("user_id")
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
   /// Same closed vocabulary as `InboundDocument.sourceSystem`.
-  sourceSystem String   @map("source_system") @db.VarChar(16)
-  sourceId     String   @map("source_id") @db.VarChar(128)
-  createdAt    DateTime @default(now()) @map("created_at")
+  sourceSystem   String   @map("source_system") @db.VarChar(16)
+  sourceId       String   @map("source_id") @db.VarChar(128)
+  /// v1.39.3 — the source instance, as on `InboundDocument.sourceInstance`
+  /// (null matches any instance of the system).
+  sourceInstance String?  @map("source_instance") @db.VarChar(512)
+  createdAt      DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, sourceSystem, sourceId])
+  // NULLS NOT DISTINCT in migration 0356 (hand-written; Prisma would
+  // regenerate it NULLS DISTINCT): a key stored without an instance still
+  // collides with the same key without one.
+  @@unique([userId, sourceSystem, sourceInstance, sourceId])
   @@map("document_import_keys")
+}
+
+/// v1.39.3 (#1038) — one person's connection to a Paperless-ngx or Papra
+/// instance, used by the document picker to search that system by name, tag
+/// and date and import the documents the person picks. One per system per
+/// person. Only reachable when the operator lists the instance's origin in
+/// `DOCUMENT_SOURCE_ORIGINS`; the origin is re-checked on every request, so
+/// removing it from the list cuts the connection off without touching the
+/// row. No background job reads it: every request to the source is one the
+/// person started. Not carried in backups (a third-party credential for a
+/// service on the operator's network; see `NOT_IN_BACKUP_MODELS`); removed by
+/// Delete all data and with the account.
+model DocumentSourceConnection {
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  /// `PAPERLESS` | `PAPRA` (`DOCUMENT_PICKER_SYSTEMS` in
+  /// `src/lib/documents/sources/types.ts`).
+  system         String    @map("system") @db.VarChar(16)
+  /// Base address of the instance, origin plus an optional path. Plaintext:
+  /// its origin is compared with the operator's list on every use, and the
+  /// settings card shows it. Not health data.
+  baseUrl        String    @map("base_url") @db.VarChar(2048)
+  /// Papra organization id; null for Paperless-ngx.
+  organizationId String?   @map("organization_id") @db.VarChar(128)
+  /// The API token (Paperless-ngx) or API key (Papra), AES-256-GCM via
+  /// `encrypt()`. No route returns it, in whole or in part.
+  tokenEncrypted String    @map("token_encrypted")
+  /// Last time the source answered a test with this token: the save's live
+  /// check or the settings card's Test button. Shown on the card.
+  lastVerifiedAt DateTime? @map("last_verified_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, system])
+  @@map("document_source_connections")
 }
 
 model ExtractedFact {

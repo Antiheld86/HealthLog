@@ -177,6 +177,8 @@ export interface DocumentBackupEntry {
    */
   sourceSystem?: string | null;
   sourceId?: string | null;
+  /** v1.39.3 — the source instance (origin); absent in older files. */
+  sourceInstance?: string | null;
   /** Canonical DR only: the import's hold on automatic AI reading. */
   aiReadDeferred?: boolean;
 }
@@ -309,6 +311,7 @@ export async function buildRecordsBackupSection(
           lastIndexOutcome: true,
           sourceSystem: true,
           sourceId: true,
+          sourceInstance: true,
           aiReadDeferred: true,
           createdAt: true,
           updatedAt: true,
@@ -330,6 +333,7 @@ export async function buildRecordsBackupSection(
           summaryEncrypted: true,
           sourceSystem: true,
           sourceId: true,
+          sourceInstance: true,
           createdAt: true,
         },
       });
@@ -545,6 +549,7 @@ export async function buildRecordsBackupSection(
         : null,
       sourceSystem: d.sourceSystem,
       sourceId: d.sourceId,
+      sourceInstance: d.sourceInstance,
       createdAt: d.createdAt.toISOString(),
     };
 

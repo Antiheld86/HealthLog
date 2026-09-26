@@ -30,6 +30,7 @@
 import { Buffer } from "node:buffer";
 
 import { prisma, toJson } from "@/lib/db";
+import { normaliseSourceInstance } from "@/lib/validations/inbound-documents";
 import { auditLog } from "@/lib/auth/audit";
 import {
   isStoredBackupReadError,
@@ -2057,6 +2058,14 @@ export async function restoreBackup(
               sourceId: document.sourceSystem
                 ? (document.sourceId ?? null)
                 : null,
+              // A file written before v1.39.3 has no instance: the key then
+              // matches any instance of its system, as it did when stored.
+              sourceInstance:
+                document.sourceSystem && document.sourceId
+                  ? document.sourceInstance
+                    ? normaliseSourceInstance(document.sourceInstance)
+                    : null
+                  : null,
               createdAt: new Date(document.createdAt!),
               updatedAt: new Date(document.updatedAt!),
             })),

@@ -301,6 +301,7 @@ function paperless(options) {
 
   return {
     system: "PAPERLESS",
+    instance: new URL(base).origin,
     label,
     async *documents() {
       const query = new URLSearchParams({
@@ -324,7 +325,8 @@ function paperless(options) {
         tagId = found[0].id;
         query.set("tags__id__all", String(tagId));
       }
-      if (options.since) query.set("created__date__gte", options.since);
+      // API version 9 made `created` a plain date: filter on it directly.
+      if (options.since) query.set("created__gte", options.since);
 
       let typeNames = new Map();
       if (options.kindMap.size > 0) {
@@ -399,6 +401,7 @@ function papra(options) {
 
   return {
     system: "PAPRA",
+    instance: new URL(options.baseUrl).origin,
     label,
     async *documents() {
       let tagId = null;
@@ -526,6 +529,7 @@ function keyQuery(source, doc) {
   return new URLSearchParams({
     sourceSystem: source.system,
     sourceId: doc.sourceId.slice(0, SOURCE_ID_MAX),
+    sourceInstance: source.instance,
   });
 }
 
@@ -617,6 +621,9 @@ async function upload(options, source, doc, file) {
       if (!options.aiRead) form.append("aiRead", "defer");
       form.append("sourceSystem", source.system);
       form.append("sourceId", doc.sourceId.slice(0, SOURCE_ID_MAX));
+      // Which Paperless-ngx or Papra this id belongs to: the same id in two
+      // instances is two documents. HealthLog 1.39.2 ignores the field.
+      form.append("sourceInstance", source.instance);
       return form;
     },
   );
@@ -640,6 +647,8 @@ async function upload(options, source, doc, file) {
       return {
         outcome: "skipped",
         reason: `larger than HealthLog accepts${meta.maxFileBytes ? ` (${mib(meta.maxFileBytes)})` : ""}`,
+        maxFileBytes:
+          typeof meta.maxFileBytes === "number" ? meta.maxFileBytes : undefined,
       };
     case 415:
       return {
@@ -661,9 +670,10 @@ async function upload(options, source, doc, file) {
 
 function mib(bytes) {
   if (typeof bytes !== "number") return "?";
-  return bytes >= 1024 * 1024 * 1024
-    ? `${(bytes / 1024 ** 3).toFixed(1)} GB`
-    : `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  // Under 0.1 MB a size in MB reads as 0.0; say it in KB.
+  if (bytes < 0.1 * 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
 
 // ── Run ────────────────────────────────────────────────────────────────────
@@ -698,6 +708,8 @@ async function run(argv, env = process.env) {
   };
   let listed = 0;
   let totalBytes = 0;
+  /** HealthLog's per-file limit, once a 413 has said it. */
+  let maxFileBytes = null;
   let unknownSizes = 0;
 
   out(
@@ -736,6 +748,20 @@ async function run(argv, env = process.env) {
         continue;
       }
 
+      // HealthLog says its per-file limit only when it refuses a file. Once
+      // it has, a document the source already says is larger is skipped
+      // without downloading it.
+      if (
+        maxFileBytes !== null &&
+        typeof doc.size === "number" &&
+        doc.size > maxFileBytes
+      ) {
+        const reason = `larger than HealthLog accepts (${mib(maxFileBytes)})`;
+        tally.skipped.push({ where, reason });
+        out(`  skipped   ${where}: ${reason}`);
+        continue;
+      }
+
       const file = await source.download(doc);
       if (file.skip) {
         tally.skipped.push({ where, reason: file.skip });
@@ -743,6 +769,9 @@ async function run(argv, env = process.env) {
         continue;
       }
       const result = await upload(options, source, doc, file);
+      if (typeof result.maxFileBytes === "number") {
+        maxFileBytes = result.maxFileBytes;
+      }
       if (result.outcome === "imported") {
         tally.imported++;
         out(`  imported  ${where}`);

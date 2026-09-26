@@ -58,9 +58,12 @@ export async function purgeExpiredDocumentTombstones(
         userId: true,
         sourceSystem: true,
         sourceId: true,
+        sourceInstance: true,
         // Further keys the import answered with this document (same bytes).
         // They cascade away with the row, so they are copied here first.
-        sourceAliases: { select: { sourceSystem: true, sourceId: true } },
+        sourceAliases: {
+          select: { sourceSystem: true, sourceId: true, sourceInstance: true },
+        },
       },
     });
     const keys = keyed.flatMap((row) => [
@@ -70,6 +73,7 @@ export async function purgeExpiredDocumentTombstones(
               userId: row.userId,
               sourceSystem: row.sourceSystem,
               sourceId: row.sourceId,
+              sourceInstance: row.sourceInstance,
             },
           ]
         : []),
@@ -77,6 +81,7 @@ export async function purgeExpiredDocumentTombstones(
         userId: row.userId,
         sourceSystem: alias.sourceSystem,
         sourceId: alias.sourceId,
+        sourceInstance: alias.sourceInstance,
       })),
     ]);
     if (keys.length > 0) {

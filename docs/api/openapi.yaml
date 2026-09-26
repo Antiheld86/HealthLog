@@ -15722,21 +15722,23 @@ paths:
 
 
         **Importing from another system (v1.39.2).** Optional `sourceSystem` (`PAPERLESS`, `PAPRA`, `OTHER`) and
-        `sourceId` (its id there, printable, up to 128 characters; needs `sourceSystem`) key the upload. A re-send with
-        a known key is a duplicate: 200 with the live row (`meta.duplicate: true`), or, when the owner DELETED that
-        document, 200 with `data.deleted: true` and `meta.deleted: true` and nothing stored; this holds after the 30-day
-        purge too. The key may also ride the query string (`?sourceSystem=…&sourceId=…`): a key the vault already holds
-        is then answered at once, the file is not stored or processed, and the request counts only toward the lookup
-        allowance shared with `GET /api/documents/inbound/source` (5000 an hour per token, per person for a session; 429
-        past it), not toward the hourly upload limit. A key in both places must agree (else 422). Every other upload
-        counts toward the hourly upload limit, duplicates included. A key that is answered with an existing document by
-        its bytes is remembered for that document, so deleting it keeps that key deleted too; one document takes at most
-        20 such keys, beyond which the upload is refused 409 (`documents.inbound.sourceAliasLimit`). `OTHER` is one
-        shared namespace per account: two different systems both sent as `OTHER` must not reuse each other's ids.
-        `aiRead=defer` holds back automatic AI reading for this upload: the thumbnail and a local text index still run,
-        the summary and lab staging do not, and the document stays out of every automatic AI path (the summary catch-up,
-        the automatic index, Index all for search) until the person reads it with AI or generates its summary. Absent,
-        behaviour is unchanged.
+        `sourceId` (its id there, printable, up to 128 characters, never `.` or `..`; needs `sourceSystem`) key the
+        upload, optionally with `sourceInstance` (v1.39.3: the address of the Paperless-ngx or Papra it came from,
+        normalised to its origin; without it the key matches any instance of the system). A re-send with a known key is
+        a duplicate: 200 with the live row (`meta.duplicate: true`), or, when the owner DELETED that document, 200 with
+        `data.deleted: true` and `meta.deleted: true` and nothing stored; this holds after the 30-day purge too. The key
+        may also ride the query string (`?sourceSystem=…&sourceId=…`): a key the vault already holds is then answered at
+        once, the file is not stored or processed, and the request counts only toward the lookup allowance shared with
+        `GET /api/documents/inbound/source` (5000 an hour per token, per person for a session; 429 past it), not toward
+        the hourly upload limit. A key in both places must agree (else 422). Every other upload counts toward the hourly
+        upload limit, duplicates included. A key that is answered with an existing document by its bytes is remembered
+        for that document, so deleting it keeps that key deleted too; one document takes at most 20 such keys, beyond
+        which the upload is refused 409 (`documents.inbound.sourceAliasLimit`). `OTHER` is one shared namespace per
+        account: two different systems both sent as `OTHER` must not reuse each other's ids. `aiRead=defer` holds back
+        automatic AI reading for this upload: the thumbnail and a local text index still run, the summary and lab
+        staging do not, and the document stays out of every automatic AI path (the summary catch-up, the automatic
+        index, Index all for search) until the person reads it with AI or generates its summary. Absent, behaviour is
+        unchanged.
 
 
         **Narrow token.** Also reachable with a `documents:write` Bearer (minted at `POST /api/tokens/documents`), which
@@ -15768,6 +15770,16 @@ paths:
             type: string
             maxLength: 128
           description: Import source key, second half. Both halves or neither; half a key is 422.
+        - name: sourceInstance
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+          description: "Optional, with a key. The instance of `sourceSystem` the id belongs to, as its http(s) address; normalised
+            to the origin (`scheme://host[:port]`). The same id in two instances is two documents. Optional: a key
+            stored without an instance (every upload before v1.39.3) matches any instance of its system, and a key sent
+            without one matches any stored instance. If also sent in the form it must agree."
       requestBody:
         required: true
         content:
@@ -15822,6 +15834,13 @@ paths:
                     documents.
                   type: string
                   maxLength: 128
+                sourceInstance:
+                  description: "Optional; requires `sourceId`. The instance of `sourceSystem` the id belongs to, as its http(s) address;
+                    normalised to the origin (`scheme://host[:port]`). The same id in two instances is two documents.
+                    Optional: a key stored without an instance (every upload before v1.39.3) matches any instance of its
+                    system, and a key sent without one matches any stored instance."
+                  type: string
+                  maxLength: 512
                 aiRead:
                   description: Optional. `defer` holds back automatic AI reading for this upload (local index and thumbnail only).
                   type: string
@@ -15897,6 +15916,16 @@ paths:
           schema:
             type: string
             maxLength: 128
+        - name: sourceInstance
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+          description: "The instance of `sourceSystem` the id belongs to, as its http(s) address; normalised to the origin
+            (`scheme://host[:port]`). The same id in two instances is two documents. Optional: a key stored without an
+            instance (every upload before v1.39.3) matches any instance of its system, and a key sent without one
+            matches any stored instance."
       responses:
         "200":
           description: The answer for this key.
@@ -20967,6 +20996,377 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+  /api/documents/sources:
+    get:
+      tags:
+        - Documents
+      summary: "Document archives: availability and connections"
+      description: "Whether the operator enabled the document picker (`available`, true when `DOCUMENT_SOURCE_ORIGINS` lists
+        at least one origin), the listed origins, and the caller's own saved connections to Paperless-ngx or Papra. A
+        connection never carries its token: `hasToken` is always true for a saved one, and no route returns the token in
+        whole or in part. `originAllowed` is false once the operator removed the connection's origin from the list. No
+        request leaves the server. Needs neither the Documents module nor the list: with the list unset, `available` is
+        false and any connection still stored is listed (with `originAllowed: false`) so it can be removed. Cookie
+        session only; not delegable."
+      security: &a52
+        - cookieAuth: []
+      responses:
+        "200":
+          description: The picker's state for the caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSourcesStatusEnvelope"
+        "401": *a1
+        "403": &a53
+          description: "Refused before any request to the source: `documents.sources.browserOnly` for a Bearer caller,
+            `sharing.not_permitted` while acting on another person's record (a delegate or guardian never uses the
+            owner's archive), or `module.disabled` when the Documents module is off."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a4
+        "429": *a5
+  /api/documents/sources/{system}:
+    put:
+      tags:
+        - Documents
+      summary: Save a connection to a document archive
+      description: "Saves or replaces the caller's connection to Paperless-ngx (`paperless`: base address and API token) or
+        Papra (`papra`: base address, organization id, API key with `documents:read` and `tags:read`). The base address
+        may carry a path; its origin must be listed in `DOCUMENT_SOURCE_ORIGINS`. The connection is tested live before
+        anything is stored. Leaving out `token` keeps the stored one, but only when the new address is on the same
+        origin as the saved one: the first save and a move to another origin must carry it (422
+        `documents.sources.tokenRequired`), so a stored token is never sent to an address it was not saved for. A Papra
+        organization id is letters, digits, `_` and `-`. The token is stored encrypted (AES-256-GCM) and never returned.
+        Ten saves and tests a minute per person. Cookie session only; not delegable."
+      security: *a52
+      parameters:
+        - &a54
+          name: system
+          in: path
+          required: true
+          description: "`paperless` (Paperless-ngx) or `papra` (Papra)."
+          schema:
+            type: string
+            enum:
+              - paperless
+              - papra
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                baseUrl:
+                  type: string
+                  minLength: 1
+                  maxLength: 2048
+                organizationId:
+                  type: string
+                  pattern: ^org_[a-z0-9]{24}$
+                token:
+                  type: string
+                  minLength: 1
+                  maxLength: 512
+                  pattern: ^[\x21-\x7e]+$
+              required:
+                - baseUrl
+      responses:
+        "200":
+          description: Saved and verified. The connection, without its token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSourceConnectionEnvelope"
+        "401": *a1
+        "403": *a53
+        "404": &a55
+          description: "`documents.sources.unavailable`: the operator has not listed any origin in `DOCUMENT_SOURCE_ORIGINS`, so
+            the picker is off. `documents.sources.notConnected`: no connection is saved for this system.
+            `documents.sources.notFound`: the source has no such document, or (Papra) no such organization, including
+            one the key's user is not a member of (Papra 403 `user.not_in_organization`) and one Papra cannot parse
+            (400)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422":
+          description: "`documents.sources.originNotAllowed`, `documents.sources.invalidAddress`,
+            `documents.sources.organizationRequired` (Papra), `documents.sources.tokenRequired` (first save without a
+            token), or body validation."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429": *a5
+        "502": &a56
+          description: "The source could not answer usefully, with the reason in `meta.errorCode` and, when the source answered at
+            all, its HTTP status in `meta.upstreamStatus` (its body is never passed on): `documents.sources.unreachable`
+            (no connection, timeout, or a destination refused at dial time), `documents.sources.redirected` (the source
+            answered with a redirect, which is never followed), `documents.sources.authRefused` (401/403 from the
+            source), `documents.sources.permissionMissing` (Papra: the key cannot read tags; needs `tags:read`),
+            `documents.sources.versionTooOld` (Paperless-ngx older than 2.16 / API version 9),
+            `documents.sources.badResponse` (not the documented JSON, or larger than 1 MiB)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    delete:
+      tags:
+        - Documents
+      summary: Remove a connection to a document archive
+      description: Deletes the caller's connection for this system, and its token with it. Works even after the operator
+        removed the origin from the list, and with the Documents module switched off. `disconnected` is false when there
+        was nothing to delete. Cookie session only; not delegable.
+      security: *a52
+      parameters:
+        - *a54
+      responses:
+        "200":
+          description: Removed, or there was nothing to remove.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSourceDisconnectEnvelope"
+        "401": *a1
+        "403": *a53
+        "422": *a4
+        "429": *a5
+  /api/documents/sources/{system}/test:
+    post:
+      tags:
+        - Documents
+      summary: Test a saved connection
+      description: One request to the source with the stored token. Answers `ok` with the round-trip time and stamps
+        `lastVerifiedAt`, or the reason in `meta.errorCode`. Shares the save's allowance of ten a minute. Cookie session
+        only; not delegable.
+      security: *a52
+      parameters:
+        - *a54
+      responses:
+        "200":
+          description: The source answered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSourceTestEnvelope"
+        "401": *a1
+        "403": *a53
+        "404": *a55
+        "422": &a57
+          description: "`documents.sources.originNotAllowed`: the base address's origin is not on the operator's list (checked on
+            every request, so a connection saved earlier is cut off once its origin is removed), or another validation
+            failure."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429": *a5
+        "502": *a56
+  /api/documents/sources/{system}/tags:
+    get:
+      tags:
+        - Documents
+      summary: Tags of a connected archive
+      description: The source's tags for the picker's filter, the first 250 by name, in the source's own ids. Shares the
+        search allowance of sixty a minute. Cookie session only; not delegable.
+      security: *a52
+      parameters:
+        - *a54
+      responses:
+        "200":
+          description: The tags.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSourceTagsEnvelope"
+        "401": *a1
+        "403": *a53
+        "404": *a55
+        "422": *a57
+        "429": *a5
+        "502": *a56
+  /api/documents/sources/{system}/search:
+    get:
+      tags:
+        - Documents
+      summary: Search a connected archive by name, tag and date
+      description: "Searches the source 25 documents at a time. `q` matches the document's name (Paperless-ngx title, Papra
+        name); `tag` narrows to one of the source's tags by id; `from` / `to` to a date range, inclusive (Paperless-ngx
+        filters on `created__gte` / `created__lte`; Papra's range is applied to each page after it arrives). When a
+        filter applied after arrival empties a page, the route reads on, up to five source pages, and `page` in the
+        answer is the last source page read; ask for `page + 1` next. Each result carries what the vault already holds
+        under that source key: `new`, `imported` with the vault document's `documentId`, or `deleted` (deleted in
+        HealthLog; importing it again stores nothing). Nothing is stored. Sixty searches a minute, shared with the tag
+        read. Cookie session only; not delegable."
+      security: *a52
+      parameters:
+        - *a54
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 1
+      responses:
+        "200":
+          description: One page of results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSourceSearchEnvelope"
+        "401": *a1
+        "403": *a53
+        "404": *a55
+        "422": *a57
+        "429": *a5
+        "502": *a56
+  /api/documents/sources/{system}/import:
+    post:
+      tags:
+        - Documents
+      summary: Import one picked document
+      description: "`sourceId` must be an id the system issues (Paperless-ngx: digits; Papra: letters, digits, `_`, `-`), else
+        422 before anything is fetched. Fetches one document from the source and stores it in the vault through the same
+        path as an upload, with `sourceSystem` / `sourceId` / `sourceInstance` (the connection's origin) provenance; the
+        same id from another instance is another document. One import per key runs at a time; a concurrent second one
+        waits and then answers `duplicate`. The key check counts toward the lookup allowance, the fetch toward the
+        search allowance, and only a file that arrived toward the upload allowance. A source key the vault already holds
+        is answered without a download: `duplicate` for a live document (same id), `deleted` for one the person deleted
+        in HealthLog, which is never stored again. Bytes already in the vault under another key are `duplicate` too, and
+        the key is remembered for that document. `link` files the document against the record the picker was opened from
+        (a condition, a visit or a vaccination, which must be the caller's own and live; checked before anything is
+        fetched), including a duplicate. `kind` sets the document type (default OTHER). Automatic AI reading follows the
+        person's own setting. Counts against the person's upload allowance (60 an hour) and storage quota. 201 for a new
+        document, 200 otherwise. Cookie session only; not delegable."
+      security: *a52
+      parameters:
+        - *a54
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sourceId:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  pattern: ^[\x21-\x7e]+$
+                kind:
+                  type: string
+                  enum:
+                    - DOCTOR_REPORT
+                    - DISCHARGE_LETTER
+                    - LAB_RESULT
+                    - IMAGING
+                    - PRESCRIPTION
+                    - REFERRAL
+                    - INSURANCE
+                    - VACCINATION
+                    - OTHER
+                link:
+                  type: object
+                  properties:
+                    kind:
+                      type: string
+                      enum:
+                        - conditionEpisode
+                        - encounter
+                        - vaccination
+                    id:
+                      type: string
+                      minLength: 1
+                      maxLength: 64
+                  required:
+                    - kind
+                    - id
+              required:
+                - sourceId
+      responses:
+        "200":
+          description: Already held (`duplicate`) or deleted in HealthLog (`deleted`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSourceImportHeldEnvelope"
+        "201":
+          description: Imported.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSourceImportEnvelope"
+        "401": *a1
+        "403": *a53
+        "404":
+          description: "`documents.sources.unavailable`: the operator has not listed any origin in `DOCUMENT_SOURCE_ORIGINS`, so
+            the picker is off. `documents.sources.notConnected`: no connection is saved for this system.
+            `documents.sources.notFound`: the source has no such document, or (Papra) no such organization, including
+            one the key's user is not a member of (Papra 403 `user.not_in_organization`) and one Papra cannot parse
+            (400). `documents.sources.linkTargetNotFound`: the record in `link` is not the caller's own live
+            conditionEpisode / encounter / vaccination."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: "`documents.inbound.sourceAliasLimit`: these bytes are already stored under too many source ids."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "413":
+          description: "`documents.inbound.fileTooLarge` (with `maxFileBytes`) or `documents.inbound.quotaExceeded` (with
+            `quotaBytes` and `usedBytes`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "415":
+          description: "`documents.inbound.fileType`: the file is not a type the vault accepts."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a57
+        "429":
+          description: "`documents.inbound.rateLimited` (the person's hourly upload allowance, with the rate-limit headers) or
+            `documents.inbound.uploadBusy` (too many uploads in progress; `Retry-After: 1`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "502": *a56
   /api/bugreport:
     post:
       security: []
@@ -30840,12 +31240,17 @@ components:
                 documents.inbound.notIndexed, documents.inbound.pdfNeedsAnthropic,
                 documents.inbound.providerUnsupported, documents.inbound.quotaExceeded, documents.inbound.rateLimited,
                 documents.inbound.restoreDuplicate, documents.inbound.restoreGone, documents.inbound.sourceAliasLimit,
-                documents.inbound.uploadBusy, documents.inbound.uploadTimeout, documents.inbound.vaccinationNotFound;
-                encounter — encounter.invalid, encounter.link.invalid, encounter.practitioner-not-found,
-                encounter.reminder-conflict, encounter.reminder-not-found; environment — environment.invalid,
-                environment.no_home, environment.range_too_large, environment.travel.not_found; export —
-                export.selection.empty, export.selection.unknown_leaf; familyHistory — familyHistory.invalid; feedback —
-                feedback.body.invalid; health_score_config — health_score_config.invalid,
+                documents.inbound.uploadBusy, documents.inbound.uploadTimeout, documents.inbound.vaccinationNotFound,
+                documents.sources.authRefused, documents.sources.badResponse, documents.sources.browserOnly,
+                documents.sources.invalidAddress, documents.sources.linkTargetNotFound, documents.sources.notConnected,
+                documents.sources.notFound, documents.sources.organizationRequired, documents.sources.originNotAllowed,
+                documents.sources.permissionMissing, documents.sources.rateLimited, documents.sources.redirected,
+                documents.sources.tokenRequired, documents.sources.unavailable, documents.sources.unreachable,
+                documents.sources.versionTooOld; encounter — encounter.invalid, encounter.link.invalid,
+                encounter.practitioner-not-found, encounter.reminder-conflict, encounter.reminder-not-found; environment
+                — environment.invalid, environment.no_home, environment.range_too_large, environment.travel.not_found;
+                export — export.selection.empty, export.selection.unknown_leaf; familyHistory — familyHistory.invalid;
+                feedback — feedback.body.invalid; health_score_config — health_score_config.invalid,
                 health_score_config.too_narrow; illness — illness.day-log.invalid, illness.disabled,
                 illness.episode.chronic-no-resolve, illness.episode.invalid, illness.episode.invalid-window,
                 illness.episode.parent-not-found, illness.insights.invalid; import — import.write_failed; ingest —
@@ -35405,6 +35810,11 @@ components:
                 anyOf:
                   - type: string
                     maxLength: 128
+                  - type: "null"
+              sourceInstance:
+                anyOf:
+                  - type: string
+                    maxLength: 512
                   - type: "null"
               aiReadDeferred:
                 type: boolean
@@ -72397,6 +72807,315 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/AdminBackupRestoreJob"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DocumentSourcesStatusEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DocumentSourcesStatus"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DocumentSourcesStatus:
+      type: object
+      properties:
+        available:
+          type: boolean
+        allowedOrigins:
+          type: array
+          items:
+            type: string
+        connections:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentSourceConnection"
+      required:
+        - available
+        - allowedOrigins
+        - connections
+      additionalProperties: false
+    DocumentSourceConnection:
+      type: object
+      properties:
+        system:
+          type: string
+          enum:
+            - PAPERLESS
+            - PAPRA
+        baseUrl:
+          type: string
+        organizationId:
+          anyOf:
+            - type: string
+            - type: "null"
+        hasToken:
+          type: boolean
+          const: true
+        lastVerifiedAt:
+          anyOf:
+            - type: string
+            - type: "null"
+        originAllowed:
+          type: boolean
+      required:
+        - system
+        - baseUrl
+        - organizationId
+        - hasToken
+        - lastVerifiedAt
+        - originAllowed
+      additionalProperties: false
+    DocumentSourceConnectionEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DocumentSourceConnection"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DocumentSourceDisconnectEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DocumentSourceDisconnect"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DocumentSourceDisconnect:
+      type: object
+      properties:
+        disconnected:
+          type: boolean
+      required:
+        - disconnected
+      additionalProperties: false
+    DocumentSourceTestEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DocumentSourceTest"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DocumentSourceTest:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          const: true
+        latencyMs:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        lastVerifiedAt:
+          type: string
+      required:
+        - ok
+        - latencyMs
+        - lastVerifiedAt
+      additionalProperties: false
+    DocumentSourceTagsEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DocumentSourceTags"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DocumentSourceTags:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentSourceTag"
+      required:
+        - tags
+      additionalProperties: false
+    DocumentSourceTag:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+      required:
+        - id
+        - name
+      additionalProperties: false
+    DocumentSourceSearchEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DocumentSourceSearch"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DocumentSourceSearch:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentSourceResult"
+        page:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        hasMore:
+          type: boolean
+      required:
+        - results
+        - page
+        - hasMore
+      additionalProperties: false
+    DocumentSourceResult:
+      type: object
+      properties:
+        sourceId:
+          type: string
+        title:
+          type: string
+        date:
+          anyOf:
+            - type: string
+            - type: "null"
+        tags:
+          type: array
+          items:
+            type: string
+        sizeBytes:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+        state:
+          type: string
+          enum:
+            - new
+            - imported
+            - deleted
+        documentId:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - sourceId
+        - title
+        - date
+        - tags
+        - sizeBytes
+        - state
+        - documentId
+      additionalProperties: false
+    DocumentSourceImportHeldEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DocumentSourceImport"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DocumentSourceImport:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum:
+            - imported
+            - duplicate
+            - deleted
+        documentId:
+          anyOf:
+            - type: string
+            - type: "null"
+        linked:
+          type: boolean
+      required:
+        - outcome
+        - documentId
+        - linked
+      additionalProperties: false
+    DocumentSourceImportEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DocumentSourceImport"
         error:
           type: "null"
         meta:

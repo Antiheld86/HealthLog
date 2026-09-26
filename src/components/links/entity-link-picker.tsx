@@ -31,7 +31,7 @@
  * carries the option's date, so two doses of one vaccine read as two
  * different records.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Check, Plus, Search, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -164,6 +164,7 @@ export function EntityLinkPicker({
   error = false,
   errorLabel,
   onRetry,
+  extraAction,
 }: {
   icon: LucideIcon;
   title: string;
@@ -183,6 +184,13 @@ export function EntityLinkPicker({
   error?: boolean;
   errorLabel?: string;
   onRetry?: () => void;
+  /**
+   * A second way to add, beside the add button: the documents pickers put
+   * "Import from Paperless-ngx / Papra" here. Shown even when there is
+   * nothing to link yet, because an empty vault is exactly when importing is
+   * the way forward. The element renders nothing when it has nothing to offer.
+   */
+  extraAction?: ReactNode;
 }) {
   const { t } = useTranslations();
   const [open, setOpen] = useState(false);
@@ -238,7 +246,10 @@ export function EntityLinkPicker({
           slot={`${slot}-error`}
         />
       ) : options.length === 0 ? (
-        <p className="text-muted-foreground text-xs">{emptyLabel}</p>
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-xs">{emptyLabel}</p>
+          {extraAction}
+        </div>
       ) : (
         <div className="space-y-2">
           {selectedChips.length > 0 ? (
@@ -312,17 +323,20 @@ export function EntityLinkPicker({
             </p>
           ) : null}
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-9"
-            data-slot={`${slot}-add`}
-            onClick={() => setOpen(true)}
-          >
-            <Plus className="size-4" aria-hidden />
-            {t("links.picker.add")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-9"
+              data-slot={`${slot}-add`}
+              onClick={() => setOpen(true)}
+            >
+              <Plus className="size-4" aria-hidden />
+              {t("links.picker.add")}
+            </Button>
+            {extraAction}
+          </div>
         </div>
       )}
 

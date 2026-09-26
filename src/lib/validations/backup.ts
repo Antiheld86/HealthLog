@@ -83,6 +83,7 @@ import {
 } from "@/lib/validations/emergency-profile";
 import {
   DOCUMENT_SOURCE_ID_MAX,
+  DOCUMENT_SOURCE_INSTANCE_MAX,
   DOCUMENT_SOURCE_SYSTEMS,
 } from "@/lib/validations/inbound-documents";
 import { REMINDER_EVENT_SOURCES } from "@/lib/measurement-reminders/satisfy";
@@ -1636,6 +1637,14 @@ const documentBackupSchema = z
     // restore cannot write a system the detail sheet has no name for.
     sourceSystem: z.enum(DOCUMENT_SOURCE_SYSTEMS).nullable().optional(),
     sourceId: z.string().max(DOCUMENT_SOURCE_ID_MAX).nullable().optional(),
+    // v1.39.3 — the source instance (an origin). Length-bounded here and
+    // normalised on restore; a value that is not an origin restores as null
+    // (matches any instance) rather than failing the restore.
+    sourceInstance: z
+      .string()
+      .max(DOCUMENT_SOURCE_INSTANCE_MAX)
+      .nullable()
+      .optional(),
     aiReadDeferred: z.boolean().optional(),
     summary: z.string().nullable().optional(),
     createdAt: isoDateTime.optional(),

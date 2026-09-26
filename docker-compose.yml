@@ -215,6 +215,13 @@ x-healthlog-env: &healthlog_env
   # and unspecified addresses stay refused even when listed. See
   # docs/self-hosting/notifications.md.
   NOTIFICATION_PRIVATE_ORIGINS: "${NOTIFICATION_PRIVATE_ORIGINS:-}"
+  # Paperless-ngx and Papra instances the document picker may reach,
+  # comma-separated exact origins (e.g. "https://paperless.example.com,
+  # http://papra.lan:1221"). Unset, the picker is off. Only listed origins are
+  # ever contacted, public or private; redirects are not followed and
+  # link-local, metadata and unspecified addresses stay refused even when
+  # listed. See docs/self-hosting/document-sources.md.
+  DOCUMENT_SOURCE_ORIGINS: "${DOCUMENT_SOURCE_ORIGINS:-}"
   # Open-Meteo endpoints for the environment/weather correlation. Default to
   # the hosted service; point them at your own Open-Meteo deployment to keep
   # the coordinate lookups off a third party.
