@@ -227,7 +227,11 @@ describe("POST /api/import/csv — batched write + per-row envelope", () => {
 
   it("surfaces an externalId row as updated when it already existed (updateMany)", async () => {
     mMeasurement().findMany.mockResolvedValue([
-      { type: "WEIGHT", externalId: "ext-1" },
+      {
+        type: "WEIGHT",
+        externalId: "ext-1",
+        measuredAt: new Date("2026-05-01T08:00:00Z"),
+      },
     ]);
 
     const res = await POST(
@@ -400,7 +404,11 @@ describe("POST /api/import/csv — contextless blood glucose", () => {
   it("keeps a re-upload of the same external id idempotent", async () => {
     // The key already exists under (userId, type, source=IMPORT, externalId).
     mMeasurement().findMany.mockResolvedValue([
-      { type: "BLOOD_GLUCOSE", externalId: "sensor-1" },
+      {
+        type: "BLOOD_GLUCOSE",
+        externalId: "sensor-1",
+        measuredAt: new Date("2024-04-03T02:15:00Z"),
+      },
     ]);
 
     const res = await POST(
@@ -511,6 +519,47 @@ describe("POST /api/import/csv — re-import", () => {
     const body = (await res.json()) as CsvEnvelope;
     expect(body.data).toMatchObject({ updated: 1, skipped: 0 });
     expect(mMeasurement().updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-folds the day a moved reading left as well as the day it moved to", async () => {
+    mMeasurement().findMany.mockResolvedValue([stored("ext-1")]);
+    await POST(
+      csvRequest(
+        [HEADER, "WEIGHT,80.5,kg,2026-05-03T08:00:00Z,,after run,ext-1"].join(
+          "\n",
+        ),
+      ),
+    );
+    const days = vi
+      .mocked(recomputeBucketsForMeasurement)
+      .mock.calls.map(
+        ([, type, at]) => `${type}@${at.toISOString().slice(0, 10)}`,
+      )
+      .sort();
+    expect(days).toEqual(["WEIGHT@2026-05-01", "WEIGHT@2026-05-03"]);
+  });
+
+  it("re-folds what it touched when a write chunk fails part-way", async () => {
+    mMeasurement().findMany.mockResolvedValue([]);
+    mMeasurement().createManyAndReturn.mockRejectedValue(
+      new Error("connection reset"),
+    );
+    await expect(
+      POST(
+        csvRequest(
+          [
+            HEADER,
+            "WEIGHT,80.5,kg,2026-05-01T08:00:00Z,,,",
+            "WEIGHT,80.7,kg,2026-05-02T08:00:00Z,,,",
+          ].join("\n"),
+        ),
+      ),
+    ).rejects.toThrow("connection reset");
+    const days = vi
+      .mocked(recomputeBucketsForMeasurement)
+      .mock.calls.map(([, , at]) => at.toISOString().slice(0, 10))
+      .sort();
+    expect(days).toEqual(["2026-05-01", "2026-05-02"]);
   });
 
   it("probes per type in bounded chunks and writes updates in bounded batches", async () => {

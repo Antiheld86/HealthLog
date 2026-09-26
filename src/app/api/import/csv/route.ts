@@ -284,6 +284,15 @@ export const POST = apiHandler(async (request: NextRequest) => {
         type: m.type as MeasurementType,
         measuredAt: m.measuredAt,
       });
+      // An update that moves the reading to another instant leaves the day
+      // it came from: that day is re-folded too, or the old day keeps a
+      // reading that no longer exists there.
+      if (stored && stored.measuredAt.getTime() !== m.measuredAt.getTime()) {
+        touchedMeasurements.push({
+          type: m.type as MeasurementType,
+          measuredAt: stored.measuredAt,
+        });
+      }
     }
 
     // --- externalId-less rows: create-only, deduped on the natural unique key
@@ -353,82 +362,89 @@ export const POST = apiHandler(async (request: NextRequest) => {
       type: MeasurementType;
       measuredAt: Date;
     }> = [];
-    for (const chunk of chunked(toCreate, WRITE_CHUNK)) {
-      const rows = await prisma.measurement.createManyAndReturn({
-        data: chunk,
-        skipDuplicates: true,
-        select: { id: true, type: true, measuredAt: true },
-      });
-      createdRows.push(...rows);
-      createdCount += rows.length;
-    }
-    for (const chunk of chunked([...extUpdates.values()], WRITE_CHUNK)) {
-      await prisma.$transaction(
-        chunk.map((m) =>
-          prisma.measurement.updateMany({
-            where: {
-              userId,
-              source: "IMPORT",
-              type: m.type as MeasurementType,
-              externalId: m.externalId as string,
-            },
-            data: {
-              value: m.value,
-              unit: m.unit,
-              measuredAt: m.measuredAt,
-              notes: null,
-              notesEncrypted: encryptNote(m.notes ?? null),
-              glucoseContext:
-                (m.glucoseContext as GlucoseContext | undefined) ?? null,
-              // No-op on a live row, a deliberate RESURRECTION on a
-              // tombstoned one — IMPORT rows are re-importable by design, so
-              // a re-imported externalId brings the row back (mirrors the
-              // source-owned sync resurrect rule).
-              deletedAt: null,
-            },
-          }),
-        ),
-      );
-    }
+    // The re-fold runs whatever happens to the writes. A chunk that fails
+    // part-way leaves the earlier chunks written, and a retry reads those
+    // rows as duplicates and touches nothing: without the re-fold here their
+    // days would keep the rollups from before the import for good. Re-folding
+    // a (type, day) nothing landed on is harmless.
+    try {
+      for (const chunk of chunked(toCreate, WRITE_CHUNK)) {
+        const rows = await prisma.measurement.createManyAndReturn({
+          data: chunk,
+          skipDuplicates: true,
+          select: { id: true, type: true, measuredAt: true },
+        });
+        createdRows.push(...rows);
+        createdCount += rows.length;
+      }
+      for (const chunk of chunked([...extUpdates.values()], WRITE_CHUNK)) {
+        await prisma.$transaction(
+          chunk.map((m) =>
+            prisma.measurement.updateMany({
+              where: {
+                userId,
+                source: "IMPORT",
+                type: m.type as MeasurementType,
+                externalId: m.externalId as string,
+              },
+              data: {
+                value: m.value,
+                unit: m.unit,
+                measuredAt: m.measuredAt,
+                notes: null,
+                notesEncrypted: encryptNote(m.notes ?? null),
+                glucoseContext:
+                  (m.glucoseContext as GlucoseContext | undefined) ?? null,
+                // No-op on a live row, a deliberate RESURRECTION on a
+                // tombstoned one — IMPORT rows are re-importable by design, so
+                // a re-imported externalId brings the row back (mirrors the
+                // source-owned sync resurrect rule).
+                deletedAt: null,
+              },
+            }),
+          ),
+        );
+      }
 
-    void emitInsertedMeasurementArrivals(
-      userId,
-      createdRows,
-      "csv_import",
-    ).catch(() => {});
-    void maybeEnqueueMorningRefresh(
-      userId,
-      createdRows
-        .filter((row) => row.type === "SLEEP_DURATION")
-        .map((row) => row.measuredAt),
-    ).catch(() => {});
+      void emitInsertedMeasurementArrivals(
+        userId,
+        createdRows,
+        "csv_import",
+      ).catch(() => {});
+      void maybeEnqueueMorningRefresh(
+        userId,
+        createdRows
+          .filter((row) => row.type === "SLEEP_DURATION")
+          .map((row) => row.measuredAt),
+      ).catch(() => {});
 
-    // Reconcile `inserted` against what `createMany` actually wrote
-    // (mirrors the batch route's raced-duplicate downgrade). Under
-    // `skipDuplicates` a conflicting row is silently absorbed — the key is
-    // present in the table either way, so we cannot identify the SPECIFIC
-    // raced lines; we only need the counters and per-line statuses to sum
-    // to the truth. Downgrade enough `inserted` lines to `duplicate` so
-    // the envelope matches the DB write count.
-    const racedDuplicates = toCreate.length - createdCount;
-    if (racedDuplicates > 0) {
-      let downgraded = 0;
-      for (const [line, outcome] of writeOutcome) {
-        if (downgraded >= racedDuplicates) break;
-        if (outcome === "inserted") {
-          writeOutcome.set(line, "duplicate");
-          inserted--;
-          skipped++;
-          downgraded++;
+      // Reconcile `inserted` against what `createMany` actually wrote
+      // (mirrors the batch route's raced-duplicate downgrade). Under
+      // `skipDuplicates` a conflicting row is silently absorbed — the key is
+      // present in the table either way, so we cannot identify the SPECIFIC
+      // raced lines; we only need the counters and per-line statuses to sum
+      // to the truth. Downgrade enough `inserted` lines to `duplicate` so
+      // the envelope matches the DB write count.
+      const racedDuplicates = toCreate.length - createdCount;
+      if (racedDuplicates > 0) {
+        let downgraded = 0;
+        for (const [line, outcome] of writeOutcome) {
+          if (downgraded >= racedDuplicates) break;
+          if (outcome === "inserted") {
+            writeOutcome.set(line, "duplicate");
+            inserted--;
+            skipped++;
+            downgraded++;
+          }
         }
       }
+    } finally {
+      // One bounded rollup re-fold per touched (type, day) — a 10 000-row
+      // CSV pays at most ~N (type, day) recomputes, not 10 000 per-row hooks
+      // — and the status re-warm for the touched types. Best-effort: a
+      // populator hiccup never fails the importer.
+      await afterMeasurementMutation(userId, touchedMeasurements, "import.csv");
     }
-
-    // One bounded rollup re-fold per touched (type, day) — a 10 000-row CSV
-    // pays at most ~N (type, day) recomputes, not 10 000 per-row hooks — and
-    // the status re-warm for the touched types. Best-effort: a populator
-    // hiccup never fails the importer.
-    await afterMeasurementMutation(userId, touchedMeasurements, "import.csv");
 
     await auditLog("import.csv.upload", {
       userId,
