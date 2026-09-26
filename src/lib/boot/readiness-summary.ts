@@ -15,6 +15,11 @@
  * signpost in front of them.
  */
 
+import {
+  LEGACY_ANY_HOST_WARNING,
+  legacyAnyHostConfigured,
+} from "@/lib/ai/local-host-allowlist";
+
 export interface ReadinessLine {
   /** Short label, e.g. "ENCRYPTION_KEY". */
   label: string;
@@ -120,6 +125,19 @@ export function collectReadiness(env: Env = process.env): ReadinessReport {
       ? "Secure cookie flag ON — serve HTTPS, or set SESSION_COOKIE_SECURE=false for a plain-HTTP LAN host"
       : "Secure cookie flag OFF — fine for plain-HTTP LAN; do NOT expose plain HTTP to the internet",
   });
+
+  // --- Deprecated AI grant (a warning, never a blocker) -------------------
+  // `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` used to open every private host on
+  // the network to every user's AI base URL. Since v1.39.3 it only covers the
+  // operator's own AI configurations and is on its way out; this line names
+  // the replacement. The admin AI settings page lists the origins in use.
+  if (legacyAnyHostConfigured(env)) {
+    lines.push({
+      label: "ALLOW_LOCAL_AI_PRIVATE_HOSTS",
+      status: "warn",
+      detail: LEGACY_ANY_HOST_WARNING,
+    });
+  }
 
   // --- Optional subsystems (informational) --------------------------------
   const optional: Array<[string, boolean]> = [

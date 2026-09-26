@@ -23,10 +23,11 @@
  *
  * ## Why the matchers are what they are
  *
- * A grep for `process.env.X` alone is not the read set. Four modules resolve a
- * name through a helper and index `process.env` dynamically, so their reads
- * are invisible to the direct matcher — `ALLOW_LOCAL_AI_PRIVATE_HOSTS` and
- * every `OIDC_*` among them. Each is registered below with its own call-shape
+ * A grep for `process.env.X` alone is not the read set. Three modules resolve
+ * a name through a helper and index `process.env` dynamically, so their reads
+ * are invisible to the direct matcher — every `OIDC_*` among them. (The AI
+ * private-host grants were a fourth until v1.39.3, when they became direct
+ * `process.env` reads.) Each is registered below with its own call-shape
  * matcher AND its own non-zero assertion, so a refactor that renames the
  * helper fails this file loudly instead of quietly shrinking the read set.
  *
@@ -78,12 +79,6 @@ const INDIRECT_READERS: ReadonlyArray<{
     pattern: /intEnv\(\s*["']([A-Z][A-Z0-9_]*)["']/g,
     minimum: 1,
     why: "the retention windows are parsed through a local intEnv() helper",
-  },
-  {
-    file: "lib/ai/local-host-allowlist.ts",
-    pattern: /ENV_VAR\s*=\s*["']([A-Z][A-Z0-9_]*)["']/g,
-    minimum: 1,
-    why: "the name is hoisted into an ENV_VAR constant, then indexed",
   },
   {
     file: "lib/boot/readiness-summary.ts",

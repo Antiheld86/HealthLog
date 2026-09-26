@@ -8,7 +8,7 @@ import {
   getClientIp,
   readBodyText,
 } from "@/lib/api-response";
-import { encryptNote } from "@/lib/crypto/note-cipher";
+import { encryptNote, readNote } from "@/lib/crypto/note-cipher";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { NextRequest } from "next/server";
 
@@ -25,6 +25,63 @@ import { Prisma } from "@/generated/prisma/client";
 import type { NormalisedMeasurementRow } from "@/lib/import/csv-measurements";
 import { emitInsertedMeasurementArrivals } from "@/lib/arrivals/measurement-emit";
 import { maybeEnqueueMorningRefresh } from "@/lib/daily/morning-refresh-trigger";
+
+/** Keys per dedup probe: well under Postgres's bind-parameter cap. */
+const LOOKUP_CHUNK = 1000;
+/** Rows per create call / per update batch transaction. */
+const WRITE_CHUNK = 200;
+
+function chunked<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+  return out;
+}
+
+/** Group rows' probe keys by measurement type, de-duplicated. */
+function groupByType<K>(
+  rows: ReadonlyArray<{ row: NormalisedMeasurementRow }>,
+  keyOf: (r: { row: NormalisedMeasurementRow }) => K,
+): Map<MeasurementType, K[]> {
+  const byType = new Map<MeasurementType, Map<string, K>>();
+  for (const r of rows) {
+    const type = r.row.type as MeasurementType;
+    const key = keyOf(r);
+    const bucket = byType.get(type) ?? new Map<string, K>();
+    bucket.set(key instanceof Date ? String(key.getTime()) : String(key), key);
+    byType.set(type, bucket);
+  }
+  return new Map([...byType].map(([type, keys]) => [type, [...keys.values()]]));
+}
+
+/**
+ * True when a stored IMPORT row already holds exactly what this line would
+ * write: same value, unit, instant, glucose context and note, and live. Such
+ * a line is a duplicate, not an update.
+ */
+function sameStoredRow(
+  stored: {
+    value: number;
+    unit: string;
+    measuredAt: Date;
+    glucoseContext: GlucoseContext | null;
+    notes: string | null;
+    notesEncrypted: Uint8Array | null;
+    deletedAt: Date | null;
+  },
+  m: NormalisedMeasurementRow,
+): boolean {
+  return (
+    stored.deletedAt === null &&
+    stored.value === m.value &&
+    stored.unit === m.unit &&
+    stored.measuredAt.getTime() === m.measuredAt.getTime() &&
+    stored.glucoseContext ===
+      ((m.glucoseContext as GlucoseContext | undefined) ?? null) &&
+    readNote(stored.notesEncrypted, stored.notes) === (m.notes || null)
+  );
+}
 
 /**
  * CSV measurement import (v1.17.1).
@@ -141,38 +198,72 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const plainRows = okRows.filter((r) => !r.row.externalId);
 
     // --- externalId rows: idempotent upsert on
-    // (userId, type, source=IMPORT, externalId). One probe fetches every
-    // pre-existing key; a hit means the row updates in place.
-    const extExisting =
-      extRows.length > 0
-        ? await prisma.measurement.findMany({
-            where: {
-              userId,
-              source: "IMPORT",
-              OR: extRows.map((r) => ({
-                type: r.row.type as MeasurementType,
-                externalId: r.row.externalId as string,
-              })),
-            },
-            select: { type: true, externalId: true },
-          })
-        : [];
-    const extExistingSet = new Set(
-      extExisting.map((e) => `${e.type}::${e.externalId}`),
-    );
+    // (userId, type, source=IMPORT, externalId). One probe per type and chunk
+    // fetches every pre-existing key with the columns an update would write,
+    // so a row whose stored values already match is left alone.
+    const extExisting = new Map<
+      string,
+      {
+        value: number;
+        unit: string;
+        measuredAt: Date;
+        glucoseContext: GlucoseContext | null;
+        notes: string | null;
+        notesEncrypted: Uint8Array | null;
+        deletedAt: Date | null;
+      }
+    >();
+    for (const [type, ids] of groupByType(
+      extRows,
+      (r) => r.row.externalId as string,
+    )) {
+      for (const chunk of chunked(ids, LOOKUP_CHUNK)) {
+        const found = await prisma.measurement.findMany({
+          where: {
+            userId,
+            source: "IMPORT",
+            type,
+            externalId: { in: chunk },
+          },
+          select: {
+            externalId: true,
+            value: true,
+            unit: true,
+            measuredAt: true,
+            glucoseContext: true,
+            notes: true,
+            notesEncrypted: true,
+            deletedAt: true,
+          },
+        });
+        for (const row of found) {
+          extExisting.set(`${type}::${row.externalId}`, row);
+        }
+      }
+    }
 
     // Partition in file order, honouring in-file repeats: the first sighting
     // of a brand-new key inserts, every later sighting (or any sighting of a
     // key already in the DB) updates in place. The last value for a key wins,
     // matching the old sequential-upsert overwrite. Insert/update maps are
     // keyed by (type, externalId) so a repeated key collapses to one write.
+    // A key already in the DB whose stored row equals this line is a
+    // duplicate: no write, reported like the natural-key duplicates below.
+    // That is what makes re-importing the same file cheap — a second upload
+    // of an unchanged 9 000-row export writes nothing.
     const seenExt = new Set<string>();
     const extInserts = new Map<string, NormalisedMeasurementRow>();
     const extUpdates = new Map<string, NormalisedMeasurementRow>();
     for (const result of extRows) {
       const m = result.row;
       const key = `${m.type}::${m.externalId}`;
-      if (extExistingSet.has(key)) {
+      const stored = extExisting.get(key);
+      if (stored && !extUpdates.has(key) && sameStoredRow(stored, m)) {
+        skipped++;
+        writeOutcome.set(result.line, "duplicate");
+        continue;
+      }
+      if (stored) {
         extUpdates.set(key, m);
         updated++;
         writeOutcome.set(result.line, "updated");
@@ -198,24 +289,28 @@ export const POST = apiHandler(async (request: NextRequest) => {
     // --- externalId-less rows: create-only, deduped on the natural unique key
     // (userId, type, measuredAt, source=IMPORT, sleepStage=null). A collision
     // — against the DB or an earlier row in this same file — is a duplicate,
-    // never an overwrite (each sample is a canonical reading).
-    const plainExisting =
-      plainRows.length > 0
-        ? await prisma.measurement.findMany({
-            where: {
-              userId,
-              source: "IMPORT",
-              OR: plainRows.map((r) => ({
-                type: r.row.type as MeasurementType,
-                measuredAt: r.row.measuredAt,
-              })),
-            },
-            select: { type: true, measuredAt: true },
-          })
-        : [];
-    const plainExistingSet = new Set(
-      plainExisting.map((e) => `${e.type}::${e.measuredAt.getTime()}`),
-    );
+    // never an overwrite (each sample is a canonical reading). Probed per type
+    // and chunk, like the externalId rows.
+    const plainExistingSet = new Set<string>();
+    for (const [type, instants] of groupByType(
+      plainRows,
+      (r) => r.row.measuredAt,
+    )) {
+      for (const chunk of chunked(instants, LOOKUP_CHUNK)) {
+        const found = await prisma.measurement.findMany({
+          where: {
+            userId,
+            source: "IMPORT",
+            type,
+            measuredAt: { in: chunk },
+          },
+          select: { measuredAt: true },
+        });
+        for (const row of found) {
+          plainExistingSet.add(`${type}::${row.measuredAt.getTime()}`);
+        }
+      }
+    }
     const seenPlain = new Set<string>();
     const plainInserts: NormalisedMeasurementRow[] = [];
     for (const result of plainRows) {
@@ -236,55 +331,65 @@ export const POST = apiHandler(async (request: NextRequest) => {
       }
     }
 
-    // Bulk write: createManyAndReturn the survivors (chunked under the PG
-    // parameter cap, skipDuplicates to absorb a concurrent double-submit
-    // race), then grouped updateMany for pre-existing externalId rows.
+    // Bulk write in bounded chunks, each its own short transaction.
+    //
+    // This used to be ONE interactive transaction around every create chunk
+    // AND one `updateMany` per re-imported row. Re-importing a 9 000-row file
+    // with an externalId column meant 9 000 serial updates inside it, which
+    // outlived Prisma's 5 s interactive-transaction timeout and ended in a
+    // 500. A chunk now commits on its own: creates go through
+    // `createManyAndReturn` (skipDuplicates absorbs a concurrent
+    // double-submit), updates through one batch transaction per chunk. A
+    // failure part-way leaves the earlier chunks written, and that is safe to
+    // retry: a re-upload of the same file skips what landed (unchanged
+    // externalId rows and natural-key duplicates are not written again).
     const toCreate: Prisma.MeasurementCreateManyInput[] = [
       ...[...extInserts.values()].map(buildCreateData),
       ...plainInserts.map(buildCreateData),
     ];
-    const CREATE_CHUNK = 200;
     let createdCount = 0;
     const createdRows: Array<{
       id: string;
       type: MeasurementType;
       measuredAt: Date;
     }> = [];
-    await prisma.$transaction(async (tx) => {
-      for (let i = 0; i < toCreate.length; i += CREATE_CHUNK) {
-        const rows = await tx.measurement.createManyAndReturn({
-          data: toCreate.slice(i, i + CREATE_CHUNK),
-          skipDuplicates: true,
-          select: { id: true, type: true, measuredAt: true },
-        });
-        createdRows.push(...rows);
-        createdCount += rows.length;
-      }
-      for (const m of extUpdates.values()) {
-        await tx.measurement.updateMany({
-          where: {
-            userId,
-            source: "IMPORT",
-            type: m.type as MeasurementType,
-            externalId: m.externalId as string,
-          },
-          data: {
-            value: m.value,
-            unit: m.unit,
-            measuredAt: m.measuredAt,
-            notes: null,
-            notesEncrypted: encryptNote(m.notes ?? null),
-            glucoseContext:
-              (m.glucoseContext as GlucoseContext | undefined) ?? null,
-            // No-op on a live row, a deliberate RESURRECTION on a
-            // tombstoned one — IMPORT rows are re-importable by design, so
-            // a re-imported externalId brings the row back (mirrors the
-            // source-owned sync resurrect rule).
-            deletedAt: null,
-          },
-        });
-      }
-    });
+    for (const chunk of chunked(toCreate, WRITE_CHUNK)) {
+      const rows = await prisma.measurement.createManyAndReturn({
+        data: chunk,
+        skipDuplicates: true,
+        select: { id: true, type: true, measuredAt: true },
+      });
+      createdRows.push(...rows);
+      createdCount += rows.length;
+    }
+    for (const chunk of chunked([...extUpdates.values()], WRITE_CHUNK)) {
+      await prisma.$transaction(
+        chunk.map((m) =>
+          prisma.measurement.updateMany({
+            where: {
+              userId,
+              source: "IMPORT",
+              type: m.type as MeasurementType,
+              externalId: m.externalId as string,
+            },
+            data: {
+              value: m.value,
+              unit: m.unit,
+              measuredAt: m.measuredAt,
+              notes: null,
+              notesEncrypted: encryptNote(m.notes ?? null),
+              glucoseContext:
+                (m.glucoseContext as GlucoseContext | undefined) ?? null,
+              // No-op on a live row, a deliberate RESURRECTION on a
+              // tombstoned one — IMPORT rows are re-importable by design, so
+              // a re-imported externalId brings the row back (mirrors the
+              // source-owned sync resurrect rule).
+              deletedAt: null,
+            },
+          }),
+        ),
+      );
+    }
 
     void emitInsertedMeasurementArrivals(
       userId,

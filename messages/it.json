@@ -6792,7 +6792,11 @@
       "removeBody": "Gli account senza una chiave propria perdono subito le funzioni IA. Dopo il salvataggio la chiave non è più visibile da nessuna parte: per rimetterla ti servirà l’originale.",
       "removeConfirm": "Rimuovi chiave",
       "saved": "Impostazioni della chiave IA del server salvate",
-      "error": "Salvataggio della chiave IA del server non riuscito"
+      "error": "Salvataggio della chiave IA del server non riuscito",
+      "legacyGrantTitle": "ALLOW_LOCAL_AI_PRIVATE_HOSTS=true è deprecato",
+      "legacyGrantBody": "Consente ancora alla chiave del server qui sopra e alle impostazioni IA salvate su un account amministratore di raggiungere la tua rete, e verrà rimosso in una versione successiva. Gli altri account hanno già bisogno del loro endpoint IA in AI_PRIVATE_ORIGINS. Imposta AI_PRIVATE_ORIGINS nell'ambiente del server, riavvia e poi rimuovi ALLOW_LOCAL_AI_PRIVATE_HOSTS.",
+      "legacyGrantOrigins": "Gli URL IA salvati su questa istanza che puntano alla tua rete:",
+      "legacyGrantNoOrigins": "Nessun URL IA salvato su questa istanza punta alla tua rete, quindi puoi rimuovere ALLOW_LOCAL_AI_PRIVATE_HOSTS già ora."
     },
     "providerHealth": {
       "title": "Stato dei provider IA",

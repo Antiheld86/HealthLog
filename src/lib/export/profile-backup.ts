@@ -25,6 +25,7 @@ import { Buffer } from "node:buffer";
 
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { encryptNote } from "@/lib/crypto/note-cipher";
 import { getEvent } from "@/lib/logging/context";
 import {
   DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
@@ -116,7 +117,16 @@ export interface CustomMetricEntryBackupEntry {
   /** Unit snapshot taken from the metric at write time, not a live join. */
   unit: string;
   measuredAt: string;
+  /**
+   * The readable note: portable exports, and DR payloads for a row the
+   * free-text backfill had not reached yet. Null otherwise.
+   */
   note: string | null;
+  /**
+   * v1.39.3 — base64 ciphertext of the note, present only in disaster-recovery
+   * payloads (null when the reading has no note).
+   */
+  noteEncrypted?: string | null;
   createdAt?: string;
   /** v1.37.20 (A3-11) — soft-delete tombstone; DR payloads only. */
   deletedAt?: string | null;
@@ -225,6 +235,32 @@ function decryptProfileFieldSoft(
     failures?.push(`healthProfile.${field}`);
     return null;
   }
+}
+
+/**
+ * v1.39.3 — a custom-metric reading's note for a portable export: ciphertext
+ * first, the legacy readable column for a row the backfill has not reached.
+ * An unreadable ciphertext is recorded in the manifest and exported as no
+ * note, never replaced by the readable column.
+ */
+function readEntryNoteSoft(
+  entry: { id: string; note: string | null; noteEncrypted: Uint8Array | null },
+  failures: string[],
+): string | null {
+  if (entry.noteEncrypted && entry.noteEncrypted.byteLength > 0) {
+    try {
+      return decryptFromBytes(entry.noteEncrypted);
+    } catch (err) {
+      getEvent()?.addWarning(
+        `custom metric entry note decrypt failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      failures.push(`customMetricEntry.${entry.id}.note`);
+      return null;
+    }
+  }
+  return entry.note;
 }
 
 function toBase64(buf: Uint8Array | null): string | null {
@@ -447,12 +483,21 @@ export async function buildProfileBackupSection(
             id: entry.id,
             createdAt: entry.createdAt.toISOString(),
             deletedAt: entry.deletedAt?.toISOString() ?? null,
+            // v1.39.3 — the ciphertext rides verbatim. A row the free-text
+            // backfill has not reached yet carries its old readable note in
+            // `note` instead, as stored; the restore seals it. Sealing it
+            // here would make the export non-deterministic.
+            noteEncrypted: toBase64(entry.noteEncrypted),
           }
         : {}),
       value: entry.value,
       unit: entry.unit,
       measuredAt: entry.measuredAt.toISOString(),
-      note: entry.note,
+      note: disasterRecovery
+        ? entry.noteEncrypted
+          ? null
+          : entry.note
+        : readEntryNoteSoft(entry, decryptFailures),
     })),
   }));
 
@@ -569,6 +614,16 @@ function resolveProfileColumn(
     return ciphertext === null ? null : decodeEncryptedField(ciphertext, field);
   }
   return plaintext == null ? null : encryptToBytes(plaintext);
+}
+
+function resolveEntryNote(entry: {
+  note?: string | null;
+  noteEncrypted?: string | null;
+}): Uint8Array<ArrayBuffer> | null {
+  if (entry.noteEncrypted !== undefined && entry.noteEncrypted !== null) {
+    return decodeEncryptedField(entry.noteEncrypted, "customMetricEntry.note");
+  }
+  return encryptNote(entry.note);
 }
 
 function resolveFactValue(
@@ -848,7 +903,10 @@ export async function restoreProfileData(
             value: entry.value,
             unit: entry.unit,
             measuredAt: new Date(entry.measuredAt),
-            note: entry.note,
+            // v1.39.3 — ciphertext wins when a DR payload carried it; a
+            // portable file's readable note is sealed under this instance's
+            // key. The readable column is never written.
+            noteEncrypted: resolveEntryNote(entry),
             deletedAt: entry.deletedAt ? new Date(entry.deletedAt) : null,
             ...(entry.createdAt
               ? { createdAt: new Date(entry.createdAt) }

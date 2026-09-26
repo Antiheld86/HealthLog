@@ -104,15 +104,12 @@ describe("listConversations — filter + DTO", () => {
   });
 
   // v1.30.2 (QoL H1) — server-side title search for the full-history rail.
-  it("applies a case-insensitive title-contains filter when q is given", async () => {
+  it("keeps the title out of SQL when q is given (it is encrypted) and stays owner-scoped", async () => {
     findMany.mockResolvedValue([]);
     await listConversations({ userId: "user-1", q: "blood pressure" });
     const where = findMany.mock.calls[0][0].where;
     expect(where.userId).toBe("user-1");
-    expect(where.title).toEqual({
-      contains: "blood pressure",
-      mode: "insensitive",
-    });
+    expect("title" in where).toBe(false);
   });
 
   it("trims q and omits the title filter for an empty/whitespace-only query", async () => {

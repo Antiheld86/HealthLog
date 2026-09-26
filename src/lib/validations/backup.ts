@@ -799,6 +799,8 @@ const customMetricEntryBackupSchema = z
     unit: z.string().min(1),
     measuredAt: isoDateTime,
     note: z.string().nullable().default(null),
+    /// v1.39.3 — the note's ciphertext, DR payloads only.
+    noteEncrypted: base64BytesSchema.nullable().optional(),
     createdAt: isoDateTime.optional(),
     /// v1.37.20 (A3-11) — the entry tombstone rides DR payloads so a restore
     /// brings the account back exactly as it stood, undo affordance included.
@@ -1366,7 +1368,10 @@ const coachConversationDocumentBackupSchema = z
 const coachConversationBackupSchema = z
   .object({
     id: z.string().min(1),
-    title: z.string(),
+    // v1.39.3 — a portable file (and every file written before) carries the
+    // readable title; a disaster-recovery file carries only the ciphertext.
+    title: z.string().optional(),
+    titleEncrypted: base64BytesSchema.optional(),
     // NOT optional with a default. The fence is permanent and a file that does
     // not state it is a file that cannot be trusted to re-fence the
     // conversation, so the absence has to be visible rather than defaulted to

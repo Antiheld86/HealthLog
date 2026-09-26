@@ -6,7 +6,7 @@
  * HTTPS + hostname allowlist on the base URL, and the masked
  * `keyPreview` in every response.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/lib/db", () => ({
@@ -15,6 +15,7 @@ vi.mock("@/lib/db", () => ({
       findUnique: vi.fn(),
       upsert: vi.fn(),
     },
+    user: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }));
 
@@ -100,6 +101,7 @@ describe("GET /api/admin/ai-settings", () => {
       keyPreview: null,
       model: "gpt-4o",
       baseUrl: "https://api.openai.com/v1",
+      legacyPrivateHostGrant: null,
     });
   });
 
@@ -214,5 +216,54 @@ describe("PUT /api/admin/ai-settings", () => {
     await expect(PUT(jsonReq({ model: "gpt-4o" }))).rejects.toMatchObject({
       statusCode: 429,
     });
+  });
+});
+
+/**
+ * v1.39.3 — while the deprecated `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` is set,
+ * the page names it and lists the origins it is standing in for, so the
+ * operator can copy them into `AI_PRIVATE_ORIGINS`.
+ */
+describe("GET /api/admin/ai-settings — deprecated private-host grant", () => {
+  beforeEach(async () => {
+    const { _resetAiGrantsForTests } =
+      await import("@/lib/ai/local-host-allowlist");
+    _resetAiGrantsForTests();
+    vi.mocked(requireAdmin).mockResolvedValue(ADMIN_CTX as never);
+    vi.mocked(prisma.appSettings.findUnique).mockResolvedValue({
+      adminAiKeyEncrypted: null,
+      adminAiModel: null,
+      adminAiBaseUrl: "http://gateway.lan:4000/v1",
+    } as never);
+    vi.mocked(prisma.user.findMany).mockResolvedValue([
+      { aiBaseUrl: "http://10.0.0.5:11434/v1", aiCompatBaseUrl: null },
+      {
+        aiBaseUrl: "http://10.0.0.5:11434/v1/",
+        aiCompatBaseUrl: "https://openrouter.ai/api/v1",
+      },
+      { aiBaseUrl: "http://169.254.169.254/latest", aiCompatBaseUrl: null },
+    ] as never);
+    vi.stubEnv("AI_PRIVATE_ORIGINS", "");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("lists the private origins in use, once each, when `true` is set", async () => {
+    vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "true");
+    const res = await GET();
+    const body = await res.json();
+    expect(body.data.legacyPrivateHostGrant).toEqual({
+      originsInUse: ["http://10.0.0.5:11434", "http://gateway.lan:4000"],
+    });
+  });
+
+  it("is null when `true` is not set", async () => {
+    vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "ollama.lan");
+    const res = await GET();
+    expect((await res.json()).data.legacyPrivateHostGrant).toBeNull();
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
 });

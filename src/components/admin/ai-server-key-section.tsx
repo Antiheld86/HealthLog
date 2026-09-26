@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Loader2 } from "lucide-react";
+import { AlertTriangle, KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,12 @@ interface AiServerKeyResponse {
   keyPreview: string | null;
   model: string;
   baseUrl: string;
+  /**
+   * v1.39.3 — present while the deprecated
+   * `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` is set: the origins it is standing in
+   * for, to copy into `AI_PRIVATE_ORIGINS`.
+   */
+  legacyPrivateHostGrant?: { originsInUse: string[] } | null;
 }
 
 export function AiServerKeySection() {
@@ -120,6 +126,11 @@ export function AiServerKeySection() {
       />
 
       <div className="space-y-4">
+        {settings?.legacyPrivateHostGrant ? (
+          <LegacyPrivateHostNotice
+            originsInUse={settings.legacyPrivateHostGrant.originsInUse}
+          />
+        ) : null}
         <div className="space-y-2 text-sm">
           <p>{t("admin.aiServerKey.byokHint")}</p>
           <p>{t("admin.aiServerKey.consentHint")}</p>
@@ -199,5 +210,45 @@ export function AiServerKeySection() {
         </SettingsCardActions>
       </div>
     </SettingsCard>
+  );
+}
+
+/**
+ * v1.39.3 — the deprecated `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true`, with the exact
+ * line to set instead. The origins come from the saved base URLs on this
+ * instance; the operator copies the line into the server environment.
+ */
+function LegacyPrivateHostNotice({ originsInUse }: { originsInUse: string[] }) {
+  const { t } = useTranslations();
+  const line = `AI_PRIVATE_ORIGINS="${originsInUse.join(",")}"`;
+  return (
+    <div
+      role="status"
+      data-slot="admin-ai-legacy-private-hosts"
+      className="border-warning/40 bg-warning/10 rounded-md border px-3 py-2 text-sm"
+    >
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        <div className="min-w-0 space-y-1">
+          <p className="font-medium">
+            {t("admin.aiServerKey.legacyGrantTitle")}
+          </p>
+          <p>{t("admin.aiServerKey.legacyGrantBody")}</p>
+          {originsInUse.length > 0 ? (
+            <>
+              <p>{t("admin.aiServerKey.legacyGrantOrigins")}</p>
+              <code
+                data-slot="admin-ai-legacy-private-hosts-line"
+                className="bg-muted block overflow-x-auto rounded px-2 py-1 font-mono text-xs break-all select-all"
+              >
+                {line}
+              </code>
+            </>
+          ) : (
+            <p>{t("admin.aiServerKey.legacyGrantNoOrigins")}</p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

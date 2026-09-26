@@ -128,6 +128,7 @@ const subsystemSurface = {
   "encryption-key-rotate": { audience: "system" },
   "mcp-token-cleanup": { audience: "system" },
   "med-notes-encryption-backfill": { audience: "system" },
+  "free-text-encryption-backfill": { audience: "system" },
   "document-tombstone-purge": { audience: "system" },
   // v1.37.19 (A7-4) — hourly heal of summary rows stuck on PENDING.
   "document-summary-reaper": { audience: "system" },

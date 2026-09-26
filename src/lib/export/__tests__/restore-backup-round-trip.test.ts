@@ -578,8 +578,11 @@ describe("backup round trip — export, wire schema, restore", () => {
     expect(entries[0]).toMatchObject({
       value: 44.5,
       unit: "kg",
-      note: "felt strong",
     });
+    // v1.39.3 — the note comes back sealed; the readable column is never
+    // written, even for a row that was still readable when it was exported.
+    expect(entries[0]).not.toHaveProperty("note");
+    expect(entries[0].noteEncrypted).toBeInstanceOf(Uint8Array);
   });
 
   it("writes persisted pattern identity and dismissal evidence back", async () => {

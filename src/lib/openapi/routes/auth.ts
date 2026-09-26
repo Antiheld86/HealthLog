@@ -2011,7 +2011,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       responses: {
         "302": {
           description:
-            "Always a redirect. To the provider on success. On failure to `/auth/login?error=<reason>` (browser) or `healthlog://oidc-callback?error=<reason>` (native), where reason is one of `oidc_disabled`, `oidc_rate_limited`, `oidc_invalid_request`, `oidc_failed`.",
+            "Always a redirect. To the provider on success. On failure to `/auth/login?error=<reason>` (browser) or `healthlog://oidc-callback?error=<reason>` (native), where reason is one of `oidc_disabled`, `oidc_rate_limited`, `oidc_invalid_request`, `oidc_failed`. The provider then returns to the callback (not listed here, because the identity provider drives it rather than a client), which ends the native leg at `healthlog://oidc-callback` with `code=<hlh_…>`, with `mfa_ticket=<ticket>&methods=<list>`, or with `error=<reason>`, where reason is one of `oidc_disabled`, `oidc_rate_limited`, `oidc_denied`, `oidc_no_email`, `oidc_email_unverified`, `oidc_identity_conflict`, `oidc_registration_disabled`, `oidc_failed`. The reasons are this exact snake_case vocabulary on both legs; a client maps a value it does not know to a generic sign-in failure.",
         },
       },
     },

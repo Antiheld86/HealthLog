@@ -6792,7 +6792,11 @@
       "removeBody": "Les comptes sans clé personnelle perdent aussitôt les fonctions IA. La clé n’est affichée nulle part une fois enregistrée : il vous faudra l’original pour la remettre.",
       "removeConfirm": "Supprimer la clé",
       "saved": "Paramètres de la clé IA du serveur enregistrés",
-      "error": "Échec de l'enregistrement de la clé IA du serveur"
+      "error": "Échec de l'enregistrement de la clé IA du serveur",
+      "legacyGrantTitle": "ALLOW_LOCAL_AI_PRIVATE_HOSTS=true est obsolète",
+      "legacyGrantBody": "Ce réglage permet encore à la clé serveur ci-dessus et aux réglages d'IA enregistrés sur un compte administrateur d'atteindre votre réseau, et sera supprimé dans une version ultérieure. Les autres comptes ont déjà besoin que leur point d'accès IA figure dans AI_PRIVATE_ORIGINS. Définissez AI_PRIVATE_ORIGINS dans l'environnement du serveur, redémarrez, puis supprimez ALLOW_LOCAL_AI_PRIVATE_HOSTS.",
+      "legacyGrantOrigins": "Les URL d'IA enregistrées sur cette instance qui pointent vers votre réseau :",
+      "legacyGrantNoOrigins": "Aucune URL d'IA enregistrée sur cette instance ne pointe vers votre réseau, vous pouvez donc supprimer ALLOW_LOCAL_AI_PRIVATE_HOSTS dès maintenant."
     },
     "providerHealth": {
       "title": "État des fournisseurs d'IA",

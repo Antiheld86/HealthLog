@@ -216,6 +216,8 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
   // ───── Coach (Bytes columns) ─────
   { model: "CoachMessage", field: "encryptedContent", kind: "bytes" },
   { model: "CoachConversation", field: "summaryEncrypted", kind: "bytes" },
+  // v1.39.3 — the title: the opening words of the first message, or a rename.
+  { model: "CoachConversation", field: "titleEncrypted", kind: "bytes" },
   { model: "CoachFact", field: "factEncrypted", kind: "bytes" },
   // v1.21.3 (B1) — Coach goal / if-then plan free-text columns.
   { model: "CoachPlan", field: "ifCueEncrypted", kind: "bytes" },
@@ -317,6 +319,12 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
   { model: "MedicationSideEffect", field: "notesEncrypted", kind: "bytes" },
   { model: "MedicationDoseChange", field: "noteEncrypted", kind: "bytes" },
   { model: "MedicationInventoryItem", field: "notesEncrypted", kind: "bytes" },
+
+  // ───── v1.39.3 custom-metric reading note (Bytes column) ─────
+  // The one free-text field on a reading of a metric the person defined. The
+  // catalog columns (name, unit, description) stay plaintext: they are the
+  // definition of a series, listed and sorted by.
+  { model: "CustomMetricEntry", field: "noteEncrypted", kind: "bytes" },
 
   // ───── v1.25 mental-health screener item answers (Bytes column) ─────
   // The PHQ-9 / GAD-7 per-item responses (incl. the safety-critical item 9)

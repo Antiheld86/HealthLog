@@ -112,6 +112,8 @@ const COACH_PLAN_CUE = "if the evening reading is over 140";
 const COACH_PLAN_ACTION = "then walk twenty minutes before dinner tomorrow";
 const COACH_REMINDER_NOTE = "ask how the evening walks are going";
 const COACH_SUMMARY = "earlier turns: weight trend and evening walks";
+const METRIC_LEGACY_NOTE = "left hand, after the long ride";
+const METRIC_SEALED_NOTE = "right hand, rested";
 const COACH_USER_TURN = "my readings look higher this week, is that real?";
 const COACH_ASSISTANT_TURN =
   "the last seven mornings average 4 mmHg above the fortnight before";
@@ -723,13 +725,26 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       userId: OWNER_ID,
       name: "Grip strength",
       unit: "kg",
+      // v1.39.3 — one reading whose note is still readable (a row the
+      // free-text backfill has not reached) and one sealed the current way.
+      // Both must come back sealed, and neither readable.
       entries: {
-        create: {
-          userId: OWNER_ID,
-          value: 44,
-          unit: "kg",
-          measuredAt: AT("2026-07-01T18:00:00.000Z"),
-        },
+        create: [
+          {
+            userId: OWNER_ID,
+            value: 44,
+            unit: "kg",
+            measuredAt: AT("2026-07-01T18:00:00.000Z"),
+            note: METRIC_LEGACY_NOTE,
+          },
+          {
+            userId: OWNER_ID,
+            value: 45,
+            unit: "kg",
+            measuredAt: AT("2026-07-02T18:00:00.000Z"),
+            noteEncrypted: encryptToBytes(METRIC_SEALED_NOTE),
+          },
+        ],
       },
     },
   });
@@ -923,7 +938,9 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
   await prisma.coachConversation.create({
     data: {
       userId: OWNER_ID,
-      title: "About my June labs",
+      // v1.39.3 — sealed the current way; the thread above keeps a readable
+      // legacy title, the shape of a row the backfill has not reached.
+      titleEncrypted: encryptToBytes("About my June labs"),
       documentScoped: true,
       messages: {
         create: [
@@ -1524,6 +1541,20 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       sourceId: "4711",
       aiReadDeferred: true,
     });
+    const metricEntries = await prisma.customMetricEntry.findMany({
+      where: { userId: OWNER_ID },
+      orderBy: { measuredAt: "asc" },
+    });
+    expect(
+      metricEntries.map((entry) => ({
+        note: readNote(entry.noteEncrypted, entry.note),
+        readable: entry.note,
+      })),
+      "both reading notes come back, sealed, with nothing readable",
+    ).toEqual([
+      { note: METRIC_LEGACY_NOTE, readable: null },
+      { note: METRIC_SEALED_NOTE, readable: null },
+    ]);
     const threads = await prisma.coachConversation.findMany({
       where: { userId: OWNER_ID },
       orderBy: { createdAt: "asc" },
@@ -1534,7 +1565,9 @@ describe("every model the plan claims two-ended survives a real restore", () => 
     });
     expect(
       threads.map((thread) => ({
-        title: thread.title,
+        title: readNote(thread.titleEncrypted, thread.title),
+        // A restore seals every title and never writes the readable column.
+        readableTitle: thread.title,
         documentScoped: thread.documentScoped,
         summary: thread.summaryEncrypted
           ? decryptFromBytes(thread.summaryEncrypted)
@@ -1552,6 +1585,7 @@ describe("every model the plan claims two-ended survives a real restore", () => 
     ).toEqual([
       {
         title: "How is my blood pressure trending?",
+        readableTitle: null,
         documentScoped: false,
         summary: COACH_SUMMARY,
         summaryTurnCount: 4,
@@ -1573,6 +1607,7 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       },
       {
         title: "About my June labs",
+        readableTitle: null,
         documentScoped: true,
         summary: null,
         summaryTurnCount: 0,

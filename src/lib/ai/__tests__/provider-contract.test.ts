@@ -53,8 +53,8 @@ describe("AIProvider contract", () => {
     vi.restoreAllMocks();
     // The local-provider contract test points at a localhost OpenAI-
     // compatible server (Ollama / LM Studio). safeFetch enforces the
-    // SSRF guard unless the operator explicitly opts in.
-    vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "true");
+    // SSRF guard unless the operator grants that exact origin.
+    vi.stubEnv("AI_PRIVATE_ORIGINS", "http://localhost:11434");
   });
 
   afterEach(() => {

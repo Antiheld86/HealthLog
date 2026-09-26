@@ -6792,7 +6792,11 @@
       "removeBody": "Accounts without their own key lose AI features straight away. The key is not shown anywhere after it is stored, so you will need the original to put it back.",
       "removeConfirm": "Remove key",
       "saved": "AI server key settings saved",
-      "error": "Saving the AI server key failed"
+      "error": "Saving the AI server key failed",
+      "legacyGrantTitle": "ALLOW_LOCAL_AI_PRIVATE_HOSTS=true is deprecated",
+      "legacyGrantBody": "It still lets the server key above and AI settings saved on an admin account reach your network, and will be removed in a later release. Other accounts need their AI endpoint listed in AI_PRIVATE_ORIGINS already. Set AI_PRIVATE_ORIGINS in the server environment, restart, then remove ALLOW_LOCAL_AI_PRIVATE_HOSTS.",
+      "legacyGrantOrigins": "The AI base URLs saved on this instance that point at your network:",
+      "legacyGrantNoOrigins": "No AI base URL saved on this instance points at your network, so you can remove ALLOW_LOCAL_AI_PRIVATE_HOSTS now."
     },
     "providerHealth": {
       "title": "AI provider health",

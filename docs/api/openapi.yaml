@@ -3429,7 +3429,13 @@ paths:
         "302":
           description: Always a redirect. To the provider on success. On failure to `/auth/login?error=<reason>` (browser) or
             `healthlog://oidc-callback?error=<reason>` (native), where reason is one of `oidc_disabled`,
-            `oidc_rate_limited`, `oidc_invalid_request`, `oidc_failed`.
+            `oidc_rate_limited`, `oidc_invalid_request`, `oidc_failed`. The provider then returns to the callback (not
+            listed here, because the identity provider drives it rather than a client), which ends the native leg at
+            `healthlog://oidc-callback` with `code=<hlh_…>`, with `mfa_ticket=<ticket>&methods=<list>`, or with
+            `error=<reason>`, where reason is one of `oidc_disabled`, `oidc_rate_limited`, `oidc_denied`,
+            `oidc_no_email`, `oidc_email_unverified`, `oidc_identity_conflict`, `oidc_registration_disabled`,
+            `oidc_failed`. The reasons are this exact snake_case vocabulary on both legs; a client maps a value it does
+            not know to a generic sign-in failure.
   /api/auth/passkey/register-options:
     post:
       tags:
@@ -13215,9 +13221,12 @@ paths:
         before 1900). Glucose accepts `mmol/L` (converted to canonical `mg/dL`); weight accepts `lb` (converted to
         `kg`). `glucoseContext` is optional on a `BLOOD_GLUCOSE` row — a blank cell stores no context, which is the
         normal shape of a continuous-sensor export; a non-empty value is still checked against the enum, and the column
-        is refused on any other type. An `externalId` column makes re-upload idempotent (upsert on `(userId, type,
-        source=IMPORT, externalId)`); without it a re-upload duplicates. `?dryRun=1` validates + previews without
-        writing. Shares the 5/hour `import:` rate bucket."
+        is refused on any other type. Re-uploading a file is idempotent. With an `externalId` column a row upserts on
+        `(userId, type, source=IMPORT, externalId)`: a changed row is `updated`, an unchanged one is `skipped` with
+        reason `duplicate` and not written. Without it a row is deduplicated on `(type, measuredAt)` and a repeat is
+        `skipped` / `duplicate`. Writes commit in chunks rather than as one transaction; a failure part-way leaves
+        earlier chunks written, and re-uploading the same file completes the rest. `?dryRun=1` validates + previews
+        without writing. Shares the 5/hour `import:` rate bucket."
       parameters:
         - name: dryRun
           in: query
@@ -36407,6 +36416,11 @@ components:
                       anyOf:
                         - type: string
                         - type: "null"
+                    noteEncrypted:
+                      anyOf:
+                        - type: string
+                          minLength: 1
+                        - type: "null"
                     createdAt:
                       type: string
                       minLength: 1
@@ -37084,6 +37098,9 @@ components:
                 minLength: 1
               title:
                 type: string
+              titleEncrypted:
+                type: string
+                minLength: 1
               documentScoped:
                 type: boolean
               summaryEncrypted:
@@ -37175,7 +37192,6 @@ components:
                   additionalProperties: {}
             required:
               - id
-              - title
               - documentScoped
               - createdAt
               - updatedAt

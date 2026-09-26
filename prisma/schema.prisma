@@ -5846,7 +5846,15 @@ model CustomMetricEntry {
   /// Unit snapshot from the metric at write time.
   unit           String
   measuredAt     DateTime  @map("measured_at")
+  /// @internal: legacy plaintext note, read only as a fallback for rows the
+  /// free-text encryption backfill has not reached yet (v1.39.3). Every write
+  /// since then goes to `noteEncrypted` and leaves this NULL; the backfill
+  /// nulls it on the old rows. DROP this column in a later release, once the
+  /// backfill reports zero remaining rows on every instance.
   note           String?
+  /// v1.39.3 — AES-256-GCM ciphertext of the note. Same Bytes codec as the
+  /// measurement and mood notes.
+  noteEncrypted  Bytes?    @map("note_encrypted")
   createdAt      DateTime  @default(now()) @map("created_at")
   /// v1.37.20 — soft-delete tombstone, peer parity with Measurement /
   /// MoodEntry (every other entry surface deletes recoverably with an undo
@@ -5857,6 +5865,10 @@ model CustomMetricEntry {
   metric CustomMetric @relation(fields: [customMetricId], references: [id], onDelete: Cascade)
 
   @@index([userId, customMetricId, measuredAt])
+  // `custom_metric_entries_note_backfill_idx` is a partial index over
+  // `(user_id) WHERE note IS NOT NULL` — see
+  // migration 0357 for the free-text encryption boot-discovery scan. Raw SQL
+  // only (partial predicate not expressible in Prisma).
   @@map("custom_metric_entries")
 }
 
@@ -6107,7 +6119,15 @@ model RecommendationFeedback {
 model CoachConversation {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
-  title     String
+  /// @internal: legacy plaintext title, read only as a fallback for rows the
+  /// free-text encryption backfill has not reached yet (v1.39.3). Every write
+  /// since then goes to `titleEncrypted` and leaves this NULL; the backfill
+  /// nulls it on the old rows. DROP this column in a later release, once the
+  /// backfill reports zero remaining rows on every instance.
+  title     String?
+  /// v1.39.3 — AES-256-GCM ciphertext of the title (the first 80 characters of
+  /// the opening Coach message, or the rename). Same Bytes codec as the notes.
+  titleEncrypted Bytes? @map("title_encrypted")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -6141,6 +6161,10 @@ model CoachConversation {
   // and the tool-route send path filters on the flag. Replaces the retired
   // [userId, documentId, updatedAt] composite.
   @@index([userId, documentScoped, updatedAt])
+  // `coach_conversations_title_backfill_idx` is a partial index over
+  // `(user_id) WHERE title IS NOT NULL` — see
+  // migration 0357 for the free-text encryption boot-discovery scan. Raw SQL
+  // only (partial predicate not expressible in Prisma).
   @@map("coach_conversations")
 }
 

@@ -7,6 +7,7 @@ import { apiSuccess, getClientIp, safeJson } from "@/lib/api-response";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
+import { legacyPrivateHostReport } from "@/lib/ai/legacy-private-host-report";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,11 @@ export const GET = apiHandler(async () => {
       : null,
     model,
     baseUrl,
+    // v1.39.3 — present while the deprecated ALLOW_LOCAL_AI_PRIVATE_HOSTS=true
+    // is set, naming the origins to move into AI_PRIVATE_ORIGINS.
+    legacyPrivateHostGrant: await legacyPrivateHostReport(
+      settings?.adminAiBaseUrl,
+    ),
   });
 });
 
