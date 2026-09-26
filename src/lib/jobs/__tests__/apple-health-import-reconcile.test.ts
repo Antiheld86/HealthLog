@@ -24,6 +24,10 @@ const mocks = vi.hoisted(() => ({
   getJobById: vi.fn(),
 }));
 
+vi.mock("@/lib/import/apple-health-staging", () => ({
+  sweepStaleImportStaging: vi.fn(async () => 2),
+}));
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     importJob: {
@@ -172,7 +176,7 @@ describe("handleImportJobReconcileTick", () => {
 
     await expect(handleImportJobReconcileTick([] as never)).resolves.toEqual({
       ok: true,
-      did: {},
+      did: { import_staging_swept: 2 },
     });
     expect(mocks.findMany).toHaveBeenCalledTimes(1);
   });

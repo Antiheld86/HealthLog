@@ -6,9 +6,12 @@ import { deflateRawSync } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 
+import { readdirSync } from "node:fs";
+
 import {
   createByteCap,
   extractExportXml,
+  memberOutputCap,
   readCentralDirectory,
 } from "../unzip-export-xml";
 
@@ -22,6 +25,8 @@ function buildMinimalZip(
   filename: string,
   payload: Buffer,
   method: 0 | 8 = 8,
+  /** What the headers claim the member inflates to; the truth by default. */
+  declaredSize?: number,
 ): Buffer {
   const compressed = method === 8 ? deflateRawSync(payload) : payload;
   const crc32 = (() => {
@@ -54,7 +59,7 @@ function buildMinimalZip(
   localHeader.writeUInt16LE(0, 12); // date
   localHeader.writeUInt32LE(crc32, 14);
   localHeader.writeUInt32LE(compressed.length, 18);
-  localHeader.writeUInt32LE(payload.length, 22);
+  localHeader.writeUInt32LE(declaredSize ?? payload.length, 22);
   localHeader.writeUInt16LE(nameBuf.length, 26);
   localHeader.writeUInt16LE(0, 28); // extra len
 
@@ -69,7 +74,7 @@ function buildMinimalZip(
   cdh.writeUInt16LE(0, 14); // date
   cdh.writeUInt32LE(crc32, 16);
   cdh.writeUInt32LE(compressed.length, 20);
-  cdh.writeUInt32LE(payload.length, 24);
+  cdh.writeUInt32LE(declaredSize ?? payload.length, 24);
   cdh.writeUInt16LE(nameBuf.length, 28);
   cdh.writeUInt16LE(0, 30); // extra
   cdh.writeUInt16LE(0, 32); // comment
@@ -166,6 +171,30 @@ describe("extractExportXml", () => {
     expect(seenDeclaredBytes).toBe(payload.length);
   });
 
+  // A member whose headers claim an honest ratio and whose deflate stream
+  // inflates a thousandfold. The header check passes it; only the count of
+  // the bytes actually produced, held to the compressed size on disk, stops
+  // it, and it must leave nothing behind in the staging directory.
+  it("refuses a member that inflates past its compressed size's cap, whatever it declares", async () => {
+    const payload = Buffer.alloc(80 * 1024 * 1024);
+    const compressedLength = deflateRawSync(payload).length;
+    const zip = buildMinimalZip(
+      "apple_health_export/export.xml",
+      payload,
+      8,
+      compressedLength * 2,
+    );
+    const tmp = mkdtempSync(join(tmpdir(), "healthlog-unzip-"));
+    const zipPath = join(tmp, "export.zip");
+    writeFileSync(zipPath, zip);
+    const staged = () =>
+      readdirSync(tmpdir()).filter((n) => n.startsWith("healthlog-import-"));
+    const before = new Set(staged());
+
+    await expect(extractExportXml(zipPath)).rejects.toThrow(/zip bomb/);
+    expect(staged().filter((n) => !before.has(n))).toEqual([]);
+  });
+
   it("throws when the export.xml member is missing", async () => {
     const payload = Buffer.from("noop");
     const zip = buildMinimalZip("other-file.txt", payload);
@@ -207,5 +236,28 @@ describe("createByteCap", () => {
         },
       ),
     ).rejects.toThrow(/exceeds the 6-byte cap/);
+  });
+});
+
+describe("memberOutputCap", () => {
+  it("holds a deflated member to 200 times what it occupies, with a floor", () => {
+    expect(
+      memberOutputCap({ compressionMethod: 8, compressedSize: 1024 }),
+    ).toBe(64 * 1024 * 1024);
+    expect(
+      memberOutputCap({
+        compressionMethod: 8,
+        compressedSize: 10 * 1024 * 1024,
+      }),
+    ).toBe(2000 * 1024 * 1024);
+    expect(
+      memberOutputCap({ compressionMethod: 8, compressedSize: 1024 ** 3 }),
+    ).toBe(8 * 1024 ** 3);
+  });
+
+  it("lets a stored member grow by nothing", () => {
+    expect(memberOutputCap({ compressionMethod: 0, compressedSize: 500 })).toBe(
+      500,
+    );
   });
 });

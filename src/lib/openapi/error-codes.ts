@@ -168,7 +168,7 @@ export const ERROR_CODE_CATALOGUE: Readonly<Record<string, readonly string[]>> =
       "illness.episode.parent-not-found",
       "illness.insights.invalid",
     ],
-    import: ["import.write_failed"],
+    import: ["import.apple_health.busy", "import.write_failed"],
     ingest: ["ingest.rate_limited"],
     insights: [
       "insights.generate.budgetExceeded",

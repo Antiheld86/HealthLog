@@ -27,6 +27,7 @@ vi.mock("next/headers", () => ({
 }));
 
 const mocks = vi.hoisted(() => ({
+  runningImportFindFirst: vi.fn(async () => null),
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
   bossSend: vi.fn().mockResolvedValue("boss-job-1"),
   getGlobalBoss: vi.fn(),
@@ -35,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   importJobUpdate: vi.fn(),
   streamToDisk: vi.fn(),
   unlink: vi.fn().mockResolvedValue(undefined),
+  rm: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/rate-limit", () => ({
@@ -51,7 +53,7 @@ vi.mock("@/lib/multipart/stream-to-disk", () => ({
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
-  return { ...actual, unlink: mocks.unlink };
+  return { ...actual, unlink: mocks.unlink, rm: mocks.rm };
 });
 
 vi.mock("@/lib/db", () => ({
@@ -61,6 +63,16 @@ vi.mock("@/lib/db", () => ({
       findFirst: mocks.importJobFindFirst,
       update: mocks.importJobUpdate,
     },
+    // The one-running-import check and the new row, in one transaction.
+    // The check finds nothing running unless a test says otherwise.
+    $transaction: async (fn: (tx: unknown) => unknown) =>
+      fn({
+        $executeRaw: async () => 0,
+        importJob: {
+          findFirst: mocks.runningImportFindFirst,
+          create: mocks.importJobCreate,
+        },
+      }),
   },
 }));
 
@@ -90,6 +102,7 @@ beforeEach(() => {
     textFields: {},
   });
   mocks.unlink.mockResolvedValue(undefined);
+  mocks.rm.mockResolvedValue(undefined);
 });
 
 function multipartReq(): NextRequest {
@@ -218,5 +231,53 @@ describe("POST /api/import/apple-health-export — dedup by content hash (issue 
         where: expect.objectContaining({ parserRevision: 3 }),
       }),
     );
+  });
+});
+
+// The staged upload is the person's export in plain text. Every exit that
+// leaves no worker to consume it removes it, and a second import for the same
+// account is refused while one is running.
+describe("POST /api/import/apple-health-export — the staged upload on every exit", () => {
+  const removed = () =>
+    mocks.rm.mock.calls.some(([path]) => path === STAGED_PATH);
+
+  it("refuses a second import while one is running, and removes the upload", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    mocks.runningImportFindFirst.mockResolvedValue({
+      id: "ij-running",
+      status: "parsing",
+    } as never);
+    const res = await POST(multipartReq());
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.meta).toMatchObject({
+      errorCode: "import.apple_health.busy",
+      jobId: "ij-running",
+    });
+    expect(mocks.importJobCreate).not.toHaveBeenCalled();
+    expect(mocks.bossSend).not.toHaveBeenCalled();
+    expect(removed()).toBe(true);
+  });
+
+  it("removes the upload when no worker is running", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    mocks.getGlobalBoss.mockReturnValue(null);
+    const res = await POST(multipartReq());
+    expect(res.status).toBe(503);
+    expect(removed()).toBe(true);
+  });
+
+  it("fails the row and removes the upload when the queue takes no job", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    mocks.bossSend.mockResolvedValue(null);
+    const res = await POST(multipartReq());
+    expect(res.status).toBe(503);
+    expect(mocks.importJobUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "ij-1" },
+        data: expect.objectContaining({ status: "failed" }),
+      }),
+    );
+    expect(removed()).toBe(true);
   });
 });

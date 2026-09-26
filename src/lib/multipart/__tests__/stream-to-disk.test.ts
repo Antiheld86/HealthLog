@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, unlinkSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { deflateRawSync } from "node:zlib";
 
@@ -110,6 +112,29 @@ describe("streamMultipartToDisk", () => {
         { maxBytes: 100, fieldName: "file" },
       ),
     ).rejects.toThrow(/size cap/);
+  });
+
+  // What was written before the refusal is the person's export in plain
+  // text; it must not stay behind in the temp directory.
+  it("removes the partial file when the upload is refused part-way", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "healthlog-stream-"));
+    const body = buildMultipartBody("export.zip", Buffer.alloc(4096, 0x41));
+    const chunked = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < body.length; i += 256) {
+          controller.enqueue(new Uint8Array(body.subarray(i, i + 256)));
+        }
+        controller.close();
+      },
+    });
+    await expect(
+      streamMultipartToDisk(
+        chunked,
+        `multipart/form-data; boundary=${BOUNDARY}`,
+        { maxBytes: 1000, fieldName: "file", tmpDir: dir },
+      ),
+    ).rejects.toThrow(/size cap/);
+    expect(readdirSync(dir)).toEqual([]);
   });
 
   it("throws when the named field is missing", async () => {

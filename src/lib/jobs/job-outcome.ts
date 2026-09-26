@@ -107,6 +107,7 @@ export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
   "geolite2_fetch_status",
   "host_metric_pruned",
   "hourly_rows_upserted",
+  "import_staging_swept",
   "imported",
   "in_slot",
   "in_window",

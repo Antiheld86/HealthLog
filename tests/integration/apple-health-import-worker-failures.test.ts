@@ -219,3 +219,28 @@ describe("apple health import worker — failure paths (issue #486)", () => {
     expect(existsSync(uploadPath)).toBe(false);
   });
 });
+
+describe("an account deleted before the worker reaches its upload", () => {
+  it("removes the staged export and does not fail on the missing account", async () => {
+    const user = await createUser("deleted-before-import");
+    const uploadPath = join(
+      scratchDir,
+      "healthlog-apple-health-import-gone.bin",
+    );
+    writeFileSync(uploadPath, "the export, in plain text");
+    // The account goes, and its ImportJob row with it by cascade.
+    await getPrismaClient().user.delete({ where: { id: user.id } });
+
+    const outcome = await handleAppleHealthImport(
+      bossJob("boss-gone-1", {
+        userId: user.id,
+        uploadPath,
+        uploadBytes: 25,
+        enqueuedAt: new Date().toISOString(),
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true });
+    expect(existsSync(uploadPath)).toBe(false);
+    expect(await getPrismaClient().importJob.count()).toBe(0);
+  });
+});
