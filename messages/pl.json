@@ -471,6 +471,13 @@
       "title": "Skonfiguruj drugi składnik",
       "body": "Administrator wymaga drugiego składnika na tym koncie. Dodaj aplikację uwierzytelniającą lub klucz bezpieczeństwa, aby kontynuować.",
       "signOut": "Wyloguj się"
+    },
+    "confirmAccess": {
+      "title": "Potwierdź, że to Ty",
+      "body": "Asystent chce połączyć się z Twoimi danymi w HealthLog. Potwierdź, że to Ty, a potem zdecydujesz, czy na to pozwolić.",
+      "action": "Potwierdź",
+      "failed": "Nie udało się. Spróbuj ponownie.",
+      "nothingToConfirm": "Nie ma tu nic do potwierdzenia. Rozpocznij połączenie ponownie w swoim asystencie."
     }
   },
   "dashboard": {

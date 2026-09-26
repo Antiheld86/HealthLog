@@ -471,6 +471,13 @@
       "title": "Set up a second factor",
       "body": "Your administrator requires a second factor on this account. Add an authenticator app or a security key to continue.",
       "signOut": "Sign out"
+    },
+    "confirmAccess": {
+      "title": "Confirm it is you",
+      "body": "An assistant is asking to connect to your HealthLog data. Confirm it is you, then you will be taken back to decide whether to allow it.",
+      "action": "Confirm",
+      "failed": "That did not work. Please try again.",
+      "nothingToConfirm": "There is nothing to confirm here. Start the connection again from your assistant."
     }
   },
   "dashboard": {

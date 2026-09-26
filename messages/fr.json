@@ -471,6 +471,13 @@
       "title": "Configurer un second facteur",
       "body": "Votre administrateur exige un second facteur sur ce compte. Ajoutez une application d'authentification ou une clé de sécurité pour continuer.",
       "signOut": "Se déconnecter"
+    },
+    "confirmAccess": {
+      "title": "Confirmez que c'est bien vous",
+      "body": "Un assistant demande à se connecter à vos données HealthLog. Confirmez que c'est bien vous, puis vous déciderez si vous l'autorisez.",
+      "action": "Confirmer",
+      "failed": "Cela n'a pas fonctionné. Veuillez réessayer.",
+      "nothingToConfirm": "Il n'y a rien à confirmer ici. Relancez la connexion depuis votre assistant."
     }
   },
   "dashboard": {

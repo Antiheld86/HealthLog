@@ -471,6 +471,13 @@
       "title": "Configura un secondo fattore",
       "body": "Il tuo amministratore richiede un secondo fattore su questo account. Aggiungi un'app di autenticazione o una chiave di sicurezza per continuare.",
       "signOut": "Esci"
+    },
+    "confirmAccess": {
+      "title": "Conferma che sei tu",
+      "body": "Un assistente chiede di collegarsi ai tuoi dati HealthLog. Conferma che sei tu, poi deciderai se consentirlo.",
+      "action": "Conferma",
+      "failed": "Non ha funzionato. Riprova.",
+      "nothingToConfirm": "Qui non c'è nulla da confermare. Avvia di nuovo la connessione dal tuo assistente."
     }
   },
   "dashboard": {

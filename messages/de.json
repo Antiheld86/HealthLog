@@ -471,6 +471,13 @@
       "title": "Zweiten Faktor einrichten",
       "body": "Dein Administrator verlangt einen zweiten Faktor für dieses Konto. Füge eine Authenticator-App oder einen Sicherheitsschlüssel hinzu, um fortzufahren.",
       "signOut": "Abmelden"
+    },
+    "confirmAccess": {
+      "title": "Bestätige, dass du es bist",
+      "body": "Ein Assistent möchte sich mit deinen HealthLog-Daten verbinden. Bestätige, dass du es bist; danach entscheidest du, ob du es erlaubst.",
+      "action": "Bestätigen",
+      "failed": "Das hat nicht geklappt. Bitte versuche es noch einmal.",
+      "nothingToConfirm": "Hier gibt es nichts zu bestätigen. Starte die Verbindung noch einmal in deinem Assistenten."
     }
   },
   "dashboard": {

@@ -97,6 +97,13 @@ const TOKEN_ARM_COOKIE_PROOF_ROUTES = [
   "app/api/fhir/Patient/$everything/route.ts",
 ].sort();
 
+/**
+ * The connection consent. It resolves the session through `getSession`
+ * (OAuth answers in its own error format, not the envelope) and asks for the
+ * proof on the consent page and again on "allow".
+ */
+const CONSENT_PROOF_ROUTES = ["app/api/mcp/oauth/authorize/route.ts"];
+
 /** Cookie-only routes that add the gate after their own resolver. */
 const COOKIE_PROOF_ROUTES = [
   "app/api/admin/backups/[id]/download/route.ts",
@@ -131,7 +138,11 @@ describe("the recent-proof gate", () => {
     const found = callers("assertRecentCookieProof");
     expect(found.length).toBeGreaterThan(0);
     expect(found).toEqual(
-      [...COOKIE_PROOF_ROUTES, ...TOKEN_ARM_COOKIE_PROOF_ROUTES].sort(),
+      [
+        ...COOKIE_PROOF_ROUTES,
+        ...TOKEN_ARM_COOKIE_PROOF_ROUTES,
+        ...CONSENT_PROOF_ROUTES,
+      ].sort(),
     );
   });
 

@@ -471,6 +471,13 @@
       "title": "Configurar un segundo factor",
       "body": "Tu administrador exige un segundo factor en esta cuenta. Añade una app de autenticación o una llave de seguridad para continuar.",
       "signOut": "Cerrar sesión"
+    },
+    "confirmAccess": {
+      "title": "Confirma que eres tú",
+      "body": "Un asistente quiere conectarse a tus datos de HealthLog. Confirma que eres tú y después decidirás si lo permites.",
+      "action": "Confirmar",
+      "failed": "No ha funcionado. Inténtalo de nuevo.",
+      "nothingToConfirm": "Aquí no hay nada que confirmar. Vuelve a iniciar la conexión desde tu asistente."
     }
   },
   "dashboard": {
