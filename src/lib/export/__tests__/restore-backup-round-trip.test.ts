@@ -420,9 +420,15 @@ function recordingTx(
 
   return new Proxy({} as Record<string, unknown>, {
     // `$executeRaw` and friends: the restore's per-account lock, and the
-    // measurement insert, which answer with a row count.
+    // measurement insert, which answer with a row count. `$queryRaw` is the
+    // tenant check's read of the schema's foreign keys, which a mock has none
+    // of (the integration suite runs it against the real catalogue).
     get: (_t, model: string) =>
-      model.startsWith("$") ? async () => 0 : delegate(model),
+      model === "$queryRaw"
+        ? async () => []
+        : model.startsWith("$")
+          ? async () => 0
+          : delegate(model),
   });
 }
 

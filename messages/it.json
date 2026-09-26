@@ -7309,7 +7309,10 @@
         "restoreFailureNotStarted": "Il processo in background non ha preso in carico il ripristino. Controlla che sia in esecuzione.",
         "restoreFailureEnqueue": "Non è stato possibile passare il ripristino al processo in background. Controlla che sia in esecuzione.",
         "restoreFailureAfterCommit": "I dati sono stati ripristinati, ma un passaggio successivo non è riuscito. I grafici potrebbero aggiornarsi solo con la prossima esecuzione notturna.",
-        "restoreFailureUnexpected": "Il ripristino si è fermato per un errore imprevisto ed è stato annullato. Il log del server indica l'errore."
+        "restoreFailureUnexpected": "Il ripristino si è fermato per un errore imprevisto ed è stato annullato. Il log del server indica l'errore.",
+        "restoreFailureKeyMissing": "Il backup richiede la chiave di cifratura {keys}, con cui questo server non riesce ad aprirlo. Aggiungi di nuovo la chiave a ENCRYPTION_KEYS, riavvia e avvia di nuovo il ripristino.",
+        "restoreFailureForeignReference": "Il file rimanda a voci che appartengono a un altro account. Non è stato scritto nulla.",
+        "previewKeyMissing": "Questo backup non può essere ripristinato su questo server: richiede la chiave di cifratura {keys}. Aggiungi prima di nuovo la chiave a ENCRYPTION_KEYS e riavvia."
       },
       "danger-zone": {
         "title": "Zona pericolosa",

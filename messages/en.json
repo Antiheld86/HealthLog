@@ -7309,7 +7309,10 @@
         "restoreFailureNotStarted": "The background worker did not pick the restore up. Check that the worker is running.",
         "restoreFailureEnqueue": "The restore could not be handed to the background worker. Check that the worker is running.",
         "restoreFailureAfterCommit": "The data was restored, but a step after it failed. Charts may take until the next nightly run to catch up.",
-        "restoreFailureUnexpected": "The restore stopped on an unexpected error and was rolled back. The server log names the error."
+        "restoreFailureUnexpected": "The restore stopped on an unexpected error and was rolled back. The server log names the error.",
+        "restoreFailureKeyMissing": "The backup needs encryption key {keys}, which this server cannot open it with. Add the key back to ENCRYPTION_KEYS, restart, and start the restore again.",
+        "restoreFailureForeignReference": "The file points at records that belong to another account. Nothing was written.",
+        "previewKeyMissing": "This backup cannot be restored on this server: it needs encryption key {keys}. Add the key back to ENCRYPTION_KEYS and restart first."
       },
       "danger-zone": {
         "title": "Danger Zone",

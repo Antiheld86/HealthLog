@@ -7309,7 +7309,10 @@
         "restoreFailureNotStarted": "Proces w tle nie przejął przywracania. Sprawdź, czy działa.",
         "restoreFailureEnqueue": "Nie udało się przekazać przywracania do procesu w tle. Sprawdź, czy działa.",
         "restoreFailureAfterCommit": "Dane zostały przywrócone, ale krok po nich się nie powiódł. Wykresy mogą nadrobić to dopiero przy następnym nocnym przebiegu.",
-        "restoreFailureUnexpected": "Przywracanie zatrzymało się na nieoczekiwanym błędzie i zostało wycofane. Dziennik serwera podaje błąd."
+        "restoreFailureUnexpected": "Przywracanie zatrzymało się na nieoczekiwanym błędzie i zostało wycofane. Dziennik serwera podaje błąd.",
+        "restoreFailureKeyMissing": "Kopia wymaga klucza szyfrowania {keys}, którym ten serwer nie może jej otworzyć. Dodaj klucz z powrotem do ENCRYPTION_KEYS, uruchom ponownie i rozpocznij przywracanie jeszcze raz.",
+        "restoreFailureForeignReference": "Plik wskazuje na wpisy należące do innego konta. Nic nie zostało zapisane.",
+        "previewKeyMissing": "Tej kopii nie da się przywrócić na tym serwerze: wymaga klucza szyfrowania {keys}. Najpierw dodaj klucz z powrotem do ENCRYPTION_KEYS i uruchom ponownie."
       },
       "danger-zone": {
         "title": "Strefa zagrożenia",

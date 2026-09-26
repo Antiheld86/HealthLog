@@ -7309,7 +7309,10 @@
         "restoreFailureNotStarted": "Le processus en arrière-plan n'a pas pris la restauration en charge. Vérifie qu'il tourne.",
         "restoreFailureEnqueue": "La restauration n'a pas pu être transmise au processus en arrière-plan. Vérifie qu'il tourne.",
         "restoreFailureAfterCommit": "Les données ont été restaurées, mais une étape suivante a échoué. Les graphiques ne seront peut-être à jour qu'après la prochaine exécution nocturne.",
-        "restoreFailureUnexpected": "La restauration s'est arrêtée sur une erreur inattendue et a été annulée. Le journal du serveur indique l'erreur."
+        "restoreFailureUnexpected": "La restauration s'est arrêtée sur une erreur inattendue et a été annulée. Le journal du serveur indique l'erreur.",
+        "restoreFailureKeyMissing": "La sauvegarde a besoin de la clé de chiffrement {keys}, avec laquelle ce serveur ne peut pas l'ouvrir. Remettez la clé dans ENCRYPTION_KEYS, redémarrez, puis relancez la restauration.",
+        "restoreFailureForeignReference": "Le fichier renvoie à des éléments qui appartiennent à un autre compte. Rien n'a été écrit.",
+        "previewKeyMissing": "Cette sauvegarde ne peut pas être restaurée sur ce serveur : elle a besoin de la clé de chiffrement {keys}. Remettez d'abord la clé dans ENCRYPTION_KEYS et redémarrez."
       },
       "danger-zone": {
         "title": "Zone de danger",

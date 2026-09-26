@@ -39,6 +39,12 @@ import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { BackupJsonError, scanBackupJson } from "@/lib/export/backup-json-scan";
 import {
+  assessBackupKeys,
+  BACKUP_KEY_MISSING_CODE,
+  BackupKeyIdCollector,
+  describeBackupKeyProblem,
+} from "@/lib/export/backup-key-ids";
+import {
   BACKUP_UPLOAD_TOO_LARGE_CODE,
   BackupBlobTooLargeError,
 } from "@/lib/export/backup-blob";
@@ -235,6 +241,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
           }
         }
         let firstWithoutId: number | null = null;
+        const keys = new BackupKeyIdCollector();
         let scanned;
         try {
           scanned = await scanBackupJson(storedAsRead(), {
@@ -251,6 +258,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
               if (!parsed.data.id && firstWithoutId === null) {
                 firstWithoutId = index;
               }
+              keys.visit(element, "measurements");
             },
           });
         } catch (err) {
@@ -316,6 +324,27 @@ export const POST = apiHandler(async (request: NextRequest) => {
               reason: "incompatible_schema_version",
               schemaVersion: payload.schemaVersion,
             },
+          );
+        }
+
+        // A file whose inner ciphertext needs a key this host does not have
+        // can be stored but never restored: the restore would refuse it, or
+        // worse, a restore on a host that had lost the key would write rows
+        // nobody can open. Refused here, where the operator is looking, with
+        // the key named. The instance settings are left to the restore, which
+        // checks them only when they are asked for back.
+        keys.visit(scanned.document);
+        const keyVerdict = assessBackupKeys(keys, {
+          ignoreSections: new Set(["appSettings"]),
+        });
+        const keyProblem = describeBackupKeyProblem(keyVerdict);
+        if (keyProblem) {
+          const keyIds = [...keyVerdict.missing, ...keyVerdict.unreadable];
+          throw new UploadRefused(
+            422,
+            keyProblem,
+            { reason: "key_missing", keyIds },
+            { errorCode: BACKUP_KEY_MISSING_CODE, keyIds },
           );
         }
 

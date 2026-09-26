@@ -7309,7 +7309,10 @@
         "restoreFailureNotStarted": "Der Hintergrunddienst hat die Wiederherstellung nicht übernommen. Prüfe, ob er läuft.",
         "restoreFailureEnqueue": "Die Wiederherstellung konnte nicht an den Hintergrunddienst übergeben werden. Prüfe, ob er läuft.",
         "restoreFailureAfterCommit": "Die Daten wurden wiederhergestellt, aber ein Schritt danach ist fehlgeschlagen. Diagramme holen das womöglich erst beim nächsten nächtlichen Lauf nach.",
-        "restoreFailureUnexpected": "Die Wiederherstellung ist an einem unerwarteten Fehler gescheitert und wurde zurückgerollt. Das Server-Log nennt den Fehler."
+        "restoreFailureUnexpected": "Die Wiederherstellung ist an einem unerwarteten Fehler gescheitert und wurde zurückgerollt. Das Server-Log nennt den Fehler.",
+        "restoreFailureKeyMissing": "Die Sicherung braucht den Verschlüsselungsschlüssel {keys}, mit dem dieser Server sie nicht öffnen kann. Nimm den Schlüssel wieder in ENCRYPTION_KEYS auf, starte neu und starte die Wiederherstellung erneut.",
+        "restoreFailureForeignReference": "Die Datei verweist auf Einträge, die zu einem anderen Konto gehören. Es wurde nichts geschrieben.",
+        "previewKeyMissing": "Diese Sicherung lässt sich auf diesem Server nicht wiederherstellen: Sie braucht den Verschlüsselungsschlüssel {keys}. Nimm den Schlüssel zuerst wieder in ENCRYPTION_KEYS auf und starte neu."
       },
       "danger-zone": {
         "title": "Gefahrenzone",

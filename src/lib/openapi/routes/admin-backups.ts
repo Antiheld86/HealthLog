@@ -86,15 +86,16 @@ const restoreFailure = z
   .object({
     code: z.string().meta({
       description:
-        "Stable reason: `backup_not_found`, `backup_changed`, `backup.payload.undecryptable`, `schema_invalid`, `incompatible_schema_version`, `owner_mismatch`, `owner_not_found`, `backup.section.missing`, `document_ciphertext_missing`, `time_budget`, `transaction_failed`, `interrupted`, `not_started`, `enqueue_failed`, `failed_after_commit`, `unexpected`. Every code but `failed_after_commit` means the account was not changed.",
+        "Stable reason: `backup_not_found`, `backup_changed`, `backup.payload.undecryptable`, `schema_invalid`, `incompatible_schema_version`, `owner_mismatch`, `owner_not_found`, `backup.section.missing`, `document_ciphertext_missing`, `backup.key.missing`, `backup.foreign_reference`, `time_budget`, `transaction_failed`, `interrupted`, `not_started`, `enqueue_failed`, `failed_after_commit`, `unexpected`. Every code but `failed_after_commit` means the account was not changed.",
     }),
     message: z.string(),
     sections: z.array(z.string()).optional(),
+    keyIds: z.array(z.string()).optional(),
   })
   .meta({
     id: "AdminBackupRestoreFailure",
     description:
-      "Why the restore did not happen, in a sentence an operator can act on. `sections` names the missing sections for `backup.section.missing`.",
+      "Why the restore did not happen, in a sentence an operator can act on. `sections` names the missing sections for `backup.section.missing`; `keyIds` names the encryption key ids the file needs and this server cannot open it with, for `backup.key.missing`.",
   });
 
 const restoreJob = z

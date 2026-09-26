@@ -244,6 +244,9 @@ export function openBackupObject(
 const UPLOAD_PART_BYTES = 8 * 1024 * 1024;
 const UPLOAD_CONCURRENCY = 2;
 
+/** Pages of 1 000 keys one listing may walk: 200 000 objects. */
+const MAX_LIST_PAGES = 200;
+
 /**
  * The largest object one multipart upload can carry: S3 and every compatible
  * target cap a multipart upload at 10 000 parts.
@@ -567,13 +570,31 @@ export async function getS3Client(cfg: OffhostBackupConfig): Promise<S3Like> {
       }
     },
     listObjects: async (prefix) => {
-      const out = await client.send(
-        new mod.ListObjectsV2Command({ Bucket: cfg.bucket, Prefix: prefix }),
+      // Every page, not the first. A bucket answers at most 1 000 keys per
+      // call, in key order, so the first page of a bucket with a few accounts
+      // and a month of retention holds only the OLDEST dates: the restore
+      // drill read an old object and called the chain stale, and a purge
+      // would have missed every newer copy. Bounded, so a bucket that holds
+      // far more than this job put there cannot keep the loop going forever.
+      const found: Array<{ key: string; lastModified?: Date }> = [];
+      let token: string | undefined;
+      for (let page = 0; page < MAX_LIST_PAGES; page++) {
+        const out = await client.send(
+          new mod.ListObjectsV2Command({
+            Bucket: cfg.bucket,
+            Prefix: prefix,
+            ContinuationToken: token,
+          }),
+        );
+        for (const c of out.Contents ?? []) {
+          found.push({ key: c.Key ?? "", lastModified: c.LastModified });
+        }
+        if (!out.IsTruncated || !out.NextContinuationToken) return found;
+        token = out.NextContinuationToken;
+      }
+      throw new Error(
+        `Bucket listing under "${prefix}" did not end within ${MAX_LIST_PAGES} pages`,
       );
-      return (out.Contents ?? []).map((c) => ({
-        key: c.Key ?? "",
-        lastModified: c.LastModified,
-      }));
     },
     deleteObject: async (key) => {
       await client.send(

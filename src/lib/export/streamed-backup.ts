@@ -21,6 +21,7 @@
  * check reads). Run it through `parseBackupPayload` for the rest of the
  * validation; together that is the whole-file check.
  */
+import { BackupKeyIdCollector } from "@/lib/export/backup-key-ids";
 import { scanBackupJson } from "@/lib/export/backup-json-scan";
 import {
   BACKUP_SCHEMA_VERSION,
@@ -51,6 +52,12 @@ export interface StreamedBackup {
   measurementCount: number;
   /** The file's size in bytes. */
   bytes: number;
+  /**
+   * The application key ids the file's inner ciphertext was written under,
+   * gathered on the first read (`assessBackupKeys` holds them against this
+   * host's keys).
+   */
+  keys: BackupKeyIdCollector;
   /**
    * Read the file again and hand its measurements over in file order, in
    * batches of at most `size`, each row parsed by the element schema.
@@ -93,6 +100,7 @@ export async function readStreamedBackup(
 ): Promise<StreamedBackup> {
   let firstWithoutId: number | null = null;
   let bytes = 0;
+  const keys = new BackupKeyIdCollector();
   async function* counted() {
     for await (const chunk of source()) {
       bytes += chunk.byteLength;
@@ -104,6 +112,7 @@ export async function readStreamedBackup(
     onElement: (_key, element, index) => {
       const row = parseMeasurement(element, index);
       if (!row.id && firstWithoutId === null) firstWithoutId = index;
+      keys.visit(element, MEASUREMENTS);
       options.onMeasurementChecked?.(index + 1);
     },
   });
@@ -120,6 +129,8 @@ export async function readStreamedBackup(
     );
   }
 
+  keys.visit(document);
+
   const skipKeys = new Set(
     Object.keys(document).filter((key) => key !== MEASUREMENTS),
   );
@@ -128,6 +139,7 @@ export async function readStreamedBackup(
     raw: document,
     measurementCount: streamedCounts[MEASUREMENTS] ?? 0,
     bytes,
+    keys,
     async forEachMeasurementBatch(size, fn) {
       let batch: BackupMeasurement[] = [];
       await scanBackupJson(source(), {

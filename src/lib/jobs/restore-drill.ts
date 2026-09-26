@@ -24,6 +24,11 @@
 import type { Job } from "pg-boss";
 import { BackupJsonError, scanBackupJson } from "@/lib/export/backup-json-scan";
 import {
+  assessBackupKeys,
+  BackupKeyIdCollector,
+  describeBackupKeyProblem,
+} from "@/lib/export/backup-key-ids";
+import {
   openBackupObject,
   getS3Client,
   loadOffhostConfig,
@@ -54,6 +59,8 @@ export interface RestoreDrillReport {
   stale: boolean;
   ciphertextBytes: number;
   plaintextBytes: number;
+  /** Application key ids the object's inner ciphertext needs, each proven to open. */
+  innerKeyIds: string[];
   recordCounts: {
     measurements: number;
     medications: number;
@@ -115,10 +122,17 @@ export async function runRestoreDrill(
       yield chunk;
     }
   }
+  // The envelope opening proves the off-host key. It proves nothing about
+  // the application keys the ciphertext INSIDE was written under, and that
+  // is the half a key rotation breaks: a restore of this object writes those
+  // values back verbatim. So every inner key id is collected, and one value
+  // per key is actually decrypted.
+  const keys = new BackupKeyIdCollector();
   let scanned;
   try {
     scanned = await scanBackupJson(counted(), {
       streamKeys: new Set(["measurements", "intakeEvents", "moodEntries"]),
+      onElement: (key, element) => keys.visit(element, key),
     });
   } catch (err) {
     if (err instanceof BackupJsonError) {
@@ -140,6 +154,17 @@ export async function runRestoreDrill(
     );
   }
 
+  keys.visit(payload);
+  const keyVerdict = assessBackupKeys(keys, {
+    ignoreSections: new Set(["appSettings"]),
+  });
+  const keyProblem = describeBackupKeyProblem(keyVerdict);
+  if (keyProblem) {
+    throw new Error(
+      `Restore drill: backup object "${objectKey}" opens, but its content could not be restored on this server. ${keyProblem}`,
+    );
+  }
+
   const ageDays = Math.floor(
     (now.getTime() - Date.parse(`${dateKey}T00:00:00Z`)) /
       (24 * 60 * 60 * 1000),
@@ -152,6 +177,7 @@ export async function runRestoreDrill(
     stale: ageDays > MAX_BACKUP_AGE_DAYS,
     ciphertextBytes: ciphertext.length,
     plaintextBytes,
+    innerKeyIds: keyVerdict.keyIds,
     recordCounts: {
       measurements: streamedCounts.measurements,
       medications: countArray(payload.medications),
@@ -193,6 +219,7 @@ export async function handleRestoreDrill(
         report.recordCounts.moodEntries,
       );
       evt.addMeta("restore_drill_stale", report.stale);
+      evt.addMeta("restore_drill_inner_key_ids", report.innerKeyIds.join(","));
       if (report.stale) {
         await reportWorkerError(
           RESTORE_DRILL_QUEUE,
