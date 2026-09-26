@@ -5183,7 +5183,7 @@ model OffhostBackupKeyUse {
 model OffhostPurgeRequest {
   id            String    @id @default(cuid())
   subjectId     String    @map("subject_id")
-  /// `account_deleted`, `data_wiped`, `managed_profile_deleted` or `admin_wipe`.
+  /// `account_deleted`, `data_wiped` or `managed_profile_deleted`.
   reason        String
   requestedAt   DateTime  @default(now()) @map("requested_at")
   attempts      Int       @default(0)

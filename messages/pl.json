@@ -6579,7 +6579,7 @@
       "delete": {
         "title": "Usuń lub zresetuj",
         "description": "Usuń całe konto albo wyczyść dane zdrowotne, zachowując konto.",
-        "backupLag": "Usunięcie natychmiast usuwa Twoje dane. Zaszyfrowane kopie zapasowe poza serwerem nadal je zawierają, dopóki nie wygasną zgodnie z oknem retencji operatora.",
+        "backupLag": "Usunięcie natychmiast usuwa Twoje dane. Jeśli ten serwer przechowuje zaszyfrowane kopie zapasowe poza serwerem, kopie Twoich danych są usuwane z tego magazynu zaraz potem, a jeśli jest niedostępny, przy następnym nocnym przebiegu.",
         "openAdvanced": "Usuń lub zresetuj"
       },
       "posture": {

@@ -592,21 +592,21 @@ export async function handleAppleHealthImport(
     // left behind in that case either.
     if (extractedXmlPath) safeUnlink(extractedXmlPath);
     safeUnlink(uploadPath);
-    await prisma.importJob
-      .update({
+    try {
+      await prisma.importJob.update({
         where: { id: importJobId },
         data: {
           status: "failed",
           failureReason: reason.slice(0, 1000),
           completedAt: new Date(),
         },
-      })
-      .catch((updateErr: unknown) => {
-        console.warn(
-          `[apple-health-import] Could not record the failure on ImportJob=${importJobId}`,
-          updateErr,
-        );
       });
+    } catch (updateErr) {
+      console.warn(
+        `[apple-health-import] Could not record the failure on ImportJob=${importJobId}`,
+        updateErr,
+      );
+    }
     throw err;
   }
 }

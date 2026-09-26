@@ -6579,7 +6579,7 @@
       "delete": {
         "title": "Elimina o reimposta",
         "description": "Elimina completamente il tuo account oppure cancella i tuoi dati sanitari mantenendo l'account.",
-        "backupLag": "L'eliminazione rimuove subito i tuoi dati. I backup cifrati esterni li contengono ancora finché non scadono secondo la finestra di conservazione dell'operatore.",
+        "backupLag": "L'eliminazione rimuove subito i tuoi dati. Se questo server conserva backup esterni cifrati, le copie dei tuoi dati vengono eliminate da quello spazio subito dopo, o alla successiva esecuzione notturna se non è raggiungibile.",
         "openAdvanced": "Elimina o reimposta"
       },
       "posture": {

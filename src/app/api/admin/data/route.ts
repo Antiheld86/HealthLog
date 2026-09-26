@@ -1,8 +1,3 @@
-import {
-  kickOffhostPurge,
-  PURGE_ALL_SUBJECTS,
-  requestOffhostPurge,
-} from "@/lib/jobs/offhost-purge";
 import { prisma } from "@/lib/db";
 import { apiHandler, requireAdmin } from "@/lib/api-handler";
 import { auditLog } from "@/lib/auth/audit";
@@ -113,9 +108,6 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
       // columns does not. Same classification contract as the model list.
       await tx.user.updateMany({ data: USER_RESET });
 
-      // Every account's nightly off-host copies go too.
-      await requestOffhostPurge(tx, PURGE_ALL_SUBJECTS, "admin_wipe");
-
       return perModel;
     },
     {
@@ -146,7 +138,6 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
   // v1.16.9 — the wipe touched every user's rows; clear every cache
   // bucket so no per-user payload survives the reset.
   invalidateAllCaches();
-  await kickOffhostPurge();
 
   return apiSuccess({ cleared: true, deletedRows, models: counts });
 });

@@ -13201,6 +13201,14 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
+        "409":
+          description: An import for this account is already queued or running, and these bytes are not the ones it carries (the
+            same bytes resolve to that job as a 202). `meta.errorCode` is `import.apple_health.busy` and `meta.jobId`
+            names the running job; poll it, then upload again. The upload was discarded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "413":
           description: The declared `Content-Length` exceeds 1.5 GB. A body that exceeds the cap without declaring it is refused
             by the streaming sink instead, which surfaces as the 422 below.
@@ -13222,8 +13230,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "503":
-          description: No background worker is bound to this process, so the job cannot be queued. The upload was staged and is
-            discarded; retry once a worker is running.
+          description: No background worker is bound to this process, or the queue did not accept the job, so nothing will run it.
+            The staged upload is discarded (and a created job is marked failed); retry once a worker is running.
           content:
             application/json:
               schema:
@@ -30819,36 +30827,37 @@ components:
                 anamnesis.fact.invalidValue; auth — auth.admin.required, auth.already_authenticated,
                 auth.mfa.code_invalid, auth.missing, auth.refresh.invalid, auth.refresh.reuse, auth.refresh.revoked,
                 auth.scope.insufficient, auth.stepup.required, auth.token.expired, auth.token.invalid; backup —
-                backup.payload.undecryptable, backup.restore.active, backup.section.missing, backup.upload.too_large;
-                body-site — body-site.invalid; coach — coach.budget.exceeded, coach.conversation.invalidTitle,
-                coach.conversation.notFound, coach.fenced.attachmentConflict, coach.fenced.attachmentLimit,
-                coach.fenced.attachmentNotFound, coach.fenced.attachmentNotIndexed, coach.fenced.attachmentRequired,
-                coach.fenced.attachmentUnavailable, coach.fenced.invalid, coach.request.invalid; coach-prefs —
-                coach-prefs.body.invalid_json, coach-prefs.body.invalid_shape; consent — consent.ai.required; cycle —
-                cycle.bulk.invalid, cycle.bulk.too_large, cycle.calendar.invalid, cycle.calendar.range,
-                cycle.cycles.invalid, cycle.day-log.conflict, cycle.day-log.invalid, cycle.disabled,
-                cycle.period.invalid, cycle.symptom.custom.invalid, cycle.symptom.custom.limit; cycle-prefs —
-                cycle-prefs.body.invalid_json, cycle-prefs.invalid; disable-coach — disable-coach.body.invalid_json;
-                documents — documents.chat.conversationNotFound, documents.chat.invalid,
-                documents.inbound.alreadyConfirmed, documents.inbound.alreadyPartlyConfirmed,
-                documents.inbound.budgetExceeded, documents.inbound.decryptFailed, documents.inbound.encounterNotFound,
-                documents.inbound.episodeNotFound, documents.inbound.extractFailed, documents.inbound.factNotFound,
-                documents.inbound.factNotPending, documents.inbound.factTypeMismatch, documents.inbound.fileTooLarge,
-                documents.inbound.fileType, documents.inbound.invalidMetadata, documents.inbound.invalidQuery,
-                documents.inbound.invalidUpdate, documents.inbound.localOcrDisabled, documents.inbound.notFound,
-                documents.inbound.notIndexed, documents.inbound.pdfNeedsAnthropic,
-                documents.inbound.providerUnsupported, documents.inbound.quotaExceeded, documents.inbound.rateLimited,
-                documents.inbound.restoreDuplicate, documents.inbound.restoreGone, documents.inbound.sourceAliasLimit,
-                documents.inbound.uploadBusy, documents.inbound.uploadTimeout, documents.inbound.vaccinationNotFound;
-                encounter — encounter.invalid, encounter.link.invalid, encounter.practitioner-not-found,
-                encounter.reminder-conflict, encounter.reminder-not-found; environment — environment.invalid,
-                environment.no_home, environment.range_too_large, environment.travel.not_found; export —
-                export.selection.empty, export.selection.unknown_leaf; familyHistory — familyHistory.invalid; feedback —
-                feedback.body.invalid; health_score_config — health_score_config.invalid,
-                health_score_config.too_narrow; illness — illness.day-log.invalid, illness.disabled,
-                illness.episode.chronic-no-resolve, illness.episode.invalid, illness.episode.invalid-window,
-                illness.episode.parent-not-found, illness.insights.invalid; import — import.write_failed; ingest —
-                ingest.rate_limited; insights — insights.generate.budgetExceeded, insights.generate.outboundScreened,
+                backup.foreign_reference, backup.key.missing, backup.payload.undecryptable, backup.restore.active,
+                backup.section.missing, backup.upload.too_large; body-site — body-site.invalid; coach —
+                coach.budget.exceeded, coach.conversation.invalidTitle, coach.conversation.notFound,
+                coach.fenced.attachmentConflict, coach.fenced.attachmentLimit, coach.fenced.attachmentNotFound,
+                coach.fenced.attachmentNotIndexed, coach.fenced.attachmentRequired, coach.fenced.attachmentUnavailable,
+                coach.fenced.invalid, coach.request.invalid; coach-prefs — coach-prefs.body.invalid_json,
+                coach-prefs.body.invalid_shape; consent — consent.ai.required; cycle — cycle.bulk.invalid,
+                cycle.bulk.too_large, cycle.calendar.invalid, cycle.calendar.range, cycle.cycles.invalid,
+                cycle.day-log.conflict, cycle.day-log.invalid, cycle.disabled, cycle.period.invalid,
+                cycle.symptom.custom.invalid, cycle.symptom.custom.limit; cycle-prefs — cycle-prefs.body.invalid_json,
+                cycle-prefs.invalid; disable-coach — disable-coach.body.invalid_json; documents —
+                documents.chat.conversationNotFound, documents.chat.invalid, documents.inbound.alreadyConfirmed,
+                documents.inbound.alreadyPartlyConfirmed, documents.inbound.budgetExceeded,
+                documents.inbound.decryptFailed, documents.inbound.encounterNotFound, documents.inbound.episodeNotFound,
+                documents.inbound.extractFailed, documents.inbound.factNotFound, documents.inbound.factNotPending,
+                documents.inbound.factTypeMismatch, documents.inbound.fileTooLarge, documents.inbound.fileType,
+                documents.inbound.invalidMetadata, documents.inbound.invalidQuery, documents.inbound.invalidUpdate,
+                documents.inbound.localOcrDisabled, documents.inbound.notFound, documents.inbound.notIndexed,
+                documents.inbound.pdfNeedsAnthropic, documents.inbound.providerUnsupported,
+                documents.inbound.quotaExceeded, documents.inbound.rateLimited, documents.inbound.restoreDuplicate,
+                documents.inbound.restoreGone, documents.inbound.sourceAliasLimit, documents.inbound.uploadBusy,
+                documents.inbound.uploadTimeout, documents.inbound.vaccinationNotFound; encounter — encounter.invalid,
+                encounter.link.invalid, encounter.practitioner-not-found, encounter.reminder-conflict,
+                encounter.reminder-not-found; environment — environment.invalid, environment.no_home,
+                environment.range_too_large, environment.travel.not_found; export — export.selection.empty,
+                export.selection.unknown_leaf; familyHistory — familyHistory.invalid; feedback — feedback.body.invalid;
+                health_score_config — health_score_config.invalid, health_score_config.too_narrow; illness —
+                illness.day-log.invalid, illness.disabled, illness.episode.chronic-no-resolve, illness.episode.invalid,
+                illness.episode.invalid-window, illness.episode.parent-not-found, illness.insights.invalid; import —
+                import.apple_health.busy, import.write_failed; ingest — ingest.rate_limited; insights —
+                insights.generate.budgetExceeded, insights.generate.outboundScreened,
                 insights.generate.profileScopeChanged, insights.generate.scopeChanged; labs —
                 labs.biomarker.create.invalid, labs.biomarker.duplicate, labs.biomarker.notFound,
                 labs.biomarker.update.invalid, labs.biomarker.update.referenceRangeInvalid, labs.create.invalid,
@@ -72376,12 +72385,16 @@ components:
           type: string
           description: "Stable reason: `backup_not_found`, `backup_changed`, `backup.payload.undecryptable`, `schema_invalid`,
             `incompatible_schema_version`, `owner_mismatch`, `owner_not_found`, `backup.section.missing`,
-            `document_ciphertext_missing`, `time_budget`, `transaction_failed`, `interrupted`, `not_started`,
-            `enqueue_failed`, `failed_after_commit`, `unexpected`. Every code but `failed_after_commit` means the
-            account was not changed."
+            `document_ciphertext_missing`, `backup.key.missing`, `backup.foreign_reference`, `time_budget`,
+            `transaction_failed`, `interrupted`, `not_started`, `enqueue_failed`, `failed_after_commit`, `unexpected`.
+            Every code but `failed_after_commit` means the account was not changed."
         message:
           type: string
         sections:
+          type: array
+          items:
+            type: string
+        keyIds:
           type: array
           items:
             type: string
@@ -72390,7 +72403,8 @@ components:
         - message
       additionalProperties: false
       description: Why the restore did not happen, in a sentence an operator can act on. `sections` names the missing sections
-        for `backup.section.missing`.
+        for `backup.section.missing`; `keyIds` names the encryption key ids the file needs and this server cannot open
+        it with, for `backup.key.missing`.
     AdminBackupRestoreJobResponse:
       type: object
       properties:

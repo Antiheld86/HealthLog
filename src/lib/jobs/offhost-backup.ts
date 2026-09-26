@@ -11,15 +11,15 @@
  * Object key layout:
  *   <bucket>/<YYYY-MM-DD>/user-<userId>.json.enc
  *
- * Retention: the worker NEVER calls DeleteObject on backup keys. Operators
- * MUST configure a bucket-level lifecycle rule (e.g. expire after
- * `BACKUP_RETENTION_DAYS`, which this module reads nowhere — see
- * `loadOffhostConfig`). This keeps the IAM grant for the worker
- * limited to PutObject + GetObject + AbortMultipartUpload, so a compromised
- * worker cannot wipe the backup history. The abort is what cleans up a run
- * that failed partway rather than leaving billed, unlistable parts behind;
- * `AbortMultipartUpload` can only touch an upload this worker started, never
- * a finished object. See docs/ops/backup-restore.md.
+ * Retention: the worker does not expire objects by age. Operators configure a
+ * bucket-level lifecycle rule (e.g. expire after `BACKUP_RETENTION_DAYS`,
+ * which this module reads nowhere — see `loadOffhostConfig`); the admin
+ * off-host card reads that rule back (`probeOffhostLifecycle`) and says when
+ * there is none. Objects ARE deleted in one case: an account that is deleted
+ * or whose data is wiped (`offhost-purge.ts`), which needs DeleteObject in the
+ * grant. `AbortMultipartUpload` cleans up a run that failed partway rather
+ * than leaving billed, unlistable parts behind. See
+ * docs/ops/backup-restore.md.
  */
 import { Buffer } from "node:buffer";
 import {
@@ -108,8 +108,8 @@ export function loadOffhostConfig(): OffhostBackupConfig | null {
   // `BACKUP_RETENTION_DAYS` is deliberately absent from this config. It used
   // to be parsed and clamped here and then read by nobody, which read as an
   // enforcer the worker is not: retention belongs to the bucket's lifecycle
-  // rule, and no consumer can ever appear here because DeleteObject is kept
-  // out of the worker's grant on purpose (see the header). The variable stays
+  // rule, which the worker leaves to the bucket rather than deleting by age
+  // (see the header). The variable stays
   // documented and on the compose whitelist because it is the number the
   // operator sets that rule to.
   return {
@@ -964,7 +964,7 @@ export async function runOffhostBackup(
       const purgedMeanwhile =
         (await prisma.offhostPurgeRequest.count({
           where: {
-            subjectId: { in: [user.id, "*"] },
+            subjectId: user.id,
             requestedAt: { gte: accountStartedAt },
           },
         })) > 0 || (await prisma.user.count({ where: { id: user.id } })) === 0;

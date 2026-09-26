@@ -6579,7 +6579,7 @@
       "delete": {
         "title": "Löschen oder zurücksetzen",
         "description": "Lösche dein Konto vollständig oder lösche deine Gesundheitsdaten und behalte das Konto.",
-        "backupLag": "Die Löschung entfernt deine Daten sofort. Verschlüsselte Off-Host-Backups enthalten sie weiterhin, bis sie aus dem Aufbewahrungsfenster des Betreibers herausfallen.",
+        "backupLag": "Die Löschung entfernt deine Daten sofort. Wenn dieser Server verschlüsselte externe Sicherungen anlegt, werden die Kopien deiner Daten gleich danach aus diesem Speicher gelöscht, oder in der nächsten Nacht, falls der Speicher nicht erreichbar ist.",
         "openAdvanced": "Löschen oder zurücksetzen"
       },
       "posture": {

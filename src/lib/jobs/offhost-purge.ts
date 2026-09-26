@@ -17,9 +17,11 @@
  * the job runs again every night and after every nightly upload, so a late
  * copy the upload wrote for an account deleted while it ran is caught too.
  *
- * `subjectId` "*" is the admin wipe of every account: every account object
- * goes. The health-check probes and anything else in the bucket that is not
- * an account object is never touched.
+ * The admin wipe of every account writes no request, on purpose: it is the
+ * operator clearing their own host, the bucket is theirs, and its copies are
+ * the documented way back from a wipe pressed by mistake. The health-check
+ * probes and anything else in the bucket that is not an account object is
+ * never touched.
  */
 import type { Job } from "pg-boss";
 
@@ -41,11 +43,8 @@ export const OFFHOST_PURGE_QUEUE = "offhost-backup-purge";
 /** 03:40, after the nightly upload (02:30) has had its hour. */
 export const OFFHOST_PURGE_CRON = "40 3 * * *";
 
-/** Every subject, for the admin wipe of every account. */
-export const PURGE_ALL_SUBJECTS = "*";
-
 export type OffhostPurgeReason =
-  "account_deleted" | "data_wiped" | "managed_profile_deleted" | "admin_wipe";
+  "account_deleted" | "data_wiped" | "managed_profile_deleted";
 
 /** An account object: `<date>/user-<id>.json.enc`. */
 const ACCOUNT_OBJECT = /^\d{4}-\d{2}-\d{2}\/user-(.+)\.json\.enc$/;
@@ -163,14 +162,13 @@ export async function processOffhostPurges(
     return report;
   }
 
-  const everything = requests.some((r) => r.subjectId === PURGE_ALL_SUBJECTS);
   const subjects = new Set(requests.map((r) => r.subjectId));
   const bySubject = new Map<string, string[]>();
   for (const { key } of objects) {
     const match = ACCOUNT_OBJECT.exec(key);
     if (!match) continue;
     const subject = match[1];
-    if (!everything && !subjects.has(subject)) continue;
+    if (!subjects.has(subject)) continue;
     const list = bySubject.get(subject) ?? [];
     list.push(key);
     bySubject.set(subject, list);
@@ -201,20 +199,12 @@ export async function processOffhostPurges(
   }
 
   for (const request of requests) {
-    const failure =
-      request.subjectId === PURGE_ALL_SUBJECTS
-        ? failedSubjects.size > 0
-          ? [...failedSubjects.values()][0]
-          : null
-        : failedSubjects.get(request.subjectId);
+    const failure = failedSubjects.get(request.subjectId);
     if (failure) {
       await markFailed([request.id], failure);
       continue;
     }
-    const deleted =
-      request.subjectId === PURGE_ALL_SUBJECTS
-        ? [...bySubject.values()].reduce((sum, keys) => sum + keys.length, 0)
-        : (bySubject.get(request.subjectId)?.length ?? 0);
+    const deleted = bySubject.get(request.subjectId)?.length ?? 0;
     await prisma.offhostPurgeRequest.delete({ where: { id: request.id } });
     report.completed++;
     // The account a deleted subject named is gone, and so is its audit

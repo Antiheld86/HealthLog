@@ -6579,7 +6579,7 @@
       "delete": {
         "title": "Supprimer ou réinitialiser",
         "description": "Supprimez complètement votre compte, ou effacez vos données de santé tout en conservant le compte.",
-        "backupLag": "La suppression efface vos données immédiatement. Les sauvegardes chiffrées hors site les contiennent encore jusqu'à leur expiration selon la fenêtre de conservation de l'opérateur.",
+        "backupLag": "La suppression efface vos données immédiatement. Si ce serveur conserve des sauvegardes externes chiffrées, les copies de vos données sont supprimées de ce stockage juste après, ou lors du prochain passage nocturne s'il est injoignable.",
         "openAdvanced": "Supprimer ou réinitialiser"
       },
       "posture": {

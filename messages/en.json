@@ -6579,7 +6579,7 @@
       "delete": {
         "title": "Delete or reset",
         "description": "Remove your account entirely, or wipe your health records while keeping the account.",
-        "backupLag": "Deletion removes your data immediately. Encrypted off-host backups still contain it until they roll off the operator's backup retention window.",
+        "backupLag": "Deletion removes your data immediately. If this server keeps encrypted off-host backups, the copies of your data are deleted from that storage right after, or on the next nightly run if the storage is unreachable.",
         "openAdvanced": "Delete or reset"
       },
       "posture": {

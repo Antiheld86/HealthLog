@@ -13,11 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth/audit", () => ({ auditLog: vi.fn() }));
 
 import { auditLog } from "@/lib/auth/audit";
-import {
-  processOffhostPurges,
-  PURGE_ALL_SUBJECTS,
-  requestOffhostPurge,
-} from "../offhost-purge";
+import { processOffhostPurges, requestOffhostPurge } from "../offhost-purge";
 
 interface Row {
   id: string;
@@ -173,18 +169,6 @@ describe("off-host purge", () => {
       "offhost.backup.purged",
       expect.objectContaining({ userId: "gone" }),
     );
-  });
-
-  it("clears every account object for the admin wipe", async () => {
-    const { prisma } = makeLedger();
-    await requestOffhostPurge(
-      prisma as never,
-      PURGE_ALL_SUBJECTS,
-      "admin_wipe",
-    );
-    const bucket = makeBucket(BUCKET);
-    await processOffhostPurges(prisma as never, bucket);
-    expect([...bucket.store]).toEqual(["_healthcheck/1.bin"]);
   });
 
   it("records nothing on a host without off-host backup", async () => {

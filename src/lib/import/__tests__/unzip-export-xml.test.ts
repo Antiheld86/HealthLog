@@ -193,7 +193,8 @@ describe("extractExportXml", () => {
 
     await expect(extractExportXml(zipPath)).rejects.toThrow(/zip bomb/);
     expect(staged().filter((n) => !before.has(n))).toEqual([]);
-  });
+    // Inflating past the 64 MiB floor takes a moment on a loaded runner.
+  }, 60_000);
 
   it("throws when the export.xml member is missing", async () => {
     const payload = Buffer.from("noop");

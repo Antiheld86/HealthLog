@@ -6579,7 +6579,7 @@
       "delete": {
         "title": "Eliminar o restablecer",
         "description": "Elimina tu cuenta por completo o borra tus registros de salud conservando la cuenta.",
-        "backupLag": "La eliminación borra tus datos de inmediato. Las copias de seguridad cifradas externas aún los contienen hasta que caduquen según la ventana de retención del operador.",
+        "backupLag": "La eliminación borra tus datos de inmediato. Si este servidor guarda copias de seguridad cifradas externas, las copias de tus datos se borran de ese almacenamiento justo después, o en la siguiente ejecución nocturna si no está disponible.",
         "openAdvanced": "Eliminar o restablecer"
       },
       "posture": {

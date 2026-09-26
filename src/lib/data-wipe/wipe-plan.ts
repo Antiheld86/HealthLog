@@ -223,9 +223,9 @@ export const WIPE_MODELS = [
   // ended. About this account's record, so they go with it.
   "BackupRestoreJob",
   // What this host last put in the operator's bucket for this account. The
-  // objects themselves stay — the worker holds no DeleteObject grant and the
-  // bucket's lifecycle rule owns their retirement — but the row saying when
-  // they were written is about this account and goes with it.
+  // objects themselves are deleted by the purge request the wipe writes
+  // (`requestOffhostPurge`); this row, saying when they were written, is about
+  // this account and goes with it.
   "OffhostBackupState",
   "AuditLog",
   "ConsentReceipt",

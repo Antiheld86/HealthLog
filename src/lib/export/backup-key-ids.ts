@@ -30,12 +30,7 @@
  */
 import { Buffer } from "node:buffer";
 
-import {
-  decrypt,
-  decryptBytes,
-  extractKeyIdFromBytes,
-  getConfiguredKeyIds,
-} from "@/lib/crypto";
+import { decrypt, decryptBytes, getConfiguredKeyIds } from "@/lib/crypto";
 
 /** The key id a value with no key id prefix was written under. */
 export const LEGACY_INNER_KEY_ID = "v1";
