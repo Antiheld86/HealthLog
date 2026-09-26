@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
 
 // --- Mocks hoisted before importing the module under test. ---
 vi.mock("@/lib/ai/coach/tools/executor", () => ({
@@ -15,6 +15,13 @@ vi.mock("@/lib/logging/context", () => ({
 // that need the gated-off shape override this per-test.
 vi.mock("@/lib/modules/gate", () => ({
   isModuleEnabled: vi.fn(async () => true),
+}));
+// v1.39.3 — the clinical-record kinds have their own suite
+// (`record-search.test.ts`); here they contribute nothing, and the ranking
+// stays real so the older kinds are ranked the way production ranks them.
+vi.mock("@/lib/mcp/record-search", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/mcp/record-search")>()),
+  loadRecordCandidates: vi.fn(async () => []),
 }));
 // v1.22.0 — `search` reads the record directly via Prisma; stub it so the
 // registry-wide loops never reach a DB.
@@ -909,7 +916,11 @@ describe("get_preventive_care — upcoming appointments fold in", () => {
         status: "PLANNED",
         kind: "ROUTINE",
         reasonEncrypted: null,
-        practitioner: { name: "Dr. Wolke", specialty: "General practice" },
+        practitioner: {
+          name: "Dr. Wolke",
+          specialty: "General practice",
+          deletedAt: null,
+        },
       },
     ] as never);
     const result = (await tool("get_preventive_care").run(CTX, {})) as {
@@ -957,7 +968,11 @@ describe("get_visits", () => {
       kind: "SPECIALIST",
       reasonEncrypted: Buffer.from("chest pain follow-up", "utf8"),
       outcomeEncrypted: Buffer.from("all clear", "utf8"),
-      practitioner: { name: "Dr. Herz", specialty: "Cardiology" },
+      practitioner: {
+        name: "Dr. Herz",
+        specialty: "Cardiology",
+        deletedAt: null,
+      },
       ...overrides,
     };
   }
@@ -1330,7 +1345,14 @@ describe("nutrients on search / fetch (v1.30 coverage review G1)", () => {
   });
 
   it("search never surfaces a nutrient when the opt-in module is off", async () => {
-    vi.mocked(isModuleEnabled).mockResolvedValueOnce(false);
+    // Keyed rather than once-only: search now asks about several modules
+    // (medications, labs, …) before it reaches the nutrients probe.
+    vi.mocked(isModuleEnabled).mockImplementation(
+      async (_userId, key) => key !== "nutrients",
+    );
+    onTestFinished(() => {
+      vi.mocked(isModuleEnabled).mockImplementation(async () => true);
+    });
     vi.mocked(prisma.nutrientIntakeDay.groupBy).mockResolvedValue([
       { nutrient: "water" },
     ] as never);

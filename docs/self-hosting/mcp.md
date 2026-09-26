@@ -113,10 +113,12 @@ access token (60 minutes, with a refresh token) behind the scenes.
 2. In ChatGPT's **default** (non-Developer) mode, the only tools it will
    call are **`search`** and **`fetch`** — these are HealthLog's two-tool
    retrieval façade over the same server-authoritative reads. So in
-   default ChatGPT you ask in natural language ("what's my recent LDL?")
-   and it searches your record and fetches the matching item with a
-   citation deep-link back into the app. Developer mode exposes the full
-   tool catalogue.
+   default ChatGPT you ask in natural language ("what's my recent LDL?",
+   "when was my left knee operation?", "what does the discharge letter
+   say?") and it searches your record and fetches the matching item with a
+   citation deep-link back into the app. Search covers metrics,
+   medications, lab values, visits and procedures, conditions, documents
+   and vaccinations. Developer mode exposes the full tool catalogue.
 
 ### Claude Desktop (stdio)
 

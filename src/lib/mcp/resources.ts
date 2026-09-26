@@ -124,6 +124,12 @@ function ageYears(dateOfBirth: Date | null): number | null {
 }
 
 /** First value of a template variable that may arrive exploded as an array. */
+/**
+ * The explicit-absence answer for a resource whose module is switched off
+ * (v1.39.3), the same shape the tools return.
+ */
+const MODULE_DISABLED = { present: false, reason: "module_disabled" } as const;
+
 function firstVar(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? "";
   return value ?? "";
@@ -171,9 +177,12 @@ export const MCP_RESOURCES: McpResourceDefinition[] = [
     uri: "healthlog://medications",
     title: "Medications",
     description:
-      "The user's tracked medications with their schedules (dose, cadence, time windows). Read-only list; use get_medication_compliance for adherence figures.",
+      'The user\'s tracked medications with their schedules (dose, cadence, time windows). Read-only list; use get_medication_compliance for adherence figures. Returns { present: false, reason: "module_disabled" } when its module is switched off.',
     mimeType: "application/json",
     async read(ctx) {
+      if (!(await isModuleEnabled(ctx.userId, "medications"))) {
+        return MODULE_DISABLED;
+      }
       const medications = await prisma.medication.findMany({
         where: { userId: ctx.userId },
         include: { schedules: true },
@@ -358,6 +367,8 @@ async function completeMetric(
 
 /** The user's own lab analytes (distinct, non-deleted). */
 async function userAnalytes(ctx: McpAuthContext): Promise<string[]> {
+  // A switched-off labs module lists and completes nothing (v1.39.3).
+  if (!(await isModuleEnabled(ctx.userId, "labs"))) return [];
   const rows = await prisma.labResult.findMany({
     where: { userId: ctx.userId, deletedAt: null },
     select: { analyte: true },
@@ -459,7 +470,7 @@ export const MCP_RESOURCE_TEMPLATES: McpResourceTemplateDefinition[] = [
     uriTemplate: "healthlog://lab/{analyte}",
     title: "Lab analyte readings",
     description:
-      "The user's recent readings for one named lab analyte (e.g. healthlog://lab/LDL) over the last 12 months — value, unit, reference range, and in-range/below/above status per reading. Same read get_labs serves. Returns { present: false } when no readings exist for that analyte.",
+      'The user\'s recent readings for one named lab analyte (e.g. healthlog://lab/LDL) over the last 12 months — value, unit, reference range, and in-range/below/above status per reading. Same read get_labs serves. Returns { present: false } when no readings exist for that analyte. Returns { present: false, reason: "module_disabled" } when its module is switched off.',
     mimeType: "application/json",
     complete: { analyte: completeAnalyte },
     async list(ctx) {
@@ -470,6 +481,9 @@ export const MCP_RESOURCE_TEMPLATES: McpResourceTemplateDefinition[] = [
       }));
     },
     async read(ctx, variables) {
+      if (!(await isModuleEnabled(ctx.userId, "labs"))) {
+        return MODULE_DISABLED;
+      }
       const analyte = decodeURIComponent(firstVar(variables.analyte));
       const result = await executeCoachTool({
         userId: ctx.userId,
@@ -488,9 +502,10 @@ export const MCP_RESOURCE_TEMPLATES: McpResourceTemplateDefinition[] = [
     uriTemplate: "healthlog://medication/{id}",
     title: "Medication summary",
     description:
-      "One of the user's medications by id, with its schedules. User-scoped: returns { present: false } when the id does not belong to this user. Use get_medication_compliance for adherence figures.",
+      'One of the user\'s medications by id, with its schedules. User-scoped: returns { present: false } when the id does not belong to this user. Use get_medication_compliance for adherence figures. Returns { present: false, reason: "module_disabled" } when its module is switched off.',
     mimeType: "application/json",
     async list(ctx) {
+      if (!(await isModuleEnabled(ctx.userId, "medications"))) return [];
       const meds = await prisma.medication.findMany({
         where: { userId: ctx.userId },
         select: { id: true, name: true, dose: true },
@@ -504,6 +519,9 @@ export const MCP_RESOURCE_TEMPLATES: McpResourceTemplateDefinition[] = [
       }));
     },
     async read(ctx, variables) {
+      if (!(await isModuleEnabled(ctx.userId, "medications"))) {
+        return MODULE_DISABLED;
+      }
       const id = firstVar(variables.id);
       // user-scoped: a medication that is not this user's resolves to absent,
       // never another tenant's row.

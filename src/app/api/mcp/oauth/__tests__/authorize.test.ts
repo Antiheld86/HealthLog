@@ -106,6 +106,16 @@ describe("GET /authorize — consent gate", () => {
     expect(body).not.toMatch(/hlac_/);
   });
 
+  it("names what the connection can read, document text included", async () => {
+    signedIn();
+    const body = await (await GET(getReq(authorizeUrl()) as never)).text();
+    // v1.39.3: search and fetch reach visits, conditions and the indexed
+    // text of stored documents, so the consent says so before Allow.
+    expect(body).toMatch(/visits/);
+    expect(body).toMatch(/text of your stored documents/);
+    expect(body).toMatch(/held back from AI reading/);
+  });
+
   it("prompts sign-in (with a return link) when there is no session", async () => {
     const res = await GET(getReq(authorizeUrl()) as never);
     expect(res.status).toBe(200);

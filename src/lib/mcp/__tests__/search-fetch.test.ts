@@ -21,6 +21,13 @@ vi.mock("@/lib/ai/coach/tools/executor", () => ({ executeCoachTool: vi.fn() }));
 vi.mock("@/lib/modules/gate", () => ({
   isModuleEnabled: vi.fn(async () => true),
 }));
+// v1.39.3 — the clinical-record kinds have their own suite
+// (`record-search.test.ts`); here they contribute nothing, and the ranking
+// stays real so the older kinds are ranked the way production ranks them.
+vi.mock("@/lib/mcp/record-search", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/mcp/record-search")>()),
+  loadRecordCandidates: vi.fn(async () => []),
+}));
 vi.mock("@/lib/db", () => ({
   prisma: {
     medication: { findMany: vi.fn(), findFirst: vi.fn() },
