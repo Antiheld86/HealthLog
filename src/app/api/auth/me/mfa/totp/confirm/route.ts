@@ -33,6 +33,7 @@ import {
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
+import { destroyOtherSessions } from "@/lib/auth/session";
 import { decrypt } from "@/lib/crypto";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { verifyTotp } from "@/lib/auth/mfa/totp";
@@ -110,6 +111,12 @@ export const POST = apiHandler(async (req: Request) => {
   }
 
   const recoveryCodes = generateRecoveryCodes();
+  // A confirmed TOTP secret was refused above, so the only second factor the
+  // account can already hold is a security key.
+  const hadSecondFactor =
+    (await prisma.webauthnMfaCredential.count({
+      where: { userId: user.id },
+    })) > 0;
 
   // The code verified and the activation is next — spend the elevation here so
   // a wrong code above costs the caller nothing.
@@ -140,6 +147,19 @@ export const POST = apiHandler(async (req: Request) => {
   // v1.23 — the account now has an active second factor, so any
   // admin-enforced forced-enrollment redirect must clear immediately.
   await setMfaEnrollCookie(false);
+
+  // Turning on the first second factor ends every other sign-in, as a password
+  // change does: a session opened before the factor existed, perhaps by
+  // whoever made the owner turn it on, must not keep going without it.
+  if (!hadSecondFactor) {
+    await destroyOtherSessions(
+      user.id,
+      auth.transport === "cookie"
+        ? { kind: "session", sessionId: auth.session.id }
+        : { kind: "accessToken", accessTokenHash: auth.accessTokenHash },
+      { reach: "sign-ins" },
+    );
+  }
 
   await auditLog("auth.mfa.enabled", {
     userId: user.id,

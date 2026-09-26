@@ -118,6 +118,7 @@ export const POST = apiHandler(async (req: Request) => {
     auth.transport === "cookie"
       ? { kind: "session", sessionId: auth.session.id }
       : { kind: "accessToken", accessTokenHash: auth.accessTokenHash },
+    { reach: "sign-ins" },
   );
 
   await auditLog("auth.mfa.disabled", {

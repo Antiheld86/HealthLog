@@ -6555,7 +6555,8 @@
       "revokeSessionConfirmTitle": "이 기기를 로그아웃할까요?",
       "revokeSessionConfirmBody": "{device} — 다시 로그인해야 해요. 기기에 기록된 내용은 영향받지 않아요.",
       "signOutEverywhereConfirmTitle": "다른 기기를 모두 로그아웃할까요?",
-      "signOutEverywhereConfirmBody": "이 기기를 뺀 모든 기기가 다시 로그인해야 해요. 이 기기는 로그인 상태로 남아요. 기록한 내용은 영향받지 않아요."
+      "signOutEverywhereConfirmBody": "다른 모든 기기, 연결된 모든 AI 어시스턴트와 모든 API 토큰은 다시 로그인하거나 다시 설정해야 합니다. 이 기기는 로그인 상태로 유지됩니다. 기록한 내용에는 영향이 없습니다.",
+      "signOutEverywhereShareLinks": "의료진 공유 링크도 종료"
     },
     "privacy": {
       "encryption": {

@@ -509,6 +509,20 @@ export async function destroyAllSessions(userId: string): Promise<void> {
     // trusted-device token: a stolen device cookie must not survive a
     // password change or account-credential remediation.
     prisma.trustedDevice.deleteMany({ where: { userId } }),
+    // A connected AI assistant holds a refresh chain of its own: revoking its
+    // access tokens above left the connection able to mint the next one.
+    prisma.mcpOAuthConnection.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+    // A clinician share link opens the record without signing in. Whoever
+    // held the old password could have made one, and it would outlive the
+    // change; the owner makes a fresh link for the people who should keep it.
+    prisma.clinicianShareLink.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+    prisma.stepUpElevation.deleteMany({ where: { userId } }),
   ]);
 }
 
@@ -526,9 +540,10 @@ export type CurrentCredential =
  * v1.23 — "sign out everywhere" for the user-facing active-session surface
  * (issue #64). Distinct from `destroyAllSessions`: this keeps the caller's
  * CURRENT credential alive so pressing the button does not sign out the device
- * it was pressed on, and it leaves the long-lived programmatic `ApiToken`s
- * alone — those are credentials the user manages separately under
- * /settings/api-tokens, not "sessions" in the device-list sense.
+ * it was pressed on. Until v1.39.3 it also left the programmatic tokens, the
+ * AI-assistant connections and the share links alone, as credentials managed
+ * on their own cards; with `reach: "everything"` it now ends those too (see
+ * below), because a stolen session could have minted any of them.
  *
  * It DOES revoke every other native-client `RefreshToken` (each is a device
  * login), and, since v1.38.11, the access token paired with each of them. A
@@ -542,13 +557,42 @@ export type CurrentCredential =
  * rotation's own consume step refuses a row revoked underneath it and retires
  * what it minted.
  *
- * Returns the number of OTHER web sessions removed and the number of access
- * tokens revoked, so the surface and the audit row can say what happened.
+ * `reach` says how far "everywhere" goes:
+ *
+ *   `sign-ins` — web sessions, device logins, trusted devices and step-up
+ *   elevations. What turning a second factor on or off ends, because those
+ *   change what a sign-in needs, and a sign-in made under the old rule must
+ *   not outlive it.
+ *
+ *   `everything` — the above, plus every credential the account handed out
+ *   that works without signing in: connected AI assistants (their OAuth
+ *   connection, not only the current access token, since the connection mints
+ *   the next one), every programmatic token (the connector, measurement and
+ *   document tokens), and, unless `keepShareLinks`, every clinician share
+ *   link. What the user-facing "sign out everywhere" does: someone who presses
+ *   it after losing a device or a session expects nothing to remain that
+ *   reaches the record. Share links default to revoked for the same reason,
+ *   and the web offers to keep them because a link already handed to a
+ *   doctor is often wanted. The caller's own credential is spared either way.
+ *
+ * Returns what was removed, so the surface and the audit row can say what
+ * happened.
  */
+export type SignOutReach =
+  { reach: "sign-ins" } | { reach: "everything"; keepShareLinks?: boolean };
+
+export interface SignOutResult {
+  sessionsRevoked: number;
+  accessTokensRevoked: number;
+  connectorsRevoked: number;
+  shareLinksRevoked: number;
+}
+
 export async function destroyOtherSessions(
   userId: string,
   current: CurrentCredential,
-): Promise<{ sessionsRevoked: number; accessTokensRevoked: number }> {
+  options: SignOutReach,
+): Promise<SignOutResult> {
   // Which rows describe the CALLER depends on how the caller authenticated, and
   // the two shapes are not interchangeable. A cookie caller is a `Session` row.
   // A Bearer caller is an `ApiToken` whose device login is the `RefreshToken`
@@ -604,9 +648,43 @@ export async function destroyOtherSessions(
     // expects nothing to remain that could act on the account; a live elevation
     // is exactly that.
     await tx.stepUpElevation.deleteMany({ where: { userId } });
+
+    if (options.reach === "sign-ins") {
+      return {
+        sessionsRevoked: deleted.count,
+        accessTokensRevoked: access.count,
+        connectorsRevoked: 0,
+        shareLinksRevoked: 0,
+      };
+    }
+
+    // Everything else that reaches the record without a sign-in. Every
+    // remaining token goes, except the Bearer caller's own access token.
+    const tokens = await tx.apiToken.updateMany({
+      where: {
+        userId,
+        revoked: false,
+        ...(current.kind === "accessToken"
+          ? { tokenHash: { not: current.accessTokenHash } }
+          : {}),
+      },
+      data: { revoked: true },
+    });
+    const connectors = await tx.mcpOAuthConnection.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt },
+    });
+    const links = options.keepShareLinks
+      ? { count: 0 }
+      : await tx.clinicianShareLink.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt },
+        });
     return {
       sessionsRevoked: deleted.count,
-      accessTokensRevoked: access.count,
+      accessTokensRevoked: access.count + tokens.count,
+      connectorsRevoked: connectors.count,
+      shareLinksRevoked: links.count,
     };
   });
 }

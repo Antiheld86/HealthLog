@@ -222,6 +222,22 @@ const signOutEverywhereResponse = z
       .number()
       .int()
       .describe("Number of OTHER sessions removed (the current one is kept)."),
+    accessTokensRevoked: z
+      .number()
+      .int()
+      .describe(
+        "Tokens revoked: the access tokens of other device logins plus every programmatic token (connector, measurement, document), never the caller's own.",
+      ),
+    connectorsRevoked: z
+      .number()
+      .int()
+      .describe("Connected AI-assistant (MCP OAuth) connections revoked."),
+    shareLinksRevoked: z
+      .number()
+      .int()
+      .describe(
+        "Clinician share links revoked; 0 when `keepShareLinks=1` was sent.",
+      ),
   })
   .meta({ id: "SignOutEverywhereResponse" });
 
@@ -1312,7 +1328,15 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Auth"],
       summary: "Sign out everywhere else",
       description:
-        "v1.23 — revokes every OTHER web session plus all native refresh tokens, keeping the caller's current session. API tokens are not touched (manage those under /settings/api-tokens).",
+        "Ends every credential except the caller's own: every OTHER web session, every other device login (refresh token and its paired access token), every trusted device and step-up elevation, every connected AI assistant (the OAuth connection, so it cannot mint a new access token), every programmatic token (connector, measurement and document tokens), and every clinician share link. Share links are revoked by default because a link made by whoever held a lost session or device would otherwise keep opening the record; send `keepShareLinks=1` to keep them. A Bearer caller keeps its own device login.",
+      requestParams: {
+        query: z.object({
+          keepShareLinks: z.enum(["1"]).optional().meta({
+            description:
+              "`1` keeps the clinician share links. Anything else, or nothing, revokes them.",
+          }),
+        }),
+      },
       responses: {
         "200": {
           description: "Other sessions revoked.",

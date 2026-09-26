@@ -1,8 +1,11 @@
 /**
  * GET    /api/auth/me/sessions   — list the user's active web sessions.
  * DELETE /api/auth/me/sessions   — "sign out everywhere": revoke every OTHER
- *                                  session (and native refresh tokens), keeping
- *                                  the caller's current session. Closes #64.
+ *                                  session, device login, AI-assistant
+ *                                  connection and token, and (unless
+ *                                  `?keepShareLinks=1`) every clinician share
+ *                                  link, keeping the caller's current
+ *                                  credential. Closes #64.
  *
  * v1.23 — the user-facing session/device-management surface. Distinct from
  * `/api/auth/me/devices`, which lists APNs / Web-Push notification devices;
@@ -114,15 +117,35 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
         }
       : { kind: "session", sessionId: auth.session.id };
 
-  const { sessionsRevoked, accessTokensRevoked } = await destroyOtherSessions(
-    user.id,
-    current,
-  );
+  // "Everywhere" reaches every credential that works without signing in: AI
+  // assistant connections, programmatic tokens and, unless the caller asks to
+  // keep them, clinician share links. The default is to revoke, because the
+  // person pressing this is often doing it after losing a device or a session,
+  // and a share link made by whoever held it would otherwise keep working. A
+  // client that sends nothing (the shipped app) gets the safe default.
+  const keepShareLinks =
+    new URL(request.url).searchParams.get("keepShareLinks") === "1";
+
+  const {
+    sessionsRevoked,
+    accessTokensRevoked,
+    connectorsRevoked,
+    shareLinksRevoked,
+  } = await destroyOtherSessions(user.id, current, {
+    reach: "everything",
+    keepShareLinks,
+  });
 
   await auditLog("auth.session.revoke_others", {
     userId: user.id,
     ipAddress: getClientIp(request),
-    details: { sessionsRevoked, accessTokensRevoked },
+    details: {
+      sessionsRevoked,
+      accessTokensRevoked,
+      connectorsRevoked,
+      shareLinksRevoked,
+      keepShareLinks,
+    },
   });
 
   annotate({
@@ -130,10 +153,17 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     meta: {
       sessions_revoked: sessionsRevoked,
       access_tokens_revoked: accessTokensRevoked,
+      connectors_revoked: connectorsRevoked,
+      share_links_revoked: shareLinksRevoked,
     },
   });
 
-  return apiSuccess({ sessionsRevoked });
+  return apiSuccess({
+    sessionsRevoked,
+    accessTokensRevoked,
+    connectorsRevoked,
+    shareLinksRevoked,
+  });
 });
 
 /**

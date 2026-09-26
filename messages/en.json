@@ -6555,7 +6555,8 @@
       "revokeSessionConfirmTitle": "Sign this device out?",
       "revokeSessionConfirmBody": "{device} will need to sign in again. Nothing recorded on it is affected.",
       "signOutEverywhereConfirmTitle": "Sign out every other device?",
-      "signOutEverywhereConfirmBody": "Every device except this one will need to sign in again. This device stays signed in. Nothing you have recorded is affected."
+      "signOutEverywhereConfirmBody": "Every other device, every connected AI assistant and every API token will need to sign in or be set up again. This device stays signed in. Nothing you have recorded is affected.",
+      "signOutEverywhereShareLinks": "Also end the doctor share links"
     },
     "privacy": {
       "encryption": {

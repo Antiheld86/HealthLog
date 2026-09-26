@@ -16,6 +16,7 @@ import { ChevronDown, Loader2, MonitorSmartphone } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryErrorRow } from "@/components/ui/query-error-row";
@@ -43,6 +44,11 @@ export function SecuritySessionsCard({
   const fmt = useFormatters();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<string | null>(null);
+  // "Everywhere" also ends clinician share links unless the person keeps
+  // them. Revoking is the default: this is often pressed after losing a
+  // device or a session, and a link made by whoever held it opens the record
+  // without signing in.
+  const [endShareLinks, setEndShareLinks] = useState(true);
   // Collapsed by default — the list opens only when the user asks for it, so
   // the security surface stays calm and skimmable on first paint. UI-only
   // state; nothing is persisted across reloads.
@@ -69,7 +75,11 @@ export function SecuritySessionsCard({
 
   const revokeOthers = useMutation({
     mutationFn: () =>
-      apiDelete<{ sessionsRevoked: number }>("/api/auth/me/sessions"),
+      apiDelete<{ sessionsRevoked: number }>(
+        endShareLinks
+          ? "/api/auth/me/sessions"
+          : "/api/auth/me/sessions?keepShareLinks=1",
+      ),
     onSuccess: (res) => {
       setStatus(
         t("settings.security.signOutEverywhereDone", {
@@ -85,7 +95,6 @@ export function SecuritySessionsCard({
   });
 
   const sessions = data?.sessions ?? [];
-  const hasOthers = sessions.some((s) => !s.isCurrent);
 
   return (
     <SettingsCard data-slot="settings-security-sessions-card">
@@ -185,7 +194,7 @@ export function SecuritySessionsCard({
           </ul>
         )}
 
-        {hasOthers && (
+        {data && (
           <SettingsCardActions>
             <ConfirmButton
               slot="sign-out-everywhere"
@@ -196,6 +205,19 @@ export function SecuritySessionsCard({
               confirmLabel={t("settings.security.signOutEverywhere")}
               onConfirm={() => revokeOthers.mutate()}
               pending={revokeOthers.isPending}
+              extra={
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    data-testid="sign-out-everywhere-share-links"
+                    checked={endShareLinks}
+                    onCheckedChange={(next) => setEndShareLinks(next === true)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    {t("settings.security.signOutEverywhereShareLinks")}
+                  </span>
+                </label>
+              }
             />
           </SettingsCardActions>
         )}
