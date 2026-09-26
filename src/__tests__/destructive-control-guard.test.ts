@@ -579,6 +579,13 @@ const REGISTRY: DestructiveEntry[] = [
     recovery: "permanent",
     confirm: ["AlertDialog"],
   })),
+  {
+    file: "components/settings/integrations/document-sources-card.tsx",
+    destroys:
+      "the stored Paperless-ngx or Papra address and API token; documents already imported stay in the vault — reconnecting means typing the token again",
+    recovery: "permanent",
+    confirm: ["AlertDialog"],
+  },
 ];
 
 // ── Detectors ─────────────────────────────────────────────────────────────

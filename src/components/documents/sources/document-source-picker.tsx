@@ -69,6 +69,9 @@ import { invalidateKeys, queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import type { InboundDocumentKindValue } from "@/lib/validations/inbound-documents";
 
+import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
+import type { WrittenOutcome } from "@/lib/outcome/written-outcome";
+
 import { formatBytes } from "../vault-utils";
 import {
   errorCodeOf,
@@ -306,7 +309,7 @@ export function DocumentSourcePicker({
         data-slot="document-source-selection"
       >
         {finished
-          ? t("documents.sourcePicker.summary", counts)
+          ? null
           : running
             ? t("documents.sourcePicker.importing")
             : t("documents.sourcePicker.selectedCount", {
@@ -469,6 +472,14 @@ export function DocumentSourcePicker({
           </button>
         ) : null}
 
+        {finished ? (
+          <WrittenOutcomeLine
+            outcome={runOutcome(counts)}
+            message={t("documents.sourcePicker.summary", counts)}
+            testId="document-source-summary"
+          />
+        ) : null}
+
         {stopMessage ? (
           <p
             role="alert"
@@ -595,6 +606,17 @@ export function DocumentSourcePicker({
       </div>
     </ResponsiveSheet>
   );
+}
+
+/** How the run went, in the shared outcome vocabulary. */
+function runOutcome(counts: {
+  imported: number;
+  present: number;
+  failed: number;
+}): WrittenOutcome {
+  const held = counts.imported + counts.present;
+  if (counts.failed === 0) return held > 0 ? "success" : "empty";
+  return held > 0 ? "partial" : "failed";
 }
 
 /** One row's progress or result, under its title. */

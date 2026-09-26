@@ -161,6 +161,13 @@ const PINNED_AFFORDANCES: Record<
   "src/components/documents/document-card.tsx": { "text-success": 1 },
   "src/components/documents/document-detail-sheet.tsx": { "toast.success": 2 },
   "src/components/documents/documents-view.tsx": { "toast.success": 3 },
+  // The document picker's per-row result: tinted only for the `imported` /
+  // `duplicate` outcome the import route returned for that one document, i.e.
+  // a document the vault now holds. The run's headline goes through
+  // WrittenOutcomeLine; a row sits inside a button, where its <p> cannot.
+  "src/components/documents/sources/document-source-picker.tsx": {
+    "text-success": 1,
+  },
   "src/components/error-details.tsx": { CheckCircle2: 2, "text-success": 1 },
   "src/components/illness/episode-menu.tsx": {
     CheckCircle2: 2,

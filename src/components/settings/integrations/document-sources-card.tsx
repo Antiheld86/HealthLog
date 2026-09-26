@@ -16,7 +16,7 @@
  * (UI standards §12).
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Archive, CheckCircle2, Loader2, Unlink } from "lucide-react";
+import { Archive, Check, Loader2, Unlink } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -38,6 +38,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
 import {
   errorCodeOf,
   sourceErrorMessage,
@@ -111,8 +112,8 @@ export function DocumentSourcesCard() {
             >
               {systemName(option)}
               {isConnected ? (
-                <CheckCircle2
-                  className="text-success size-3.5"
+                <Check
+                  className="size-3.5"
                   aria-label={t("settings.documentSources.statusConnected")}
                 />
               ) : null}
@@ -328,16 +329,11 @@ function SourceForm({
       </div>
 
       {outcome ? (
-        <p
-          role={outcome.tone === "error" ? "alert" : "status"}
-          data-slot="document-sources-outcome"
-          className={cn(
-            "text-sm",
-            outcome.tone === "error" ? "text-destructive" : "text-success",
-          )}
-        >
-          {outcome.message}
-        </p>
+        <WrittenOutcomeLine
+          outcome={outcome.tone === "error" ? "failed" : "success"}
+          message={outcome.message}
+          testId="document-sources-outcome"
+        />
       ) : null}
 
       <SettingsCardActions>
