@@ -71,6 +71,15 @@ import { fenceUserText, scrubFenceMarkers } from "@/lib/ai/coach/data-fence";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 import { listTargetsBySource } from "@/lib/links";
 import { encounterKindEnum } from "@/lib/validations/encounters";
+import { moduleForMeasurementType } from "@/lib/modules/measurement-scope";
+import {
+  fetchRecord,
+  isRecordKind,
+  loadRecordCandidates,
+  rankCandidates,
+  WEIGHT as SEARCH_WEIGHT,
+  type SearchCandidate,
+} from "@/lib/mcp/record-search";
 import type { McpAuthContext } from "./auth";
 import { dueSchedules } from "@/lib/medications/intake-tracking";
 import { liveEraStartsByMedication } from "@/lib/medications/scheduling/live-era";
@@ -357,7 +366,7 @@ function searchAndFetchTools(): McpToolDefinition[] {
       name: "search",
       title: "Search your health records",
       description:
-        "Search the user's own health record — metric domains, medications, and lab biomarkers — for items matching a free-text query. Returns { results: [{ id, title, url }], nextCursor? }; pass an id to the `fetch` tool to hydrate it. Each `url` deep-links into the HealthLog web app for citation. When more results exist, pass the opaque `nextCursor` back as `cursor` for the next page. Returns an empty list when nothing matches.",
+        "Search the user's own health record for items matching a free-text query (English or the user's language). Covers metric domains, medications, lab biomarkers, and the clinical records: doctor visits including procedures and surgeries (`visit:<id>`, matched on visit kind, reason, outcome, body site and side, practitioner name and specialty), conditions (`condition:<id>`, matched on label, type, body site and side), documents (`document:<id>`, matched on title, file name, kind such as discharge letter, and whole words of the document's indexed text where one is stored) and vaccinations (`vaccination:<id>`, matched on vaccine name and catalogue name). A kind whose module the user has switched off never appears. Results are ranked by how many query words match, then newest first; record results are capped at 50. Returns { results: [{ id, title, url }], nextCursor? }; pass an id to the `fetch` tool to hydrate it. Each `url` deep-links into the HealthLog web app for citation. When more results exist, pass the opaque `nextCursor` back as `cursor` for the next page. Returns an empty list when nothing matches.",
       inputShape: {
         query: z.string().max(200),
         cursor: z
@@ -380,68 +389,94 @@ function searchAndFetchTools(): McpToolDefinition[] {
         nextCursor: z.string().optional(),
       },
       async run(ctx, args) {
-        const query =
-          typeof args.query === "string" ? args.query.trim().toLowerCase() : "";
+        const rawQuery =
+          typeof args.query === "string" ? args.query.trim() : "";
         const origin = resolveBaseOrigin();
-        const results: Array<{ id: string; title: string; url: string }> = [];
+        // Every kind lands here as a candidate with the fields it can be
+        // matched on; one ranking (`rankCandidates`) filters and orders them
+        // all, so a visit and a medication compete on the same terms.
+        const candidates: SearchCandidate[] = [];
+        let seq = 0;
+        const legacy = (
+          id: string,
+          title: string,
+          url: string,
+          hay: string,
+        ): void => {
+          candidates.push({
+            id,
+            title,
+            url,
+            // The older kinds keep their assembly order on a tie.
+            kindOrder: seq++,
+            date: null,
+            fields: [{ text: hay, weight: SEARCH_WEIGHT.primary }],
+          });
+        };
 
         const inventory = await buildCoachDataInventory(ctx.userId, undefined);
         for (const entry of inventory.entries) {
           if (!entry.present) continue;
-          const hay = `${entry.domain} ${entry.metric ?? ""}`.toLowerCase();
-          if (query && !hay.includes(query)) continue;
           // Per-item deep-link where a metric id exists (mirrors `fetch`),
           // else the generic insights landing for a whole-domain row.
-          results.push({
-            id: entry.metric
-              ? `metric:${entry.metric}`
-              : `domain:${entry.domain}`,
-            title: entry.domain,
-            url: entry.metric
+          legacy(
+            entry.metric ? `metric:${entry.metric}` : `domain:${entry.domain}`,
+            entry.domain,
+            entry.metric
               ? `${origin}/insights?metric=${encodeURIComponent(entry.metric)}`
               : `${origin}/insights`,
-          });
+            `${entry.domain} ${entry.metric ?? ""}`,
+          );
         }
 
-        const meds = await prisma.medication.findMany({
-          where: { userId: ctx.userId },
-          select: { id: true, name: true, dose: true },
-          orderBy: { createdAt: "desc" },
-          take: SEARCH_RESULT_SCAN_CAP,
-        });
+        // v1.39.3 — a switched-off module's records never appear. The
+        // medication and lab reads below predate the rule and were ungated.
+        const [medicationsOn, labsOn] = await Promise.all([
+          isModuleEnabled(ctx.userId, "medications"),
+          isModuleEnabled(ctx.userId, "labs"),
+        ]);
+
+        const meds = medicationsOn
+          ? await prisma.medication.findMany({
+              where: { userId: ctx.userId },
+              select: { id: true, name: true, dose: true },
+              orderBy: { createdAt: "desc" },
+              take: SEARCH_RESULT_SCAN_CAP,
+            })
+          : [];
         for (const med of meds) {
-          if (query && !med.name.toLowerCase().includes(query)) continue;
-          results.push({
-            id: `med:${med.id}`,
+          legacy(
+            `med:${med.id}`,
             // A search title is a short label a host renders in a result list,
             // so it is scrubbed rather than fenced — wrapping it would leak
             // markers into the host's UI. Scrubbing still denies a hostile
             // name the ability to forge a boundary around neighbouring text.
-            title: scrubFenceMarkers(
-              med.dose ? `${med.name} ${med.dose}` : med.name,
-            ),
+            scrubFenceMarkers(med.dose ? `${med.name} ${med.dose}` : med.name),
             // Per-item deep-link to the medication detail page (mirrors `fetch`).
-            url: `${origin}/medications/${encodeURIComponent(med.id)}`,
-          });
+            `${origin}/medications/${encodeURIComponent(med.id)}`,
+            med.name,
+          );
         }
 
-        const labs = await prisma.labResult.findMany({
-          where: { userId: ctx.userId, deletedAt: null },
-          select: { analyte: true },
-          distinct: ["analyte"],
-          orderBy: { analyte: "asc" },
-          take: SEARCH_RESULT_SCAN_CAP,
-        });
+        const labs = labsOn
+          ? await prisma.labResult.findMany({
+              where: { userId: ctx.userId, deletedAt: null },
+              select: { analyte: true },
+              distinct: ["analyte"],
+              orderBy: { analyte: "asc" },
+              take: SEARCH_RESULT_SCAN_CAP,
+            })
+          : [];
         for (const lab of labs) {
-          if (query && !lab.analyte.toLowerCase().includes(query)) continue;
-          results.push({
-            id: `lab:${lab.analyte}`,
+          legacy(
+            `lab:${lab.analyte}`,
             // Document-sourced free text — scrubbed, same reasoning as the
             // medication titles above.
-            title: scrubFenceMarkers(lab.analyte),
+            scrubFenceMarkers(lab.analyte),
             // Per-item deep-link to the labs surface filtered to this analyte.
-            url: `${origin}/labs?analyte=${encodeURIComponent(lab.analyte)}`,
-          });
+            `${origin}/labs?analyte=${encodeURIComponent(lab.analyte)}`,
+            lab.analyte,
+          );
         }
 
         // v1.25 clinical signals (grip strength, pain NRS, waist / WHtR) PLUS
@@ -451,7 +486,8 @@ function searchAndFetchTools(): McpToolDefinition[] {
         // so they are surfaced here directly. One grouped presence probe over
         // the combined backing measurement types; present-only, in a stable
         // (allowlist) order. `fetch metric:<KEY>` hydrates each via the
-        // rollup-backed baseline read.
+        // rollup-backed baseline read. v1.39.3 — a signal whose owning module
+        // is off is dropped, the way `list_metrics` already drops it.
         const discoverableSignals = [
           ...MCP_CLINICAL_SIGNALS,
           ...MCP_METRIC_STATUS_DISCOVERY,
@@ -466,13 +502,14 @@ function searchAndFetchTools(): McpToolDefinition[] {
         const presentTypes = new Set(discoverablePresent.map((r) => r.type));
         for (const sig of discoverableSignals) {
           if (!presentTypes.has(sig.measurementType)) continue;
-          const hay = `${sig.label} ${sig.key}`.toLowerCase();
-          if (query && !hay.includes(query)) continue;
-          results.push({
-            id: `metric:${sig.key}`,
-            title: sig.label,
-            url: `${origin}/insights?metric=${encodeURIComponent(sig.key)}`,
-          });
+          const owner = moduleForMeasurementType(sig.measurementType);
+          if (owner && !(await isModuleEnabled(ctx.userId, owner))) continue;
+          legacy(
+            `metric:${sig.key}`,
+            sig.label,
+            `${origin}/insights?metric=${encodeURIComponent(sig.key)}`,
+            `${sig.label} ${sig.key}`,
+          );
         }
 
         // v1.30 (G1) — nutrients (water/caffeine/24 micronutrients) presence
@@ -494,19 +531,27 @@ function searchAndFetchTools(): McpToolDefinition[] {
           for (const code of NUTRIENT_CODES) {
             if (!loggedNutrients.has(code)) continue;
             const label = NUTRIENT_LABELS[code];
-            const hay = `${label} ${code} nutrient nutrients`.toLowerCase();
-            if (query && !hay.includes(query)) continue;
-            results.push({
-              id: `nutrient:${code}`,
-              title: label,
-              url: `${origin}/insights/nutrients`,
-            });
+            legacy(
+              `nutrient:${code}`,
+              label,
+              `${origin}/insights/nutrients`,
+              `${label} ${code} nutrient nutrients`,
+            );
           }
         }
 
-        // Cursor pagination over the assembled result set (was a silent
-        // slice(0,50)). The set is rebuilt deterministically each call (stable
-        // ordering: metrics → medications → labs), so an opaque offset cursor
+        // v1.39.3 — visits (procedures included), conditions, documents and
+        // vaccinations, each behind its own module switch.
+        candidates.push(
+          ...(await loadRecordCandidates(ctx.userId, rawQuery, origin)),
+        );
+
+        const results = rankCandidates(candidates, rawQuery).map(
+          ({ id, title, url }) => ({ id, title, url }),
+        );
+
+        // Cursor pagination over the ranked result set. The set is rebuilt
+        // and ranked deterministically each call, so an opaque offset cursor
         // pages it reliably and the response stays token-bounded.
         const offset = decodeOffsetCursor(args.cursor);
         const page = results.slice(offset, offset + SEARCH_PAGE_SIZE);
@@ -527,7 +572,7 @@ function searchAndFetchTools(): McpToolDefinition[] {
       name: "fetch",
       title: "Fetch one health record",
       description:
-        "Hydrate a single record returned by `search`, by its id (e.g. `metric:weight`, `med:<id>`, `lab:LDL`). Returns { id, title, text, url, metadata } where `text` is a server-authoritative, plain-text prose summary suitable for citation and `url` deep-links to the specific record in HealthLog. Returns a not-found message when the id does not resolve.",
+        'Hydrate a single record returned by `search`, by its id (e.g. `metric:weight`, `med:<id>`, `lab:LDL`, `visit:<id>`, `condition:<id>`, `document:<id>`, `vaccination:<id>`). Returns { id, title, text, url, metadata } where `text` is a server-authoritative, plain-text prose summary suitable for citation and `url` deep-links to the specific record in HealthLog. A visit, condition, document or vaccination carries its key fields and its directly linked records (metadata.links, each with an id `fetch` accepts); a document returns its metadata and at most a bounded excerpt of its indexed text, never the file. Fields that were never recorded are null. Returns a not-found message when the id does not resolve, and metadata.reason "module_disabled" when the record\'s module is switched off.',
       inputShape: { id: z.string().min(1).max(200) },
       annotations: READ_ONLY_ANNOTATIONS,
       outputShape: {
@@ -609,6 +654,28 @@ function searchAndFetchTools(): McpToolDefinition[] {
           };
         }
 
+        // v1.39.3 — a switched-off module answers as switched off, before
+        // any row is read, the way the record kinds below do.
+        const gatedModule =
+          kind === "lab" ? "labs" : kind === "med" ? "medications" : null;
+        if (
+          gatedModule &&
+          rid &&
+          !(await isModuleEnabled(ctx.userId, gatedModule))
+        ) {
+          return {
+            id,
+            title: "Not available",
+            text: `This record kind is switched off in HealthLog (module "${gatedModule}"), so nothing of it is shared.`,
+            url: `${origin}/insights`,
+            metadata: {
+              type: kind === "lab" ? "lab" : "medication",
+              present: false,
+              reason: "module_disabled",
+            },
+          };
+        }
+
         if (kind === "lab" && rid) {
           const result = await executeCoachTool({
             userId: ctx.userId,
@@ -661,6 +728,10 @@ function searchAndFetchTools(): McpToolDefinition[] {
             url: `${origin}/medications/${encodeURIComponent(rid)}`,
             metadata: { type: "medication", medicationId: rid },
           };
+        }
+
+        if (isRecordKind(kind) && rid) {
+          return fetchRecord(ctx.userId, kind, rid, origin);
         }
 
         return {
