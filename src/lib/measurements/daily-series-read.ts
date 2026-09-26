@@ -159,9 +159,10 @@ const TRUNC_UNIT: Record<Exclude<AggregateGrain, "raw">, string> = {
  * the bucket's own day for every offset, including half-hour and negative
  * ones, and across a DST change.
  *
- * Per bucket the overlapping sources collapse to the ladder-canonical one
- * before the fold (the same pick the rollup reader makes), cumulative types
- * SUM and every other type averages. The result set is at most `cap` rows,
+ * Per local day the overlapping sources collapse to the ladder-canonical one
+ * (the same pick the rollup reader makes), and the days then fold into the
+ * bucket: cumulative types SUM and every other type averages over every
+ * reading of the canonical days. The result set is at most `cap` rows,
  * however dense the underlying stream: the fold runs in Postgres.
  *
  * `type` narrows to one type; `null` folds every type in the window (the
@@ -190,9 +191,7 @@ export async function readLiveBuckets(opts: {
   const cumulativeList = [...CUMULATIVE_HK_TYPES]
     .map((t) => `'${t}'`)
     .join(",");
-  const aggregator = Prisma.raw(
-    `(CASE WHEN m."type"::text IN (${cumulativeList}) THEN SUM(m."value") ELSE AVG(m."value") END)::double precision`,
-  );
+  const isCumulative = Prisma.raw(`c."type"::text IN (${cumulativeList})`);
   const rankRaw = Prisma.raw(
     buildSourceRankCase(priorityJson, 'p."type"', 'p."source"'),
   );
@@ -202,14 +201,14 @@ export async function readLiveBuckets(opts: {
   // measured_at is a UTC wall-clock timestamp: pin it to UTC, re-read it in
   // the user's zone and truncate there.
   //
-  // Fold first, pick second. Every source is folded per bucket in one hashed
-  // pass (a few rows per day, however dense the stream), and only then does
-  // each bucket keep its ladder-canonical source. The fold of the canonical
-  // source's rows is exactly the fold of that source's group, so the result
-  // is the same as collapsing the rows first; what changes is the cost. A
-  // year of per-minute heart rate is half a million rows, and ranking them
-  // before the fold sorted them twice (about 0.55 s); folding first never
-  // sorts more than one row per source per day.
+  // The canonical source is chosen per local DAY, whatever the grain: each
+  // source is folded per day in one hashed pass (a few rows per day, however
+  // dense the stream), each day keeps its ladder-canonical source, and only
+  // then are the days folded into the week or month. Picking the source per
+  // week or month instead dropped every day the losing source carried, so a
+  // month of manual readings plus one synced reading reported one day.
+  // Folding first and picking second is the same result as collapsing the
+  // raw rows first; it just never sorts more than one row per source per day.
   const buckets = await prisma.$queryRaw<
     Array<{
       type: string;
@@ -224,8 +223,8 @@ export async function readLiveBuckets(opts: {
       SELECT
         m."type",
         m."source",
-        date_trunc(${unit}, (m."measured_at" AT TIME ZONE 'UTC') AT TIME ZONE ${timeZone}) AS d,
-        ${aggregator} AS avg,
+        date_trunc('day', (m."measured_at" AT TIME ZONE 'UTC') AT TIME ZONE ${timeZone}) AS day,
+        SUM(m."value")::double precision AS total,
         COUNT(*)::int AS cnt,
         MIN(m."value") AS min_value,
         MAX(m."value") AS max_value
@@ -238,20 +237,31 @@ export async function readLiveBuckets(opts: {
       GROUP BY m."type", m."source", 3
     ),
     canon AS (
-      SELECT DISTINCT ON (p."type", p.d)
-        p."type", p.d, p.avg, p.cnt, p.min_value, p.max_value
+      SELECT DISTINCT ON (p."type", p.day)
+        p."type", p.day, p.total, p.cnt, p.min_value, p.max_value
       FROM per_source p
-      ORDER BY p."type", p.d, (${rankRaw}), p."source"
+      ORDER BY p."type", p.day, (${rankRaw}), p."source"::text
+    ),
+    folded AS (
+      SELECT
+        c."type",
+        date_trunc(${unit}, c.day) AS d,
+        (CASE WHEN ${isCumulative} THEN SUM(c.total) ELSE SUM(c.total) / SUM(c.cnt) END)::double precision AS avg,
+        SUM(c.cnt)::int AS cnt,
+        MIN(c.min_value) AS min_value,
+        MAX(c.max_value) AS max_value
+      FROM canon c
+      GROUP BY c."type", 2
     )
     SELECT
-      c."type"::text AS type,
-      c.d AT TIME ZONE ${timeZone} AS bucket_start,
-      c.avg,
-      c.cnt,
-      c.min_value,
-      c.max_value
-    FROM canon c
-    ORDER BY c.d ASC
+      f."type"::text AS type,
+      f.d AT TIME ZONE ${timeZone} AS bucket_start,
+      f.avg,
+      f.cnt,
+      f.min_value,
+      f.max_value
+    FROM folded f
+    ORDER BY f.d ASC
     LIMIT ${cap}
   `;
   return buckets.map((b) => {

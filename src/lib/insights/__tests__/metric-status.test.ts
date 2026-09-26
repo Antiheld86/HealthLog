@@ -62,7 +62,8 @@ vi.mock("@/lib/tz/resolver", async () => {
   return { ...actual, resolveUserTimezone: vi.fn() };
 });
 
-vi.mock("@/lib/rollups/measurement-read", () => ({
+vi.mock("@/lib/rollups/measurement-read", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/rollups/measurement-read")>()),
   loadUserSourcePriority: vi.fn(),
 }));
 

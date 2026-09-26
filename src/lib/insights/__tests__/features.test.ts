@@ -78,17 +78,41 @@ const dayMs = 24 * 60 * 60 * 1000;
 const TZ_USER = "user-tz";
 
 function rollupRow(daysAgo: number, mean: number, count: number) {
+  const now = new Date();
   return {
-    bucketStart: new Date(Date.now() - daysAgo * dayMs),
+    // A stored DAY bucket starts at UTC midnight.
+    bucketStart: new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) -
+        daysAgo * dayMs,
+    ),
+    source: "MANUAL",
     count,
     mean,
     minValue: mean,
     maxValue: mean,
+    sumValue: count * mean,
     sd: 0,
     slope: 0,
     r2: 0,
+    sumX: null,
+    sumXy: null,
+    sumXx: null,
+    sumYy: null,
     computedAt: new Date(),
   };
+}
+
+/** Keep the rows a DAY read's `bucketStart` window would return. */
+function inWindow(
+  rows: ReturnType<typeof rollupRow>[],
+  where: { bucketStart: { gte: Date; lt?: Date } },
+) {
+  return rows.filter(
+    (r) =>
+      r.bucketStart >= where.bucketStart.gte &&
+      (where.bucketStart.lt === undefined ||
+        r.bucketStart < where.bucketStart.lt),
+  );
 }
 
 beforeEach(() => {
@@ -122,22 +146,25 @@ describe("extractFeatures — v1.4.36 W3 bucketed payload", () => {
   });
 
   it("attaches DAY / WEEK / MONTH buckets from measurement_rollups when includeRaw=true", async () => {
-    // Two WEIGHT DAY buckets in the 0-90d window and one MONTH bucket
-    // in the 365-1825d window. The reader is called once per
-    // (type, granularity) combination — return data only for the two
-    // we care about, empty for the rest.
+    // Two WEIGHT DAY buckets in the 0-90d window and one day in the
+    // 365-1825d window, which surfaces as a MONTH bucket. Every window is
+    // folded from the DAY tier, so the mock answers DAY reads by window.
+    const weightDays = [
+      rollupRow(10, 82.5, 2),
+      rollupRow(20, 82.7, 1),
+      rollupRow(400, 85.1, 28),
+    ];
     prismaMock.measurementRollup.findMany.mockImplementation(
-      async (args: { where: { type: string; granularity: string } }) => {
-        if (args.where.type === "WEIGHT" && args.where.granularity === "DAY") {
-          return [rollupRow(10, 82.5, 2), rollupRow(20, 82.7, 1)];
-        }
-        if (
-          args.where.type === "WEIGHT" &&
-          args.where.granularity === "MONTH"
-        ) {
-          return [rollupRow(400, 85.1, 28)];
-        }
-        return [];
+      async (args: {
+        where: {
+          type: string;
+          granularity: string;
+          bucketStart: { gte: Date; lt?: Date };
+        };
+      }) => {
+        if (args.where.type !== "WEIGHT") return [];
+        expect(args.where.granularity).toBe("DAY");
+        return inWindow(weightDays, args.where);
       },
     );
 
@@ -188,19 +215,17 @@ describe("extractFeatures — v1.4.36 W3 bucketed payload", () => {
     { timeout: 30_000 },
     async () => {
       // Fabricate an absurdly long bucket list so the JSON dump crosses
-      // the ceiling. ~200 KB per series × 28 series ≈ ~5.6 MB.
-      const giant = new Array(200_000).fill(null).map((_, i) => ({
-        bucketStart: new Date(Date.now() - i * dayMs),
-        count: i,
-        mean: i,
-        minValue: i,
-        maxValue: i,
-        sd: 0,
-        slope: 0,
-        r2: 0,
-        computedAt: new Date(),
-      }));
-      prismaMock.measurementRollup.findMany.mockResolvedValue(giant);
+      // the ceiling: every DAY read answers 200 000 distinct buckets inside
+      // its own window, one second apart.
+      prismaMock.measurementRollup.findMany.mockImplementation(
+        async (args: { where: { bucketStart: { gte: Date } } }) =>
+          new Array(200_000).fill(null).map((_, i) => ({
+            ...rollupRow(0, i, i),
+            bucketStart: new Date(
+              args.where.bucketStart.gte.getTime() + i * 1000,
+            ),
+          })),
+      );
 
       await expect(extractFeatures("user-1", true)).rejects.toThrow(
         FeaturesPayloadTooLargeError,

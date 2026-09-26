@@ -1,71 +1,47 @@
 /**
- * v1.4.39 W-WMY — WEEK / MONTH / YEAR rollup readers.
+ * WEEK / MONTH / YEAR readers over the measurement rollup tier.
  *
- * Background — the read-side gap
- * ------------------------------
- * Every measurement write fans out via `recomputeBucketsForMeasurement`
- * into a synchronous DAY upsert plus pg-boss-queued WEEK / MONTH / YEAR
- * recomputes. The boot-time backfill (`enqueueBootTimeRollupBackfill`)
- * mints the full WEEK / MONTH / YEAR history once per uncovered user.
- *
- * As of v1.4.38 the only reader that consults `measurement_rollups`
- * (`rollup-read.ts`, plus the per-fast-path branches in
- * `summaries-slice`, `comprehensive-aggregator`, etc.) caps at DAY and
- * a trailing 90-day window. The WEEK / MONTH / YEAR buckets sit in
- * Postgres as pure write amplification — populated every write,
- * surfaced nowhere on read. The v1.4.38 perf audit
- * (`.planning/round-v1438-perf-analysis.md` §2 + §5 P6) calls this out
- * as the largest unused investment in the rollup tier.
- *
- * What this module adds
- * ---------------------
  * Helpers that read the trailing N-bucket window for a single
- * `(userId, type)` pair at a chosen granularity, plus an auto-router
- * that picks the largest granularity that still resolves the requested
- * window. The shape returned is identical to `readRollupBuckets` so
- * callers can interleave WEEK / MONTH / YEAR rows with DAY rows
- * downstream without branching on the source granularity.
+ * `(userId, type)` pair at a chosen granularity, plus an auto-router that
+ * picks the largest granularity that still resolves the requested window.
+ * The shape returned is identical to `readRollupBuckets` so callers can
+ * interleave WEEK / MONTH / YEAR rows with DAY rows downstream without
+ * branching on the source granularity.
+ *
+ * Built from the DAY tier
+ * -----------------------
+ * Every coarse bucket is folded from the canonical DAY buckets
+ * (`readCanonicalRollupBuckets`): the source-priority ladder picks one
+ * source per DAY, and the week, month or year then counts every one of its
+ * days. The stored per-source WEEK / MONTH / YEAR rows cannot express that:
+ * collapsing them picks one source for the whole bucket, so a month of
+ * manual readings plus one synced reading reported only the synced day.
  *
  * Compositional contract
  * ----------------------
- * `count / min / max / mean / sumValue` are linearly composable across
- * any granularity — aggregating these stats over WEEK buckets returns
- * the same numbers as aggregating the underlying DAY buckets or the
- * raw measurements. `sd / slope / r2` are NOT linearly composable; the
- * routed callers either fall back to live SQL for those or accept the
- * per-bucket stat as-is. The auto-router is a granularity selector
- * only — it does not attempt to reconstruct slope across coarser
- * buckets.
+ * `count / min / max / mean / sumValue` compose exactly across days.
+ * `sd / slope / r2` are composed from the summed regression accumulators,
+ * which is exact over the canonical rows too; a bucket with any day that
+ * lacks the accumulators reports them as `null`.
  *
  * Coverage-miss semantics
  * -----------------------
- * Each reader returns `null` when the requested granularity yields
- * zero rows for `(userId, type, since)`. The caller decides whether
- * that is a real "no data" case (the user has not logged this type in
- * the window) or a coverage miss the boot-backfill / worker has not
- * caught up on. The default policy is to fall back to a finer
- * granularity (MONTH → WEEK → DAY) before giving up — see
- * `readBestGranularityRollups`.
- *
- * Scope vs. `rollup-read.ts`
- * --------------------------
- * `rollup-read.ts` carries the existing DAY-only aggregator. This
- * module is deliberately separate so the WEEK / MONTH / YEAR wiring
- * is reviewable in isolation and so the v1.4.39 W-SUM agent's
- * concurrent edits to the writer side don't collide with the reader
- * additions.
+ * Each reader returns `null` when the window holds no DAY buckets for
+ * `(userId, type)`. The caller decides whether that is a real "no data"
+ * case or a coverage miss the boot backfill has not caught up on, and
+ * usually falls through to live SQL.
  */
 import type {
   MeasurementType,
   RollupGranularity,
 } from "@/generated/prisma/client";
 
-import { prisma } from "@/lib/db";
 import { CUMULATIVE_HK_TYPES } from "@/lib/measurements/apple-health-mapping";
 import { annotate } from "@/lib/logging/context";
 import {
-  collapseRollupRowsBySource,
+  foldCanonicalDays,
   loadUserSourcePriority,
+  readCanonicalRollupBuckets,
 } from "@/lib/rollups/measurement-read";
 
 /**
@@ -125,11 +101,7 @@ const GRANULARITY_FLOORS: Array<{
 
 /**
  * Pick the largest granularity that can still resolve the requested
- * `windowDays` window — WEEK for >14 d, MONTH for >62 d, YEAR for
- * >730 d. Falls back to a finer granularity on coverage miss so a
- * user with WEEK / MONTH coverage but no YEAR buckets (e.g. a tenant
- * who joined less than two years ago) still gets a usable trend
- * series.
+ * `windowDays` window (see `GRANULARITY_FLOORS`) and read it.
  *
  * Returns the granularity the helper resolved against plus the row
  * shape the internal `readGranularity` reader produces. `null` when
@@ -153,28 +125,25 @@ export async function readBestGranularityRollups(
     userPriorityJson !== undefined
       ? userPriorityJson
       : await loadUserSourcePriority(userId);
-  // Walk the floors from coarsest to finest and return the first
-  // granularity whose floor the window clears AND which has coverage
-  // for `(userId, type, since)`. The `if rows == null` fall-through
-  // is what makes the helper resilient to partial coverage.
-  for (const floor of GRANULARITY_FLOORS) {
-    if (windowDays < floor.minWindowDays) continue;
-    const rows = await readGranularity(
-      userId,
-      type,
-      floor.granularity,
-      since,
-      // Trailing-window semantics: no upper bound. This router serves the
-      // "last N days to now" probes (summaries-slice / health-score); the
-      // requested-window bounding lives on `readTieredRollupSeries`.
-      null,
-      priority,
-    );
-    if (rows && rows.length > 0) {
-      return { granularity: floor.granularity, rows };
-    }
-  }
-  return null;
+  // Every tier is folded from the same canonical DAY buckets, so a tier
+  // either has coverage or none has: pick the coarsest floor the window
+  // clears and read it once.
+  const floor = GRANULARITY_FLOORS.find((f) => windowDays >= f.minWindowDays);
+  if (!floor) return null;
+  const rows = await readGranularity(
+    userId,
+    type,
+    floor.granularity,
+    since,
+    // Trailing-window semantics: no upper bound. This router serves the
+    // "last N days to now" probes (summaries-slice / health-score); the
+    // requested-window bounding lives on `readTieredRollupSeries`.
+    null,
+    priority,
+  );
+  return rows && rows.length > 0
+    ? { granularity: floor.granularity, rows }
+    : null;
 }
 
 /**
@@ -225,9 +194,17 @@ export function aggregateWmyBuckets(rows: RollupBucketRow[]): {
 }
 
 /**
- * Internal — shared `findMany` projection. Returns `null` when the
- * window has zero rows so the caller can branch on coverage miss
- * without a separate count round-trip.
+ * Internal — one type's canonical buckets at `granularity`, built from the
+ * DAY tier (`readCanonicalRollupBuckets`: canonical source per DAY, then the
+ * fold). Returns `null` when the window has no rows so the caller can branch
+ * on a coverage miss without a separate count round-trip.
+ *
+ * When `to` is supplied the window is bounded on BOTH ends (`bucketStart` in
+ * `[from, to]`), so a caller asking for an arbitrary historic window reads
+ * the buckets INSIDE it rather than the trailing "to now" slice, the same
+ * contract the DAY-tier `readRollup` and the live-SQL fallback keep.
+ * `to === null` keeps the trailing-window semantics for the
+ * `readBestGranularityRollups` router.
  */
 async function readGranularity(
   userId: string,
@@ -237,43 +214,17 @@ async function readGranularity(
   to: Date | null,
   userPriorityJson: unknown,
 ): Promise<RollupBucketRow[] | null> {
-  // Bounded `findMany`: `(userId, type, granularity, bucketStart, source)`
-  // is the composite primary key so the planner picks the index path
-  // every time. When `to` is supplied the `bucketStart` filter is bounded
-  // on BOTH ends (`gte from` AND `lte to`) so a caller asking for an
-  // arbitrary historic window — `[2020-01-01, 2022-01-01]` — reads the
-  // buckets INSIDE that window rather than the trailing "to now" slice.
-  // This mirrors the DAY-tier `readRollup` in `daily-series-read.ts`
-  // (`bucketStart: { gte: from, lte: to }`) so the tiered read reproduces
-  // the same window contract the live-SQL fallback bounds on both ends.
-  // `to === null` keeps the legacy trailing-window semantics for the
-  // `readBestGranularityRollups` router.
-  const rows = await prisma.measurementRollup.findMany({
-    where: {
-      userId,
-      type,
-      granularity,
-      bucketStart: to === null ? { gte: from } : { gte: from, lte: to },
-    },
-    orderBy: { bucketStart: "asc" },
-    select: {
-      bucketStart: true,
-      // v1.11.1 — source drives the per-bucket canonical collapse below.
-      source: true,
-      count: true,
-      mean: true,
-      sd: true,
-      slope: true,
-      r2: true,
-      sumValue: true,
-      minValue: true,
-      maxValue: true,
-    },
+  const rows = await readCanonicalRollupBuckets({
+    userId,
+    type,
+    granularity,
+    from,
+    to,
+    toInclusive: true,
+    userPriorityJson,
   });
   if (rows.length === 0) return null;
-  // v1.11.1 — collapse overlapping sources to the ladder-canonical reading
-  // per bucket, then drop the source column from the normalised shape.
-  return collapseRollupRowsBySource(rows, type, userPriorityJson).map((r) => ({
+  return rows.map((r) => ({
     bucketStart: r.bucketStart,
     count: r.count,
     mean: r.mean,
@@ -318,9 +269,6 @@ export interface TieredSeriesRow {
  * ladders are not identical — this one may be finer (DAY rows for a
  * 91–365 d span; the client folds them into the weeks it captions) —
  * and a test pins the never-coarser direction across every span.
- *
- * The finer fallback in `readTieredRollupSeries` still rescues a tenant
- * whose coarse buckets the worker has not minted yet.
  */
 export function pickRollupGranularityForWindow(
   windowDays: number,
@@ -330,7 +278,7 @@ export function pickRollupGranularityForWindow(
   return "DAY";
 }
 
-/** DAY → WEEK → MONTH → YEAR ordering for the finer-fallback walk. */
+/** DAY → WEEK → MONTH → YEAR, finest first. */
 const TIER_ORDER: RollupGranularity[] = ["DAY", "WEEK", "MONTH", "YEAR"];
 
 /**
@@ -354,12 +302,9 @@ const TIER_ORDER: RollupGranularity[] = ["DAY", "WEEK", "MONTH", "YEAR"];
  * range band on spot metrics; cumulative metrics (steps, energy,
  * distance) surface the bucket's summed total and drop the spread.
  *
- * Coverage handling: the target tier is read first; on a coverage miss
- * (the boot backfill / worker has not minted the coarse buckets yet) the
- * reader walks FINER (MONTH → WEEK → DAY) so a tenant still gets a usable
- * series rather than an empty chart. Returns `null` only when no tier at
- * or below the target carries any buckets for the window — the caller
- * then falls through to its live-SQL path.
+ * Coverage handling: the window's canonical DAY buckets are read once and
+ * folded into the chosen tier. Returns `null` when the window holds no DAY
+ * buckets; the caller then falls through to its live-SQL path.
  *
  * The result is NOT capped — the tier selection bounds the row count
  * (≤ ~104 weeks for the WEEK tier, ≤ ~12 months/year for MONTH). If a
@@ -397,77 +342,58 @@ export async function readTieredRollupSeries(opts: {
       : await loadUserSourcePriority(userId);
 
   const target = pickRollupGranularityForWindow(windowDays);
-  // Walk the target tier first, then finer (never coarser — coarser would
-  // drop detail the chart can render). Stop at the first tier with coverage.
-  const targetIdx = TIER_ORDER.indexOf(target);
-  for (let i = targetIdx; i >= 0; i--) {
-    let granularity = TIER_ORDER[i];
-    let rows = await readGranularity(
-      userId,
+  const days = await readCanonicalRollupBuckets({
+    userId,
+    type,
+    granularity: "DAY",
+    from,
+    to,
+    toInclusive: true,
+    userPriorityJson: priority,
+  });
+  if (days.length === 0) return null;
+  // Refine the tier by the ACTUAL data span, not the requested window. The
+  // "Alle" tab always requests ~3650 days, so keying the tier off the request
+  // width alone handed EVERY account MONTH buckets: a record whose history
+  // spans four months came back as four monthly means while the client
+  // (which captions from the real span) labelled them "weekly average". The
+  // tier is never coarser than the request calls for.
+  const spanDays = Math.ceil(
+    (days[days.length - 1].bucketStart.getTime() -
+      days[0].bucketStart.getTime()) /
+      86_400_000,
+  );
+  const refined = pickRollupGranularityForWindow(Math.max(1, spanDays));
+  const granularity =
+    TIER_ORDER.indexOf(refined) < TIER_ORDER.indexOf(target) ? refined : target;
+  // Fold the window's own days; a leading bucket that starts before `from`
+  // would hold only part of its days, so it is left out as the stored coarse
+  // rows were.
+  const rows = foldCanonicalDays(days, granularity).filter(
+    (b) => b.bucketStart.getTime() >= from.getTime(),
+  );
+  if (rows.length === 0) return null;
+  const useSum = CUMULATIVE_HK_TYPES.has(type);
+  annotate({
+    action: { name: "measurement.list" },
+    meta: {
+      total: rows.length,
       type,
+      aggregate: "tiered",
       granularity,
-      from,
-      to,
-      priority,
-    );
-    if (rows && rows.length > 0) {
-      // Refine the tier by the ACTUAL data span, not the requested window.
-      // The "Alle" tab always requests ~3650 days, so keying the tier off
-      // the request width alone handed EVERY account MONTH buckets — a
-      // record whose history spans four months came back as four monthly
-      // means while the client (which captions from the real span) labelled
-      // them "weekly average". Re-reading at the tier the real span calls
-      // for returns the resolution the chart will actually caption. A
-      // coverage miss on the finer tier keeps the coarser rows — finer
-      // tiers are the base tiers the workers mint first, so in practice
-      // this probe only fires when the refinement is genuinely available.
-      // The walk is strictly finer-only, so it terminates.
-      for (;;) {
-        const spanDays = Math.ceil(
-          (rows[rows.length - 1].bucketStart.getTime() -
-            rows[0].bucketStart.getTime()) /
-            86_400_000,
-        );
-        const refined = pickRollupGranularityForWindow(Math.max(1, spanDays));
-        if (TIER_ORDER.indexOf(refined) >= TIER_ORDER.indexOf(granularity)) {
-          break;
-        }
-        const finerRows = await readGranularity(
-          userId,
-          type,
-          refined,
-          from,
-          to,
-          priority,
-        );
-        if (!finerRows || finerRows.length === 0) break;
-        granularity = refined;
-        rows = finerRows;
-      }
-      const useSum = CUMULATIVE_HK_TYPES.has(type);
-      annotate({
-        action: { name: "measurement.list" },
-        meta: {
-          total: rows.length,
-          type,
-          aggregate: "tiered",
-          granularity,
-          target_granularity: target,
-          source: "rollup",
-        },
-      });
-      return {
-        granularity,
-        rows: rows.map((r) => ({
-          type,
-          value: useSum ? (r.sumValue ?? r.mean * r.count) : r.mean,
-          measuredAt: r.bucketStart.toISOString(),
-          count: r.count,
-          minValue: useSum ? undefined : r.minValue,
-          maxValue: useSum ? undefined : r.maxValue,
-        })),
-      };
-    }
-  }
-  return null;
+      target_granularity: target,
+      source: "rollup",
+    },
+  });
+  return {
+    granularity,
+    rows: rows.map((r) => ({
+      type,
+      value: useSum ? (r.sumValue ?? r.mean * r.count) : r.mean,
+      measuredAt: r.bucketStart.toISOString(),
+      count: r.count,
+      minValue: useSum ? undefined : r.minValue,
+      maxValue: useSum ? undefined : r.maxValue,
+    })),
+  };
 }

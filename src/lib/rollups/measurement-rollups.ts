@@ -38,9 +38,10 @@ import { prisma } from "@/lib/db";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { annotate } from "@/lib/logging/context";
 import {
-  collapseRollupRowsBySource,
-  loadUserSourcePriority,
+  readCanonicalRollupBuckets,
   REGRESSION_X_ORIGIN_DAYS,
+  utcBucketEnd,
+  utcBucketStart,
 } from "@/lib/rollups/measurement-read";
 import { startOfUtcDay } from "@/lib/tz/start-of-utc-day";
 import type {
@@ -354,8 +355,10 @@ export async function enqueueRollupRecompute(input: {
  * Read rollup rows for `(userId, type, granularity)` in `[from, to)`.
  * Returns rows sorted ascending by `bucketStart`.
  *
- * v1.11.1 — rows are stored per source; this collapses overlapping sources to
- * the ladder-canonical reading so the return shape stays one row per bucket.
+ * Rows are stored per source. Every granularity is built from the DAY tier,
+ * collapsed to the ladder-canonical source per DAY and then folded into the
+ * requested bucket (`readCanonicalRollupBuckets`), so the return shape stays
+ * one row per bucket and a coarse bucket counts every day it covers.
  * Pass `userPriorityJson` to avoid a per-call user lookup when the caller
  * already loaded it (e.g. a loop over many types); omit it to lazy-load.
  */
@@ -379,20 +382,15 @@ export async function readRollupBuckets(
     computedAt: Date;
   }>
 > {
-  const rows = await prisma.measurementRollup.findMany({
-    where: {
-      userId,
-      type,
-      granularity,
-      bucketStart: { gte: from, lt: to },
-    },
-    orderBy: { bucketStart: "asc" },
+  const rows = await readCanonicalRollupBuckets({
+    userId,
+    type,
+    granularity,
+    from,
+    to,
+    userPriorityJson,
   });
-  const priority =
-    userPriorityJson !== undefined
-      ? userPriorityJson
-      : await loadUserSourcePriority(userId);
-  return collapseRollupRowsBySource(rows, type, priority).map((r) => ({
+  return rows.map((r) => ({
     bucketStart: r.bucketStart,
     count: r.count,
     mean: r.mean,
@@ -800,34 +798,10 @@ export function bucketSpan(
   measuredAt: Date,
   granularity: RollupGranularity,
 ): { from: Date; to: Date } {
-  switch (granularity) {
-    case "DAY": {
-      const from = startOfUtcDay(measuredAt);
-      return { from, to: new Date(from.getTime() + 24 * 60 * 60 * 1000) };
-    }
-    case "WEEK": {
-      const day = startOfUtcDay(measuredAt);
-      // Postgres ISO week: Monday is day 1. JS getUTCDay(): Sunday=0..Saturday=6.
-      const dayOfWeek = day.getUTCDay(); // 0=Sun
-      const mondayOffset = (dayOfWeek + 6) % 7; // 0 for Mon … 6 for Sun
-      const from = new Date(day.getTime() - mondayOffset * 24 * 60 * 60 * 1000);
-      return { from, to: new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000) };
-    }
-    case "MONTH": {
-      const from = new Date(
-        Date.UTC(measuredAt.getUTCFullYear(), measuredAt.getUTCMonth(), 1),
-      );
-      const to = new Date(
-        Date.UTC(measuredAt.getUTCFullYear(), measuredAt.getUTCMonth() + 1, 1),
-      );
-      return { from, to };
-    }
-    case "YEAR": {
-      const from = new Date(Date.UTC(measuredAt.getUTCFullYear(), 0, 1));
-      const to = new Date(Date.UTC(measuredAt.getUTCFullYear() + 1, 0, 1));
-      return { from, to };
-    }
-  }
+  return {
+    from: utcBucketStart(measuredAt, granularity),
+    to: utcBucketEnd(measuredAt, granularity),
+  };
 }
 
 /**

@@ -23,9 +23,11 @@
 import type {
   MeasurementSource,
   MeasurementType,
+  RollupGranularity,
 } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { metricKeyForType } from "@/lib/measurements/cumulative-day-sum";
+import { startOfUtcDay } from "@/lib/tz/start-of-utc-day";
 import {
   getSourceLadder,
   parseSourcePriority,
@@ -411,4 +413,236 @@ export function aggregateBuckets(rows: DailyMeanRow[]): {
     max: Number.isFinite(max) ? max : null,
     mean: sumWeighted / totalCount,
   };
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Start of the UTC bucket containing `at` at the given granularity. The same
+ * cut Postgres `date_trunc(<unit>, measured_at)` makes on the rollup writer's
+ * UTC wall-clock `measured_at` (weeks are ISO weeks starting on Monday).
+ */
+export function utcBucketStart(at: Date, granularity: RollupGranularity): Date {
+  switch (granularity) {
+    case "DAY":
+      return startOfUtcDay(at);
+    case "WEEK": {
+      const day = startOfUtcDay(at);
+      // getUTCDay(): Sunday = 0 … Saturday = 6; ISO weeks start on Monday.
+      const mondayOffset = (day.getUTCDay() + 6) % 7;
+      return new Date(day.getTime() - mondayOffset * DAY_MS);
+    }
+    case "MONTH":
+      return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1));
+    case "YEAR":
+      return new Date(Date.UTC(at.getUTCFullYear(), 0, 1));
+  }
+}
+
+/** Start of the UTC bucket after the one containing `at`. */
+export function utcBucketEnd(at: Date, granularity: RollupGranularity): Date {
+  const start = utcBucketStart(at, granularity);
+  switch (granularity) {
+    case "DAY":
+      return new Date(start.getTime() + DAY_MS);
+    case "WEEK":
+      return new Date(start.getTime() + 7 * DAY_MS);
+    case "MONTH":
+      return new Date(
+        Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1),
+      );
+    case "YEAR":
+      return new Date(Date.UTC(start.getUTCFullYear() + 1, 0, 1));
+  }
+}
+
+/** One canonical-source bucket, at any granularity. */
+export interface CanonicalRollupBucket {
+  bucketStart: Date;
+  count: number;
+  mean: number;
+  minValue: number;
+  maxValue: number;
+  sumValue: number | null;
+  sd: number | null;
+  slope: number | null;
+  r2: number | null;
+  sumX: number | null;
+  sumXy: number | null;
+  sumXx: number | null;
+  sumYy: number | null;
+  computedAt: Date;
+}
+
+/**
+ * Fold canonical DAY buckets (one row per day, already source-collapsed)
+ * into buckets of `granularity`.
+ *
+ * The canonical source is a per-DAY decision: a week, month or year in which
+ * the user logged most days by hand and one day from a device holds readings
+ * from both, and each of those days counts. Collapsing the stored per-source
+ * WEEK / MONTH / YEAR rows instead picked ONE source for the whole bucket, so
+ * a month of manual blood-pressure readings plus a single synced one reported
+ * the synced day alone, and a step history that switched devices mid-month
+ * lost every day logged by the losing device.
+ *
+ * `count`, `min`, `max`, `sum` and the count-weighted `mean` compose exactly.
+ * `sd`, `slope` and `r2` are composed from the summed regression accumulators
+ * (`composeRegression`); a bucket with any day lacking them reports `null`.
+ * DAY input at DAY granularity passes through unchanged.
+ */
+export function foldCanonicalDays(
+  days: ReadonlyArray<CanonicalRollupBucket>,
+  granularity: RollupGranularity,
+): CanonicalRollupBucket[] {
+  if (granularity === "DAY") return days.map((d) => ({ ...d }));
+  const groups = new Map<number, CanonicalRollupBucket[]>();
+  for (const d of days) {
+    const key = utcBucketStart(d.bucketStart, granularity).getTime();
+    const slot = groups.get(key);
+    if (slot) slot.push(d);
+    else groups.set(key, [d]);
+  }
+  const out: CanonicalRollupBucket[] = [];
+  for (const [key, members] of [...groups.entries()].sort(
+    (a, b) => a[0] - b[0],
+  )) {
+    let count = 0;
+    let sumY = 0;
+    let min = Infinity;
+    let max = -Infinity;
+    let computedAt = members[0].computedAt;
+    let accumulatorsComplete = true;
+    let sumX = 0;
+    let sumXy = 0;
+    let sumXx = 0;
+    let sumYy = 0;
+    for (const m of members) {
+      count += m.count;
+      sumY += m.sumValue ?? m.mean * m.count;
+      if (m.minValue < min) min = m.minValue;
+      if (m.maxValue > max) max = m.maxValue;
+      if (m.computedAt.getTime() > computedAt.getTime()) {
+        computedAt = m.computedAt;
+      }
+      if (
+        m.sumX === null ||
+        m.sumXy === null ||
+        m.sumXx === null ||
+        m.sumYy === null
+      ) {
+        accumulatorsComplete = false;
+      } else {
+        sumX += m.sumX;
+        sumXy += m.sumXy;
+        sumXx += m.sumXx;
+        sumYy += m.sumYy;
+      }
+    }
+    if (count === 0) continue;
+    const mean = sumY / count;
+    const regression = accumulatorsComplete
+      ? composeRegression([
+          { count, mean, sumValue: sumY, sumX, sumXy, sumXx, sumYy },
+        ])
+      : { slope: null, r2: null, sdPop: null };
+    out.push({
+      bucketStart: new Date(key),
+      count,
+      mean,
+      minValue: min,
+      maxValue: max,
+      sumValue: sumY,
+      // A single reading has no spread; STDDEV_POP of one value is 0.
+      sd: count === 1 && accumulatorsComplete ? 0 : regression.sdPop,
+      slope: regression.slope,
+      r2: regression.r2,
+      sumX: accumulatorsComplete ? sumX : null,
+      sumXy: accumulatorsComplete ? sumXy : null,
+      sumXx: accumulatorsComplete ? sumXx : null,
+      sumYy: accumulatorsComplete ? sumYy : null,
+      computedAt,
+    });
+  }
+  return out;
+}
+
+/**
+ * Read one type's canonical rollup buckets at `granularity`.
+ *
+ * Every granularity is built from the DAY tier: the day's rows are collapsed
+ * to the ladder-canonical source first (`collapseRollupRowsBySource`), then
+ * folded into weeks, months or years (`foldCanonicalDays`). The stored
+ * per-source WEEK / MONTH / YEAR rows are not read, because the canonical
+ * source cannot be chosen once per coarse bucket.
+ *
+ * A bucket is returned when its start lies in the window: `bucketStart >=
+ * from`, and `< to` (or `<= to` with `toInclusive`). `to === null` leaves the
+ * window open towards now. A returned bucket always carries all of its days,
+ * including days past `to`, the way the stored coarse rows did.
+ */
+export async function readCanonicalRollupBuckets(opts: {
+  userId: string;
+  type: MeasurementType;
+  granularity: RollupGranularity;
+  from: Date;
+  to: Date | null;
+  toInclusive?: boolean;
+  /** The user's source-priority blob; `undefined` loads it on demand. */
+  userPriorityJson?: unknown;
+}): Promise<CanonicalRollupBucket[]> {
+  const { userId, type, granularity, from, to } = opts;
+  // The DAY read reaches the end of the last bucket that can start inside
+  // the window, so that bucket folds complete.
+  const dayUpper =
+    to === null
+      ? undefined
+      : granularity === "DAY"
+        ? to
+        : utcBucketEnd(to, granularity);
+  const dayRows = await prisma.measurementRollup.findMany({
+    where: {
+      userId,
+      type,
+      granularity: "DAY",
+      bucketStart:
+        dayUpper === undefined
+          ? { gte: from }
+          : granularity === "DAY" && opts.toInclusive
+            ? { gte: from, lte: dayUpper }
+            : { gte: from, lt: dayUpper },
+    },
+    orderBy: { bucketStart: "asc" },
+  });
+  if (dayRows.length === 0) return [];
+  const priority =
+    opts.userPriorityJson !== undefined
+      ? opts.userPriorityJson
+      : await loadUserSourcePriority(userId);
+  const canonicalDays = collapseRollupRowsBySource(dayRows, type, priority).map(
+    (r): CanonicalRollupBucket => ({
+      bucketStart: r.bucketStart,
+      count: r.count,
+      mean: r.mean,
+      minValue: r.minValue,
+      maxValue: r.maxValue,
+      sumValue: r.sumValue,
+      sd: r.sd,
+      slope: r.slope,
+      r2: r.r2,
+      sumX: r.sumX,
+      sumXy: r.sumXy,
+      sumXx: r.sumXx,
+      sumYy: r.sumYy,
+      computedAt: r.computedAt,
+    }),
+  );
+  const fromMs = from.getTime();
+  const toMs = to?.getTime() ?? null;
+  return foldCanonicalDays(canonicalDays, granularity).filter((b) => {
+    const start = b.bucketStart.getTime();
+    if (start < fromMs) return false;
+    if (toMs === null) return true;
+    return opts.toInclusive ? start <= toMs : start < toMs;
+  });
 }
