@@ -36,6 +36,7 @@ import { createRawStreamEncryptor, decryptRawStream } from "@/lib/crypto";
 import { createBackupKeyIdTextScanner } from "@/lib/export/backup-key-ids";
 import { streamFullBackupJson } from "@/lib/export/full-backup-stream";
 import { annotate, getEvent } from "@/lib/logging/context";
+import { envValue } from "@/lib/env";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
@@ -120,7 +121,7 @@ export function loadOffhostConfig(): OffhostBackupConfig | null {
     secretKey,
     region: envOr("BACKUP_S3_REGION", "auto"),
     encryptionKey: decodeBackupKey(encRaw),
-    previousEncryptionKeys: (process.env.BACKUP_ENCRYPTION_PREVIOUS_KEYS ?? "")
+    previousEncryptionKeys: (envValue("BACKUP_ENCRYPTION_PREVIOUS_KEYS") ?? "")
       .split(",")
       .map((raw) => raw.trim())
       .filter((raw) => raw.length > 0)

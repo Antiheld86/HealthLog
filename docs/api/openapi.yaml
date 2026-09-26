@@ -3433,9 +3433,11 @@ paths:
             listed here, because the identity provider drives it rather than a client), which ends the native leg at
             `healthlog://oidc-callback` with `code=<hlh_…>`, with `mfa_ticket=<ticket>&methods=<list>`, or with
             `error=<reason>`, where reason is one of `oidc_disabled`, `oidc_rate_limited`, `oidc_denied`,
-            `oidc_no_email`, `oidc_email_unverified`, `oidc_identity_conflict`, `oidc_registration_disabled`,
-            `oidc_failed`. The reasons are this exact snake_case vocabulary on both legs; a client maps a value it does
-            not know to a generic sign-in failure.
+            `oidc_no_email`, `oidc_email_unverified`, `oidc_identity_conflict`, `oidc_link_required`,
+            `oidc_registration_disabled`, `oidc_failed`. `oidc_link_required` means the provider's e-mail matches an
+            existing local account that is not linked yet; the owner links it by signing in once with that account's own
+            password or passkey in a browser. The reasons are this exact snake_case vocabulary on both legs; a client
+            maps a value it does not know to a generic sign-in failure.
   /api/auth/passkey/register-options:
     post:
       tags:

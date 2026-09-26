@@ -54,7 +54,10 @@ vi.mock("@/lib/telegram-cleanup", () => ({
   TELEGRAM_AUTO_DELETE_DELAY_MS: 30 * 60 * 1000,
 }));
 
-vi.mock("@/lib/measurement-reminders/satisfy", () => ({
+vi.mock("@/lib/measurement-reminders/satisfy", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/measurement-reminders/satisfy")
+  >()),
   satisfyReminder: vi.fn().mockResolvedValue({ satisfied: true }),
 }));
 
