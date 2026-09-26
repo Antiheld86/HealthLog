@@ -288,20 +288,65 @@ export function apiError(message: string, status = 400, meta?: ErrorMeta) {
 }
 
 /**
+ * Read a request body as text, counting BYTES as they arrive and stopping at
+ * `maxBytes`. A body that declares a larger `Content-Length` is refused before
+ * a byte is read; one that does not (chunked) is cancelled the moment it
+ * passes the cap. `request.text()` has no such bound — it holds whatever the
+ * client sends — which mattered little while the proxy's body clone truncated
+ * everything at a fixed ceiling, and matters for the upload routes that no
+ * longer pass through the proxy.
+ */
+export async function readBodyText(
+  request: Request,
+  maxBytes: number,
+): Promise<{ text: string; tooLarge?: never } | { tooLarge: true }> {
+  const declared = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    return { tooLarge: true };
+  }
+  const body = request.body;
+  if (!body) return { text: "" };
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        void reader.cancel().catch(() => {});
+        return { tooLarge: true };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Already released by the cancel above.
+    }
+  }
+  const joined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { text: new TextDecoder().decode(joined) };
+}
+
+/**
  * Safely parse JSON body from a request.
  * Returns the parsed body or a 400 error response if parsing fails.
  *
- * `opts.maxBytes` opts a route into a hard body-size cap. The check
- * runs against the raw text length rather than the parsed object, so an
- * over-limit payload returns 413 before reaching `JSON.parse` and never
- * builds an object graph. (`request.text()` still buffers the raw body
- * into a string, so the cap bounds the parse/object cost, not the
- * initial read — keep caps comfortably above the largest legitimate
- * payload.) Single-record routes can pass a tight cap; batch routes
- * that legitimately accept large payloads pass a larger one. When
- * `maxBytes` is omitted the route inherits the Next.js runtime default —
- * pre-existing behaviour, no regression risk for callers that haven't
- * adopted the parameter.
+ * `opts.maxBytes` opts a route into a hard body-size cap, enforced WHILE the
+ * body is read (`readBodyText`): an over-limit payload returns 413 without the
+ * whole body ever being held, and never reaches `JSON.parse`. Single-record
+ * routes can pass a tight cap; batch routes that legitimately accept large
+ * payloads pass a larger one. When `maxBytes` is omitted the body is bounded
+ * only by the proxy's 1 MB clone ceiling (`proxyClientMaxBodySize`), so a
+ * route left out of the proxy matcher must pass one.
  */
 export async function safeJson<T = unknown>(
   request: Request,
@@ -312,19 +357,19 @@ export async function safeJson<T = unknown>(
     return { error: apiError("Content-Type must be application/json", 415) };
   }
   if (opts?.maxBytes !== undefined) {
-    let raw: string;
+    let read: Awaited<ReturnType<typeof readBodyText>>;
     try {
-      raw = await request.text();
+      read = await readBodyText(request, opts.maxBytes);
     } catch {
       return { error: apiError("Invalid request body", 400) };
     }
-    if (raw.length > opts.maxBytes) {
+    if (read.tooLarge) {
       return {
         error: apiError(`Request body exceeds ${opts.maxBytes} bytes`, 413),
       };
     }
     try {
-      const data = JSON.parse(raw) as T;
+      const data = JSON.parse(read.text) as T;
       return { data };
     } catch {
       return { error: apiError("Invalid JSON body", 400) };

@@ -66,9 +66,9 @@ export const dynamic = "force-dynamic";
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 /**
- * Cap on a file sent as the raw request body, compressed or not. The same
- * ceiling the app sets for any request body (`middlewareClientMaxBodySize` in
- * `next.config.ts`), beyond which the body would arrive truncated. A
+ * Cap on a file sent as the raw request body, compressed or not, counted
+ * while the body streams. The route is left out of the proxy matcher
+ * (`src/lib/http/proxy-bypass-routes.ts`), so this is the only ceiling. A
  * disaster-recovery file of 1.25 million measurements is 662 MB as plain
  * JSON and 64 MB compressed, so large files go up compressed.
  */
@@ -169,6 +169,13 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // Cheap pre-flight on the declared content length. The byte count while
   // reading is the hard limit; this just rejects obvious abuse early.
   const contentLength = Number(request.headers.get("content-length") ?? 0);
+  // The multipart parser holds the whole form in memory and counts nothing,
+  // so a form must declare its length for the check below to bound it. The
+  // raw-body path counts while it streams and needs no declaration.
+  if (multipart && !(contentLength > 0)) {
+    await denied("content_length_missing");
+    return apiError("A multipart upload must declare its Content-Length", 411);
+  }
   if (contentLength > limit) {
     await denied("content_length_exceeded", { contentLength });
     return apiError(
