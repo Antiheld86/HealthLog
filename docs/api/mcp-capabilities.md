@@ -103,11 +103,18 @@ What `search` matches for the clinical records:
 - `visit:<id>`: visit kind (a procedure also answers to "surgery" and
   "operation"), reason, outcome, body site and side, practitioner name and
   specialty.
-- `condition:<id>`: label, type, body site and side, and the note.
+- `condition:<id>`: label, type, body site and side.
 - `document:<id>`: title, file name, document kind ("discharge letter"),
   and whole words of the document's indexed text when one is stored. The
-  document itself is never read for a search.
+  document itself is never read for a search. A document uploaded with AI
+  reading deferred is matched on its title and details only.
 - `vaccination:<id>`: vaccine name, catalogue name, practitioner.
+
+Condition and vaccination notes are never searched or returned, the same
+rule the Coach and the doctor report follow. A deleted practitioner is not
+named or matched. Query words shorter than four letters match whole words or
+word starts only. Titles and file names are also looked up in the database,
+so an older document is found by them even outside the newest 500.
 
 Body sites are matched after decryption, folded the way the body-sites view
 folds them, with German and English body-part names treated as one ("knee"
@@ -116,13 +123,19 @@ by field weight, then newest first, so the same query always returns the
 same list. A kind whose module is switched off (`illness`,
 `inboundDocuments`, `vaccinations`, and for the older kinds `medications`
 and `labs`) is neither searched nor fetched; `fetch` answers such an id with
-`metadata.reason: "module_disabled"`.
+`metadata.reason: "module_disabled"`. The same switches apply to every other
+MCP read: `get_labs`, `get_medication_schedule`, `get_medication_compliance`
+and the lab and medication resources answer
+`{ present: false, reason: "module_disabled" }`, and `get_visits` withholds
+condition labels (`conditionsReason: "module_disabled"`) when the illness
+module is off.
 
 `fetch` on a clinical record returns its key fields, with never-recorded
 fields as `null`, and `metadata.links`: the records it is directly linked to,
 each with an id `fetch` accepts. A document returns its metadata and at most
 a 1,500-character excerpt of its indexed text, never the file, a download
-URL, or its stored summary. All user-written text is wrapped in the
+URL, or its stored summary. A document held back from AI reading returns no
+excerpt and `metadata.reason: "ai_read_deferred"`. All user-written text is wrapped in the
 `<<<USER_TEXT_START>>>` / `<<<USER_TEXT_END>>>` fence.
 
 Every read tool is annotated read-only / non-destructive / idempotent /
