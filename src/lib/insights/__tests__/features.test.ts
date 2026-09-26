@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
-    measurement: { findMany: vi.fn(), groupBy: vi.fn() },
+    measurement: { findMany: vi.fn() },
     measurementRollup: { findMany: vi.fn() },
     moodEntry: { findMany: vi.fn(), findFirst: vi.fn() },
     moodEntryRollup: { findMany: vi.fn(), findFirst: vi.fn() },
@@ -15,6 +15,8 @@ vi.mock("@/lib/db", () => ({
     workout: { findMany: vi.fn() },
     ecgRecording: { findMany: vi.fn() },
     $queryRawUnsafe: vi.fn(),
+    // The all-time extremes read (one grouped aggregate).
+    $queryRaw: vi.fn(),
   },
 }));
 
@@ -49,7 +51,6 @@ const prismaMock = prisma as unknown as {
   user: { findUnique: ReturnType<typeof vi.fn> };
   measurement: {
     findMany: ReturnType<typeof vi.fn>;
-    groupBy: ReturnType<typeof vi.fn>;
   };
   measurementRollup: { findMany: ReturnType<typeof vi.fn> };
   moodEntry: {
@@ -66,6 +67,7 @@ const prismaMock = prisma as unknown as {
   measurementReminder: { findMany: ReturnType<typeof vi.fn> };
   workout: { findMany: ReturnType<typeof vi.fn> };
   ecgRecording: { findMany: ReturnType<typeof vi.fn> };
+  $queryRaw: ReturnType<typeof vi.fn>;
 };
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -123,7 +125,7 @@ beforeEach(() => {
     gender: "MALE",
   });
   prismaMock.measurement.findMany.mockResolvedValue([]);
-  prismaMock.measurement.groupBy.mockResolvedValue([]);
+  prismaMock.$queryRaw.mockResolvedValue([]);
   prismaMock.measurementRollup.findMany.mockResolvedValue([]);
   prismaMock.moodEntry.findMany.mockResolvedValue([]);
   prismaMock.moodEntry.findFirst.mockResolvedValue(null);

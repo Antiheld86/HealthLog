@@ -913,13 +913,20 @@ export const analyticsRangeQuery = z
 
 export const analyticsWindowAggregate = z
   .object({
-    count: z.number().int().describe("Reading count composed across buckets."),
+    count: z
+      .number()
+      .int()
+      .describe(
+        "Reading count composed across buckets. For step-like totals it is the number of days with a total, for SLEEP_DURATION the number of nights.",
+      ),
     min: z.number().nullable().describe("Window minimum; null when empty."),
     max: z.number().nullable().describe("Window maximum; null when empty."),
     mean: z
       .number()
       .nullable()
-      .describe("Count-weighted mean across buckets; null when empty."),
+      .describe(
+        "Count-weighted mean across buckets; null when empty. For step-like totals (steps, energy, distance, flights) it is the average daily total, for SLEEP_DURATION the average time asleep per night.",
+      ),
     sum: z
       .number()
       .nullable()
@@ -941,7 +948,7 @@ export const analyticsRangeResponse = z
     granularity: z
       .string()
       .describe(
-        "Rollup granularity the read resolved against (`DAY` / `WEEK` / `MONTH` / `YEAR`, or `none` on a coverage miss).",
+        "Rollup granularity the read resolved against (`DAY` / `WEEK` / `MONTH` / `YEAR`), `live` for SLEEP_DURATION (nights are reconstructed from the stage rows), or `none` when there is no data.",
       ),
     current: analyticsWindowAggregate.describe(
       "Aggregate over the current window `[now-N, now)`.",
@@ -965,7 +972,7 @@ export const analyticsRangeResponse = z
   .meta({
     id: "AnalyticsRangeResponse",
     description:
-      "Single-metric period-over-period aggregate. Reads the current and previous comparable windows from the WMY rollup tier and composes a count-weighted-mean delta. `count/min/max/mean/sum` are linearly composable across buckets; SD/slope/r² are intentionally excluded (not composable).",
+      "Single-metric period-over-period aggregate. Reads the current and previous comparable windows from the rollup tier and composes a count-weighted-mean delta, one source per day. Step-like totals compare average daily totals and SLEEP_DURATION compares average nights, not per-reading means. `count/min/max/mean/sum` are linearly composable across buckets; SD/slope/r² are intentionally excluded (not composable).",
   });
 
 export const insightsPregenerateRequest = z.object({}).meta({

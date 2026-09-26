@@ -20,6 +20,8 @@ import {
   recomputeUserRollups,
 } from "@/lib/rollups/measurement-rollups";
 import { readLiveBuckets } from "@/lib/measurements/daily-series-read";
+import { readAllTimeExtremes } from "@/lib/insights/feature-blocks";
+import { computeSummariesSlice } from "@/lib/analytics/summaries-slice";
 import type { MeasurementType } from "@/generated/prisma/client";
 
 vi.mock("@/lib/db-compat", () => ({
@@ -282,5 +284,86 @@ describe("coarse buckets — canonical source per day", () => {
     const [liveMonth] = await live(user.id, "BLOOD_GLUCOSE", "monthly");
     expect(rollupDay.mean).toBe(110);
     expect(liveMonth.value).toBe(110);
+  });
+
+  it("all-time weight figures keep one source per day", async () => {
+    const user = await seedUser();
+    const prisma = getPrismaClient();
+    await prisma.measurement.createMany({
+      data: [
+        // Day A: the scale (WITHINGS leads the ladder) and a typed reading.
+        {
+          userId: user.id,
+          type: "WEIGHT",
+          value: 80,
+          unit: "kg",
+          source: "WITHINGS",
+          measuredAt: day(3, 7),
+        },
+        {
+          userId: user.id,
+          type: "WEIGHT",
+          value: 90,
+          unit: "kg",
+          source: "MANUAL",
+          measuredAt: day(3, 9),
+        },
+        // Day B: a typed reading only.
+        {
+          userId: user.id,
+          type: "WEIGHT",
+          value: 70,
+          unit: "kg",
+          source: "MANUAL",
+          measuredAt: day(4, 9),
+        },
+      ],
+    });
+
+    const extremes = await readAllTimeExtremes(user.id, ["WEIGHT"]);
+    expect(extremes.get("WEIGHT")).toEqual({ mean: 75, min: 70, max: 80 });
+  });
+
+  it("rows older than the rollup window count one source per day in the all-time figures", async () => {
+    const user = await seedUser();
+    const prisma = getPrismaClient();
+    const now = Date.now();
+    const recent = new Date(now - 2 * DAY_MS);
+    const old = new Date(now - 6 * 365 * DAY_MS);
+    await prisma.measurement.createMany({
+      data: [
+        {
+          userId: user.id,
+          type: "WEIGHT",
+          value: 82,
+          unit: "kg",
+          source: "MANUAL",
+          measuredAt: recent,
+        },
+        // Six years ago, one day seen by two sources.
+        {
+          userId: user.id,
+          type: "WEIGHT",
+          value: 90,
+          unit: "kg",
+          source: "WITHINGS",
+          measuredAt: old,
+        },
+        {
+          userId: user.id,
+          type: "WEIGHT",
+          value: 100,
+          unit: "kg",
+          source: "MANUAL",
+          measuredAt: new Date(old.getTime() + 60_000),
+        },
+      ],
+    });
+    await recomputeUserRollups(user.id, { granularities: ["DAY"] });
+
+    const slice = await computeSummariesSlice(user.id);
+    expect(slice.summaries.WEIGHT.count).toBe(2);
+    expect(slice.summaries.WEIGHT.max).toBe(90);
+    expect(slice.summaries.WEIGHT.mean).toBe(86);
   });
 });
