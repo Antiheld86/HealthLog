@@ -31,6 +31,7 @@ import {
 } from "@simplewebauthn/server";
 import { z } from "zod/v4";
 import { prisma } from "@/lib/db";
+import { claimAuthChallenge } from "@/lib/auth/passkey";
 import {
   RP_NAME as rpName,
   getRpId,
@@ -146,38 +147,30 @@ export async function verifyMfaRegistration(
   userId: string,
   response: unknown,
 ): Promise<VerifiedRegistrationResponse> {
-  const challenge = await prisma.authChallenge.findUnique({
-    where: { id: challengeId },
-  });
-
   // The challenge must be live, of the registration type, and bound to the
   // calling user — a challenge minted for another account can never be reused.
-  if (
-    !challenge ||
-    challenge.expiresAt < new Date() ||
-    challenge.type !== "mfa_registration" ||
-    challenge.userId !== userId
-  ) {
+  // Claimed (deleted) in the same statement that checks it, so two concurrent
+  // requests cannot both use it.
+  const challenge = await claimAuthChallenge({
+    challengeId,
+    type: "mfa_registration",
+    userId,
+  });
+  if (!challenge) {
     throw new Error("Challenge expired or not found");
   }
 
-  try {
-    const parsed = registrationResponseSchema.safeParse(response);
-    if (!parsed.success) {
-      throw new Error("Registration response shape invalid");
-    }
-    return await verifyRegistrationResponse({
-      response: parsed.data as RegistrationResponseJSON,
-      expectedChallenge: challenge.challenge,
-      expectedOrigin: getExpectedOrigin(),
-      expectedRPID: getRpId(),
-      supportedAlgorithmIDs: REGISTRATION_ACCEPTED_ALGORITHM_IDS,
-    });
-  } finally {
-    await prisma.authChallenge
-      .delete({ where: { id: challengeId } })
-      .catch(() => {});
+  const parsed = registrationResponseSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error("Registration response shape invalid");
   }
+  return verifyRegistrationResponse({
+    response: parsed.data as RegistrationResponseJSON,
+    expectedChallenge: challenge.challenge,
+    expectedOrigin: getExpectedOrigin(),
+    expectedRPID: getRpId(),
+    supportedAlgorithmIDs: REGISTRATION_ACCEPTED_ALGORITHM_IDS,
+  });
 }
 
 // ── Authentication (mid-login second factor) ─────────────────────────
@@ -232,16 +225,14 @@ export async function verifyMfaAuthentication(
   userId: string,
   response: unknown,
 ): Promise<boolean> {
-  const challenge = await prisma.authChallenge.findUnique({
-    where: { id: challengeId },
+  // Claimed (deleted) in the same statement that checks it: one assertion,
+  // one verification, even when two requests carry it at once.
+  const challenge = await claimAuthChallenge({
+    challengeId,
+    type: "mfa_authentication",
+    userId,
   });
-
-  if (
-    !challenge ||
-    challenge.expiresAt < new Date() ||
-    challenge.type !== "mfa_authentication" ||
-    challenge.userId !== userId
-  ) {
+  if (!challenge) {
     throw new Error("Challenge expired or not found");
   }
 
@@ -251,43 +242,37 @@ export async function verifyMfaAuthentication(
   }
   const typedResponse = parsed.data as unknown as AuthenticationResponseJSON;
 
-  try {
-    // The presented credential MUST belong to the password-identified user —
-    // look it up scoped to `userId` so an assertion against another account's
-    // key can never satisfy this account's second factor.
-    const credential = await prisma.webauthnMfaCredential.findFirst({
-      where: { credentialId: typedResponse.id, userId },
+  // The presented credential MUST belong to the password-identified user —
+  // look it up scoped to `userId` so an assertion against another account's
+  // key can never satisfy this account's second factor.
+  const credential = await prisma.webauthnMfaCredential.findFirst({
+    where: { credentialId: typedResponse.id, userId },
+  });
+  if (!credential) return false;
+
+  const verification: VerifiedAuthenticationResponse =
+    await verifyAuthenticationResponse({
+      response: typedResponse,
+      expectedChallenge: challenge.challenge,
+      expectedOrigin: getExpectedOrigin(),
+      expectedRPID: getRpId(),
+      credential: {
+        id: credential.credentialId,
+        publicKey: credential.credentialPublicKey,
+        counter: Number(credential.counter),
+        transports: credential.transports as Transport[],
+      },
     });
-    if (!credential) return false;
 
-    const verification: VerifiedAuthenticationResponse =
-      await verifyAuthenticationResponse({
-        response: typedResponse,
-        expectedChallenge: challenge.challenge,
-        expectedOrigin: getExpectedOrigin(),
-        expectedRPID: getRpId(),
-        credential: {
-          id: credential.credentialId,
-          publicKey: credential.credentialPublicKey,
-          counter: Number(credential.counter),
-          transports: credential.transports as Transport[],
-        },
-      });
-
-    if (verification.verified) {
-      await prisma.webauthnMfaCredential.update({
-        where: { id: credential.id },
-        data: {
-          counter: BigInt(verification.authenticationInfo.newCounter),
-          lastUsedAt: new Date(),
-        },
-      });
-    }
-
-    return verification.verified;
-  } finally {
-    await prisma.authChallenge
-      .delete({ where: { id: challengeId } })
-      .catch(() => {});
+  if (verification.verified) {
+    await prisma.webauthnMfaCredential.update({
+      where: { id: credential.id },
+      data: {
+        counter: BigInt(verification.authenticationInfo.newCounter),
+        lastUsedAt: new Date(),
+      },
+    });
   }
+
+  return verification.verified;
 }
