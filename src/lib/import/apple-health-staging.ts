@@ -82,13 +82,26 @@ export async function discardStagedUpload(path: string): Promise<void> {
 }
 
 /**
+ * What a queued or running import still owns: the staged uploads its queued
+ * jobs name, and whether an import is extracting or reading its XML now.
+ */
+export interface StagingInUse {
+  paths: ReadonlySet<string>;
+  xmlInUse: boolean;
+}
+
+/**
  * Remove staged uploads and extracted XML files older than
- * `STAGING_MAX_AGE_MS` from `dir`. Only names this app writes are touched.
- * Answers how many were removed.
+ * `STAGING_MAX_AGE_MS` from `dir`, except what `inUse` names. Age alone is
+ * not enough: an upload can wait in the queue behind another account's
+ * import for longer than that, and removing it failed the import when its
+ * turn came. Only names this app writes are touched. Answers how many were
+ * removed.
  */
 export async function sweepStaleImportStaging(
   dir: string = tmpdir(),
   now: number = Date.now(),
+  inUse: StagingInUse = { paths: new Set(), xmlInUse: false },
 ): Promise<number> {
   let names: string[];
   try {
@@ -100,6 +113,8 @@ export async function sweepStaleImportStaging(
   for (const name of names) {
     if (!STAGING_NAME.test(name)) continue;
     const path = join(dir, name);
+    if (inUse.paths.has(path)) continue;
+    if (inUse.xmlInUse && name.endsWith(".xml")) continue;
     try {
       const info = await stat(path);
       if (!info.isFile()) continue;

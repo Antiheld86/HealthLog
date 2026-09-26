@@ -51,7 +51,7 @@ import {
   readBestGranularityRollups,
   type RollupBucketRow,
 } from "@/lib/rollups/measurement-read-wmy";
-import { startOfUtcDay } from "@/lib/tz/start-of-utc-day";
+import { shiftDateKey, userDayKey } from "@/lib/tz/format";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import {
   ANALYTICS_RANGES,
@@ -146,21 +146,62 @@ function splitPerPeriod(
   };
 }
 
+/**
+ * The last day a daily total may count for: yesterday on the user's
+ * calendar, and never a UTC day bucket that has not ended yet. The DAY
+ * rollups are UTC buckets; east of UTC the bucket keyed "yesterday" is still
+ * filling until UTC midnight, so the earlier of the two keys wins. Counting
+ * today's still-growing total made every delta read "down" in the morning.
+ */
+export function dailyTotalsEndKey(now: number, timezone: string): string {
+  const localYesterday = shiftDateKey(userDayKey(new Date(now), timezone), -1);
+  const utcYesterday = shiftDateKey(
+    new Date(now).toISOString().slice(0, 10),
+    -1,
+  );
+  return localYesterday < utcYesterday ? localYesterday : utcYesterday;
+}
+
+/**
+ * Split one-per-day totals into the `windowDays` completed days ending
+ * `endKey` (current) and the `windowDays` days before them (previous).
+ */
+export function splitDailyTotals(
+  points: ReadonlyArray<{ day: string; value: number }>,
+  windowDays: number,
+  endKey: string,
+): { current: WindowAggregate; previous: WindowAggregate } {
+  const currentStart = shiftDateKey(endKey, -(windowDays - 1));
+  const previousStart = shiftDateKey(endKey, -(2 * windowDays - 1));
+  const current: number[] = [];
+  const previous: number[] = [];
+  for (const p of points) {
+    if (p.day > endKey) continue;
+    if (p.day >= currentStart) current.push(p.value);
+    else if (p.day >= previousStart) previous.push(p.value);
+  }
+  return {
+    current: aggregatePerPeriod(current),
+    previous: aggregatePerPeriod(previous),
+  };
+}
+
 /** The canonical daily totals of a step-like metric, one point per day. */
 async function readDailyTotals(
   userId: string,
   type: MeasurementType,
   windowDays: number,
-  now: number,
-): Promise<Array<{ at: Date; value: number }>> {
-  const rows = await readRollupBuckets(
-    userId,
-    type,
-    "DAY",
-    startOfUtcDay(new Date(now - 2 * windowDays * DAY_MS)),
-    new Date(now),
+  endKey: string,
+): Promise<Array<{ day: string; value: number }>> {
+  const from = new Date(
+    `${shiftDateKey(endKey, -(2 * windowDays - 1))}T00:00:00.000Z`,
   );
-  return rows.map((r) => ({ at: r.bucketStart, value: r.mean * r.count }));
+  const to = new Date(`${shiftDateKey(endKey, 1)}T00:00:00.000Z`);
+  const rows = await readRollupBuckets(userId, type, "DAY", from, to);
+  return rows.map((r) => ({
+    day: r.bucketStart.toISOString().slice(0, 10),
+    value: r.mean * r.count,
+  }));
 }
 
 /** Time asleep per reconstructed night, one point per night. */
@@ -233,22 +274,30 @@ export async function computeRangeDelta(
 ): Promise<RangeDeltaResult> {
   const windowDays = rangeWindowDays(range);
 
-  if (type === "SLEEP_DURATION" || CUMULATIVE_HK_TYPES.has(type)) {
-    const points =
-      type === "SLEEP_DURATION"
-        ? await readNightlySleep(userId, windowDays, now)
-        : await readDailyTotals(userId, type, windowDays, now);
+  if (type === "SLEEP_DURATION") {
+    const points = await readNightlySleep(userId, windowDays, now);
     const { current, previous } = splitPerPeriod(points, windowDays, now);
     const { delta, deltaPct } = composeDelta(current, previous);
     return {
       range,
       windowDays,
-      granularity:
-        points.length === 0
-          ? "none"
-          : type === "SLEEP_DURATION"
-            ? "live"
-            : "DAY",
+      granularity: points.length === 0 ? "none" : "live",
+      current,
+      previous,
+      delta,
+      deltaPct,
+    };
+  }
+
+  if (CUMULATIVE_HK_TYPES.has(type)) {
+    const endKey = dailyTotalsEndKey(now, await resolveUserTimezone(userId));
+    const points = await readDailyTotals(userId, type, windowDays, endKey);
+    const { current, previous } = splitDailyTotals(points, windowDays, endKey);
+    const { delta, deltaPct } = composeDelta(current, previous);
+    return {
+      range,
+      windowDays,
+      granularity: points.length === 0 ? "none" : "DAY",
       current,
       previous,
       delta,

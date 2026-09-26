@@ -51,6 +51,38 @@ function rruleListCount(rrule: string, key: string): number {
   return m ? m[1].split(",").filter((v) => v.trim() !== "").length : 0;
 }
 
+/** The raw values of an RRULE list part (`BYDAY=1MO,FR` → `1MO`, `FR`). */
+function rruleList(rrule: string, key: string): string[] {
+  const m = new RegExp(`(?:^|;)${key}=([^;]+)`, "i").exec(rrule);
+  return m ? m[1].split(",").filter((v) => v.trim() !== "") : [];
+}
+
+/**
+ * Occurrences one period of a monthly or yearly rule holds, with the period
+ * `periodDays` long. `BYSETPOS` picks that many of the candidates. A
+ * `BYDAY` entry with an ordinal (`1MO`, `-1FR`) is one day of the period;
+ * one without (`MO`) is every such weekday in it, about `periodDays / 7`.
+ * Counting `FREQ=MONTHLY;BYDAY=MO` as one dose a month made a Monday
+ * medication's supply read four times longer than it lasts.
+ */
+function occurrencesPerPeriod(
+  rrule: string,
+  periodDays: number,
+  fallback: number,
+): number {
+  const setPos = rruleListCount(rrule, "BYSETPOS");
+  if (setPos > 0) return setPos;
+  const monthDays = rruleListCount(rrule, "BYMONTHDAY");
+  if (monthDays > 0) return monthDays;
+  const byDay = rruleList(rrule, "BYDAY");
+  if (byDay.length === 0) return fallback;
+  let count = 0;
+  for (const entry of byDay) {
+    count += /^[+-]?\d/.test(entry.trim()) ? 1 : periodDays / 7;
+  }
+  return count;
+}
+
 /**
  * Approximate doses per day for ONE schedule: times-of-day count, scaled
  * down by the cadence (rolling interval, weekly day picks + interval
@@ -82,14 +114,17 @@ function cadenceDailyDoseCount(s: RunwaySchedule): number {
     return times / interval;
   }
   if (/FREQ=MONTHLY/i.test(rrule)) {
-    const perMonth = Math.max(
-      1,
-      rruleListCount(rrule, "BYMONTHDAY") || rruleListCount(rrule, "BYDAY"),
-    );
+    const perMonth = occurrencesPerPeriod(rrule, 30, 1);
     return (times * perMonth) / (30 * interval);
   }
   if (/FREQ=YEARLY/i.test(rrule)) {
-    const perYear = Math.max(1, rruleListCount(rrule, "BYMONTH"));
+    // Within each BYMONTH month (or the year, without one), the day parts
+    // count as they would for a monthly rule.
+    const months = rruleListCount(rrule, "BYMONTH");
+    const perYear =
+      months > 0
+        ? months * occurrencesPerPeriod(rrule, 30, 1)
+        : occurrencesPerPeriod(rrule, 365, 1);
     return (times * perYear) / (365 * interval);
   }
   // FREQ=WEEKLY;BYDAY=…;INTERVAL=… is the modern weekly encoding (the

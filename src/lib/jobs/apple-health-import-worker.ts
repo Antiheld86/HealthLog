@@ -49,7 +49,11 @@ import {
 } from "@/lib/rollups/measurement-rollups";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
-import { sweepStaleImportStaging } from "@/lib/import/apple-health-staging";
+import {
+  ACTIVE_IMPORT_STATUSES,
+  sweepStaleImportStaging,
+  type StagingInUse,
+} from "@/lib/import/apple-health-staging";
 
 /**
  * Queue + cron for the periodic orphan-ImportJob sweep. v1.32.1
@@ -94,7 +98,14 @@ export async function handleImportJobReconcileTick(
       // Staged uploads and extracted XML that no running import can still
       // own: whatever exit left them (a crash, a restart mid-import, a
       // deploy), the person's export does not stay in /tmp past this.
-      const swept = await sweepStaleImportStaging().catch(() => 0);
+      // A queued or running import keeps its files whatever their age;
+      // when that cannot be read, nothing is swept this tick.
+      const inUse = await stagedImportFilesInUse().catch(() => null);
+      const swept = inUse
+        ? await sweepStaleImportStaging(undefined, undefined, inUse).catch(
+            () => 0,
+          )
+        : 0;
       evt.addMeta("import_staging_swept", swept);
       try {
         await reconcileOrphanImportJobs();
@@ -654,6 +665,43 @@ const IMPORT_HEARTBEAT_STALE_MS = 30 * 60 * 1000;
 
 /** pg-boss job states from which a mid-run import can still make progress. */
 const LIVE_PG_BOSS_STATES = new Set(["active", "created", "retry"]);
+
+/**
+ * The staged files a queued or running import still owns: the upload each
+ * live pg-boss job names, and whether any import is past the queue (it has
+ * an extracted XML open). `null` when that cannot be read, so the caller
+ * sweeps nothing rather than guess.
+ */
+export async function stagedImportFilesInUse(): Promise<StagingInUse | null> {
+  const prisma = getWorkerPrisma();
+  const rows = await prisma.importJob.findMany({
+    where: { status: { in: [...ACTIVE_IMPORT_STATUSES] } },
+    select: { status: true, pgBossJobId: true },
+  });
+  const paths = new Set<string>();
+  if (rows.length === 0) return { paths, xmlInUse: false };
+  const boss = getGlobalBoss();
+  if (!boss) return null;
+  for (const row of rows) {
+    if (!row.pgBossJobId) continue;
+    let job: { state: string; data: unknown } | null = null;
+    for (const queue of [
+      APPLE_HEALTH_IMPORT_V2_QUEUE,
+      APPLE_HEALTH_IMPORT_LEGACY_QUEUE,
+    ]) {
+      job = await boss.getJobById(queue, row.pgBossJobId);
+      if (job) break;
+    }
+    if (!job || !LIVE_PG_BOSS_STATES.has(job.state)) continue;
+    const uploadPath = (job.data as { uploadPath?: unknown } | null)
+      ?.uploadPath;
+    if (typeof uploadPath === "string") paths.add(uploadPath);
+  }
+  return {
+    paths,
+    xmlInUse: rows.some((row) => row.status !== "queued"),
+  };
+}
 
 /**
  * Reconcile orphan `ImportJob` rows on worker startup. A row stuck in

@@ -147,6 +147,7 @@ export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
   "offhost_backup_oversized",
   "offhost_backup_total_users",
   "offhost_backup_uploaded",
+  "offhost_purge_awaiting_run",
   "offhost_purge_completed",
   "offhost_purge_failed",
   "offhost_purge_objects_deleted",

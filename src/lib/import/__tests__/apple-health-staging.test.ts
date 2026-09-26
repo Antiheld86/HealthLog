@@ -46,6 +46,28 @@ describe("sweepStaleImportStaging", () => {
     );
   });
 
+  it("keeps what a queued or running import still owns, whatever its age", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "healthlog-sweep-"));
+    const uuid = "0b7f3c2a-1d4e-4f5a-9b8c-7d6e5f4a3b2c";
+    const queued = `healthlog-apple-health-import-${uuid}.bin`;
+    const orphan = `healthlog-upload-${uuid}.bin`;
+    const xml = `healthlog-import-${"cd".repeat(12)}.xml`;
+    const now = Date.now();
+    const old = new Date(now - STAGING_MAX_AGE_MS - 60_000);
+    for (const name of [queued, orphan, xml]) {
+      writeFileSync(join(dir, name), "x");
+      utimesSync(join(dir, name), old, old);
+    }
+
+    expect(
+      await sweepStaleImportStaging(dir, now, {
+        paths: new Set([join(dir, queued)]),
+        xmlInUse: true,
+      }),
+    ).toBe(1);
+    expect(readdirSync(dir).sort()).toEqual([queued, xml].sort());
+  });
+
   it("answers zero for a directory that is not there", async () => {
     expect(await sweepStaleImportStaging("/nonexistent/healthlog")).toBe(0);
   });

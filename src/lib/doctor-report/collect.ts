@@ -61,7 +61,7 @@ import { loadDenseMeasurementBuckets } from "./dense-buckets";
 import { summariseDenseBuckets } from "./measurement-series";
 import { emptyGlucoseClinical } from "./glucose-panel";
 import { buildAdministrationLedger, buildGlp1Block } from "./medications";
-import { validTimezoneOr, DEFAULT_TIMEZONE } from "@/lib/tz/format";
+import { userDayKey, validTimezoneOr, DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import {
   loadAllergies,
   loadAnamnesis,
@@ -148,6 +148,12 @@ export async function collectDoctorReportData(
     },
   });
   const reportTz = validTimezoneOr(userProfile?.timezone, DEFAULT_TIMEZONE);
+  // `startsOn` / `endsOn` are calendar dates (stored as UTC midnight), so
+  // they compare against the window's first and last day in the report zone,
+  // not its instants: west of UTC the window starts hours after UTC midnight,
+  // and a course that ended on the first day read as over before it began.
+  const firstDay = new Date(`${userDayKey(start, reportTz)}T00:00:00.000Z`);
+  const lastDay = new Date(`${userDayKey(end, reportTz)}T00:00:00.000Z`);
 
   const aggregateDenseTypes = days > DENSE_REPORT_RAW_WINDOW_DAYS;
   const densePulse = aggregateDenseTypes && !excluded.includes("PULSE");
@@ -202,7 +208,7 @@ export async function collectDoctorReportData(
               AND: [
                 {
                   OR: [
-                    { startsOn: { lte: end } },
+                    { startsOn: { lte: lastDay } },
                     { startsOn: null, createdAt: { lte: end } },
                     {
                       intakeEvents: {
@@ -214,7 +220,7 @@ export async function collectDoctorReportData(
                     },
                   ],
                 },
-                { OR: [{ endsOn: null }, { endsOn: { gte: start } }] },
+                { OR: [{ endsOn: null }, { endsOn: { gte: firstDay } }] },
               ],
             },
             include: {

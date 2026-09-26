@@ -213,7 +213,33 @@ describe("readBestGranularityRollups", () => {
   it("returns null when the window holds no buckets", async () => {
     const result = await readBestGranularityRollups("user", "WEIGHT", 1095);
     expect(result).toBeNull();
-    expect(queryRaw).toHaveBeenCalledTimes(1);
+    // YEAR, MONTH and WEEK folds, then the DAY tier.
+    expect(queryRaw).toHaveBeenCalledTimes(3);
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("steps one tier finer when the data sits only in the leading partial bucket", async () => {
+    // A 731-day window on 2026-09-26 starts 2024-09-25. October to December
+    // 2024 fold into the YEAR bucket 2024-01-01, which starts before the
+    // window and is left out; the MONTH tier starts inside it.
+    vi.setSystemTime(new Date("2026-09-26T12:00:00.000Z"));
+    const readings: Array<[string, number]> = [
+      ["2024-10-05", 80],
+      ["2024-11-05", 81],
+      ["2024-12-05", 82],
+    ];
+    queryRaw
+      .mockResolvedValueOnce([folded("2024-01-01T00:00:00.000Z", readings)])
+      .mockResolvedValueOnce(
+        readings.map(([day, value]) =>
+          folded(`${day.slice(0, 7)}-01T00:00:00.000Z`, [[day, value]]),
+        ),
+      );
+    const result = await readBestGranularityRollups("user", "WEIGHT", 731);
+    expect(result?.granularity).toBe("MONTH");
+    expect(result?.rows.map((r) => r.mean)).toEqual([80, 81, 82]);
+    expect(sqlOf(queryRaw.mock.calls[0])).toContain("'year'");
+    expect(sqlOf(queryRaw.mock.calls[1])).toContain("'month'");
   });
 
   it("composes a coarse bucket's mean, spread and slope from its days", async () => {

@@ -8085,7 +8085,8 @@
     "bodyToday": "Dein Vorrat an {medName} reicht keinen ganzen Tag mehr ({units} Einheiten übrig).",
     "bodyReorder": "Dein Vorrat an {medName} ({units} Einheiten) ist um den {runsOutOn} aufgebraucht — bestelle bis zum {reorderBy} nach.",
     "bodyLastDose": "Dein Vorrat an {medName} ({units} Einheiten) reicht noch etwa für die letzte Dosis. Aufgebraucht um den {runsOutOn}.",
-    "bodyExpired": "{medName}: kein nutzbarer Bestand mehr. {units} Einheiten sind als abgelaufen markiert."
+    "bodyExpired": "{medName}: kein nutzbarer Bestand mehr. {units} Einheiten sind als abgelaufen markiert.",
+    "bodyAsNeeded": "Von {medName} sind nur noch {units} Einheiten übrig. Bestelle nach, bevor du die nächste Dosis brauchst."
   },
   "moodReminders": {
     "dailyTitle": "Stimmung erfassen",

@@ -53,6 +53,12 @@
  *
  * Inactive / paused medications are skipped: nothing consumes their
  * stock, so their runway is not falling.
+ *
+ * As-needed (PRN) medications have no cadence and so no runway in days.
+ * Once the runway math stopped counting a PRN schedule as a daily dose,
+ * a medication taken only as needed never warned at all. It now warns on
+ * an absolute floor instead: `AS_NEEDED_LOW_STOCK_DOSES` doses or fewer
+ * left, once per crossing, with the same stamp and re-arm rule.
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import {
@@ -89,6 +95,12 @@ export const MEDICATION_LOW_STOCK_QUEUE = "medication-low-stock";
  */
 export const MEDICATION_LOW_STOCK_CRON = "0 9 * * *";
 
+/**
+ * An as-needed medication warns when this many doses or fewer are left: no
+ * cadence says how many days that is, so the floor is a dose count.
+ */
+export const AS_NEEDED_LOW_STOCK_DOSES = 2;
+
 export interface MedicationLowStockSummary {
   usersScanned: number;
   skippedThresholdOff: number;
@@ -114,6 +126,11 @@ export interface LowStockEvaluation {
    * able to tell them apart.
    */
   expiredUnits: number;
+  /**
+   * Taken only as needed: no schedule consumes on a cadence, and at least
+   * one is PRN. Such a medication warns on the dose floor, not on days.
+   */
+  asNeeded: boolean;
 }
 
 /**
@@ -156,6 +173,7 @@ export function evaluateMedicationRunway(
       dosesRemaining: supply.dosesRemaining,
       unitsRemaining: supply.unitsRemaining,
       expiredUnits: supply.expiredUnits,
+      asNeeded: schedules.some((sched) => sched.scheduleType === "PRN"),
     };
   }
   const runwayDays =
@@ -167,6 +185,7 @@ export function evaluateMedicationRunway(
     dosesRemaining: supply.dosesRemaining,
     unitsRemaining: supply.unitsRemaining,
     expiredUnits: supply.expiredUnits,
+    asNeeded: false,
   };
 }
 
@@ -249,9 +268,24 @@ export function buildLowStockPayload(input: {
   triggerDays: number;
   schedules: RunwaySchedule[];
   today: Date;
+  /** Taken as needed: no dates to name, only what is left. */
+  asNeeded?: boolean;
 }): { title: string; body: string } {
   const t = getServerTranslator(coerceLocale(input.locale)).t;
   const title = t("lowStockReminders.title", { medName: input.medName });
+
+  if (
+    input.asNeeded &&
+    !(input.unitsRemaining <= 0 && input.expiredUnits > 0)
+  ) {
+    return {
+      title,
+      body: t("lowStockReminders.bodyAsNeeded", {
+        medName: input.medName,
+        units: input.unitsRemaining,
+      }),
+    };
+  }
 
   if (input.runwayDays < 1) {
     // Nothing usable left. Whether that means the packs are empty or
@@ -464,14 +498,21 @@ export async function runMedicationLowStockTick(
           user.notificationPrefs,
           med.reorderLeadDays,
         );
-        const triggerDays = lowStockTriggerDays({
-          lowStockRunwayDays: thresholdDays,
-          leadDays,
-          schedules: runwaySchedules,
-        });
+        // An as-needed medication has no runway in days: it crosses on the
+        // dose floor, and the same stamp records that floor.
+        const asNeeded = evaluation.runwayDays === null && evaluation.asNeeded;
+        const triggerDays = asNeeded
+          ? AS_NEEDED_LOW_STOCK_DOSES
+          : lowStockTriggerDays({
+              lowStockRunwayDays: thresholdDays,
+              leadDays,
+              schedules: runwaySchedules,
+            });
 
         const decision = decideLowStockAction({
-          runwayDays: evaluation.runwayDays,
+          runwayDays: asNeeded
+            ? evaluation.dosesRemaining
+            : evaluation.runwayDays,
           triggerDays,
           notifiedAt: med.lowStockNotifiedAt,
           notifiedThresholdDays: med.lowStockNotifiedThresholdDays,
@@ -522,6 +563,7 @@ export async function runMedicationLowStockTick(
               triggerDays,
               schedules: runwaySchedules,
               today: now,
+              asNeeded,
             });
             const renderForRecipient = (locale: Locale) => {
               const rendered = buildLowStockPayload({
@@ -534,6 +576,7 @@ export async function runMedicationLowStockTick(
                 triggerDays,
                 schedules: runwaySchedules,
                 today: now,
+                asNeeded,
               });
               return { title: rendered.title, message: rendered.body };
             };
@@ -550,7 +593,10 @@ export async function runMedicationLowStockTick(
                 thresholdDays,
                 // v1.17.0 — the effective trigger + reorder lead so the
                 // client can render the same dates the push body names.
-                triggerDays,
+                // An as-needed medication has no trigger in days; it
+                // crossed the dose floor instead.
+                triggerDays: asNeeded ? null : triggerDays,
+                asNeeded,
                 leadDays,
                 unitsRemaining: evaluation.unitsRemaining,
                 dosesRemaining: evaluation.dosesRemaining,

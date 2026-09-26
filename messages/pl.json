@@ -8085,7 +8085,8 @@
     "bodyToday": "{medName}: pozostało {units} jednostek — mniej niż jeden dzień zapasu.",
     "bodyReorder": "{medName}: pozostało {units} jednostek. Zapas skończy się około {runsOutOn} — zamów ponownie do {reorderBy}.",
     "bodyLastDose": "{medName}: pozostało {units} jednostek — to mniej więcej Twoja ostatnia dawka. Zapas skończy się około {runsOutOn}.",
-    "bodyExpired": "{medName}: brak zapasu do użycia. {units} jednostek oznaczono jako przeterminowane."
+    "bodyExpired": "{medName}: brak zapasu do użycia. {units} jednostek oznaczono jako przeterminowane.",
+    "bodyAsNeeded": "{medName}: zostało tylko {units} jednostek. Zamów ponownie, zanim będziesz potrzebować kolejnej dawki."
   },
   "moodReminders": {
     "dailyTitle": "Zapisz nastrój",

@@ -138,4 +138,46 @@ describe("doctor report with a fixed end date", () => {
     expect(glp1?.currentDose?.value).toBe(0.25);
     expect(glp1?.lastInjection?.date).toBe("2026-03-20T08:05:00.000Z");
   });
+  it("compares a course's start and end dates as days in the report zone", async () => {
+    // West of UTC the window's instants sit hours after UTC midnight, and the
+    // course dates are calendar days stored as UTC midnight.
+    const prisma = getPrismaClient();
+    const user = await prisma.user.create({
+      data: {
+        username: "west-window",
+        email: "west-window@example.test",
+        timezone: "America/New_York",
+      },
+    });
+    const course = (name: string, startsOn: string, endsOn: string | null) =>
+      prisma.medication.create({
+        data: {
+          userId: user.id,
+          name,
+          dose: "1 mg",
+          startsOn: new Date(`${startsOn}T00:00:00.000Z`),
+          endsOn: endsOn ? new Date(`${endsOn}T00:00:00.000Z`) : null,
+          createdAt: new Date("2025-06-01T00:00:00.000Z"),
+        },
+      });
+    await course("Ended on the first day", "2025-10-01", "2026-01-01");
+    await course("Ended the day before", "2025-10-01", "2025-12-31");
+    await course("Started on the last day", "2026-03-31", null);
+    await course("Started the day after", "2026-04-01", null);
+
+    const data = await collectDoctorReportData(
+      user.id,
+      {
+        start: new Date("2026-01-01T05:00:00.000Z"),
+        end: new Date("2026-04-01T03:59:59.999Z"),
+        days: 90,
+      },
+      selectionFromLeaves(ALL_LEAF_IDS),
+    );
+
+    expect(data.medications?.map((m) => m.name).sort()).toEqual([
+      "Ended on the first day",
+      "Started on the last day",
+    ]);
+  });
 });

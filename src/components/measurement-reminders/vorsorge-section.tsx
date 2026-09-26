@@ -181,11 +181,13 @@ function toDateInputValue(iso: string | null): string {
   return new Date(d.getTime() - offset * 60 * 1000).toISOString().slice(0, 10);
 }
 
-/** `<input type="date">` value → an ISO instant at local midnight, or null. */
+/**
+ * `<input type="date">` value → the calendar date itself, or null. The server
+ * reads a bare date as that day in the profile's zone, so a browser set to
+ * another zone cannot move the first-due day.
+ */
 function fromDateInputValue(value: string): string | null {
-  if (!value) return null;
-  const d = new Date(`${value}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 }
 
 interface FormState {

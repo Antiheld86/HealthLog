@@ -8085,7 +8085,8 @@
     "bodyToday": "{medName}: quedan {units} unidades — menos de un día de suministro.",
     "bodyReorder": "{medName}: quedan {units} unidades. Las existencias se agotan hacia el {runsOutOn} — vuelve a pedir antes del {reorderBy}.",
     "bodyLastDose": "{medName}: quedan {units} unidades — alrededor de tu última dosis. Las existencias se agotan hacia el {runsOutOn}.",
-    "bodyExpired": "{medName}: no quedan existencias utilizables. {units} unidades están marcadas como caducadas."
+    "bodyExpired": "{medName}: no quedan existencias utilizables. {units} unidades están marcadas como caducadas.",
+    "bodyAsNeeded": "{medName}: solo quedan {units} unidades. Vuelve a pedir antes de necesitar la próxima dosis."
   },
   "moodReminders": {
     "dailyTitle": "Registrar el ánimo",
