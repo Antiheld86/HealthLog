@@ -11,9 +11,13 @@
  *
  * Guarantees enforced here:
  * - **TTL** (~5 min) — `expiresAt`; an expired ticket is never loadable.
- * - **Attempt cap** — `attempts` is incremented on every wrong factor and
- *   the ticket is burned (`consumedAt` set) once the cap is hit, forcing a
- *   fresh password login (NIST throttle, not an account lock).
+ * - **Attempt cap** — every verification first RESERVES an attempt with one
+ *   guarded UPDATE (`attempts < cap` in the WHERE), so the cap bounds the
+ *   number of guesses even when they arrive concurrently. It used to be a
+ *   read, a verification, then an increment: parallel requests all read the
+ *   same count below the cap and every one of them got to guess. A failed
+ *   verification then burns the ticket (`consumedAt` set) once the cap is
+ *   hit, forcing a fresh password login (NIST throttle, not an account lock).
  * - **Claim-once** — consuming a ticket is an atomic guarded update
  *   (`consumedAt: null` in the WHERE), so two concurrent verifications can
  *   never both succeed and mint two sessions. The factor is verified first;
@@ -96,26 +100,50 @@ export async function loadActiveChallenge(
 }
 
 /**
- * Record a failed factor attempt. Increments `attempts`; when the cap is
- * reached the ticket is burned (`consumedAt` set) so it cannot be retried.
- * Returns whether the ticket is now exhausted.
+ * Reserve one verification attempt against the ticket. Must run BEFORE the
+ * factor is checked. The increment and the cap check are one conditional
+ * UPDATE, so of any number of concurrent callers at most
+ * `MFA_CHALLENGE_ATTEMPT_CAP` in total ever get `true`. A `false` means the
+ * ticket is spent, expired or out of attempts, and the caller answers with the
+ * same generic refusal as an unknown ticket.
+ */
+export async function reserveChallengeAttempt(
+  challengeId: string,
+): Promise<boolean> {
+  const reserved = await prisma.mfaChallenge.updateMany({
+    where: {
+      id: challengeId,
+      consumedAt: null,
+      attempts: { lt: MFA_CHALLENGE_ATTEMPT_CAP },
+      expiresAt: { gt: new Date() },
+    },
+    data: { attempts: { increment: 1 } },
+  });
+  return reserved.count === 1;
+}
+
+/**
+ * Settle a failed attempt that `reserveChallengeAttempt` already counted.
+ * Does not increment again; when the reserved count has reached the cap the
+ * ticket is burned (`consumedAt` set) so it cannot be retried. Returns whether
+ * the ticket is now exhausted.
  */
 export async function recordChallengeFailure(
   challengeId: string,
 ): Promise<{ exhausted: boolean; attempts: number }> {
-  const updated = await prisma.mfaChallenge.update({
+  const row = await prisma.mfaChallenge.findUnique({
     where: { id: challengeId },
-    data: { attempts: { increment: 1 } },
     select: { attempts: true },
   });
-  const exhausted = updated.attempts >= MFA_CHALLENGE_ATTEMPT_CAP;
+  const attempts = row?.attempts ?? MFA_CHALLENGE_ATTEMPT_CAP;
+  const exhausted = attempts >= MFA_CHALLENGE_ATTEMPT_CAP;
   if (exhausted) {
     await prisma.mfaChallenge.updateMany({
       where: { id: challengeId, consumedAt: null },
       data: { consumedAt: new Date() },
     });
   }
-  return { exhausted, attempts: updated.attempts };
+  return { exhausted, attempts };
 }
 
 /**

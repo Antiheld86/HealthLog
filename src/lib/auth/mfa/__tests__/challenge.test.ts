@@ -21,6 +21,7 @@ import {
   createMfaChallenge,
   loadActiveChallenge,
   recordChallengeFailure,
+  reserveChallengeAttempt,
   claimChallenge,
   MFA_CHALLENGE_ATTEMPT_CAP,
 } from "../challenge";
@@ -91,8 +92,41 @@ describe("mfa challenge", () => {
     expect(await loadActiveChallenge("nope")).toBeNull();
   });
 
+  it("reserves an attempt with one guarded update bounded by the cap", async () => {
+    vi.mocked(prisma.mfaChallenge.updateMany).mockResolvedValue({
+      count: 1,
+    } as never);
+    expect(await reserveChallengeAttempt("ch-1")).toBe(true);
+    expect(prisma.mfaChallenge.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "ch-1",
+        consumedAt: null,
+        attempts: { lt: MFA_CHALLENGE_ATTEMPT_CAP },
+        expiresAt: { gt: expect.any(Date) },
+      },
+      data: { attempts: { increment: 1 } },
+    });
+    // No separate read decides the cap — the WHERE is the whole check.
+    expect(prisma.mfaChallenge.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("refuses the reservation once the guarded update matches nothing", async () => {
+    vi.mocked(prisma.mfaChallenge.updateMany).mockResolvedValue({
+      count: 0,
+    } as never);
+    expect(await reserveChallengeAttempt("ch-1")).toBe(false);
+  });
+
+  it("settling a failure does not count the attempt a second time", async () => {
+    vi.mocked(prisma.mfaChallenge.findUnique).mockResolvedValue({
+      attempts: 2,
+    } as never);
+    await recordChallengeFailure("ch-1");
+    expect(prisma.mfaChallenge.update).not.toHaveBeenCalled();
+  });
+
   it("burns the ticket when the attempt cap is reached", async () => {
-    vi.mocked(prisma.mfaChallenge.update).mockResolvedValue({
+    vi.mocked(prisma.mfaChallenge.findUnique).mockResolvedValue({
       attempts: MFA_CHALLENGE_ATTEMPT_CAP,
     } as never);
     vi.mocked(prisma.mfaChallenge.updateMany).mockResolvedValue({
@@ -108,7 +142,7 @@ describe("mfa challenge", () => {
   });
 
   it("does not burn below the attempt cap", async () => {
-    vi.mocked(prisma.mfaChallenge.update).mockResolvedValue({
+    vi.mocked(prisma.mfaChallenge.findUnique).mockResolvedValue({
       attempts: 1,
     } as never);
     const res = await recordChallengeFailure("ch-1");
