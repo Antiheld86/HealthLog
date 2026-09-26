@@ -71,6 +71,7 @@ function restoredCount(job: BackupRestoreJobView): number {
 function failureText(
   code: BackupRestoreFailureCode,
   t: ReturnType<typeof useTranslations>["t"],
+  keyIds: readonly string[] = [],
 ): string {
   switch (code) {
     case "backup_not_found":
@@ -91,6 +92,12 @@ function failureText(
       return t("admin.section.backups.restoreFailureSectionMissing");
     case "document_ciphertext_missing":
       return t("admin.section.backups.restoreFailureDocument");
+    case "backup.key.missing":
+      return t("admin.section.backups.restoreFailureKeyMissing", {
+        keys: keyIds.join(", "),
+      });
+    case "backup.foreign_reference":
+      return t("admin.section.backups.restoreFailureForeignReference");
     case "time_budget":
       return t("admin.section.backups.restoreFailureTimeBudget");
     case "transaction_failed":
@@ -289,7 +296,9 @@ export function RestoreJobStatus({
             <p className="font-medium">
               {t("admin.section.backups.restoreJobFailedTitle", { username })}
             </p>
-            <p className="text-xs">{failureText(code, t)}</p>
+            <p className="text-xs">
+              {failureText(code, t, job.failure?.keyIds)}
+            </p>
             {changedNothing ? (
               <p className="text-muted-foreground mt-1 text-xs">
                 {t("admin.section.backups.restoreJobFailedKept")}

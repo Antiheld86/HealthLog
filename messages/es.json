@@ -6590,7 +6590,7 @@
       "delete": {
         "title": "Eliminar o restablecer",
         "description": "Elimina tu cuenta por completo o borra tus registros de salud conservando la cuenta.",
-        "backupLag": "La eliminación borra tus datos de inmediato. Las copias de seguridad cifradas externas aún los contienen hasta que caduquen según la ventana de retención del operador.",
+        "backupLag": "La eliminación borra tus datos de inmediato. Si este servidor guarda copias de seguridad cifradas externas, las copias de tus datos se borran de ese almacenamiento justo después, o en la siguiente ejecución nocturna si no está disponible.",
         "openAdvanced": "Eliminar o restablecer"
       },
       "posture": {
@@ -7323,7 +7323,12 @@
           "neverDetail": "No ha llegado nada para esta cuenta. Última comprobación {when}.",
           "unknownDetail": "Ninguna ejecución nocturna ha registrado esta cuenta todavía.",
           "age": "hace {hours} h",
-          "scheduleNote": "La subida se ejecuta cada {hours} h. Reciente significa dentro de una ejecución, pendiente que una no produjo nada, obsoleta que fueron dos."
+          "scheduleNote": "La subida se ejecuta cada {hours} h. Reciente significa dentro de una ejecución, pendiente que una no produjo nada, obsoleta que fueron dos.",
+          "lifecycleConfigured": "El bucket borra las copias a los {days} días con su propia regla de ciclo de vida.",
+          "lifecycleMissing": "El bucket no tiene regla de ciclo de vida, así que cada copia nocturna se guarda para siempre. Añade una regla que caduque los objetos tras BACKUP_RETENTION_DAYS.",
+          "lifecycleUnknown": "No se pudo leer si el bucket borra las copias antiguas: la credencial no puede leer su regla de ciclo de vida. Comprueba que una regla caduque los objetos tras BACKUP_RETENTION_DAYS.",
+          "pendingDeletions": "Aún quedan en el bucket copias de {count} cuentas eliminadas o vaciadas, y se están borrando.",
+          "pendingDeletionsFailing": "Aún quedan en el bucket copias de {count} cuentas eliminadas o vaciadas porque rechazó borrarlas ({error}). Da a la credencial el permiso DeleteObject; el borrado se reintenta cada noche."
         },
         "restoreStarted": "Restauración iniciada. Su progreso aparece encima de la lista.",
         "restoreActive": "Ya hay una restauración en curso para esta cuenta. Espera a que termine.",
@@ -7356,7 +7361,10 @@
         "restoreFailureNotStarted": "El proceso en segundo plano no recogió la restauración. Comprueba que está en marcha.",
         "restoreFailureEnqueue": "No se pudo entregar la restauración al proceso en segundo plano. Comprueba que está en marcha.",
         "restoreFailureAfterCommit": "Los datos se restauraron, pero falló un paso posterior. Puede que los gráficos no se pongan al día hasta la próxima ejecución nocturna.",
-        "restoreFailureUnexpected": "La restauración se detuvo por un error inesperado y se deshizo. El registro del servidor indica el error."
+        "restoreFailureUnexpected": "La restauración se detuvo por un error inesperado y se deshizo. El registro del servidor indica el error.",
+        "restoreFailureKeyMissing": "La copia necesita la clave de cifrado {keys}, con la que este servidor no puede abrirla. Vuelve a añadir la clave a ENCRYPTION_KEYS, reinicia e inicia de nuevo la restauración.",
+        "restoreFailureForeignReference": "El archivo apunta a registros que pertenecen a otra cuenta. No se escribió nada.",
+        "previewKeyMissing": "Esta copia no se puede restaurar en este servidor: necesita la clave de cifrado {keys}. Vuelve a añadir la clave a ENCRYPTION_KEYS y reinicia primero."
       },
       "danger-zone": {
         "title": "Zona de peligro",
@@ -7408,7 +7416,17 @@
           "completed": "Completado",
           "failed": "Fallido"
         },
-        "coverageDetail": "Solo se muestran los id de clave y los recuentos, nunca el material de la clave."
+        "coverageDetail": "Solo se muestran los id de clave y los recuentos, nunca el material de la clave.",
+        "backupsTitle": "Claves que las copias aún necesitan",
+        "backupsDescription": "Una clave retirada sigue siendo necesaria mientras alguna copia de abajo la indique.",
+        "backupsStoredLine": "Clave {key}: {count} copias guardadas, la más antigua del {when}",
+        "backupsUnrecordedLine": "{count} copias guardadas se escribieron antes de que las copias registraran sus claves (la más antigua el {when}). Pueden necesitar cualquier clave que existiera entonces: conserva todas las claves antiguas hasta que se sustituyan o borren.",
+        "backupsOffhostLine": "Clave {key}: la última copia externa que la necesita entró en el bucket el {when}; necesaria allí hasta el {until}",
+        "backupsOffhostLineUnknown": "Clave {key}: la última copia externa que la necesita entró en el bucket el {when}. No se sabe cuándo caducan las copias en el bucket, así que conserva la clave hasta saber que esa copia ya no está.",
+        "backupsNone": "Ninguna copia ha registrado todavía las claves que necesita.",
+        "backupsStillNeed": "Todas las filas están rotadas, pero las copias aún necesitan {keys}",
+        "backupsUnrecordedBadge": "Todas las filas están rotadas, pero copias antiguas pueden necesitar aún una clave retirada",
+        "backupsDetail": "La rotación vuelve a cifrar cada fila, pero una copia conserva la clave con la que se escribió su contenido, y restaurarla necesita esa clave. Mantén una clave retirada en ENCRYPTION_KEYS hasta que no aparezca abajo."
       }
     },
     "carrier": "Operador",

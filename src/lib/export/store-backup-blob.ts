@@ -34,6 +34,7 @@ import {
   type BackupJsonProducer,
   type PackBackupOptions,
 } from "@/lib/export/backup-blob";
+import { createBackupKeyIdTextScanner } from "@/lib/export/backup-key-ids";
 import {
   BackupIntegrityError,
   newChunkStreamId,
@@ -112,6 +113,11 @@ export async function storeBackupBlob(
       await tx.dataBackupChunk.deleteMany({ where: { backupId: row.id } });
 
       const streamId = newChunkStreamId();
+      // The key ids the copy's content was written under, read from the JSON
+      // on its way into the pieces. Rotation re-seals the pieces but never
+      // what is inside them, so this is what tells an operator how long a
+      // retired key is still needed (`GET /api/admin/encryption/status`).
+      const keyScanner = createBackupKeyIdTextScanner();
       const { chunks, bytes } = await packBackupChunks(
         async (sealed, seq) => {
           await tx.dataBackupChunk.create({
@@ -120,7 +126,11 @@ export async function storeBackupBlob(
           });
         },
         streamId,
-        producer,
+        (write) =>
+          producer(async (chunk) => {
+            keyScanner.feed(chunk);
+            await write(chunk);
+          }),
         options,
       );
 
@@ -135,6 +145,8 @@ export async function storeBackupBlob(
           ...(input.ownerAfterRead ? { userId: input.ownerAfterRead() } : {}),
           chunkCount: chunks,
           chunkStreamId: streamId,
+          innerKeyIds: keyScanner.keyIds(),
+          innerKeyIdsRecorded: true,
           createdAt: new Date(),
         },
       });

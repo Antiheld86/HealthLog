@@ -58,6 +58,25 @@ export interface OffhostBackupOverview {
   periodHours: number;
   /** One row per account. Empty when off-host backup is not configured. */
   rows: OffhostAccountRow[];
+  /**
+   * Deleted or wiped accounts whose copies are still in the bucket. A count
+   * above zero with an error means the bucket refused the deletion (most
+   * often a credential without DeleteObject); the job retries nightly.
+   */
+  pendingDeletions: {
+    count: number;
+    oldestRequestedAt: string | null;
+    lastFailure: string | null;
+  };
+  /**
+   * Whether the bucket retires old copies by itself. Read from the bucket
+   * (`GetBucketLifecycleConfiguration`), cached for ten minutes; `unknown`
+   * when the credential may not read it.
+   */
+  lifecycle: {
+    state: "configured" | "missing" | "unknown";
+    expirationDays: number | null;
+  };
 }
 
 export interface BackupsList {

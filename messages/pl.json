@@ -6590,7 +6590,7 @@
       "delete": {
         "title": "Usuń lub zresetuj",
         "description": "Usuń całe konto albo wyczyść dane zdrowotne, zachowując konto.",
-        "backupLag": "Usunięcie natychmiast usuwa Twoje dane. Zaszyfrowane kopie zapasowe poza serwerem nadal je zawierają, dopóki nie wygasną zgodnie z oknem retencji operatora.",
+        "backupLag": "Usunięcie natychmiast usuwa Twoje dane. Jeśli ten serwer przechowuje zaszyfrowane kopie zapasowe poza serwerem, kopie Twoich danych są usuwane z tego magazynu zaraz potem, a jeśli jest niedostępny, przy następnym nocnym przebiegu.",
         "openAdvanced": "Usuń lub zresetuj"
       },
       "posture": {
@@ -7323,7 +7323,12 @@
           "neverDetail": "Dla tego konta nic nie dotarło. Ostatnie sprawdzenie {when}.",
           "unknownDetail": "Żaden nocny przebieg nie zarejestrował jeszcze tego konta.",
           "age": "{hours} h temu",
-          "scheduleNote": "Wysyłka działa co {hours} h. Świeża znaczy w obrębie jednego przebiegu, zaległa że jeden nic nie dał, przeterminowana że dwa."
+          "scheduleNote": "Wysyłka działa co {hours} h. Świeża znaczy w obrębie jednego przebiegu, zaległa że jeden nic nie dał, przeterminowana że dwa.",
+          "lifecycleConfigured": "Bucket usuwa kopie po {days} dniach zgodnie z własną regułą cyklu życia.",
+          "lifecycleMissing": "Bucket nie ma reguły cyklu życia, więc każda nocna kopia zostaje na zawsze. Dodaj regułę, która usuwa obiekty po BACKUP_RETENTION_DAYS.",
+          "lifecycleUnknown": "Nie udało się odczytać, czy bucket usuwa stare kopie: poświadczenia nie mogą odczytać jego reguły cyklu życia. Sprawdź, czy reguła usuwa obiekty po BACKUP_RETENTION_DAYS.",
+          "pendingDeletions": "Kopie {count} usuniętych lub wyczyszczonych kont są jeszcze w buckecie i są usuwane.",
+          "pendingDeletionsFailing": "Kopie {count} usuniętych lub wyczyszczonych kont są jeszcze w buckecie, bo odmówił ich usunięcia ({error}). Nadaj poświadczeniom uprawnienie DeleteObject; usuwanie jest ponawiane co noc."
         },
         "restoreStarted": "Przywracanie rozpoczęte. Postęp widać nad listą.",
         "restoreActive": "Dla tego konta trwa już przywracanie. Poczekaj, aż się skończy.",
@@ -7356,7 +7361,10 @@
         "restoreFailureNotStarted": "Proces w tle nie przejął przywracania. Sprawdź, czy działa.",
         "restoreFailureEnqueue": "Nie udało się przekazać przywracania do procesu w tle. Sprawdź, czy działa.",
         "restoreFailureAfterCommit": "Dane zostały przywrócone, ale krok po nich się nie powiódł. Wykresy mogą nadrobić to dopiero przy następnym nocnym przebiegu.",
-        "restoreFailureUnexpected": "Przywracanie zatrzymało się na nieoczekiwanym błędzie i zostało wycofane. Dziennik serwera podaje błąd."
+        "restoreFailureUnexpected": "Przywracanie zatrzymało się na nieoczekiwanym błędzie i zostało wycofane. Dziennik serwera podaje błąd.",
+        "restoreFailureKeyMissing": "Kopia wymaga klucza szyfrowania {keys}, którym ten serwer nie może jej otworzyć. Dodaj klucz z powrotem do ENCRYPTION_KEYS, uruchom ponownie i rozpocznij przywracanie jeszcze raz.",
+        "restoreFailureForeignReference": "Plik wskazuje na wpisy należące do innego konta. Nic nie zostało zapisane.",
+        "previewKeyMissing": "Tej kopii nie da się przywrócić na tym serwerze: wymaga klucza szyfrowania {keys}. Najpierw dodaj klucz z powrotem do ENCRYPTION_KEYS i uruchom ponownie."
       },
       "danger-zone": {
         "title": "Strefa zagrożenia",
@@ -7408,7 +7416,17 @@
           "completed": "Zakończono",
           "failed": "Niepowodzenie"
         },
-        "coverageDetail": "Pokazywane są tylko identyfikatory kluczy i liczby — nigdy materiał klucza."
+        "coverageDetail": "Pokazywane są tylko identyfikatory kluczy i liczby — nigdy materiał klucza.",
+        "backupsTitle": "Klucze, których kopie nadal potrzebują",
+        "backupsDescription": "Wycofany klucz jest potrzebny, dopóki którakolwiek kopia poniżej go wymienia.",
+        "backupsStoredLine": "Klucz {key}: {count} zapisanych kopii, najstarsza z {when}",
+        "backupsUnrecordedLine": "{count} zapisanych kopii powstało, zanim kopie zaczęły zapisywać swoje klucze (najstarsza {when}). Mogą potrzebować każdego klucza, który wtedy istniał: zachowaj wszystkie stare klucze, dopóki nie zostaną zastąpione lub usunięte.",
+        "backupsOffhostLine": "Klucz {key}: ostatnia kopia zewnętrzna, która go potrzebuje, trafiła do bucketu {when}; potrzebny tam do {until}",
+        "backupsOffhostLineUnknown": "Klucz {key}: ostatnia kopia zewnętrzna, która go potrzebuje, trafiła do bucketu {when}. Nie wiadomo, jak długo bucket przechowuje kopie, więc zachowaj klucz, dopóki nie masz pewności, że tej kopii już nie ma.",
+        "backupsNone": "Żadna kopia nie zapisała jeszcze kluczy, których potrzebuje.",
+        "backupsStillNeed": "Wszystkie wiersze są zrotowane, ale kopie nadal potrzebują {keys}",
+        "backupsUnrecordedBadge": "Wszystkie wiersze są zrotowane, ale starsze kopie mogą nadal potrzebować wycofanego klucza",
+        "backupsDetail": "Rotacja ponownie szyfruje każdy wiersz, ale kopia zachowuje klucz, którym zapisano jej zawartość, a jej przywrócenie wymaga tego klucza. Trzymaj wycofany klucz w ENCRYPTION_KEYS, dopóki widnieje poniżej."
       }
     },
     "carrier": "Operator",

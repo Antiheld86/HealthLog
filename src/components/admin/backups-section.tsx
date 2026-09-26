@@ -238,11 +238,23 @@ function RestoreRowDialog({
               {t("admin.section.backups.previewLoading")}
             </p>
           )}
-          {preview.isError && (
-            <p className="text-muted-foreground">
-              {t("admin.section.backups.previewUnavailable")}
-            </p>
-          )}
+          {preview.isError &&
+            (preview.error instanceof ApiError &&
+            preview.error.meta?.errorCode === "backup.key.missing" ? (
+              // The one preview failure the restore would repeat: say which
+              // key, so the operator can put it back before trying.
+              <p role="alert" className="text-destructive">
+                {t("admin.section.backups.previewKeyMissing", {
+                  keys: Array.isArray(preview.error.meta.keyIds)
+                    ? preview.error.meta.keyIds.map(String).join(", ")
+                    : "",
+                })}
+              </p>
+            ) : (
+              <p className="text-muted-foreground">
+                {t("admin.section.backups.previewUnavailable")}
+              </p>
+            ))}
           {preview.isSuccess && (
             <ul className="grid list-none grid-cols-1 gap-x-4 gap-y-0.5 p-0 sm:grid-cols-2">
               {previewRows.map((entry) => (

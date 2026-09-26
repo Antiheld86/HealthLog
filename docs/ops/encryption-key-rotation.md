@@ -118,14 +118,34 @@ under `v1` (the synthetic id assigned to the existing `ENCRYPTION_KEY`).
    Restart. The legacy single-key fallback is now disconnected; only `v2`
    exists.
 
-> **Backups are covered, and were not always.** `DataBackup.data` holds every
-> weekly disaster-recovery snapshot and every uploaded pack, encrypted like
-> everything else but under a column called `data`. It was outside the
-> registry until v1.38.6, so a rotation before that release reported zero
-> rows remaining without ever reading a backup. If you rotated on an older
-> release and dropped the previous key, the stored backups are encrypted
-> under the key you removed: put that key back into `ENCRYPTION_KEYS` and
-> re-run the rotation on this release before removing it again.
+> **The rows in the database are covered. The content of a backup is not.**
+> Rotation re-encrypts every registered column, including `DataBackup.data`
+> and the pieces in `DataBackupChunk`, so every stored copy opens under the
+> new key. What it cannot change is what a disaster-recovery backup carries
+> inside: the database's ciphertext as it was stored when the copy was taken,
+> which a restore writes back verbatim. A copy taken before the rotation still
+> needs the old key for its notes, documents and coach history, and so does
+> every copy in the off-host bucket and every backup file you downloaded.
+>
+> So before step 4, also check **Admin → Encryption → Keys the backups still
+> need**. It lists, per key id, the stored copies that need it with the oldest
+> date, and when the last off-host copy needing it expires under the bucket's
+> lifecycle rule. Keep the old key in `ENCRYPTION_KEYS` until it is no longer
+> listed there (the weekly copy replaces itself within a week; delete old
+> uploaded copies you no longer want, and wait out the off-host retention), or
+> accept that those copies cannot be restored. Copies written before v1.39.3
+> did not record their keys and are listed as such: treat them as needing
+> every key that existed when they were written.
+>
+> Dropping the key early no longer fails silently: a restore, a restore
+> preview or an upload of a copy that needs a missing key is refused with the
+> key id named, and nothing is changed. Putting the key back makes the copy
+> restorable again.
+>
+> If you rotated on a release before v1.38.6 and dropped the previous key,
+> the stored backups themselves are encrypted under the key you removed: put
+> that key back into `ENCRYPTION_KEYS` and re-run the rotation on this release
+> before removing it again.
 
 ## Adding a third key (v2 → v3)
 

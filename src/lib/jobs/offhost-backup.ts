@@ -11,23 +11,29 @@
  * Object key layout:
  *   <bucket>/<YYYY-MM-DD>/user-<userId>.json.enc
  *
- * Retention: the worker NEVER calls DeleteObject on backup keys. Operators
- * MUST configure a bucket-level lifecycle rule (e.g. expire after
- * `BACKUP_RETENTION_DAYS`, which this module reads nowhere — see
- * `loadOffhostConfig`). This keeps the IAM grant for the worker
- * limited to PutObject + GetObject + AbortMultipartUpload, so a compromised
- * worker cannot wipe the backup history. The abort is what cleans up a run
- * that failed partway rather than leaving billed, unlistable parts behind;
- * `AbortMultipartUpload` can only touch an upload this worker started, never
- * a finished object. See docs/ops/backup-restore.md.
+ * Retention: the worker does not expire objects by age. Operators configure a
+ * bucket-level lifecycle rule (e.g. expire after `BACKUP_RETENTION_DAYS`,
+ * which this module reads nowhere — see `loadOffhostConfig`); the admin
+ * off-host card reads that rule back (`probeOffhostLifecycle`) and says when
+ * there is none. Objects ARE deleted in one case: an account that is deleted
+ * or whose data is wiped (`offhost-purge.ts`), which needs DeleteObject in the
+ * grant. `AbortMultipartUpload` cleans up a run that failed partway rather
+ * than leaving billed, unlistable parts behind. See
+ * docs/ops/backup-restore.md.
  */
 import { envOr } from "@/lib/env";
 import { Buffer } from "node:buffer";
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from "node:crypto";
 import { Readable, Transform } from "node:stream";
 import { createGunzip, createGzip, gunzipSync, gzipSync } from "node:zlib";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { createRawStreamEncryptor, decryptRawStream } from "@/lib/crypto";
+import { createBackupKeyIdTextScanner } from "@/lib/export/backup-key-ids";
 import { streamFullBackupJson } from "@/lib/export/full-backup-stream";
 import { annotate, getEvent } from "@/lib/logging/context";
 
@@ -41,7 +47,16 @@ export interface OffhostBackupConfig {
   accessKey: string;
   secretKey: string;
   region: string;
+  /** The key new objects are written under (`BACKUP_ENCRYPTION_KEY`). */
   encryptionKey: Buffer;
+  /**
+   * Keys older objects may still be under (`BACKUP_ENCRYPTION_PREVIOUS_KEYS`,
+   * comma-separated). Read only; nothing is written under them. This is the
+   * rotation path: the new key goes into `BACKUP_ENCRYPTION_KEY`, the old one
+   * here, until the bucket's lifecycle rule has retired every object written
+   * under it.
+   */
+  previousEncryptionKeys: Buffer[];
 }
 
 export class OffhostBackupNotConfiguredError extends Error {
@@ -94,8 +109,8 @@ export function loadOffhostConfig(): OffhostBackupConfig | null {
   // `BACKUP_RETENTION_DAYS` is deliberately absent from this config. It used
   // to be parsed and clamped here and then read by nobody, which read as an
   // enforcer the worker is not: retention belongs to the bucket's lifecycle
-  // rule, and no consumer can ever appear here because DeleteObject is kept
-  // out of the worker's grant on purpose (see the header). The variable stays
+  // rule, which the worker leaves to the bucket rather than deleting by age
+  // (see the header). The variable stays
   // documented and on the compose whitelist because it is the number the
   // operator sets that rule to.
   return {
@@ -105,6 +120,11 @@ export function loadOffhostConfig(): OffhostBackupConfig | null {
     secretKey,
     region: envOr("BACKUP_S3_REGION", "auto"),
     encryptionKey: decodeBackupKey(encRaw),
+    previousEncryptionKeys: (process.env.BACKUP_ENCRYPTION_PREVIOUS_KEYS ?? "")
+      .split(",")
+      .map((raw) => raw.trim())
+      .filter((raw) => raw.length > 0)
+      .map(decodeBackupKey),
   };
 }
 
@@ -115,6 +135,9 @@ export function loadOffhostConfig(): OffhostBackupConfig | null {
  *   1: magic(4)="HLBK" || 0x01 || iv(12) || tag(16) || ciphertext(json)
  *   2: magic(4)="HLBK" || 0x02 || iv(12) || tag(16) || ciphertext(gzip(json))
  *   3: magic(4)="HLBK" || 0x03 || iv(12) || ciphertext(gzip(json)) || tag(16)
+ *   4: magic(4)="HLBK" || 0x04 || keyIdLen(1) || keyId || iv(12)
+ *        || ciphertext(gzip(json)) || tag(16), with the object's own key
+ *        (`<date>/user-<id>.json.enc`) as GCM associated data
  *
  * Version 1 encrypted the JSON directly; version 2 gzipped it first. Both put
  * the tag in front of the ciphertext, and that is precisely what could not be
@@ -135,9 +158,107 @@ export function loadOffhostConfig(): OffhostBackupConfig | null {
 const BACKUP_ENVELOPE_PLAIN = 0x01;
 const BACKUP_ENVELOPE_GZIP = 0x02;
 const BACKUP_ENVELOPE_STREAM = 0x03;
+/**
+ * Version 4 adds two things version 3 did not have, and changes nothing else.
+ *
+ * A key id: the first twelve hex characters of the key's SHA-256, so a reader
+ * holding several keys (`BACKUP_ENCRYPTION_PREVIOUS_KEYS` during a rotation)
+ * knows which one opens an object instead of trying each. It is a
+ * fingerprint, not a name the operator has to keep in step.
+ *
+ * Associated data: the object's key in the bucket, which names the account
+ * and the night. Before this, an object copied to another account's key in
+ * the bucket, or to another date, decrypted as if it belonged there; now it
+ * does not open at all.
+ */
+const BACKUP_ENVELOPE_KEYED = 0x04;
+const OFFHOST_AAD_PREFIX = "healthlog/offhost-backup/v4|";
 const MAGIC = "HLBK";
 /** magic(4) + version(1). Where the per-version body begins. */
 const PREAMBLE_LENGTH = 5;
+
+/** The off-host keys a reader may use: the current one, then the retired. */
+export interface OffhostKeyRing {
+  active: Buffer;
+  previous: Buffer[];
+}
+
+/** The key ring of a loaded configuration. */
+export function offhostKeyRing(cfg: OffhostBackupConfig): OffhostKeyRing {
+  return { active: cfg.encryptionKey, previous: cfg.previousEncryptionKeys };
+}
+
+function asKeyRing(key: Buffer | OffhostKeyRing): OffhostKeyRing {
+  return Buffer.isBuffer(key) ? { active: key, previous: [] } : key;
+}
+
+/** The id a version-4 object records for the key it was written under. */
+export function offhostKeyId(key: Buffer): string {
+  return createHash("sha256").update(key).digest("hex").slice(0, 12);
+}
+
+function offhostAad(objectKey: string): Buffer {
+  return Buffer.from(`${OFFHOST_AAD_PREFIX}${objectKey}`, "utf8");
+}
+
+/**
+ * Open the gzip bytes of a version-4 object: find its key by id, verify the
+ * tag with the object key as associated data.
+ */
+function openKeyed(
+  buf: Buffer,
+  ring: OffhostKeyRing,
+  objectKey: string | undefined,
+): Buffer {
+  if (objectKey === undefined) {
+    throw new Error(
+      "This backup object is bound to its key in the bucket; pass the object key to open it",
+    );
+  }
+  const idLen = buf[PREAMBLE_LENGTH];
+  const keyId = buf
+    .subarray(PREAMBLE_LENGTH + 1, PREAMBLE_LENGTH + 1 + idLen)
+    .toString("latin1");
+  const key = [ring.active, ...ring.previous].find(
+    (candidate) => offhostKeyId(candidate) === keyId,
+  );
+  if (!key) {
+    throw new Error(
+      `Backup object was written under off-host key ${keyId}, which is neither BACKUP_ENCRYPTION_KEY nor in BACKUP_ENCRYPTION_PREVIOUS_KEYS`,
+    );
+  }
+  return decryptRawStream(
+    buf.subarray(PREAMBLE_LENGTH + 1 + idLen),
+    key,
+    offhostAad(objectKey),
+  );
+}
+
+/**
+ * Try each key of the ring on an object with no key id (versions 1 to 3),
+ * current first. GCM refuses a wrong key outright, so the first key that
+ * opens it is the one it was written under.
+ */
+function withEachKey<T>(ring: OffhostKeyRing, open: (key: Buffer) => T): T {
+  let lastError: unknown = null;
+  for (const key of [ring.active, ...ring.previous]) {
+    try {
+      return open(key);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError ?? new Error("No off-host key configured");
+}
+
+function isKnownVersion(version: number): boolean {
+  return (
+    version === BACKUP_ENVELOPE_PLAIN ||
+    version === BACKUP_ENVELOPE_GZIP ||
+    version === BACKUP_ENVELOPE_STREAM ||
+    version === BACKUP_ENVELOPE_KEYED
+  );
+}
 
 /**
  * Write a whole JSON string as a version-2 object.
@@ -163,23 +284,36 @@ export function encryptBackup(plaintext: string, key: Buffer): Buffer {
   return Buffer.concat([header, iv, tag, ct]);
 }
 
-export function decryptBackup(buf: Buffer, key: Buffer): string {
+export function decryptBackup(
+  buf: Buffer,
+  keys: Buffer | OffhostKeyRing,
+  objectKey?: string,
+): string {
   const magic = buf.subarray(0, 4).toString("binary");
   const version = buf[PREAMBLE_LENGTH - 1];
-  if (
-    magic !== MAGIC ||
-    (version !== BACKUP_ENVELOPE_PLAIN &&
-      version !== BACKUP_ENVELOPE_GZIP &&
-      version !== BACKUP_ENVELOPE_STREAM)
-  ) {
+  if (magic !== MAGIC || !isKnownVersion(version)) {
     throw new Error("Invalid backup envelope (bad magic or version)");
+  }
+  const ring = asKeyRing(keys);
+  if (version === BACKUP_ENVELOPE_KEYED) {
+    return gunzipSync(openKeyed(buf, ring, objectKey)).toString("utf8");
   }
   if (version === BACKUP_ENVELOPE_STREAM) {
     // iv | ciphertext | tag, exactly what the streaming writer emits and what
     // the shared reader verifies whole before it hands back a byte.
-    const plaintext = decryptRawStream(buf.subarray(PREAMBLE_LENGTH), key);
+    const plaintext = withEachKey(ring, (key) =>
+      decryptRawStream(buf.subarray(PREAMBLE_LENGTH), key),
+    );
     return gunzipSync(plaintext).toString("utf8");
   }
+  const plaintext = withEachKey(ring, (key) => openLeadingTag(buf, key));
+  return version === BACKUP_ENVELOPE_GZIP
+    ? gunzipSync(plaintext).toString("utf8")
+    : plaintext.toString("utf8");
+}
+
+/** Versions 1 and 2: iv | tag | ciphertext. */
+function openLeadingTag(buf: Buffer, key: Buffer): Buffer {
   const iv = buf.subarray(PREAMBLE_LENGTH, PREAMBLE_LENGTH + IV_LENGTH);
   const tag = buf.subarray(
     PREAMBLE_LENGTH + IV_LENGTH,
@@ -188,10 +322,7 @@ export function decryptBackup(buf: Buffer, key: Buffer): string {
   const ct = buf.subarray(PREAMBLE_LENGTH + IV_LENGTH + TAG_LENGTH);
   const dec = createDecipheriv(ALGORITHM, key, iv);
   dec.setAuthTag(tag);
-  const plaintext = Buffer.concat([dec.update(ct), dec.final()]);
-  return version === BACKUP_ENVELOPE_GZIP
-    ? gunzipSync(plaintext).toString("utf8")
-    : plaintext.toString("utf8");
+  return Buffer.concat([dec.update(ct), dec.final()]);
 }
 
 /**
@@ -204,31 +335,24 @@ export function decryptBackup(buf: Buffer, key: Buffer): string {
  */
 export function openBackupObject(
   buf: Buffer,
-  key: Buffer,
+  keys: Buffer | OffhostKeyRing,
+  objectKey?: string,
 ): () => AsyncIterable<Buffer> {
   const magic = buf.subarray(0, 4).toString("binary");
   const version = buf[PREAMBLE_LENGTH - 1];
-  if (
-    magic !== MAGIC ||
-    (version !== BACKUP_ENVELOPE_PLAIN &&
-      version !== BACKUP_ENVELOPE_GZIP &&
-      version !== BACKUP_ENVELOPE_STREAM)
-  ) {
+  if (magic !== MAGIC || !isKnownVersion(version)) {
     throw new Error("Invalid backup envelope (bad magic or version)");
   }
+  const ring = asKeyRing(keys);
   let plaintext: Buffer;
-  if (version === BACKUP_ENVELOPE_STREAM) {
-    plaintext = decryptRawStream(buf.subarray(PREAMBLE_LENGTH), key);
-  } else {
-    const iv = buf.subarray(PREAMBLE_LENGTH, PREAMBLE_LENGTH + IV_LENGTH);
-    const tag = buf.subarray(
-      PREAMBLE_LENGTH + IV_LENGTH,
-      PREAMBLE_LENGTH + IV_LENGTH + TAG_LENGTH,
+  if (version === BACKUP_ENVELOPE_KEYED) {
+    plaintext = openKeyed(buf, ring, objectKey);
+  } else if (version === BACKUP_ENVELOPE_STREAM) {
+    plaintext = withEachKey(ring, (key) =>
+      decryptRawStream(buf.subarray(PREAMBLE_LENGTH), key),
     );
-    const ct = buf.subarray(PREAMBLE_LENGTH + IV_LENGTH + TAG_LENGTH);
-    const dec = createDecipheriv(ALGORITHM, key, iv);
-    dec.setAuthTag(tag);
-    plaintext = Buffer.concat([dec.update(ct), dec.final()]);
+  } else {
+    plaintext = withEachKey(ring, (key) => openLeadingTag(buf, key));
   }
   if (version === BACKUP_ENVELOPE_PLAIN) {
     return () => Readable.from([plaintext]);
@@ -244,6 +368,9 @@ export function openBackupObject(
  */
 const UPLOAD_PART_BYTES = 8 * 1024 * 1024;
 const UPLOAD_CONCURRENCY = 2;
+
+/** Pages of 1 000 keys one listing may walk: 200 000 objects. */
+const MAX_LIST_PAGES = 200;
 
 /**
  * The largest object one multipart upload can carry: S3 and every compatible
@@ -303,12 +430,15 @@ export class OffhostBackupTooLargeError extends Error {
  */
 function createEnvelopeStream(
   key: Buffer,
+  objectKey: string,
   limitBytes: number,
 ): { stream: Transform; bytes: () => number } {
-  const encryptor = createRawStreamEncryptor(key);
+  const encryptor = createRawStreamEncryptor(key, offhostAad(objectKey));
+  const keyId = Buffer.from(offhostKeyId(key), "latin1");
   const header = Buffer.concat([
     Buffer.from(MAGIC, "binary"),
-    Buffer.from([BACKUP_ENVELOPE_STREAM]),
+    Buffer.from([BACKUP_ENVELOPE_KEYED, keyId.byteLength]),
+    keyId,
     encryptor.iv,
   ]);
   let written = 0;
@@ -395,6 +525,7 @@ export async function uploadEncryptedBackup(
   const gzip = createGzip();
   const { stream: envelope, bytes } = createEnvelopeStream(
     encryptionKey,
+    objectKey,
     limitBytes,
   );
 
@@ -487,6 +618,24 @@ export interface S3Like {
     prefix: string,
   ): Promise<Array<{ key: string; lastModified?: Date }>>;
   deleteObject(key: string): Promise<void>;
+  /**
+   * The bucket's lifecycle rule, as far as the credential may read it.
+   * Optional so a test double that has no opinion leaves it out.
+   */
+  getLifecycle?(): Promise<OffhostLifecycle>;
+}
+
+/**
+ * Whether the bucket retires old copies by itself.
+ *
+ * `configured` names the shortest expiry of an enabled rule; `missing` means
+ * the bucket answered that it has no rule; `unknown` means it would not say
+ * (a credential without `s3:GetLifecycleConfiguration`, a target that does not
+ * implement the call, a network failure) and says nothing either way.
+ */
+export interface OffhostLifecycle {
+  state: "configured" | "missing" | "unknown";
+  expirationDays: number | null;
 }
 
 export async function getS3Client(cfg: OffhostBackupConfig): Promise<S3Like> {
@@ -568,20 +717,107 @@ export async function getS3Client(cfg: OffhostBackupConfig): Promise<S3Like> {
       }
     },
     listObjects: async (prefix) => {
-      const out = await client.send(
-        new mod.ListObjectsV2Command({ Bucket: cfg.bucket, Prefix: prefix }),
+      // Every page, not the first. A bucket answers at most 1 000 keys per
+      // call, in key order, so the first page of a bucket with a few accounts
+      // and a month of retention holds only the OLDEST dates: the restore
+      // drill read an old object and called the chain stale, and a purge
+      // would have missed every newer copy. Bounded, so a bucket that holds
+      // far more than this job put there cannot keep the loop going forever.
+      const found: Array<{ key: string; lastModified?: Date }> = [];
+      let token: string | undefined;
+      for (let page = 0; page < MAX_LIST_PAGES; page++) {
+        const out = await client.send(
+          new mod.ListObjectsV2Command({
+            Bucket: cfg.bucket,
+            Prefix: prefix,
+            ContinuationToken: token,
+          }),
+        );
+        for (const c of out.Contents ?? []) {
+          found.push({ key: c.Key ?? "", lastModified: c.LastModified });
+        }
+        if (!out.IsTruncated || !out.NextContinuationToken) return found;
+        token = out.NextContinuationToken;
+      }
+      throw new Error(
+        `Bucket listing under "${prefix}" did not end within ${MAX_LIST_PAGES} pages`,
       );
-      return (out.Contents ?? []).map((c) => ({
-        key: c.Key ?? "",
-        lastModified: c.LastModified,
-      }));
     },
     deleteObject: async (key) => {
       await client.send(
         new mod.DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }),
       );
     },
+    getLifecycle: async () => {
+      try {
+        const out = await client.send(
+          new mod.GetBucketLifecycleConfigurationCommand({
+            Bucket: cfg.bucket,
+          }),
+          { abortSignal: AbortSignal.timeout(5_000) },
+        );
+        const days = (out.Rules ?? [])
+          .filter((rule) => rule.Status === "Enabled")
+          .map((rule) => rule.Expiration?.Days)
+          .filter((d): d is number => typeof d === "number" && d > 0);
+        return days.length > 0
+          ? { state: "configured", expirationDays: Math.min(...days) }
+          : { state: "missing", expirationDays: null };
+      } catch (err) {
+        const name = (err as { name?: string; Code?: string }).name;
+        const code = (err as { Code?: string }).Code;
+        if (
+          name === "NoSuchLifecycleConfiguration" ||
+          code === "NoSuchLifecycleConfiguration"
+        ) {
+          return { state: "missing", expirationDays: null };
+        }
+        return { state: "unknown", expirationDays: null };
+      }
+    },
   };
+}
+
+const LIFECYCLE_CACHE_MS = 10 * 60 * 1000;
+let lifecycleCache: { at: number; value: OffhostLifecycle } | null = null;
+
+/**
+ * The bucket's lifecycle rule for the admin card, cached for ten minutes so a
+ * page render does not become a bucket call. Never throws.
+ */
+export async function probeOffhostLifecycle(
+  s3Override?: S3Like,
+  now: number = Date.now(),
+): Promise<OffhostLifecycle> {
+  if (
+    !s3Override &&
+    lifecycleCache &&
+    now - lifecycleCache.at < LIFECYCLE_CACHE_MS
+  ) {
+    return lifecycleCache.value;
+  }
+  const cfg = loadOffhostConfigSafe();
+  if (!cfg) return { state: "unknown", expirationDays: null };
+  let value: OffhostLifecycle;
+  try {
+    const s3 = s3Override ?? (await getS3Client(cfg));
+    value = s3.getLifecycle
+      ? await s3.getLifecycle()
+      : { state: "unknown", expirationDays: null };
+  } catch {
+    value = { state: "unknown", expirationDays: null };
+  }
+  if (!s3Override) lifecycleCache = { at: now, value };
+  return value;
+}
+
+/** `loadOffhostConfig`, answering null for a malformed key instead of throwing. */
+function loadOffhostConfigSafe(): OffhostBackupConfig | null {
+  try {
+    return loadOffhostConfig();
+  } catch {
+    return null;
+  }
 }
 
 interface BackupRunReport {
@@ -620,6 +856,30 @@ export interface RunOffhostBackupOptions extends UploadBackupOptions {
    * accounts, before the job's expiry would cut one off halfway.
    */
   shouldStop?: () => boolean;
+}
+
+/**
+ * Note, per key id, that an object needing it went into the bucket now. Never
+ * fails the account: the object is in the bucket whatever this row says.
+ */
+async function recordOffhostKeyUse(
+  prisma: PrismaClient,
+  keyIds: readonly string[],
+  at: Date,
+): Promise<void> {
+  for (const keyId of keyIds) {
+    try {
+      await prisma.offhostBackupKeyUse.upsert({
+        where: { keyId },
+        create: { keyId, firstWrittenAt: at, lastWrittenAt: at },
+        update: { lastWrittenAt: at },
+      });
+    } catch (err) {
+      getEvent()?.addWarning(
+        `offhost-backup key-use write failed: ${(err as Error).message?.slice(0, 200)}`,
+      );
+    }
+  }
 }
 
 export async function runOffhostBackup(
@@ -669,24 +929,54 @@ export async function runOffhostBackup(
       break;
     }
     let objectBytes: number | null = null;
+    const objectKey = `${dateKey}/user-${user.id}.json.enc`;
+    const accountStartedAt = new Date();
+    // The key ids the object's content needs, read as it is written: the
+    // admin encryption view uses them to say how long a retired key is still
+    // needed for what is in the bucket.
+    const keyScanner = createBackupKeyIdTextScanner();
     try {
       objectBytes = await uploadEncryptedBackup(
         s3,
-        `${dateKey}/user-${user.id}.json.enc`,
+        objectKey,
         cfg.encryptionKey,
         // The same writer the weekly in-database pass uses. The payload
         // builder was always shared; everything after it was not, which is why
         // this job kept dying on a record the weekly one had learned to
         // survive.
         (write) =>
-          streamFullBackupJson(prisma, user.id, write, {
-            purpose: "disaster-recovery",
-            exportedAt: now,
-          }),
+          streamFullBackupJson(
+            prisma,
+            user.id,
+            async (chunk) => {
+              keyScanner.feed(chunk);
+              await write(chunk);
+            },
+            {
+              purpose: "disaster-recovery",
+              exportedAt: now,
+            },
+          ),
         options,
       );
+      // The account was deleted or wiped while its copy was being written.
+      // The purge that request started may already have run, so the copy
+      // this run just put there is removed here rather than left behind.
+      const purgedMeanwhile =
+        (await prisma.offhostPurgeRequest.count({
+          where: {
+            subjectId: user.id,
+            requestedAt: { gte: accountStartedAt },
+          },
+        })) > 0 || (await prisma.user.count({ where: { id: user.id } })) === 0;
+      if (purgedMeanwhile) {
+        await s3.deleteObject(objectKey);
+        objectBytes = null;
+        continue;
+      }
       largestObjectBytes = Math.max(largestObjectBytes, objectBytes);
       uploaded++;
+      await recordOffhostKeyUse(prisma, keyScanner.keyIds(), new Date());
     } catch (err) {
       failed++;
       if (err instanceof OffhostBackupTooLargeError) oversized++;

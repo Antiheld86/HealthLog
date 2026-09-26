@@ -68,6 +68,11 @@ import {
   type IntakeSlotDedupPayload,
 } from "@/lib/medications/intake-slot-dedup";
 import {
+  handleOffhostPurge,
+  OFFHOST_PURGE_CRON,
+  OFFHOST_PURGE_QUEUE,
+} from "@/lib/jobs/offhost-purge";
+import {
   handleRestoreDrill,
   RESTORE_DRILL_CRON,
   RESTORE_DRILL_QUEUE,
@@ -353,6 +358,10 @@ const allQueues = [
   STEP_UP_ELEVATION_CLEANUP_QUEUE,
   OFFHOST_BACKUP_QUEUE,
   RESTORE_DRILL_QUEUE,
+  // v1.39.3 — deleting an account or wiping its data takes its off-host
+  // copies out of the bucket. Without this entry the requests would be
+  // written and never worked.
+  OFFHOST_PURGE_QUEUE,
   // v1.39.1 — an admin's restore of a stored backup, run off the request, and
   // the boot sweep that re-queues one a stopped worker left running. Without
   // this entry every restore request would queue a job nobody works.
@@ -505,6 +514,9 @@ const schedules: ScheduleEntry[] = [
   ],
   [OFFHOST_BACKUP_QUEUE, OFFHOST_BACKUP_CRON],
   [RESTORE_DRILL_QUEUE, RESTORE_DRILL_CRON],
+  // Nightly backstop for the purge the deletion kicks straight away: a
+  // request the bucket refused, or one written while the queue was down.
+  [OFFHOST_PURGE_QUEUE, OFFHOST_PURGE_CRON, cronIsTheRetry],
   [HOST_METRIC_QUEUE, HOST_METRIC_CRON, cronIsTheRetry],
   [FEEDBACK_AGGREGATOR_QUEUE, FEEDBACK_AGGREGATOR_CRON, cronIsTheRetry],
   // v1.4.37 — hourly geo backfill. The helper is idempotent + capped
@@ -746,6 +758,12 @@ export async function registerMaintenanceQueues(
     RESTORE_DRILL_QUEUE,
     { localConcurrency: 1 },
     handleRestoreDrill,
+  );
+  await createAndWork(
+    boss,
+    OFFHOST_PURGE_QUEUE,
+    { localConcurrency: 1 },
+    handleOffhostPurge,
   );
   // One restore at a time per worker: each holds a transaction over a whole
   // account and a batch of readings in memory, and two at once on a small host

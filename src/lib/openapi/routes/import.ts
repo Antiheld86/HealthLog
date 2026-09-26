@@ -324,6 +324,11 @@ export const importPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+        "409": {
+          description:
+            "An import for this account is already queued or running, and these bytes are not the ones it carries (the same bytes resolve to that job as a 202). `meta.errorCode` is `import.apple_health.busy` and `meta.jobId` names the running job; poll it, then upload again. The upload was discarded.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "422": {
           description:
             "The multipart body could not be streamed to disk — no `file` part, a malformed boundary, or the size cap tripped mid-stream. The message names the failure.",
@@ -335,7 +340,7 @@ export const importPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "503": {
           description:
-            "No background worker is bound to this process, so the job cannot be queued. The upload was staged and is discarded; retry once a worker is running.",
+            "No background worker is bound to this process, or the queue did not accept the job, so nothing will run it. The staged upload is discarded (and a created job is marked failed); retry once a worker is running.",
           content: { "application/json": { schema: errorEnvelope } },
         },
       },

@@ -17,6 +17,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
@@ -293,22 +294,41 @@ export async function streamMultipartToDisk(
     }
   };
 
-  while (!streamDone) {
-    const { value, done } = await reader.read();
-    if (done) {
-      streamDone = true;
-      break;
+  try {
+    while (!streamDone) {
+      const { value, done } = await reader.read();
+      if (done) {
+        streamDone = true;
+        break;
+      }
+      buffer = Buffer.concat([buffer, Buffer.from(value)]);
+      await processBuffer();
     }
-    buffer = Buffer.concat([buffer, Buffer.from(value)]);
     await processBuffer();
-  }
-  await processBuffer();
-  await closeFileSink();
+    await closeFileSink();
 
-  if (bytesWritten === 0) {
-    throw new Error(
-      `Multipart body did not include a '${opts.fieldName}' file field`,
-    );
+    if (bytesWritten === 0) {
+      throw new Error(
+        `Multipart body did not include a '${opts.fieldName}' file field`,
+      );
+    }
+  } catch (err) {
+    // Whatever was written so far is the user's plaintext health export,
+    // and it must not outlive a refused upload in the shared temp
+    // directory: the size cap, a malformed body and a dropped connection
+    // all end here. The reader is cancelled so the rest of the body is not
+    // read for nothing.
+    await reader.cancel().catch(() => {});
+    const sink = fileSink as Writable | null;
+    if (sink && !sink.closed) {
+      fileSinkOpen = false;
+      await new Promise<void>((resolve) => {
+        sink.once("close", () => resolve());
+        sink.destroy();
+      });
+    }
+    await rm(filePath, { force: true }).catch(() => {});
+    throw err;
   }
 
   return {

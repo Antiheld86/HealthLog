@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
+import {
+  kickOffhostPurge,
+  requestOffhostPurge,
+} from "@/lib/jobs/offhost-purge";
 import { apiSuccess, apiError, getClientIp } from "@/lib/api-response";
 import { NextRequest } from "next/server";
 import {
@@ -101,6 +105,11 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
         // does not. Same classification contract as the model list.
         await tx.user.update({ where: { id: userId }, data: USER_RESET });
 
+        // The nightly off-host copies of the record are part of "all your
+        // data". The request commits with the wipe; the purge job deletes
+        // the objects and removes it.
+        await requestOffhostPurge(tx, userId, "data_wiped");
+
         return perModel;
       },
       {
@@ -144,6 +153,7 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
   // v1.16.9 — every cached payload was built on the rows just deleted;
   // hard-evict the user's buckets so no surface serves pre-wipe data.
   invalidateUserData(userId);
+  await kickOffhostPurge();
 
   return apiSuccess({ cleared: true, deletedRows, models: counts });
 });

@@ -1,5 +1,6 @@
 import type { Readable } from "node:stream";
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { _resetCryptoCacheForTests, encrypt } from "@/lib/crypto";
 import { encryptBackup } from "../offhost-backup";
 import {
   handleRestoreDrill,
@@ -113,6 +114,43 @@ describe("runRestoreDrill", () => {
     const report = await runRestoreDrill(s3, new Date("2026-06-01T04:11:00Z"));
     expect(report.ageDays).toBe(12);
     expect(report.stale).toBe(true);
+  });
+
+  it("decrypts a value per inner key id and names a key the host lacks", async () => {
+    vi.stubEnv("ENCRYPTION_KEY", "");
+    vi.stubEnv(
+      "ENCRYPTION_KEYS",
+      JSON.stringify({ old: "11".repeat(32), cur: "22".repeat(32) }),
+    );
+    vi.stubEnv("ENCRYPTION_ACTIVE_KEY_ID", "old");
+    _resetCryptoCacheForTests();
+    const note = Buffer.from(encrypt("a note"), "utf8").toString("base64");
+    const s3 = makeS3Mock({
+      "2026-06-01/user-abc.json.enc": backupObject({
+        measurements: [{ id: "m1", notesEncrypted: note }],
+      }),
+    });
+    const now = new Date("2026-06-02T04:11:00Z");
+    const report = await runRestoreDrill(s3, now);
+    expect(report.innerKeyIds).toEqual(["old"]);
+
+    // The rotation ran, and the operator dropped the old key.
+    vi.stubEnv("ENCRYPTION_KEYS", JSON.stringify({ cur: "22".repeat(32) }));
+    vi.stubEnv("ENCRYPTION_ACTIVE_KEY_ID", "cur");
+    _resetCryptoCacheForTests();
+    await expect(runRestoreDrill(s3, now)).rejects.toThrow(/'old'/);
+
+    // Same id, different key material behind it.
+    vi.stubEnv(
+      "ENCRYPTION_KEYS",
+      JSON.stringify({ old: "33".repeat(32), cur: "22".repeat(32) }),
+    );
+    _resetCryptoCacheForTests();
+    await expect(runRestoreDrill(s3, now)).rejects.toThrow(
+      /does not open the values/,
+    );
+    vi.unstubAllEnvs();
+    _resetCryptoCacheForTests();
   });
 
   it("throws when the bucket holds no backup-shaped objects", async () => {

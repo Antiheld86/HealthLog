@@ -25,6 +25,7 @@ vi.mock("next/headers", () => ({
 }));
 
 const mocks = vi.hoisted(() => ({
+  runningImportFindFirst: vi.fn(async () => null),
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
   bossSend: vi.fn().mockResolvedValue("boss-job-1"),
   getGlobalBoss: vi.fn(),
@@ -60,6 +61,16 @@ vi.mock("@/lib/db", () => ({
       findFirst: mocks.importJobFindFirst,
       update: mocks.importJobUpdate,
     },
+    // The one-running-import check and the new row, in one transaction.
+    // The check finds nothing running unless a test says otherwise.
+    $transaction: async (fn: (tx: unknown) => unknown) =>
+      fn({
+        $executeRaw: async () => 0,
+        importJob: {
+          findFirst: mocks.runningImportFindFirst,
+          create: mocks.importJobCreate,
+        },
+      }),
     user: {
       findUnique: mocks.userFindUnique,
     },

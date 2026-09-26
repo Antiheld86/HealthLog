@@ -16,13 +16,23 @@ container (queue `data-backup-offhost`). Object key layout:
 
 ```
 magic   = "HLBK"           (4 bytes, ASCII)
-version = 0x03             (1 byte)
+version = 0x04             (1 byte)
+keyIdLen, keyId            (1 byte + 12 ASCII hex: the first 12 hex digits of SHA-256(key))
 iv      = 12 random bytes  (AES-GCM nonce)
-ciphertext = N bytes       (AES-256-GCM over gzip(JSON dump), key = BACKUP_ENCRYPTION_KEY)
+ciphertext = N bytes       (AES-256-GCM over gzip(JSON dump), key = BACKUP_ENCRYPTION_KEY,
+                            associated data = "healthlog/offhost-backup/v4|<object key>")
 authTag = 16 bytes         (AES-GCM tag, trailing)
 ```
 
-Three versions exist in the wild and all three restore. `0x01` encrypted the
+Version `0x04` (from v1.39.3) adds two things. The key id says which off-host
+key an object needs, so a reader holding a retired key as well finds the right
+one. The associated data is the object's own key in the bucket,
+`YYYY-MM-DD/user-<id>.json.enc`: an object copied to another account's name or
+another date does not decrypt, where before it opened as if it belonged there.
+The restore script passes the key it downloaded, so nothing changes for an
+operator.
+
+Four versions exist in the wild and all four restore. `0x01` encrypted the
 JSON directly and `0x02` gzipped it first; both carry the tag in FRONT of the
 ciphertext, which is what made them impossible to write a piece at a time —
 GCM only produces the tag once the last block is in, so a leading tag means the
@@ -33,32 +43,59 @@ the restore script needs no flag to tell them apart.
 
 ## Required env vars
 
-| Var                     | Required | Notes                                                                |
-| ----------------------- | -------- | -------------------------------------------------------------------- |
-| `BACKUP_ENCRYPTION_KEY` | yes      | 64 hex chars or 32-byte base64. **Different from `ENCRYPTION_KEY`.** |
-| `BACKUP_S3_ENDPOINT`    | yes      | e.g. `https://<account>.r2.cloudflarestorage.com`                    |
-| `BACKUP_S3_BUCKET`      | yes      |                                                                      |
-| `BACKUP_S3_ACCESS_KEY`  | yes      |                                                                      |
-| `BACKUP_S3_SECRET_KEY`  | yes      |                                                                      |
-| `BACKUP_S3_REGION`      | no       | defaults to `auto` (Cloudflare R2)                                   |
-| `BACKUP_RETENTION_DAYS` | no       | not read by the app; the number for your bucket's lifecycle rule     |
+| Var                               | Required | Notes                                                                               |
+| --------------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `BACKUP_ENCRYPTION_KEY`           | yes      | 64 hex chars or 32-byte base64. **Different from `ENCRYPTION_KEY`.**                |
+| `BACKUP_S3_ENDPOINT`              | yes      | e.g. `https://<account>.r2.cloudflarestorage.com`                                   |
+| `BACKUP_S3_BUCKET`                | yes      |                                                                                     |
+| `BACKUP_S3_ACCESS_KEY`            | yes      |                                                                                     |
+| `BACKUP_S3_SECRET_KEY`            | yes      |                                                                                     |
+| `BACKUP_S3_REGION`                | no       | defaults to `auto` (Cloudflare R2)                                                  |
+| `BACKUP_RETENTION_DAYS`           | no       | not read by the app; the number for your bucket's lifecycle rule                    |
+| `BACKUP_ENCRYPTION_PREVIOUS_KEYS` | no       | retired off-host keys, comma-separated, read only (see "Rotating the off-host key") |
 
 ## Bucket permissions
 
-The worker needs `PutObject`, `GetObject` and `AbortMultipartUpload`. It never
-calls `DeleteObject` on a backup key, so a compromised worker cannot wipe the
-history; `AbortMultipartUpload` only reaches an upload that same worker started
-and is what clears the parts of a run that failed halfway. Without it, a failed
-upload leaves parts that are billed and do not show in a bucket listing. On
-Cloudflare R2 the **Object Read & Write** token already covers all three.
+The worker needs `PutObject`, `GetObject`, `ListBucket`, `DeleteObject` and
+`AbortMultipartUpload`. On Cloudflare R2 the **Object Read & Write** token
+covers all of them.
 
-## Bucket lifecycle (recommended)
+`DeleteObject` is needed because the app deletes objects in two cases, and
+only those:
 
-The worker never deletes a backup object: its grant covers PutObject,
-GetObject and AbortMultipartUpload only, so a compromised worker cannot
-wipe the history, and nothing in the app reads `BACKUP_RETENTION_DAYS`.
-Expiry is the storage provider's lifecycle rule, set to match the number
-you wrote there:
+- **An account is deleted, or its data is wiped.** Deleting an account,
+  deleting a managed profile and "Delete all data" each write a deletion
+  request in the same transaction as the deletion. The `offhost-backup-purge` job lists the bucket, deletes every
+  `YYYY-MM-DD/user-<id>.json.enc` of that account and removes the request once
+  nothing of the account is left. It runs right after the deletion and again
+  every night at 03:40. A copy the nightly upload was writing while the account
+  was deleted is removed by the upload itself.
+- **The connection test** deletes its own `_healthcheck/<ts>.bin`.
+
+The admin wipe of every account deletes nothing in the bucket. It is you
+clearing your own host, the bucket is yours, and its copies are the way back
+from a wipe pressed by mistake. If you are handing the host on, empty the
+bucket yourself.
+
+Earlier versions of this page said the worker never deletes an object. That
+was the design until v1.39.3, and it meant a deleted account's copies stayed
+in the bucket for as long as the lifecycle rule kept them, or forever without
+one. If the bucket refuses the delete (a credential without `DeleteObject`),
+the request stays, the job retries it every night, and **Admin → Backups →
+Off-host** shows how many deletions are outstanding and the bucket's answer.
+
+`AbortMultipartUpload` only reaches an upload the same worker started and is
+what clears the parts of a run that failed halfway. Without it, a failed
+upload leaves parts that are billed and do not show in a bucket listing.
+
+## Bucket lifecycle (required for retention)
+
+The app does not expire objects by age, and nothing in the app reads
+`BACKUP_RETENTION_DAYS`. Expiry is the storage provider's lifecycle rule, set
+to match the number you wrote there. Without one, every nightly copy of every
+account is kept forever. **Admin → Backups → Off-host** reads the bucket's
+lifecycle configuration and says so when there is none, or when the credential
+may not read it (grant `GetLifecycleConfiguration` to let it check):
 
 ```
 Filter: "" (all objects)
@@ -343,6 +380,28 @@ in seconds having backed up nothing is that defect and not your record.
 
 ### Key rotation
 
+Rotation reaches a stored backup's envelope and nothing inside it. The
+content of a disaster-recovery backup is the database's ciphertext, carried
+as it is stored, and a restore writes it back verbatim: a note, a document or
+a coach message inside a copy taken before a rotation still needs the key the
+rotation retired. The same holds for every copy in the off-host bucket and for
+every file an operator has downloaded. So the rule is: **keep a retired
+`ENCRYPTION_KEYS` entry until no backup you may still restore needs it.**
+**Admin → Encryption → Keys the backups still need** lists, per key id, the
+stored copies that need it with the oldest date, and when the last off-host
+copy needing it expires under the bucket's lifecycle rule. Copies written
+before v1.39.3 did not record their keys and are listed as such.
+
+Every restore, the restore preview, the admin upload and the monthly drill
+check this before anything is changed: a file whose content needs a key this
+server does not have (or an id whose key material differs) is refused with the
+key id named, and the account is left as it was.
+
+Re-encrypting the content of stored backups during rotation was considered and
+not done: it would mean decrypting, parsing, re-encrypting and re-writing every
+copy in full, and it still could not reach the off-host copies or downloaded
+files, so the rule above would be needed regardless.
+
 `scripts/rotate-encryption-key.ts` and the rotation in the admin console
 re-seal every piece under the active key, in small batches, without reading
 the backup inside. The link between a piece, its copy and its position is
@@ -367,6 +426,17 @@ read back. Restoring Monday's copy on Wednesday therefore costs the account
 everything it recorded on Tuesday. If the current state is worth keeping, take
 a fresh snapshot from the backups console before restoring the old one.
 
+## Rotating the off-host key
+
+`BACKUP_ENCRYPTION_KEY` is the key new objects are written under. To rotate
+it, set the new key there and move the old one into
+`BACKUP_ENCRYPTION_PREVIOUS_KEYS` (comma-separated if there are several), then
+restart. New objects are written under the new key; older objects stay
+readable because every version-4 object names its key and older objects are
+tried against each key in turn. Remove the old key once the lifecycle rule has
+retired every object written under it, that is `BACKUP_RETENTION_DAYS` after
+the restart.
+
 ## Monthly restore drill (automatic)
 
 Since v1.16.4 a pg-boss job (`data-restore-drill`, cron `11 4 1 * *` —
@@ -386,8 +456,13 @@ Outcomes:
 - **Failure** — empty bucket, fetch error, decryption failure (wrong or
   rotated key), malformed JSON: pages the same way. A decryption
   failure right after a `BACKUP_ENCRYPTION_KEY` change means the new
-  key cannot read the existing objects — re-encrypt or accept that
-  pre-rotation backups are only readable with the retired key.
+  key cannot read the existing objects: put the old key into
+  `BACKUP_ENCRYPTION_PREVIOUS_KEYS` (see "Rotating the off-host key").
+- **Content under a missing application key** — the object opens, but its
+  content was written under an `ENCRYPTION_KEYS` entry this server no longer
+  has, or under an id whose key material changed. The drill decrypts one value
+  per key id it finds, and pages naming the key. A restore of that object
+  would write back rows nobody can open; put the key back before restoring.
 - **Not configured** — deployments without the `BACKUP_S3_*` vars skip
   silently (wide-event warning only).
 

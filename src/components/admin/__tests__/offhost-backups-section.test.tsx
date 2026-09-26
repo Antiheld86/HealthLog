@@ -23,6 +23,11 @@ vi.mock("@tanstack/react-query", () => ({
 import { I18nProvider } from "@/lib/i18n/context";
 import { OffhostBackupsSection } from "../offhost-backups-section";
 
+const QUIET = {
+  pendingDeletions: { count: 0, oldestRequestedAt: null, lastFailure: null },
+  lifecycle: { state: "configured" as const, expirationDays: 30 },
+};
+
 function render(data: BackupsList["offhost"] | null): string {
   queryResult.current = {
     data:
@@ -46,7 +51,12 @@ function render(data: BackupsList["offhost"] | null): string {
 
 describe("<OffhostBackupsSection>", () => {
   it("says off-host backup is not configured rather than showing an empty list", () => {
-    const html = render({ configured: false, periodHours: 24, rows: [] });
+    const html = render({
+      configured: false,
+      periodHours: 24,
+      rows: [],
+      ...QUIET,
+    });
     expect(html).toContain("Off-host backup is not configured");
     expect(html).not.toContain('data-slot="offhost-backup-rows"');
   });
@@ -55,6 +65,7 @@ describe("<OffhostBackupsSection>", () => {
     const html = render({
       configured: true,
       periodHours: 24,
+      ...QUIET,
       rows: [
         {
           userId: "u1",
@@ -108,5 +119,34 @@ describe("<OffhostBackupsSection>", () => {
     expect(html).toContain("No nightly run has recorded this account yet");
     // Never the bucket's own coordinates.
     expect(html).not.toMatch(/secret|access[- ]key/i);
+  });
+
+  it("says when the bucket keeps copies forever, and when deletions are stuck", () => {
+    const html = render({
+      configured: true,
+      periodHours: 24,
+      rows: [],
+      pendingDeletions: {
+        count: 2,
+        oldestRequestedAt: "2026-09-20T10:00:00.000Z",
+        lastFailure: "AccessDenied",
+      },
+      lifecycle: { state: "missing", expirationDays: null },
+    });
+    expect(html).toContain('data-lifecycle-state="missing"');
+    expect(html).toContain("no lifecycle rule");
+    expect(html).toContain('data-slot="offhost-pending-deletions"');
+    expect(html).toContain("AccessDenied");
+  });
+
+  it("states the expiry the bucket enforces", () => {
+    const html = render({
+      configured: true,
+      periodHours: 24,
+      rows: [],
+      ...QUIET,
+    });
+    expect(html).toContain("after 30 days");
+    expect(html).not.toContain('data-slot="offhost-pending-deletions"');
   });
 });

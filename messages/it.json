@@ -6590,7 +6590,7 @@
       "delete": {
         "title": "Elimina o reimposta",
         "description": "Elimina completamente il tuo account oppure cancella i tuoi dati sanitari mantenendo l'account.",
-        "backupLag": "L'eliminazione rimuove subito i tuoi dati. I backup cifrati esterni li contengono ancora finché non scadono secondo la finestra di conservazione dell'operatore.",
+        "backupLag": "L'eliminazione rimuove subito i tuoi dati. Se questo server conserva backup esterni cifrati, le copie dei tuoi dati vengono eliminate da quello spazio subito dopo, o alla successiva esecuzione notturna se non è raggiungibile.",
         "openAdvanced": "Elimina o reimposta"
       },
       "posture": {
@@ -7323,7 +7323,12 @@
           "neverDetail": "Per questo account non è arrivato nulla. Ultimo controllo {when}.",
           "unknownDetail": "Nessun giro notturno ha ancora registrato questo account.",
           "age": "{hours} h fa",
-          "scheduleNote": "Il caricamento gira ogni {hours} h. Recente significa entro un giro, attesa che un giro non ha prodotto nulla, obsoleta che non lo hanno fatto due."
+          "scheduleNote": "Il caricamento gira ogni {hours} h. Recente significa entro un giro, attesa che un giro non ha prodotto nulla, obsoleta che non lo hanno fatto due.",
+          "lifecycleConfigured": "Il bucket elimina le copie dopo {days} giorni con la propria regola di ciclo di vita.",
+          "lifecycleMissing": "Il bucket non ha una regola di ciclo di vita, quindi ogni copia notturna viene conservata per sempre. Aggiungi una regola che faccia scadere gli oggetti dopo BACKUP_RETENTION_DAYS.",
+          "lifecycleUnknown": "Non è stato possibile leggere se il bucket elimina le copie vecchie: la credenziale non può leggere la sua regola di ciclo di vita. Verifica che una regola faccia scadere gli oggetti dopo BACKUP_RETENTION_DAYS.",
+          "pendingDeletions": "Copie di {count} account eliminati o svuotati sono ancora nel bucket e vengono rimosse.",
+          "pendingDeletionsFailing": "Copie di {count} account eliminati o svuotati sono ancora nel bucket perché ha rifiutato di eliminarle ({error}). Concedi DeleteObject alla credenziale; l'eliminazione viene ritentata ogni notte."
         },
         "restoreStarted": "Ripristino avviato. L'avanzamento compare sopra l'elenco.",
         "restoreActive": "Per questo account è già in corso un ripristino. Aspetta che finisca.",
@@ -7356,7 +7361,10 @@
         "restoreFailureNotStarted": "Il processo in background non ha preso in carico il ripristino. Controlla che sia in esecuzione.",
         "restoreFailureEnqueue": "Non è stato possibile passare il ripristino al processo in background. Controlla che sia in esecuzione.",
         "restoreFailureAfterCommit": "I dati sono stati ripristinati, ma un passaggio successivo non è riuscito. I grafici potrebbero aggiornarsi solo con la prossima esecuzione notturna.",
-        "restoreFailureUnexpected": "Il ripristino si è fermato per un errore imprevisto ed è stato annullato. Il log del server indica l'errore."
+        "restoreFailureUnexpected": "Il ripristino si è fermato per un errore imprevisto ed è stato annullato. Il log del server indica l'errore.",
+        "restoreFailureKeyMissing": "Il backup richiede la chiave di cifratura {keys}, con cui questo server non riesce ad aprirlo. Aggiungi di nuovo la chiave a ENCRYPTION_KEYS, riavvia e avvia di nuovo il ripristino.",
+        "restoreFailureForeignReference": "Il file rimanda a voci che appartengono a un altro account. Non è stato scritto nulla.",
+        "previewKeyMissing": "Questo backup non può essere ripristinato su questo server: richiede la chiave di cifratura {keys}. Aggiungi prima di nuovo la chiave a ENCRYPTION_KEYS e riavvia."
       },
       "danger-zone": {
         "title": "Zona pericolosa",
@@ -7408,7 +7416,17 @@
           "completed": "Completato",
           "failed": "Fallito"
         },
-        "coverageDetail": "Vengono mostrati solo gli id di chiave e i conteggi, mai il materiale della chiave."
+        "coverageDetail": "Vengono mostrati solo gli id di chiave e i conteggi, mai il materiale della chiave.",
+        "backupsTitle": "Chiavi di cui i backup hanno ancora bisogno",
+        "backupsDescription": "Una chiave ritirata resta necessaria finché un backup qui sotto la elenca ancora.",
+        "backupsStoredLine": "Chiave {key}: {count} copie salvate, la più vecchia del {when}",
+        "backupsUnrecordedLine": "{count} copie salvate sono state scritte prima che i backup registrassero le loro chiavi (la più vecchia il {when}). Possono richiedere qualsiasi chiave esistente allora: conserva tutte le vecchie chiavi finché non vengono sostituite o eliminate.",
+        "backupsOffhostLine": "Chiave {key}: l'ultima copia esterna che la richiede è entrata nel bucket il {when}; necessaria fino al {until}",
+        "backupsOffhostLineUnknown": "Chiave {key}: l'ultima copia esterna che la richiede è entrata nel bucket il {when}. La scadenza del bucket è sconosciuta, quindi conserva la chiave finché non sai che quella copia non c'è più.",
+        "backupsNone": "Nessun backup ha ancora registrato le chiavi di cui ha bisogno.",
+        "backupsStillNeed": "Tutte le righe sono ruotate, ma i backup hanno ancora bisogno di {keys}",
+        "backupsUnrecordedBadge": "Tutte le righe sono ruotate, ma backup più vecchi potrebbero ancora richiedere una chiave ritirata",
+        "backupsDetail": "La rotazione cifra di nuovo ogni riga, ma un backup conserva la chiave con cui è stato scritto il suo contenuto, e ripristinarlo richiede quella chiave. Tieni una chiave ritirata in ENCRYPTION_KEYS finché compare qui sotto."
       }
     },
     "carrier": "Operatore",

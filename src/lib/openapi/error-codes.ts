@@ -69,6 +69,8 @@ export const ERROR_CODE_CATALOGUE: Readonly<Record<string, readonly string[]>> =
       "auth.token.invalid",
     ],
     backup: [
+      "backup.foreign_reference",
+      "backup.key.missing",
       "backup.payload.undecryptable",
       "backup.restore.active",
       "backup.section.missing",
@@ -185,7 +187,7 @@ export const ERROR_CODE_CATALOGUE: Readonly<Record<string, readonly string[]>> =
       "illness.episode.parent-not-found",
       "illness.insights.invalid",
     ],
-    import: ["import.write_failed"],
+    import: ["import.apple_health.busy", "import.write_failed"],
     ingest: ["ingest.rate_limited"],
     insights: [
       "insights.generate.budgetExceeded",

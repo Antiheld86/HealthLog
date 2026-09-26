@@ -6590,7 +6590,7 @@
       "delete": {
         "title": "Löschen oder zurücksetzen",
         "description": "Lösche dein Konto vollständig oder lösche deine Gesundheitsdaten und behalte das Konto.",
-        "backupLag": "Die Löschung entfernt deine Daten sofort. Verschlüsselte Off-Host-Backups enthalten sie weiterhin, bis sie aus dem Aufbewahrungsfenster des Betreibers herausfallen.",
+        "backupLag": "Die Löschung entfernt deine Daten sofort. Wenn dieser Server verschlüsselte externe Sicherungen anlegt, werden die Kopien deiner Daten gleich danach aus diesem Speicher gelöscht, oder in der nächsten Nacht, falls der Speicher nicht erreichbar ist.",
         "openAdvanced": "Löschen oder zurücksetzen"
       },
       "posture": {
@@ -7323,7 +7323,12 @@
           "neverDetail": "Für dieses Konto ist nichts angekommen. Zuletzt geprüft {when}.",
           "unknownDetail": "Noch kein nächtlicher Lauf hat dieses Konto erfasst.",
           "age": "vor {hours} h",
-          "scheduleNote": "Der Upload läuft alle {hours} h. Frisch heißt innerhalb eines Laufs, fällig heißt ein Lauf blieb ohne Ergebnis, veraltet heißt zwei."
+          "scheduleNote": "Der Upload läuft alle {hours} h. Frisch heißt innerhalb eines Laufs, fällig heißt ein Lauf blieb ohne Ergebnis, veraltet heißt zwei.",
+          "lifecycleConfigured": "Der Bucket löscht Kopien nach {days} Tagen über seine eigene Lifecycle-Regel.",
+          "lifecycleMissing": "Der Bucket hat keine Lifecycle-Regel, jede nächtliche Kopie bleibt also für immer liegen. Lege eine Regel an, die Objekte nach BACKUP_RETENTION_DAYS löscht.",
+          "lifecycleUnknown": "Ob der Bucket alte Kopien löscht, ließ sich nicht lesen: Die Zugangsdaten dürfen seine Lifecycle-Regel nicht lesen. Prüfe, dass eine Regel Objekte nach BACKUP_RETENTION_DAYS löscht.",
+          "pendingDeletions": "Kopien von {count} gelöschten oder geleerten Konten liegen noch im Bucket und werden entfernt.",
+          "pendingDeletionsFailing": "Kopien von {count} gelöschten oder geleerten Konten liegen noch im Bucket, weil er das Löschen verweigert hat ({error}). Gib den Zugangsdaten DeleteObject; das Löschen wird jede Nacht wiederholt."
         },
         "restoreStarted": "Wiederherstellung gestartet. Der Fortschritt steht über der Liste.",
         "restoreActive": "Für dieses Konto läuft schon eine Wiederherstellung. Warte, bis sie fertig ist.",
@@ -7356,7 +7361,10 @@
         "restoreFailureNotStarted": "Der Hintergrunddienst hat die Wiederherstellung nicht übernommen. Prüfe, ob er läuft.",
         "restoreFailureEnqueue": "Die Wiederherstellung konnte nicht an den Hintergrunddienst übergeben werden. Prüfe, ob er läuft.",
         "restoreFailureAfterCommit": "Die Daten wurden wiederhergestellt, aber ein Schritt danach ist fehlgeschlagen. Diagramme holen das womöglich erst beim nächsten nächtlichen Lauf nach.",
-        "restoreFailureUnexpected": "Die Wiederherstellung ist an einem unerwarteten Fehler gescheitert und wurde zurückgerollt. Das Server-Log nennt den Fehler."
+        "restoreFailureUnexpected": "Die Wiederherstellung ist an einem unerwarteten Fehler gescheitert und wurde zurückgerollt. Das Server-Log nennt den Fehler.",
+        "restoreFailureKeyMissing": "Die Sicherung braucht den Verschlüsselungsschlüssel {keys}, mit dem dieser Server sie nicht öffnen kann. Nimm den Schlüssel wieder in ENCRYPTION_KEYS auf, starte neu und starte die Wiederherstellung erneut.",
+        "restoreFailureForeignReference": "Die Datei verweist auf Einträge, die zu einem anderen Konto gehören. Es wurde nichts geschrieben.",
+        "previewKeyMissing": "Diese Sicherung lässt sich auf diesem Server nicht wiederherstellen: Sie braucht den Verschlüsselungsschlüssel {keys}. Nimm den Schlüssel zuerst wieder in ENCRYPTION_KEYS auf und starte neu."
       },
       "danger-zone": {
         "title": "Gefahrenzone",
@@ -7408,7 +7416,17 @@
           "completed": "Abgeschlossen",
           "failed": "Fehlgeschlagen"
         },
-        "coverageDetail": "Es werden nur Schlüssel-IDs und Anzahlen gezeigt — niemals Schlüsselmaterial."
+        "coverageDetail": "Es werden nur Schlüssel-IDs und Anzahlen gezeigt — niemals Schlüsselmaterial.",
+        "backupsTitle": "Schlüssel, die die Sicherungen noch brauchen",
+        "backupsDescription": "Ein alter Schlüssel bleibt nötig, solange eine Sicherung unten ihn noch aufführt.",
+        "backupsStoredLine": "Schlüssel {key}: {count} gespeicherte Kopien, die älteste vom {when}",
+        "backupsUnrecordedLine": "{count} gespeicherte Kopien stammen aus der Zeit, bevor Sicherungen ihre Schlüssel festhielten (die älteste vom {when}). Sie können jeden damals vorhandenen Schlüssel brauchen: Behalte alle alten Schlüssel, bis sie ersetzt oder gelöscht sind.",
+        "backupsOffhostLine": "Schlüssel {key}: Die letzte externe Kopie, die ihn braucht, kam am {when} in den Bucket; dort gebraucht bis {until}",
+        "backupsOffhostLineUnknown": "Schlüssel {key}: Die letzte externe Kopie, die ihn braucht, kam am {when} in den Bucket. Wie lange der Bucket Kopien behält, ist unbekannt; behalte den Schlüssel, bis diese Kopie sicher weg ist.",
+        "backupsNone": "Noch keine Sicherung hat die Schlüssel festgehalten, die sie braucht.",
+        "backupsStillNeed": "Alle Zeilen sind rotiert, aber Sicherungen brauchen noch {keys}",
+        "backupsUnrecordedBadge": "Alle Zeilen sind rotiert, aber ältere Sicherungen können noch einen ausgemusterten Schlüssel brauchen",
+        "backupsDetail": "Die Rotation verschlüsselt jede Zeile neu, aber eine Sicherung behält den Schlüssel, unter dem ihr Inhalt geschrieben wurde, und ihre Wiederherstellung braucht ihn. Behalte einen ausgemusterten Schlüssel in ENCRYPTION_KEYS, bis er unten nicht mehr aufgeführt ist."
       }
     },
     "carrier": "Netzbetreiber",

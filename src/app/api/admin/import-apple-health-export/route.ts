@@ -27,6 +27,11 @@ import {
   type AppleHealthImportPayload,
 } from "@/lib/jobs/apple-health-import-worker";
 import { streamMultipartToDisk } from "@/lib/multipart/stream-to-disk";
+import {
+  createImportJobUnlessBusy,
+  discardStagedUpload,
+  IMPORT_BUSY_CODE,
+} from "@/lib/import/apple-health-staging";
 import { unlink } from "node:fs/promises";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +101,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       ipAddress: getClientIp(request),
       details: { reason: "missing_user_id" },
     });
+    await discardStagedUpload(uploaded.filePath);
     return apiError("Multipart field 'userId' is required", 422);
   }
 
@@ -109,6 +115,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       ipAddress: getClientIp(request),
       details: { reason: "target_user_missing", targetUserId },
     });
+    await discardStagedUpload(uploaded.filePath);
     return apiError(`Target user '${targetUserId}' does not exist`, 422);
   }
 
@@ -149,19 +156,27 @@ export const POST = apiHandler(async (request: NextRequest) => {
       ipAddress: getClientIp(request),
       details: { reason: "worker_not_running" },
     });
+    await discardStagedUpload(uploaded.filePath);
     throw new HttpError(503, "Background worker is not running");
   }
 
-  const importJob = await prisma.importJob.create({
-    data: {
-      userId: targetUser.id,
-      triggeredByAdminId: admin.id,
-      status: "queued",
-      uploadBytes: uploaded.bytes,
-      uploadSha256: uploaded.sha256,
-      parserRevision: APPLE_HEALTH_IMPORT_PARSER_REVISION,
-    },
+  const staged = await createImportJobUnlessBusy(prisma, {
+    userId: targetUser.id,
+    triggeredByAdminId: admin.id,
+    status: "queued",
+    uploadBytes: uploaded.bytes,
+    uploadSha256: uploaded.sha256,
+    parserRevision: APPLE_HEALTH_IMPORT_PARSER_REVISION,
   });
+  if ("busy" in staged) {
+    await discardStagedUpload(uploaded.filePath);
+    return apiError(
+      "An Apple Health import is already running for this account. Wait for it to finish, then upload again.",
+      409,
+      { errorCode: IMPORT_BUSY_CODE, jobId: staged.busy.id },
+    );
+  }
+  const importJob = staged.created;
 
   const payload: AppleHealthImportPayload = {
     userId: targetUser.id,
@@ -178,6 +193,19 @@ export const POST = apiHandler(async (request: NextRequest) => {
     payload,
     APPLE_HEALTH_IMPORT_SEND_OPTIONS,
   );
+  if (!bossJobId) {
+    await prisma.importJob.update({
+      where: { id: importJob.id },
+      data: {
+        status: "failed",
+        failureReason:
+          "The import could not be queued. Upload the export again.",
+        completedAt: new Date(),
+      },
+    });
+    await discardStagedUpload(uploaded.filePath);
+    throw new HttpError(503, "The import could not be queued");
+  }
 
   await prisma.importJob.update({
     where: { id: importJob.id },
