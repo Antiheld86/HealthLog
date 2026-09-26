@@ -31,6 +31,7 @@
 import { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
 
+import { BodyTooLargeError, readBoundedBody } from "@/lib/labs/ocr-upload";
 import { NextRequest } from "next/server";
 import { ZodError } from "zod/v4";
 import { prisma } from "@/lib/db";
@@ -64,6 +65,8 @@ export const dynamic = "force-dynamic";
  * is sent as the raw request body, which is read as a stream.
  */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+/** Room for the multipart boundaries and part headers around the file. */
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 
 /**
  * Cap on a file sent as the raw request body, compressed or not, counted
@@ -169,13 +172,6 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // Cheap pre-flight on the declared content length. The byte count while
   // reading is the hard limit; this just rejects obvious abuse early.
   const contentLength = Number(request.headers.get("content-length") ?? 0);
-  // The multipart parser holds the whole form in memory and counts nothing,
-  // so a form must declare its length for the check below to bound it. The
-  // raw-body path counts while it streams and needs no declaration.
-  if (multipart && !(contentLength > 0)) {
-    await denied("content_length_missing");
-    return apiError("A multipart upload must declare its Content-Length", 411);
-  }
   if (contentLength > limit) {
     await denied("content_length_exceeded", { contentLength });
     return apiError(
@@ -186,10 +182,23 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   let source: AsyncIterable<Uint8Array>;
   if (multipart) {
+    // The multipart parser holds the whole form and counts nothing, so the
+    // bytes are counted first and the form is parsed from what was kept. The
+    // route is outside the proxy matcher, so nothing else bounds this read.
     let formData: FormData;
     try {
-      formData = await request.formData();
+      const bytes = await readBoundedBody(
+        request.body,
+        MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES,
+      );
+      formData = await new Response(new Blob([bytes]), {
+        headers: { "content-type": contentType },
+      }).formData();
     } catch (err) {
+      if (err instanceof BodyTooLargeError) {
+        await denied("stream_size_exceeded");
+        return apiError("Upload exceeds 10 MB limit", 413);
+      }
       return apiError(
         `Invalid multipart body: ${err instanceof Error ? err.message : "unknown"}`,
         400,
