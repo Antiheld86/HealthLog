@@ -189,7 +189,34 @@ export async function collectDoctorReportData(
       }),
       wantsMedications
         ? prisma.medication.findMany({
-            where: { userId, active: true },
+            // The report describes its window, and a link can pin that window
+            // in the past: a medication whose course had not begun by the
+            // window's end, or had ended before it began, is not part of it.
+            // One with a dose scheduled inside the window was taken then,
+            // whenever it was entered. Dose history and the last intake stop
+            // at the window's end too, so a report for March does not show a
+            // dose set in June.
+            where: {
+              userId,
+              active: true,
+              AND: [
+                {
+                  OR: [
+                    { startsOn: { lte: end } },
+                    { startsOn: null, createdAt: { lte: end } },
+                    {
+                      intakeEvents: {
+                        some: {
+                          deletedAt: null,
+                          scheduledFor: { gte: start, lte: end },
+                        },
+                      },
+                    },
+                  ],
+                },
+                { OR: [{ endsOn: null }, { endsOn: { gte: start } }] },
+              ],
+            },
             include: {
               schedules: {
                 select: { ...SCHEDULE_COMPLIANCE_SELECT, label: true },
@@ -205,9 +232,12 @@ export async function collectDoctorReportData(
                 },
               },
               pauseEras: { select: { pausedAt: true, resumedAt: true } },
-              doseChanges: { orderBy: { effectiveFrom: "asc" } },
+              doseChanges: {
+                where: { effectiveFrom: { lte: end } },
+                orderBy: { effectiveFrom: "asc" },
+              },
               intakeEvents: {
-                where: { takenAt: { not: null } },
+                where: { takenAt: { not: null, lte: end } },
                 orderBy: { takenAt: "desc" },
                 take: 1,
                 select: { takenAt: true, injectionSite: true },
