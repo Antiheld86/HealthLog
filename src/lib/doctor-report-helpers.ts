@@ -344,7 +344,8 @@ export function normaliseDateRange(
  * schedule, no expected dose — a fabricated 100 % on a clinical report).
  *
  * Pure / synchronous — bands come from pre-fetched schedules + intake
- * instants. Keyed by medication name to match the renderer contract.
+ * instants. Keyed by medication id: two medications can share a name, and
+ * a name key let the second overwrite the first. The name rides in the value.
  */
 export function buildLedgerCompliance(
   medications: DoctorReportComplianceMedication[],
@@ -385,7 +386,8 @@ export function buildLedgerCompliance(
     // `total = taken + missed` (the ledger denominator) so the renderer's
     // `taken / total` equals `tally.rate` — the exact number the detail page
     // shows. Deliberate skips are reported separately but stay out of `total`.
-    compliance[med.name] = {
+    compliance[med.id] = {
+      name: med.name,
       total: tally.denominator,
       taken: tally.taken,
       skipped: tally.skipped,

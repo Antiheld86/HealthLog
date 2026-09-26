@@ -142,6 +142,24 @@ export async function cleanupScheduledTelegramDeletions(): Promise<void> {
 }
 
 /**
+ * Whether a medication-level snooze holds the reminder of one slot. It
+ * holds only while it runs (`now < snoozedUntil`) and only for a slot whose
+ * reminder window had opened when the snooze was set (`snoozedAt`, the
+ * medication row's @updatedAt of the snooze write). A later edit to the
+ * row moves `snoozedAt` forward, which can only widen the hold back to the
+ * old medication-wide behaviour, never lose a snooze.
+ */
+export function snoozeHoldsSlot(
+  snoozedUntil: Date | null,
+  snoozedAt: Date,
+  slotWindowStart: Date,
+  now: Date,
+): boolean {
+  if (!snoozedUntil || now.getTime() >= snoozedUntil.getTime()) return false;
+  return slotWindowStart.getTime() <= snoozedAt.getTime();
+}
+
+/**
  * Check all active medications for each user and determine reminder phases.
  * Uses phase-based logic (GREEN/YELLOW/ORANGE/RED) to send one notification
  * per phase transition rather than every 15 minutes.
@@ -477,6 +495,7 @@ export async function handleReminderCheck(
                 return currentPhase
                   ? {
                       slotScheduledFor: occurrence.at,
+                      windowStart: phaseWindow.start,
                       minutesToEnd,
                       currentPhase,
                     }
@@ -489,8 +508,12 @@ export async function handleReminderCheck(
               )[0];
             if (!phaseCandidate) continue;
 
-            const { slotScheduledFor, minutesToEnd, currentPhase } =
-              phaseCandidate;
+            const {
+              slotScheduledFor,
+              windowStart,
+              minutesToEnd,
+              currentPhase,
+            } = phaseCandidate;
             const slotInstant = slotScheduledFor.getTime();
             if (liveEraStart !== null && slotInstant < liveEraStart) {
               continue;
@@ -544,8 +567,16 @@ export async function handleReminderCheck(
               continue;
             }
 
-            // Skip if medication is snoozed
-            if (med.snoozedUntil && now < med.snoozedUntil) {
+            // A snooze answers the reminder of the slot that was open when it
+            // was set, so it holds only slots whose window had opened by then.
+            // `snoozedUntil` lives on the medication row and the snooze write
+            // stamps the row's @updatedAt, which dates the decision (the same
+            // reading the skip / pin suppression above uses). A later slot of
+            // the same medication, such as the evening dose after a morning
+            // "skip" that snoozes to the end of the day, is still reminded.
+            if (
+              snoozeHoldsSlot(med.snoozedUntil, med.updatedAt, windowStart, now)
+            ) {
               continue;
             }
 

@@ -186,7 +186,7 @@ export function buildGlp1Block(params: {
     medications: glp1Meds.map((m) => {
       const latest = m.doseChanges[m.doseChanges.length - 1] ?? null;
       const lastIntake = m.intakeEvents[0] ?? null;
-      const comp = params.compliance[m.name] ?? {
+      const comp = params.compliance[m.id] ?? {
         taken: 0,
         total: 0,
         skipped: 0,

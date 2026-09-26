@@ -111,10 +111,17 @@ function makeData(overrides?: Partial<DoctorReportData>): DoctorReportData {
     glucoseUnit: "mg/dL",
     bmi: 24.1,
     compliance: {
-      "Example Drug": { total: 90, taken: 85, skipped: 3, missed: 2 },
+      "med-example": {
+        name: "Example Drug",
+        total: 90,
+        taken: 85,
+        skipped: 3,
+        missed: 2,
+      },
     },
     medications: [
       {
+        id: "med-example-drug",
         name: "Example Drug",
         dose: "5mg",
         schedules: [
@@ -472,6 +479,7 @@ describe("buildFhirDocumentBundle", () => {
       makeData({
         medications: [
           {
+            id: "med-mounjaro",
             name: "Mounjaro",
             dose: "10mg",
             atcCode: "A10BX10",
@@ -509,7 +517,13 @@ describe("buildFhirDocumentBundle", () => {
     const bundle = buildFhirDocumentBundle(
       makeData({
         medications: [
-          { name: "Ramipril", dose: "5mg", atcCode: "C09AA05", schedules: [] },
+          {
+            id: "med-ramipril",
+            name: "Ramipril",
+            dose: "5mg",
+            atcCode: "C09AA05",
+            schedules: [],
+          },
         ],
       }),
       { insuranceNumber: null },
@@ -781,6 +795,7 @@ describe("buildFhirDocumentBundle", () => {
       makeData({
         medications: [
           {
+            id: "med-empagliflozin",
             name: "Empagliflozin",
             dose: "10mg",
             atcCode: "A10BK03",
@@ -810,6 +825,7 @@ describe("buildFhirDocumentBundle", () => {
       makeData({
         medications: [
           {
+            id: "med-empagliflozin",
             name: "Empagliflozin",
             dose: "10mg",
             atcCode: "A10BK03",
@@ -867,7 +883,14 @@ describe("buildFhirDocumentBundle", () => {
   it("never invents a BfArM coding when no ATC code is stored, even with germanAtc on", () => {
     const bundle = buildFhirDocumentBundle(
       makeData({
-        medications: [{ name: "Herbal mix", dose: "1 tab", schedules: [] }],
+        medications: [
+          {
+            id: "med-herbal",
+            name: "Herbal mix",
+            dose: "1 tab",
+            schedules: [],
+          },
+        ],
       }),
       { insuranceNumber: null },
       FIXED_NOW,
