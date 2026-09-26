@@ -21,7 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiHandler } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
-import { checkPasswordBreach } from "@/lib/auth/hibp";
+import { checkPasswordBreachIfEnabled } from "@/lib/password-breach-check";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import {
   isValidTimezone,
@@ -173,7 +173,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   // v1.23 — reject a registration password found in a known breach corpus
   // (HIBP k-anonymity). Fail-open on an unreachable HIBP.
-  const breach = await checkPasswordBreach(password);
+  const breach = await checkPasswordBreachIfEnabled(password);
   if (breach?.breached) {
     return apiError(
       getServerTranslator(locale).t("auth.passwordBreached"),

@@ -1,3 +1,4 @@
+import { envValue } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import {
   apiError,
@@ -50,7 +51,7 @@ export const GET = apiHandler(async () => {
 });
 
 async function registerTelegramWebhook(botToken: string) {
-  const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  const appUrl = envValue("APP_URL") ?? envValue("NEXT_PUBLIC_APP_URL");
   if (!appUrl) {
     return apiError(
       "Server configuration error: APP_URL (or NEXT_PUBLIC_APP_URL) is missing.",

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { ErrorDetails } from "@/components/error-details";
 
 const CHUNK_RELOAD_KEY = "healthlog:chunk-reload-attempted";
-const SHELL_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "";
+const SHELL_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "";
 
 function isChunkLoadError(err: Error & { digest?: string }): boolean {
   if (err.name === "ChunkLoadError") return true;

@@ -4591,7 +4591,7 @@
       "sampleBody": "2주 동안 체중 1.2kg 감소. 안정 시 맥박은 58bpm으로 꾸준해요. 혈압은 7일 중 6일 범위 안 — 높았던 하루는 늦은 시간의 짠 저녁 식사 다음이었어요.",
       "sampleCaption": "예시일 뿐 내 데이터가 아니에요. 인사이트를 켜면 브리핑이 이런 식으로 읽혀요.",
       "ladderTitle": "켜는 방법 세 가지",
-      "ladderLocalTitle": "로컬 모델 — 내 네트워크 밖으로 나가지 않아요",
+      "ladderLocalTitle": "로컬 모델 — AI 요청이 내 네트워크 안에 머물러요",
       "ladderLocalBody": "내 컴퓨터의 Ollama나 LM Studio를 HealthLog에 연결해요. 무료이고 완전히 비공개 — 가장 마음 편한 기본값이에요.",
       "ladderByokTitle": "내 API 키 사용",
       "ladderByokBody": "본인의 OpenAI나 Anthropic 키를 쓰면 돼요. 내 계정과 결제로 돌아가고, API 등급은 기본적으로 데이터를 학습에 쓰지 않아요.",
@@ -5655,10 +5655,10 @@
     "codexConnected": "ChatGPT를 연결했어요! 이제 인사이트를 쓸 수 있어요.",
     "codexDisconnected": "ChatGPT 연결을 해제했어요.",
     "codexConnectionFailed": "ChatGPT 연결에 실패했어요. 다시 시도해 주세요.",
-    "rawData": "원본 데이터 보내기",
-    "rawDataOnDescription": "집계 지표와 함께 최근 30일의 익명화된 개별 값이 시간 맥락과 함께 전송돼요 — 이름, 이메일, 계정 식별자는 절대 보내지 않아요.",
-    "rawDataOffDescription": "요약 지표만 전송돼요(예: 평균, 추이, 최소/최대) — 개별 값이나 정확한 시간 맥락은 보내지 않아요.",
-    "rawDataWarning": "원본 모드가 켜져 있어요. 분석 정확도를 높이려고 제공자에게 최근 30일의 익명화된 값이 추가로 전달돼요.",
+    "rawData": "자세한 기록 보내기",
+    "rawDataOnDescription": "요약과 함께 측정값의 평균이 제공자에게 전송돼요. 최근 90일은 하루 단위, 그 이전 1년은 주 단위, 최대 5년 전까지는 월 단위이며 각각 날짜와 측정 횟수가 포함돼요. 개별 측정값, 이름, 이메일은 보내지 않아요.",
+    "rawDataOffDescription": "요약만 전송돼요. 최근 값, 평균, 추이, 정해진 기간의 최소/최대가 포함되며 측정값 시계열은 보내지 않아요.",
+    "rawDataWarning": "자세한 기록이 켜져 있어요. 분석할 때마다 최근 90일의 일별 평균, 그 이전 1년의 주별 평균, 최대 5년 전까지의 월별 평균이 추가로 전송돼요.",
     "regenerateInsights": "리포트 다시 생성",
     "regenerateSuccess": "리포트를 다시 생성했어요",
     "regenerateRateLimit": "잠시만 기다려 주세요 — 시간당 분석 한도에 도달했어요.",
@@ -7071,6 +7071,7 @@
       "versionTileBuiltAt": "빌드 시각",
       "versionTileUpdateAvailable": "업데이트 있음: {tag}",
       "versionTileUpToDate": "최신 상태",
+      "versionTileCheckOff": "업데이트 확인 꺼짐",
       "snapshotLoadError": "시스템 스냅샷을 불러오지 못했어요.",
       "snapshotLoading": "스냅샷 불러오는 중…",
       "auditTitle": "최근 활동",
@@ -7275,7 +7276,7 @@
           "description": "이 호스트가 각 계정의 암호화 사본을 버킷에 마지막으로 올린 시점입니다.",
           "loadError": "외부 보관 상태를 불러오지 못했습니다.",
           "notConfiguredTitle": "외부 보관 백업이 설정되지 않았습니다",
-          "notConfiguredDescription": "버킷과 키가 모두 설정되지 않아 이 호스트를 벗어나는 것이 없습니다. 야간 업로드를 켜려면 BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY, BACKUP_ENCRYPTION_KEY를 설정하세요.",
+          "notConfiguredDescription": "버킷과 키가 모두 설정되지 않아 이 호스트를 벗어나는 백업이 없습니다. 야간 업로드를 켜려면 BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY, BACKUP_ENCRYPTION_KEY를 설정하세요.",
           "stateFresh": "최신",
           "stateDue": "지연",
           "stateStale": "오래됨",
@@ -7356,7 +7357,7 @@
         "rotateEnqueued": "교체를 시작했어요.",
         "rotateFailed": "교체를 시작하지 못했어요.",
         "stepUpNeeded": "2단계 인증을 다시 확인해야 해요. 2단계 인증을 확인하거나, 등록한 수단이 없으면 명령줄 도구를 써 주세요.",
-        "cliNote": "이 버튼을 쓰려면 2단계 인증이 필요해요. 등록하지 않은 운영자는 scripts/rotate-encryption-key.ts로 교체해 주세요.",
+        "cliNote": "이 버튼을 쓰려면 2단계 인증이 필요해요. 등록하지 않았다면 이 버전의 소스 코드 체크아웃에서 scripts/rotate-encryption-key.ts를 실행해 주세요. 절차는 docs/ops/encryption-key-rotation.md에 있어요.",
         "columnsTitle": "열별 적용 범위",
         "columnsDescription": "암호화된 열마다 활성 키와 이전 키의 행 수를 보여줘요.",
         "colColumn": "열",
@@ -10243,7 +10244,7 @@
     }
   },
   "selfDescription": {
-    "dataPosture": "HealthLog는 셀프 호스팅이에요. 건강 데이터는 본인 인스턴스에 암호화되어 저장돼요. AI 기능은 직접 준비한 제공자 키나 로컬 모델을 쓰기 때문에 설정한 제공자 외에는 아무것도 인스턴스 밖으로 나가지 않고, 건강 데이터에 대한 서드파티 분석도 없어요."
+    "dataPosture": "HealthLog는 셀프 호스팅이에요. 건강 데이터는 본인 인스턴스의 데이터베이스에 저장돼요. 메모와 기타 자유 입력 텍스트, 문서, 설문 응답, AI가 작성한 텍스트, 접근 토큰은 저장 시 암호화돼요. 측정값, 검사 수치, 약 이름, 기분 점수는 암호화되지 않은 채 저장되며 서버 자체의 보안에 의존해요. AI 기능은 계정에 설정된 AI 제공자에게만 데이터를 보내고, 건강 데이터에 대한 서드파티 분석은 없어요."
   },
   "customMetrics": {
     "sectionTitle": "사용자 지표",

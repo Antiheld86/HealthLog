@@ -4591,7 +4591,7 @@
       "sampleBody": "Peso 1,2 kg menos en dos semanas. Pulso en reposo estable en 58 lpm. Tensión dentro del rango 6 de 7 días — la única lectura alta llegó tras una cena tardía y salada.",
       "sampleCaption": "Solo un ejemplo — no son tus datos. Así se lee un resumen cuando los insights están activos.",
       "ladderTitle": "Tres formas de activarlo",
-      "ladderLocalTitle": "Modelo local — nada sale de tu red",
+      "ladderLocalTitle": "Modelo local — las solicitudes de IA no salen de tu red",
       "ladderLocalBody": "Apunta HealthLog a Ollama o LM Studio en tu propia máquina. Gratis y totalmente privado — la opción tranquila por defecto.",
       "ladderByokTitle": "Usa tu propia clave",
       "ladderByokBody": "Usa tu propia clave de OpenAI o Anthropic. Funciona con tu cuenta y facturación, y el nivel de API mantiene tus datos fuera del entrenamiento por defecto.",
@@ -5655,10 +5655,10 @@
     "codexConnected": "¡ChatGPT conectado correctamente! Insights ya está activo.",
     "codexDisconnected": "Conexión con ChatGPT eliminada.",
     "codexConnectionFailed": "Falló la conexión con ChatGPT. Inténtalo de nuevo.",
-    "rawData": "Enviar datos en bruto",
-    "rawDataOnDescription": "Se envían métricas agregadas más puntos individuales anonimizados de los últimos 30 días con contexto temporal — nunca el nombre, el correo electrónico ni los identificadores directos de la cuenta.",
-    "rawDataOffDescription": "Solo se envían métricas resumidas (por ejemplo, promedios, tendencias, mínimo/máximo) — sin puntos individuales ni contexto temporal exacto.",
-    "rawDataWarning": "Modo en bruto activado: el proveedor recibe puntos anonimizados adicionales de los últimos 30 días para un análisis más preciso.",
+    "rawData": "Enviar historial detallado",
+    "rawDataOnDescription": "Además de los resúmenes, el proveedor recibe promedios de tus mediciones: por día de los últimos 90 días, por semana del año anterior y por mes hasta 5 años atrás, cada uno con su fecha y número de mediciones. No se envían mediciones sueltas, tu nombre ni tu correo electrónico.",
+    "rawDataOffDescription": "Solo se envían resúmenes: el último valor, promedios, tendencias, mínimo y máximo en ventanas fijas. Ninguna serie de mediciones.",
+    "rawDataWarning": "Historial detallado activado: cada análisis envía además promedios diarios de los últimos 90 días, promedios semanales del año anterior y promedios mensuales hasta 5 años atrás.",
     "regenerateInsights": "Regenerar informes",
     "regenerateSuccess": "Informes regenerados correctamente",
     "regenerateRateLimit": "Espera un momento — has alcanzado el límite por hora de análisis.",
@@ -7092,6 +7092,7 @@
       "versionTileBuiltAt": "Compilado el",
       "versionTileUpdateAvailable": "Actualización disponible: {tag}",
       "versionTileUpToDate": "Actualizado",
+      "versionTileCheckOff": "Comprobación de actualizaciones desactivada",
       "snapshotLoadError": "No se pudo cargar la instantánea del sistema.",
       "snapshotLoading": "Cargando instantánea...",
       "auditTitle": "Actividad reciente",
@@ -7296,7 +7297,7 @@
           "description": "Cuándo puso este host por última vez la copia cifrada de cada cuenta en tu bucket.",
           "loadError": "No se pudo cargar el estado fuera del host.",
           "notConfiguredTitle": "La copia fuera del host no está configurada",
-          "notConfiguredDescription": "No hay bucket ni clave definidos, así que nada sale de este host. Define BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY y BACKUP_ENCRYPTION_KEY para activar la subida nocturna.",
+          "notConfiguredDescription": "No hay bucket ni clave definidos, así que ninguna copia de seguridad sale de este host. Define BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY y BACKUP_ENCRYPTION_KEY para activar la subida nocturna.",
           "stateFresh": "Reciente",
           "stateDue": "Pendiente",
           "stateStale": "Obsoleta",
@@ -7377,7 +7378,7 @@
         "rotateEnqueued": "Rotación iniciada.",
         "rotateFailed": "No se pudo iniciar la rotación.",
         "stepUpNeeded": "Se requiere un segundo factor reciente. Confirma tu segundo factor o usa la herramienta de línea de comandos si no tienes ninguno configurado.",
-        "cliNote": "Se necesita un segundo factor para usar este botón. Los operadores sin él rotan con scripts/rotate-encryption-key.ts.",
+        "cliNote": "Se necesita un segundo factor para usar este botón. Sin él, ejecuta scripts/rotate-encryption-key.ts desde una copia del código fuente de esta versión; los pasos están en docs/ops/encryption-key-rotation.md.",
         "columnsTitle": "Cobertura por columna",
         "columnsDescription": "Cada columna cifrada con sus recuentos de filas en la clave activa frente a claves anteriores.",
         "colColumn": "Columna",
@@ -10243,7 +10244,7 @@
     }
   },
   "selfDescription": {
-    "dataPosture": "HealthLog es autoalojado: tus datos de salud permanecen en tu propia instancia, cifrados en reposo. Las funciones de IA usan una clave de proveedor que tú aportas o un modelo local, así que nada sale de tu instancia más allá del proveedor que configures, y no hay analítica de terceros sobre tus datos de salud."
+    "dataPosture": "HealthLog es autoalojado: tus datos de salud están en la base de datos de tu propia instancia. Las notas y otros textos libres, los documentos, las respuestas a cuestionarios, los textos escritos por la IA y los tokens de acceso se cifran en reposo; los valores de mediciones, los valores de laboratorio, los nombres de medicamentos y las puntuaciones de ánimo se guardan sin cifrar y dependen de la seguridad de tu servidor. Las funciones de IA envían datos solo al proveedor de IA configurado para tu cuenta, y no hay analítica de terceros sobre tus datos de salud."
   },
   "customMetrics": {
     "sectionTitle": "Métricas personalizadas",

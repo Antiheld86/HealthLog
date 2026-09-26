@@ -55,6 +55,9 @@ next-env.d.ts
 # the cache-version baseline.
 /public/sw-version.js
 /public/i18n/
+# In-browser OCR engine and language data, copied from node_modules by
+# scripts/stage-tesseract-assets.mjs at prebuild/predev.
+/public/tesseract/
 
 # v1.4.27 B3 — MaxMind GeoLite2 databases are fetched at build time
 # via `scripts/fetch-geolite2.sh`. Too large for git; license key

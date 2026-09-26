@@ -4591,7 +4591,7 @@
       "sampleBody": "Gewicht in zwei Wochen um 1,2 kg gesunken. Ruhepuls stabil bei 58 bpm. Blutdruck an 6 von 7 Tagen im Zielbereich — der einzige hohe Wert folgte auf ein spätes, salziges Abendessen.",
       "sampleCaption": "Nur ein Beispiel — nicht deine eigenen Daten. So liest sich ein Briefing, sobald Insights aktiv sind.",
       "ladderTitle": "Drei Wege, es zu aktivieren",
-      "ladderLocalTitle": "Lokales Modell — nichts verlässt dein Netzwerk",
+      "ladderLocalTitle": "Lokales Modell — KI-Anfragen bleiben in deinem Netzwerk",
       "ladderLocalBody": "Richte HealthLog auf Ollama oder LM Studio auf deinem eigenen Rechner aus. Kostenlos und vollständig privat — der ruhige Standard.",
       "ladderByokTitle": "Eigenen Schlüssel verwenden",
       "ladderByokBody": "Nutze deinen eigenen OpenAI- oder Anthropic-Schlüssel. Er läuft über dein Konto und deine Abrechnung, und die API-Stufe hält deine Daten standardmäßig aus dem Training heraus.",
@@ -5655,10 +5655,10 @@
     "codexConnected": "ChatGPT erfolgreich verbunden! Insights sind jetzt aktiv.",
     "codexDisconnected": "ChatGPT-Verbindung getrennt.",
     "codexConnectionFailed": "ChatGPT-Verbindung fehlgeschlagen. Bitte versuche es erneut.",
-    "rawData": "Rohdaten mitsenden",
-    "rawDataOnDescription": "Es werden aggregierte Kennzahlen plus anonymisierte einzelne Messpunkte der letzten 30 Tage mit Zeitbezug gesendet — ohne Name, E-Mail oder direkte Kontodaten.",
-    "rawDataOffDescription": "Es werden nur zusammengefasste Werte gesendet (z. B. Durchschnitt, Trend, Minimum/Maximum) — ohne einzelne Messpunkte und exakte Zeitbezüge.",
-    "rawDataWarning": "Rohdaten aktiv: Der Provider erhält zusätzlich anonymisierte Messpunkte der letzten 30 Tage für eine präzisere Auswertung.",
+    "rawData": "Ausführlichen Verlauf senden",
+    "rawDataOnDescription": "Zusätzlich zu den Zusammenfassungen erhält der Anbieter Durchschnittswerte deiner Messungen: pro Tag für die letzten 90 Tage, pro Woche für das Jahr davor und pro Monat bis zu 5 Jahre zurück, jeweils mit Datum und Anzahl der Messungen. Einzelne Messwerte, dein Name und deine E-Mail werden nicht gesendet.",
+    "rawDataOffDescription": "Es werden nur Zusammenfassungen gesendet: der letzte Wert, Durchschnitte, Trends, Minimum und Maximum über feste Zeiträume. Keine Messreihen.",
+    "rawDataWarning": "Ausführlicher Verlauf ist an: Jede Auswertung sendet zusätzlich Tagesdurchschnitte der letzten 90 Tage, Wochendurchschnitte für das Jahr davor und Monatsdurchschnitte bis zu 5 Jahre zurück.",
     "regenerateInsights": "Reports neu generieren",
     "regenerateSuccess": "Reports wurden neu generiert",
     "regenerateRateLimit": "Bitte warte — du hast das stündliche Limit für Analysen erreicht.",
@@ -7092,6 +7092,7 @@
       "versionTileBuiltAt": "Gebaut am",
       "versionTileUpdateAvailable": "Update verfügbar: {tag}",
       "versionTileUpToDate": "Aktuell",
+      "versionTileCheckOff": "Update-Prüfung aus",
       "snapshotLoadError": "System-Snapshot konnte nicht geladen werden.",
       "snapshotLoading": "Snapshot wird geladen…",
       "auditTitle": "Letzte Aktivitäten",
@@ -7296,7 +7297,7 @@
           "description": "Wann dieser Host zuletzt die verschlüsselte Kopie jedes Kontos in deinen Bucket gelegt hat.",
           "loadError": "Der Status außer Haus konnte nicht geladen werden.",
           "notConfiguredTitle": "Sicherung außer Haus ist nicht eingerichtet",
-          "notConfiguredDescription": "Es sind weder Bucket noch Schlüssel gesetzt, also verlässt nichts diesen Host. Setze BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY und BACKUP_ENCRYPTION_KEY, um den nächtlichen Upload einzuschalten.",
+          "notConfiguredDescription": "Es sind weder Bucket noch Schlüssel gesetzt, also verlässt keine Sicherung diesen Host. Setze BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY und BACKUP_ENCRYPTION_KEY, um den nächtlichen Upload einzuschalten.",
           "stateFresh": "Frisch",
           "stateDue": "Fällig",
           "stateStale": "Veraltet",
@@ -7377,7 +7378,7 @@
         "rotateEnqueued": "Rotation gestartet.",
         "rotateFailed": "Rotation konnte nicht gestartet werden.",
         "stepUpNeeded": "Ein frischer zweiter Faktor ist erforderlich. Bestätige deinen zweiten Faktor oder nutze das Kommandozeilen-Werkzeug, falls kein zweiter Faktor eingerichtet ist.",
-        "cliNote": "Für diesen Knopf ist ein zweiter Faktor nötig. Betreiber ohne zweiten Faktor rotieren mit scripts/rotate-encryption-key.ts.",
+        "cliNote": "Für diesen Knopf ist ein zweiter Faktor nötig. Ohne ihn führen Betreiber scripts/rotate-encryption-key.ts aus einem Quellcode-Checkout dieser Version aus; die Schritte stehen in docs/ops/encryption-key-rotation.md.",
         "columnsTitle": "Abdeckung pro Spalte",
         "columnsDescription": "Jede verschlüsselte Spalte mit ihren Zeilenzahlen auf dem aktiven Schlüssel gegenüber älteren Schlüsseln.",
         "colColumn": "Spalte",
@@ -10243,7 +10244,7 @@
     }
   },
   "selfDescription": {
-    "dataPosture": "HealthLog wird selbst gehostet: Deine Gesundheitsdaten bleiben auf deiner eigenen Instanz und sind im Ruhezustand verschlüsselt. KI-Funktionen nutzen einen von dir mitgebrachten Anbieter-Schlüssel oder ein lokales Modell — nichts verlässt deine Instanz über den von dir konfigurierten Anbieter hinaus, und es gibt keine Drittanbieter-Analyse deiner Gesundheitsdaten."
+    "dataPosture": "HealthLog wird selbst gehostet: Deine Gesundheitsdaten liegen in der Datenbank deiner eigenen Instanz. Notizen und andere Freitexte, Dokumente, Fragebogen-Antworten, von der KI geschriebene Texte und Zugangs-Tokens sind im Ruhezustand verschlüsselt; Messwerte, Laborwerte, Medikamentennamen und Stimmungswerte werden unverschlüsselt gespeichert und sind so sicher wie dein Server. KI-Funktionen senden Daten nur an den KI-Anbieter, der für dein Konto eingerichtet ist, und es gibt keine Drittanbieter-Analyse deiner Gesundheitsdaten."
   },
   "customMetrics": {
     "sectionTitle": "Eigene Metriken",

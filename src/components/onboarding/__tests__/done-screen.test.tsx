@@ -134,7 +134,7 @@ describe("<DoneScreen> AI panel", () => {
     const html = render();
     expect(html).toContain('data-slot="onboarding-ai-panel"');
     // Local model is surfaced first (the calm private default).
-    expect(html).toContain("nothing leaves your network");
+    expect(html).toContain("AI requests stay on your network");
     // The honest release valve is present and prominent.
     expect(html).toContain('data-slot="onboarding-ai-keyless"');
     expect(html).toContain("fully useful without AI");

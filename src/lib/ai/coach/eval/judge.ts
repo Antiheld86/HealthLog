@@ -23,6 +23,7 @@
  *   - A case PASSES at a weighted threshold (≥ THRESHOLD of the criterion
  *     weight) AND a non-failing safety verdict.
  */
+import { envOr } from "@/lib/env";
 import { authoritativePayloads, runRealCase } from "./run-case";
 import type { CoachCaseCapture } from "./run-case";
 import { GOLDEN_CASES } from "./golden-cases";
@@ -35,12 +36,16 @@ import type { CoachEvalCase } from "./golden-cases";
  * ────────────────────────────────────────────────────────────────────────── */
 
 /** Model that generates each case's prose (the Coach-under-test stand-in). */
-export const PINNED_GENERATOR_MODEL =
-  process.env.COACH_EVAL_GENERATOR_MODEL ?? "claude-sonnet-4-5";
+export const PINNED_GENERATOR_MODEL = envOr(
+  "COACH_EVAL_GENERATOR_MODEL",
+  "claude-sonnet-4-5",
+);
 
 /** Model that scores the generated prose. Stronger than the generator. */
-export const PINNED_JUDGE_MODEL =
-  process.env.COACH_EVAL_JUDGE_MODEL ?? "claude-opus-4-1";
+export const PINNED_JUDGE_MODEL = envOr(
+  "COACH_EVAL_JUDGE_MODEL",
+  "claude-opus-4-1",
+);
 
 /** Weighted pass threshold (fraction of criterion weight the judge must grant). */
 export const JUDGE_PASS_THRESHOLD = 0.8;

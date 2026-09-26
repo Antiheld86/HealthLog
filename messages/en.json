@@ -4591,7 +4591,7 @@
       "sampleBody": "Weight down 1.2 kg over two weeks. Resting pulse steady at 58 bpm. Blood pressure in range on 6 of 7 days — the one high reading followed a late, salty dinner.",
       "sampleCaption": "Example only — not your own data. This is what a briefing reads like once insights are on.",
       "ladderTitle": "Three ways to turn it on",
-      "ladderLocalTitle": "Local model — nothing leaves your network",
+      "ladderLocalTitle": "Local model — AI requests stay on your network",
       "ladderLocalBody": "Point HealthLog at Ollama or LM Studio on your own machine. Free and fully private — the calm default.",
       "ladderByokTitle": "Bring your own key",
       "ladderByokBody": "Use your own OpenAI or Anthropic key. It runs under your account and billing, and the API tier keeps your data out of training by default.",
@@ -5655,10 +5655,10 @@
     "codexConnected": "ChatGPT connected successfully! Insights are now active.",
     "codexDisconnected": "ChatGPT connection removed.",
     "codexConnectionFailed": "ChatGPT connection failed. Please try again.",
-    "rawData": "Send raw data",
-    "rawDataOnDescription": "Aggregated metrics plus anonymized individual points from the last 30 days with time context are sent — never your name, email, or direct account identifiers.",
-    "rawDataOffDescription": "Only summarized metrics are sent (for example averages, trends, minimum/maximum) — no individual points and no exact time context.",
-    "rawDataWarning": "Raw mode enabled: the provider receives additional anonymized points from the last 30 days for higher analysis accuracy.",
+    "rawData": "Send detailed history",
+    "rawDataOnDescription": "Besides the summaries, the provider receives averages of your readings: per day for the last 90 days, per week for the year before, and per month back to 5 years, each with its date and number of readings. Single readings, your name and your email are not sent.",
+    "rawDataOffDescription": "Only summaries are sent: the latest value, averages, trends, minimum and maximum over fixed windows. No series of readings.",
+    "rawDataWarning": "Detailed history is on: every analysis also sends daily averages for the last 90 days, weekly averages for the year before, and monthly averages back to 5 years.",
     "regenerateInsights": "Regenerate reports",
     "regenerateSuccess": "Reports regenerated successfully",
     "regenerateRateLimit": "Please wait — you've hit the hourly limit for analyses.",
@@ -7092,6 +7092,7 @@
       "versionTileBuiltAt": "Built at",
       "versionTileUpdateAvailable": "Update available: {tag}",
       "versionTileUpToDate": "Up to date",
+      "versionTileCheckOff": "Update check off",
       "snapshotLoadError": "Failed to load system snapshot.",
       "snapshotLoading": "Loading snapshot…",
       "auditTitle": "Recent activity",
@@ -7296,7 +7297,7 @@
           "description": "When this host last put each account's encrypted copy in your bucket.",
           "loadError": "Could not load the off-host status.",
           "notConfiguredTitle": "Off-host backup is not configured",
-          "notConfiguredDescription": "No bucket and no key are set, so nothing leaves this host. Set BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY and BACKUP_ENCRYPTION_KEY to turn the nightly upload on.",
+          "notConfiguredDescription": "No bucket and no key are set, so no backup leaves this host. Set BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY and BACKUP_ENCRYPTION_KEY to turn the nightly upload on.",
           "stateFresh": "Fresh",
           "stateDue": "Due",
           "stateStale": "Stale",
@@ -7377,7 +7378,7 @@
         "rotateEnqueued": "Rotation started.",
         "rotateFailed": "Could not start the rotation.",
         "stepUpNeeded": "A fresh second factor is required. Confirm your second factor, or use the command-line tool if you have no second factor enrolled.",
-        "cliNote": "A second factor is required to use this button. Operators without one rotate with scripts/rotate-encryption-key.ts.",
+        "cliNote": "A second factor is required to use this button. Without one, run scripts/rotate-encryption-key.ts from a source checkout of this release; the steps are in docs/ops/encryption-key-rotation.md.",
         "columnsTitle": "Per-column coverage",
         "columnsDescription": "Each encrypted column with its row counts on the active key versus older keys.",
         "colColumn": "Column",
@@ -10243,7 +10244,7 @@
     }
   },
   "selfDescription": {
-    "dataPosture": "HealthLog is self-hosted: your health data stays on your own instance, encrypted at rest. AI features use a provider key you bring or a local model, so nothing leaves your instance beyond the provider you configure, and there is no third-party analytics on your health data."
+    "dataPosture": "HealthLog is self-hosted: your health data lives in your own instance's database. Notes and other free text, documents, questionnaire answers, AI-written text and access tokens are encrypted at rest; measurement values, lab values, medication names and mood scores are stored unencrypted and rely on the security of your server. AI features send data only to the AI provider set up for your account, and there is no third-party analytics on your health data."
   },
   "customMetrics": {
     "sectionTitle": "Custom metrics",

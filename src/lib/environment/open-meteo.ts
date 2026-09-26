@@ -18,17 +18,20 @@
  * settling), so callers fetch with a lookback window rather than "yesterday
  * only" — see the nightly job and the backfill route.
  */
+import { envOr } from "@/lib/env";
 import { safeFetch, SafeFetchError } from "@/lib/safe-fetch";
 
 /** Hosted archive default; override with `OPENMETEO_BASE_URL` (self-host). */
-const ARCHIVE_BASE_URL =
-  process.env.OPENMETEO_BASE_URL?.replace(/\/$/, "") ??
-  "https://archive-api.open-meteo.com";
+const ARCHIVE_BASE_URL = envOr(
+  "OPENMETEO_BASE_URL",
+  "https://archive-api.open-meteo.com",
+).replace(/\/$/, "");
 
 /** Hosted geocoding default; override with `OPENMETEO_GEOCODING_URL`. */
-const GEOCODING_BASE_URL =
-  process.env.OPENMETEO_GEOCODING_URL?.replace(/\/$/, "") ??
-  "https://geocoding-api.open-meteo.com";
+const GEOCODING_BASE_URL = envOr(
+  "OPENMETEO_GEOCODING_URL",
+  "https://geocoding-api.open-meteo.com",
+).replace(/\/$/, "");
 
 const FETCH_TIMEOUT_MS = 15_000;
 

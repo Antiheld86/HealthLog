@@ -1,3 +1,4 @@
+import { envOr } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { apiHandler, requireAdmin } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
@@ -14,7 +15,7 @@ const BUILD_TIME = process.env.BUILD_TIMESTAMP || new Date().toISOString();
 const START_TIME = new Date().toISOString();
 
 // Try to read git commit info
-let gitCommit = process.env.GIT_COMMIT ?? "unknown";
+let gitCommit = envOr("GIT_COMMIT", "unknown");
 try {
   const head = readFileSync(".git/HEAD", "utf-8").trim();
   if (head.startsWith("ref:")) {
@@ -69,7 +70,7 @@ export const GET = apiHandler(async () => {
   const failingJobs = await readFailingQueues();
 
   return apiSuccess({
-    version: process.env.npm_package_version ?? "0.1.0",
+    version: process.env.npm_package_version || "0.1.0",
     nodeVersion: process.version,
     gitCommit,
     buildTime: BUILD_TIME,

@@ -104,6 +104,35 @@ describe("lookupIpLocation IP-geolocation HTTPS guard", () => {
     expect(url).toBe("https://ipwho.is/8.8.8.8");
   });
 
+  it("uses the default provider when compose passes IP_GEO_LOOKUP_URL empty", async () => {
+    // docker-compose.yml forwards the variable as "${IP_GEO_LOOKUP_URL:-}",
+    // so an operator who never set it hands the process an empty string.
+    process.env.IP_GEO_LOOKUP_URL = "";
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(
+        jsonOk({ success: true, city: "Berlin", country_code: "DE" }),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+    const { lookupIpLocation } = await import("../geo");
+
+    expect(await lookupIpLocation("8.8.8.8")).toBe("Berlin, DE");
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe("https://ipwho.is/8.8.8.8");
+  });
+
+  it.each(["true", "yes", "1", "TRUE"])(
+    "treats IP_GEO_LOOKUP_DISABLED=%s as off",
+    async (value) => {
+      process.env.IP_GEO_LOOKUP_DISABLED = value;
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const { lookupIpLocation } = await import("../geo");
+
+      expect(await lookupIpLocation("8.8.8.8")).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
   it("refuses to call non-HTTPS configured providers", async () => {
     process.env.IP_GEO_LOOKUP_URL = "http://ip-api.com/json";
     const fetchSpy = vi.fn().mockResolvedValue(
