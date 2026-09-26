@@ -5584,6 +5584,7 @@
     "passkeyReauth": {
       "title": "본인 확인",
       "description": "새 패스키를 추가하기 전에 기존 로그인 수단으로 확인해 주세요.",
+      "factorDescription": "두 번째 인증 수단을 추가하기 전에 기존 로그인 방법을 확인하세요.",
       "methodLabel": "확인 방법",
       "methods": {
         "password": "비밀번호",
@@ -5594,7 +5595,8 @@
       "currentPassword": "현재 비밀번호",
       "authenticatorCode": "인증 앱 코드",
       "authenticatorPlaceholder": "6자리 인증 앱 코드",
-      "verifyAndAdd": "확인 후 추가"
+      "verifyAndAdd": "확인 후 추가",
+      "verifyAndContinue": "확인하고 계속"
     },
     "passkeyName": "이름",
     "noPasskeys": "등록된 패스키가 없어요.",

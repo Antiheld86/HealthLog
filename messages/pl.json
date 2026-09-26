@@ -5584,6 +5584,7 @@
     "passkeyReauth": {
       "title": "Potwierdź swoją tożsamość",
       "description": "Przed dodaniem nowego klucza dostępu zweryfikuj jedną z istniejących metod logowania.",
+      "factorDescription": "Potwierdź istniejącą metodę logowania, zanim dodasz drugi składnik.",
       "methodLabel": "Metoda weryfikacji",
       "methods": {
         "password": "Hasło",
@@ -5594,7 +5595,8 @@
       "currentPassword": "Aktualne hasło",
       "authenticatorCode": "Kod z aplikacji uwierzytelniającej",
       "authenticatorPlaceholder": "6-cyfrowy kod z aplikacji uwierzytelniającej",
-      "verifyAndAdd": "Zweryfikuj i dodaj"
+      "verifyAndAdd": "Zweryfikuj i dodaj",
+      "verifyAndContinue": "Potwierdź i kontynuuj"
     },
     "passkeyName": "Nazwa",
     "noPasskeys": "Brak zarejestrowanych kluczy dostępu.",

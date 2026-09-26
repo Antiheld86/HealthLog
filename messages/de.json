@@ -5584,6 +5584,7 @@
     "passkeyReauth": {
       "title": "Bestätige deine Identität",
       "description": "Bestätige vor dem Hinzufügen eines neuen Passkeys eine vorhandene Anmeldemethode.",
+      "factorDescription": "Bestätige eine vorhandene Anmeldemethode, bevor du einen zweiten Faktor hinzufügst.",
       "methodLabel": "Bestätigungsmethode",
       "methods": {
         "password": "Passwort",
@@ -5594,7 +5595,8 @@
       "currentPassword": "Aktuelles Passwort",
       "authenticatorCode": "Authenticator-Code",
       "authenticatorPlaceholder": "Sechsstelliger Authenticator-Code",
-      "verifyAndAdd": "Bestätigen und hinzufügen"
+      "verifyAndAdd": "Bestätigen und hinzufügen",
+      "verifyAndContinue": "Bestätigen und fortfahren"
     },
     "passkeyName": "Name",
     "noPasskeys": "Keine Passkeys registriert.",

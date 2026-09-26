@@ -5584,6 +5584,7 @@
     "passkeyReauth": {
       "title": "Confirmez votre identité",
       "description": "Vérifiez une méthode de connexion existante avant d’ajouter une nouvelle clé d’accès.",
+      "factorDescription": "Vérifiez une méthode de connexion existante avant d'ajouter un second facteur.",
       "methodLabel": "Méthode de vérification",
       "methods": {
         "password": "Mot de passe",
@@ -5594,7 +5595,8 @@
       "currentPassword": "Mot de passe actuel",
       "authenticatorCode": "Code d’authentification",
       "authenticatorPlaceholder": "Code d’authentification à 6 chiffres",
-      "verifyAndAdd": "Vérifier et ajouter"
+      "verifyAndAdd": "Vérifier et ajouter",
+      "verifyAndContinue": "Vérifier et continuer"
     },
     "passkeyName": "Nom",
     "noPasskeys": "Aucune clé d’accès enregistrée.",

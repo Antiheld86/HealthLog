@@ -5584,6 +5584,7 @@
     "passkeyReauth": {
       "title": "Conferma la tua identità",
       "description": "Verifica un metodo di accesso esistente prima di aggiungere una nuova passkey.",
+      "factorDescription": "Verifica un metodo di accesso esistente prima di aggiungere un secondo fattore.",
       "methodLabel": "Metodo di verifica",
       "methods": {
         "password": "Password",
@@ -5594,7 +5595,8 @@
       "currentPassword": "Password attuale",
       "authenticatorCode": "Codice dell’app di autenticazione",
       "authenticatorPlaceholder": "Codice a 6 cifre dell’app di autenticazione",
-      "verifyAndAdd": "Verifica e aggiungi"
+      "verifyAndAdd": "Verifica e aggiungi",
+      "verifyAndContinue": "Verifica e continua"
     },
     "passkeyName": "Nome",
     "noPasskeys": "Nessuna passkey registrata.",

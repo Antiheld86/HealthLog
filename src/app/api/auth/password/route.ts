@@ -14,7 +14,10 @@ import {
   returnAllZodIssues,
   safeJson,
 } from "@/lib/api-response";
-import { checkRateLimit } from "@/lib/rate-limit";
+import {
+  recordReproofFailure,
+  throttleReproof,
+} from "@/lib/auth/existing-factor-proof";
 import {
   apiHandler,
   requireFreshMfaIfEnrolled,
@@ -35,14 +38,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // contract. Mirrors the step-up on MFA-disable + recovery-code regen.
   const { user } = await requireFreshMfaIfEnrolled(MFA_STEP_UP_MAX_AGE_SECONDS);
 
-  const rl = await checkRateLimit(
-    `auth:password:${user.id}`,
-    5,
-    15 * 60 * 1000,
-  );
-  if (!rl.allowed) {
-    return apiError("Too many attempts. Please wait 15 minutes.", 429);
-  }
+  // The current-password check below is a guessing oracle, so it draws on the
+  // account's shared re-proof budget: a guess spent here is one the step-up
+  // mint and the enrollment proofs cannot spend again.
+  const ip = getClientIp(request);
+  const limited = await throttleReproof(user.id, ip, "password_change");
+  if (limited) return limited;
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,
@@ -62,6 +63,13 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   const currentValid = await verifyPassword(user.passwordHash, currentPassword);
   if (!currentValid) {
+    await recordReproofFailure(
+      user.id,
+      ip,
+      "password_change",
+      "password",
+      "bad_password",
+    );
     return apiError("Current password is incorrect", 401);
   }
 

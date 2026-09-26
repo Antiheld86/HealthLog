@@ -5584,6 +5584,7 @@
     "passkeyReauth": {
       "title": "Confirm it's you",
       "description": "Verify an existing sign-in method before adding a new passkey.",
+      "factorDescription": "Verify an existing sign-in method before adding a second factor.",
       "methodLabel": "Verification method",
       "methods": {
         "password": "Password",
@@ -5594,7 +5595,8 @@
       "currentPassword": "Current password",
       "authenticatorCode": "Authenticator code",
       "authenticatorPlaceholder": "6-digit authenticator code",
-      "verifyAndAdd": "Verify and add"
+      "verifyAndAdd": "Verify and add",
+      "verifyAndContinue": "Verify and continue"
     },
     "passkeyName": "Name",
     "noPasskeys": "No passkeys registered.",

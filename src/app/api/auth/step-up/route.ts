@@ -40,16 +40,17 @@ import {
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
-import { prisma } from "@/lib/db";
 import {
   checkAuthSurfaceRateLimit,
   checkRateLimit,
   rateLimitHeaders,
 } from "@/lib/rate-limit";
-import { verifyPassword } from "@/lib/auth/password";
-import { verifyAuthentication } from "@/lib/auth/passkey";
-import { verifyMfaAuthentication } from "@/lib/auth/mfa/webauthn";
-import { verifyMfaFactor } from "@/lib/auth/mfa/verify-factor";
+import {
+  REPROOF_LIMIT,
+  REPROOF_WINDOW_MS,
+  reproofBucket,
+  verifyExistingFactorProof,
+} from "@/lib/auth/existing-factor-proof";
 import {
   mintStepUpElevation,
   isFreshFactorMethod,
@@ -65,8 +66,8 @@ export const dynamic = "force-dynamic";
  * against a user-supplied string — the same 5-per-15-minutes the password-change
  * route uses, for the same reason.
  */
-const MINT_LIMIT = 5;
-const MINT_WINDOW_MS = 15 * 60 * 1000;
+const MINT_LIMIT = REPROOF_LIMIT;
+const MINT_WINDOW_MS = REPROOF_WINDOW_MS;
 
 export const POST = apiHandler(async (request: NextRequest) => {
   const auth = await requireBearerAuth();
@@ -91,8 +92,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
     });
   }
 
+  // The account's shared re-proof bucket: a guess spent here is a guess the
+  // web enrollment surfaces cannot spend again, and the other way round.
   const userRl = await checkRateLimit(
-    `auth:step-up:${user.id}`,
+    reproofBucket(user.id),
     MINT_LIMIT,
     MINT_WINDOW_MS,
   );
@@ -122,78 +125,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   const method: StepUpMethod = parsed.data.method;
-  let proved = false;
+  // The shared verifier: the same challenge ownership and ceremony checks, and
+  // the same confirmed-secret rule for TOTP, as every other re-proof surface.
+  // The replay guard and the accepted-step burn behave exactly as they do at
+  // login and at MFA-disable, so a code spent here cannot be replayed there.
+  const outcome = await verifyExistingFactorProof(user, parsed.data);
+  const proved = outcome.ok;
   // Audit-only detail. Never reaches the response — see the file header.
-  let failure = "invalid";
-
-  /**
-   * Resolve a WebAuthn challenge and confirm it belongs to THIS account before
-   * any verification runs. Both ceremony helpers resolve a challenge by id
-   * alone, so without this a challenge minted for another account could be
-   * carried into the ceremony.
-   */
-  const challengeBelongsToCaller = async (id: string): Promise<boolean> => {
-    const row = await prisma.authChallenge.findUnique({
-      where: { id },
-      select: { userId: true },
-    });
-    return Boolean(row && row.userId === user.id);
-  };
-
-  if (parsed.data.method === "password") {
-    if (!user.passwordHash) {
-      // An SSO-provisioned account has no password to re-prove. Same refusal as
-      // a wrong one: the account's credential shape is not a token holder's to
-      // enumerate. `/api/auth/step-up/options` is the honest discovery path —
-      // it 409s when there is no credential of the requested kind either.
-      failure = "no_password";
-    } else {
-      proved = await verifyPassword(user.passwordHash, parsed.data.password);
-      if (!proved) failure = "bad_password";
-    }
-  } else if (parsed.data.method === "totp") {
-    // The shared factor verifier, so the replay guard and the accepted-step
-    // burn behave exactly as they do at login and at MFA-disable. A code spent
-    // here cannot be replayed there.
-    const result = await verifyMfaFactor(user, "totp", parsed.data.code);
-    proved = result.ok;
-    if (!proved) failure = result.replay ? "totp_replay" : "bad_totp";
-  } else if (parsed.data.method === "webauthn") {
-    if (!(await challengeBelongsToCaller(parsed.data.challengeId))) {
-      failure = "foreign_challenge";
-    } else {
-      try {
-        // Scoped to the caller's own second-factor credentials by the verifier.
-        proved = await verifyMfaAuthentication(
-          parsed.data.challengeId,
-          user.id,
-          parsed.data.credential,
-        );
-        if (!proved) failure = "bad_assertion";
-      } catch {
-        // A malformed / expired challenge is a failed attempt, not a 500.
-        failure = "bad_assertion";
-      }
-    }
-  } else {
-    if (!(await challengeBelongsToCaller(parsed.data.challengeId))) {
-      failure = "foreign_challenge";
-    } else {
-      try {
-        const result = await verifyAuthentication(
-          parsed.data.challengeId,
-          parsed.data.credential,
-        );
-        // Both halves matter: a verified assertion against SOMEONE ELSE'S
-        // passkey proves possession of a factor, just not of this account's.
-        proved =
-          result.verification.verified && result.passkey.userId === user.id;
-        if (!proved) failure = "bad_assertion";
-      } catch {
-        failure = "bad_assertion";
-      }
-    }
-  }
+  const failure = outcome.ok ? "" : outcome.reason;
 
   if (!proved) {
     await auditLog("auth.stepup.mint.failed", {
