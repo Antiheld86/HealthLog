@@ -125,25 +125,32 @@ export async function readBestGranularityRollups(
     userPriorityJson !== undefined
       ? userPriorityJson
       : await loadUserSourcePriority(userId);
-  // Every tier is folded from the same canonical DAY buckets, so a tier
-  // either has coverage or none has: pick the coarsest floor the window
-  // clears and read it once.
-  const floor = GRANULARITY_FLOORS.find((f) => windowDays >= f.minWindowDays);
-  if (!floor) return null;
-  const rows = await readGranularity(
-    userId,
-    type,
-    floor.granularity,
-    since,
-    // Trailing-window semantics: no upper bound. This router serves the
-    // "last N days to now" probes (summaries-slice / health-score); the
-    // requested-window bounding lives on `readTieredRollupSeries`.
-    null,
-    priority,
+  // Every tier is folded from the same canonical DAY buckets, but a coarse
+  // bucket that starts before `since` is left out (it holds only part of its
+  // days). Data that sits only in that leading partial bucket, say three
+  // months at the start of a 731-day window, reads as empty at YEAR: step one
+  // tier finer until a tier has buckets, down to DAY, which starts inside the
+  // window by construction.
+  const floors = GRANULARITY_FLOORS.filter(
+    (f) => windowDays >= f.minWindowDays,
   );
-  return rows && rows.length > 0
-    ? { granularity: floor.granularity, rows }
-    : null;
+  for (const floor of floors) {
+    const rows = await readGranularity(
+      userId,
+      type,
+      floor.granularity,
+      since,
+      // Trailing-window semantics: no upper bound. This router serves the
+      // "last N days to now" probes (summaries-slice / health-score); the
+      // requested-window bounding lives on `readTieredRollupSeries`.
+      null,
+      priority,
+    );
+    if (rows && rows.length > 0) {
+      return { granularity: floor.granularity, rows };
+    }
+  }
+  return null;
 }
 
 /**
