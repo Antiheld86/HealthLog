@@ -7,7 +7,7 @@ import {
   getHiddenMetrics,
   getMoodMetrics,
 } from "@/lib/gamification/expansion-metrics";
-import { toBerlinDayKey } from "@/lib/gamification/achievements";
+import { userDayKey } from "@/lib/tz/format";
 
 // Mirror of the module-private Berlin-hour derivation so the parity test can
 // build a CORRECT precomputed `measurementHours` array.
@@ -408,7 +408,7 @@ describe("achievements Intl precompute — byte-identical parity", () => {
   ];
 
   const measurementDayKeys = measurements.map((m) =>
-    toBerlinDayKey(m.measuredAt),
+    userDayKey(m.measuredAt, "Europe/Berlin"),
   );
   const measurementHours = measurements.map((m) => berlinHour(m.measuredAt));
 

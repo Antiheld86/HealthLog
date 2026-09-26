@@ -256,6 +256,7 @@ export async function prepareBmiStatusForUser(
     userId,
     "WEIGHT",
     now,
+    userTz,
   );
   const bmiGraded = scaleGradedSeries(weightGraded, 1 / heightFactor, 2);
   const bmiSeries = {

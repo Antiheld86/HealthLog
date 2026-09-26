@@ -11,23 +11,30 @@
  * This test mirrors the v1.4.40 W-POOL pin
  * (`src/app/api/analytics/__tests__/route.test.ts` —
  * "pin concurrency cap and pool ceiling"). It mocks
- * `readBestGranularityRollups` with a controllable promise so we can
+ * `readRollupBuckets` with a controllable promise so we can
  * observe the in-flight count at the helper boundary and assert it
  * never exceeds 4 across a 15-type fan-out.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/rollups/measurement-read-wmy", () => ({
-  readBestGranularityRollups: vi.fn(),
+vi.mock("@/lib/rollups/measurement-rollups", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/rollups/measurement-rollups")
+  >()),
+  readRollupBuckets: vi.fn(),
+}));
+vi.mock("@/lib/rollups/measurement-read", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/rollups/measurement-read")>()),
+  loadUserSourcePriority: vi.fn(async () => null),
 }));
 
-import { readBestGranularityRollups } from "@/lib/rollups/measurement-read-wmy";
+import { readRollupBuckets } from "@/lib/rollups/measurement-rollups";
 import {
   WMY_FANOUT_CONCURRENCY,
   computeAvg30LastYearMap,
 } from "../summaries-slice";
 
-const READ = readBestGranularityRollups as unknown as ReturnType<typeof vi.fn>;
+const READ = readRollupBuckets as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   READ.mockReset();
@@ -45,7 +52,7 @@ describe("computeAvg30LastYearMap — WMY fan-out cap (v1.4.43)", () => {
     expect(WMY_FANOUT_CONCURRENCY).toBe(4);
   });
 
-  it("holds at most 4 concurrent readBestGranularityRollups calls for a 15-type list", async () => {
+  it("holds at most 4 concurrent rollup reads for a 15-type list", async () => {
     let inFlight = 0;
     let peak = 0;
     const resolvers: Array<() => void> = [];
@@ -58,7 +65,7 @@ describe("computeAvg30LastYearMap — WMY fan-out cap (v1.4.43)", () => {
           inFlight -= 1;
           // Resolve with `null` — the helper treats no-coverage as
           // `null` in the output map, which is fine for this test.
-          resolve(null);
+          resolve([]);
         });
       });
     });

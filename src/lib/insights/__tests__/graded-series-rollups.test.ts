@@ -43,6 +43,8 @@ import {
 import { foldDayAggregates } from "@/lib/measurements/__tests__/fake-day-aggregates";
 import type { ReadDayAggregatesOptions } from "@/lib/measurements/day-aggregates";
 
+const TZ = "Europe/Berlin";
+
 const dayMs = 24 * 60 * 60 * 1000;
 
 /** Readings spanning `days` back from `now`, `perDay` per day. */
@@ -80,7 +82,7 @@ describe("buildGradedSeriesWithRollups — bounded reads (#1023)", () => {
       rows: [rollupRow(new Date("2025-09-01T00:00:00Z"), 79)],
     });
 
-    await buildGradedSeriesWithRollups("u1", "PULSE", now);
+    await buildGradedSeriesWithRollups("u1", "PULSE", now, TZ);
 
     expect(findMany).not.toHaveBeenCalled();
     const opts = readDayAggregates.mock.calls[0][0] as ReadDayAggregatesOptions;
@@ -99,7 +101,7 @@ describe("buildGradedSeriesWithRollups — bounded reads (#1023)", () => {
     serveFrom(points(800, now));
     readBestGranularityRollups.mockResolvedValue(null);
 
-    const series = await buildGradedSeriesWithRollups("u1", "WEIGHT", now);
+    const series = await buildGradedSeriesWithRollups("u1", "WEIGHT", now, TZ);
 
     expect(series.monthly.length).toBeGreaterThan(0);
     expect(series.yearly.length).toBeGreaterThan(0);
@@ -129,7 +131,7 @@ describe("buildGradedSeriesWithRollups — bounded reads (#1023)", () => {
             },
     );
 
-    const series = await buildGradedSeriesWithRollups("u1", "WEIGHT", now);
+    const series = await buildGradedSeriesWithRollups("u1", "WEIGHT", now, TZ);
 
     expect(series.monthly.length).toBeGreaterThan(0);
     expect(series.yearly.length).toBeGreaterThan(0);
@@ -148,7 +150,7 @@ describe("buildGradedSeriesWithRollups — bounded reads (#1023)", () => {
           : null,
     );
 
-    const series = await buildGradedSeriesWithRollups("u1", "WEIGHT", now);
+    const series = await buildGradedSeriesWithRollups("u1", "WEIGHT", now, TZ);
 
     expect(series.monthly).toHaveLength(1);
     expect(series.yearly.length).toBeGreaterThan(0);
@@ -170,7 +172,7 @@ describe("buildGradedSeriesFromDayAggregates — parity with the raw fold", () =
       { measuredAt: new Date(now.getTime() - 21 * dayMs), value: 99 },
       { measuredAt: new Date(now.getTime() - 91 * dayMs), value: 41 },
     ];
-    const raw = buildGradedSeriesFromPoints(rows, now);
+    const raw = buildGradedSeriesFromPoints(rows, now, TZ);
     const agg = buildGradedSeriesFromDayAggregates(
       foldDayAggregates(rows, {
         since: new Date(0),

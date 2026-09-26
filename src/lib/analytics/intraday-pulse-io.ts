@@ -19,7 +19,7 @@ import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
 import { percentile } from "@/lib/insights/strain-score";
 import { resolveRestingPulseSeries } from "@/lib/analytics/resting-pulse";
-import { localDayWindow } from "@/lib/measurements/consolidation-tz";
+import { localDayWindow } from "@/lib/tz/local-day";
 import { userDayKey } from "@/lib/tz/format";
 import {
   BUCKET_MINUTES,

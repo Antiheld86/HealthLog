@@ -2,7 +2,7 @@
  * v1.4.25 W7 — per-user timezone resolver (server-only).
  *
  * HealthLog historically pinned every display surface to the
- * `DISPLAY_TIMEZONE` constant ("Europe/Berlin"). The per-user
+ * `DEFAULT_TIMEZONE` constant ("Europe/Berlin"). The per-user
  * timezone feature (Option B in `.planning/feature-user-timezone.md`)
  * threads the user's stored zone through every surface that renders
  * a date or buckets by day — exports, charts, AI Coach snapshot,
@@ -50,54 +50,6 @@ export {
   userDayKey,
   hourInTz,
 } from "./format";
-
-const BERLIN_DAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  timeZone: "Europe/Berlin",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
-/**
- * Format a Date as `YYYY-MM-DD` in `Europe/Berlin`. The seven Insight
- * status helpers (`bmi`, `blood-pressure`, `weight`, `pulse`, `mood`,
- * `medication-compliance`, `general`) all key their per-day cache on
- * this — the maintainer's primary tenant runs in Berlin and the cache
- * action row reads identically across helpers when the formatter lives
- * here.
- *
- * For per-user surfaces, prefer `userDayKey(date, tz)` from `./format`.
- * This helper exists for the cache-key path where the day-bucket is
- * intentionally Berlin-anchored regardless of the requesting user's
- * stored zone.
- */
-export function toBerlinDayKey(date: Date): string {
-  const { year, month, day } = toBerlinYmd(date);
-  return `${year}-${month}-${day}`;
-}
-
-/**
- * Same formatter, but returns the numeric `{year, month, day}` parts
- * instead of the reassembled string. Used by `bucket-series.ts` for
- * `Date.UTC(year, month - 1, day)` arithmetic where parsing the string
- * back would be wasted work.
- */
-export function toBerlinYmd(date: Date): {
-  year: string;
-  month: string;
-  day: string;
-} {
-  const parts = BERLIN_DAY_FORMATTER.formatToParts(date);
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  if (!year || !month || !day) {
-    throw new Error("Could not derive Berlin day key");
-  }
-
-  return { year, month, day };
-}
 
 const TTL_MS = 60_000;
 

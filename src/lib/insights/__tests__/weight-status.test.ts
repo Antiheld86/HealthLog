@@ -19,6 +19,8 @@ vi.mock("@/lib/db", () => ({
     // moodEntry.aggregate before the heavy findMany build.
     measurement: { findMany: vi.fn(), groupBy: vi.fn() },
     measurementRollup: { findMany: vi.fn() },
+    // Weekly / monthly / yearly buckets are folded from the DAY tier in SQL.
+    $queryRaw: vi.fn(),
     moodEntry: { findMany: vi.fn(), aggregate: vi.fn() },
     customMetric: { findMany: vi.fn() },
     // v1.11.1 — the rollup readers lazy-load the user's
@@ -102,6 +104,7 @@ beforeEach(() => {
   // Cold rollup tier: the graded builder folds monthly/yearly from the
   // full-history `measurement.findMany` fallback the test already mocks.
   vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
   // v1.11.1 — null source-priority blob → default rank ladders.
   vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
   // v1.18.11 (P6) — input-gate probe. Default to empty groups + zero mood so

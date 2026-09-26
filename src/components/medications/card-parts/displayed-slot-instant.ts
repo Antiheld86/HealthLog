@@ -1,3 +1,4 @@
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 /**
  * v1.12.3 — resolve the canonical slot instant of the dose a medication
  * card is currently surfacing, so the card's "Genommen" / "Skip" buttons
@@ -138,7 +139,7 @@ export function resolveDisplayedSlotInstant(
     currentWindowStatus,
     nextDueAt,
     now,
-    timeZone = "Europe/Berlin",
+    timeZone = DEFAULT_TIMEZONE,
   } = input;
 
   // The card surfaces the current/overdue dose band — record that band's

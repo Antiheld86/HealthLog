@@ -28,9 +28,7 @@
  * legacy date string (`effectiveMoodTz`).
  */
 
-import { userDayKey } from "@/lib/tz/format";
-
-export const DEFAULT_TIMEZONE = "Europe/Berlin";
+import { userDayKey, DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * Build the `YYYY-MM-DD` day-key for a mood entry given the user's

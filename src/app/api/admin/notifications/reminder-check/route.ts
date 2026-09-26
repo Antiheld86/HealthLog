@@ -9,6 +9,7 @@ import { parseScheduleRecurrence } from "@/lib/medication-schedule";
 import { dispatchLocalisedNotification } from "@/lib/notifications/dispatch-localised";
 import { getUserTodayBounds, getDayOfWeekInTz } from "@/lib/tz/local-day";
 import { TRACKED_INTAKE_WHERE } from "@/lib/medications/intake-tracking";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +117,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   let notificationsSent = 0;
 
   for (const med of medications) {
-    const userTz = med.user.timezone || "Europe/Berlin";
+    const userTz = med.user.timezone || DEFAULT_TIMEZONE;
     const { start: todayStart, end: todayEnd } = getUserTodayBounds(
       now,
       userTz,

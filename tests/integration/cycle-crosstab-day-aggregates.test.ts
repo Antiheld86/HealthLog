@@ -101,8 +101,8 @@ describe("cycle crosstab day values (#1023)", () => {
     expect(aggRows.length).toBeLessThan(500);
 
     for (const type of PHASE_CROSSTAB_METRIC_TYPES) {
-      const expected = metricDayMap(raw, type, null);
-      const actual = metricDayMap(aggRows, type, null);
+      const expected = metricDayMap(raw, type, null, "Europe/Berlin");
+      const actual = metricDayMap(aggRows, type, null, "Europe/Berlin");
       expect([...actual.keys()].sort(), type).toEqual(
         [...expected.keys()].sort(),
       );

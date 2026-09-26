@@ -57,6 +57,7 @@ import {
 } from "@/lib/medications/window-status";
 import { resolveDisplayedSlotInstant } from "@/components/medications/card-parts/displayed-slot-instant";
 import type { DoseStatus } from "@/lib/analytics/compliance";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type Translator = (
   key: string,
@@ -142,7 +143,7 @@ export function deriveDueMedications(
   } = {},
 ): DueMedication[] {
   const now = options.now ?? new Date();
-  const tz = options.tz ?? "Europe/Berlin";
+  const tz = options.tz ?? DEFAULT_TIMEZONE;
   const { lateMinutes, missedMinutes } =
     options.thresholds ?? DEFAULT_THRESHOLDS;
 

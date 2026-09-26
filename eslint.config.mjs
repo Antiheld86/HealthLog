@@ -104,6 +104,10 @@ const eslintConfig = defineConfig([
       // catches the omission only — a handler that returns `{ ok: true }`
       // after swallowing still passes, and its header says so.
       "healthlog/job-handler-outcome": "error",
+      // The default zone is named once, in src/lib/tz/format.ts. A copy of the
+      // literal anywhere else is where a user outside that zone got someone
+      // else's calendar. src/lib/tz/ and test files are exempt; see the rule.
+      "healthlog/no-default-zone-literal": "error",
     },
   },
   // v1.28.17 — every recharts-rendering component funnels through the

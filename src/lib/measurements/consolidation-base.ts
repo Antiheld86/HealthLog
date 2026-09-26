@@ -19,7 +19,7 @@
  * supplies its reducer/types and keeps its own public summary shape.
  *
  * The timezone day-math helpers (`dayKeyForUserTz`,
- * `canonicalDailyTimestamp`, `localStartOfDay`, `localDayWindow`), the
+ * `canonicalDailyTimestamp`), the
  * `PerSampleRow` shape, and `CONSOLIDATION_GRACE_CUTOFF_HOURS` all live
  * in the dependency-free leaf `consolidation-tz.ts`. Both this module
  * and `drain-per-sample-cumulative.ts` import them from there, so there
@@ -40,13 +40,13 @@ import {
   dayKeyForUserTz,
   type PerSampleRow,
 } from "./consolidation-tz";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 // Re-export the shared grace constant so the established
 // `consolidation-base` import surface stays unchanged for callers.
 export { CONSOLIDATION_GRACE_CUTOFF_HOURS };
 
 /** Fallback timezone for users with no `User.timezone` set. */
-const DEFAULT_TIMEZONE = "Europe/Berlin";
 
 /**
  * Options shared by every drain. Each drain re-exports its own alias of

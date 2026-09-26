@@ -33,7 +33,7 @@ import { sanitizeForPrompt } from "@/lib/insights/sanitize";
 import { getNoKeyBloodPressureStatusText } from "@/lib/insights/no-key-fallbacks";
 import {
   applyPayloadBudget,
-  dayOffsetToBerlinDayKey,
+  dayOffsetToDayKey,
   type DailyBucket,
 } from "@/lib/insights/bucket-series";
 import {
@@ -67,6 +67,7 @@ import { annotate } from "@/lib/logging/context";
 import { resolveUserTimezone, userDayKey } from "@/lib/tz/resolver";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { TRACKED_INTAKE_WHERE } from "@/lib/medications/intake-tracking";
+import { canonicalDailyTimestamp } from "@/lib/measurements/consolidation-tz";
 
 /**
  * Cap on the embedded correlation / paired-daily arrays. The Pearson
@@ -78,7 +79,7 @@ const CORRELATION_PAIR_CAP = 30;
 /**
  * Pair two daily-bucket series on `dayOffset`. The synthesised `date`
  * field is anchored at the UTC midnight of the Berlin calendar day —
- * `dayOffsetToBerlinDayKey()` is the source of truth so DST boundaries
+ * `dayOffsetToDayKey()` is the source of truth so DST boundaries
  * don't slip the day-key by one. Each pair also carries `dayKey`
  * directly so callers can label points without re-formatting.
  */
@@ -94,10 +95,9 @@ function pairDailyBuckets(
     .map((entry) => {
       const b = mapB.get(entry.dayOffset);
       if (b == null) return null;
-      const dayKey = dayOffsetToBerlinDayKey(now, entry.dayOffset, tz);
-      // UTC midnight of the Berlin day — formatting this Date with
-      // `toBerlinDayKey()` is guaranteed DST-safe because the y-m-d
-      // fields below are the Berlin calendar day fields by construction.
+      const dayKey = dayOffsetToDayKey(now, entry.dayOffset, tz);
+      // UTC midnight of the user's day: an ordering handle only; `dayKey`
+      // is the day itself.
       const [y, m, d] = dayKey.split("-").map(Number);
       return {
         a: entry.value,
@@ -435,8 +435,8 @@ export async function prepareBloodPressureStatusForUser(
   }
 
   const continuityVsSystolicSeries = sysSeries.daily.map((point) => {
-    // DST-safe: dayOffsetToBerlinDayKey computes calendar days, not 24h ticks.
-    const dayKey = dayOffsetToBerlinDayKey(now, point.dayOffset, userTz);
+    // DST-safe: dayOffsetToDayKey computes calendar days, not 24h ticks.
+    const dayKey = dayOffsetToDayKey(now, point.dayOffset, userTz);
     const taken = takenByDay.get(dayKey) ?? 0;
     const continuityPct =
       expectedBpIntakesPerDay > 0
@@ -480,18 +480,22 @@ export async function prepareBloodPressureStatusForUser(
   const gradedFromDaily = (buckets: DailyBucket[]) =>
     buildGradedSeriesFromPoints(
       buckets.map((b) => ({
-        measuredAt: new Date(dayOffsetToBerlinDayKey(now, b.dayOffset, userTz)),
+        measuredAt: canonicalDailyTimestamp(
+          dayOffsetToDayKey(now, b.dayOffset, userTz),
+          userTz,
+        ),
         value: b.value,
       })),
       now,
+      userTz,
     );
   // The two BP channels source their recent / weekly slices from a
   // bounded raw read and their monthly / yearly tail from the MONTH /
   // YEAR rollup tier (full-history in-memory fallback on a cold-tier
   // coverage miss). Mood has no rollup tier, so it stays an in-memory fold.
   const [sysGraded, diaGraded] = await Promise.all([
-    buildGradedSeriesWithRollups(userId, "BLOOD_PRESSURE_SYS", now),
-    buildGradedSeriesWithRollups(userId, "BLOOD_PRESSURE_DIA", now),
+    buildGradedSeriesWithRollups(userId, "BLOOD_PRESSURE_SYS", now, userTz),
+    buildGradedSeriesWithRollups(userId, "BLOOD_PRESSURE_DIA", now, userTz),
   ]);
   const moodGraded = gradedFromDaily(moodSeries.daily);
 

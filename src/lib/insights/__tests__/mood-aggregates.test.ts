@@ -1006,7 +1006,12 @@ describe("computeTagMetricCrosstab", () => {
         meas(i, "ACTIVE_ENERGY_BURNED", 350 + (i % 2 === 0 ? 20 : -20)),
       );
     }
-    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const rows = computeTagMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      entries,
+      measurements,
+      now: NOW,
+    });
     const row = rows.find(
       (r) => r.tag === "worked_out" && r.metricKey === "activeEnergy",
     );
@@ -1045,7 +1050,12 @@ describe("computeTagMetricCrosstab", () => {
         meas(i, "SLEEP_DURATION", 360 + (i % 2 === 0 ? 6 : -6)),
       );
     }
-    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const rows = computeTagMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      entries,
+      measurements,
+      now: NOW,
+    });
     const row = rows.find((r) => r.metricKey === "sleepDuration");
     expect(row).toBeDefined();
     expect(row!.display).toBe("hours");
@@ -1079,7 +1089,12 @@ describe("computeTagMetricCrosstab", () => {
         meas(i - 1, "RECOVERY_SCORE", 80 + (i % 2 === 0 ? 3 : -3)),
       );
     }
-    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const rows = computeTagMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      entries,
+      measurements,
+      now: NOW,
+    });
     const row = rows.find((r) => r.metricKey === "nextDayRecovery");
     expect(row).toBeDefined();
     expect(row!.mode).toBe("nextDay");
@@ -1134,7 +1149,12 @@ describe("computeTagMetricCrosstab", () => {
       62,
       54,
     );
-    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const rows = computeTagMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      entries,
+      measurements,
+      now: NOW,
+    });
     const row = rows.find(
       (r) => r.tag === "alcohol" && r.metricKey === "nextDayRestingHeartRate",
     );
@@ -1156,7 +1176,12 @@ describe("computeTagMetricCrosstab", () => {
       38,
       55,
     );
-    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const rows = computeTagMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      entries,
+      measurements,
+      now: NOW,
+    });
     const row = rows.find(
       (r) =>
         r.tag === "alcohol" && r.metricKey === "nextDayHeartRateVariability",
@@ -1183,6 +1208,7 @@ describe("computeTagMetricCrosstab", () => {
         { key, categoryKey: "health", labelKey, icon },
       );
       const rows = computeTagMetricCrosstab({
+        timeZone: "Europe/Berlin",
         entries,
         measurements,
         now: NOW,
@@ -1220,7 +1246,12 @@ describe("computeTagMetricCrosstab", () => {
       measurements.push(meas(i, "ACTIVE_ENERGY_BURNED", 350));
     }
     expect(CROSSTAB_MIN_PRESENT_DAYS).toBeGreaterThan(3);
-    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const rows = computeTagMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      entries,
+      measurements,
+      now: NOW,
+    });
     expect(rows.find((r) => r.tag === "worked_out")).toBeUndefined();
   });
 
@@ -1235,7 +1266,12 @@ describe("computeTagMetricCrosstab", () => {
       entries.push(entry(i, 3, []));
       measurements.push(meas(i, "ACTIVE_ENERGY_BURNED", 350));
     }
-    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const rows = computeTagMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      entries,
+      measurements,
+      now: NOW,
+    });
     expect(rows).toEqual([]);
   });
 
@@ -1245,6 +1281,7 @@ describe("computeTagMetricCrosstab", () => {
       entries.push(structuredEntry(i, 4, i < 12 ? [WORKOUT] : []));
     }
     const rows = computeTagMetricCrosstab({
+      timeZone: "Europe/Berlin",
       entries,
       measurements: [],
       now: NOW,
@@ -1301,7 +1338,12 @@ describe("computeTagMetricCrosstab", () => {
         ),
       );
     }
-    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const rows = computeTagMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      entries,
+      measurements,
+      now: NOW,
+    });
     const row = rows.find(
       (r) => r.tag === "worked_out" && r.metricKey === "activeEnergy",
     );
@@ -1335,7 +1377,12 @@ describe("computeTagMetricCrosstab", () => {
         sourcedMeas(i, "SLEEP_DURATION", 360 + (i % 2 === 0 ? 6 : -6), "WHOOP"),
       );
     }
-    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const rows = computeTagMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      entries,
+      measurements,
+      now: NOW,
+    });
     const row = rows.find((r) => r.metricKey === "sleepDuration");
     expect(row).toBeDefined();
     // 8 h, not 16 h — the Fitbit twin is dropped, not summed on top.
@@ -1370,7 +1417,12 @@ describe("computeTagMetricCrosstab", () => {
       measurements.push(sourcedMeas(i, "SLEEP_DURATION", 120 + j, "WHOOP"));
       measurements.push(sourcedMeas(i, "SLEEP_DURATION", 120 + j, "WHOOP"));
     }
-    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const rows = computeTagMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      entries,
+      measurements,
+      now: NOW,
+    });
     const row = rows.find((r) => r.metricKey === "sleepDuration");
     expect(row).toBeDefined();
     expect(row!.withAvg).toBeCloseTo(8, 1); // 3 × 160 = 480 min = 8 h
@@ -1478,6 +1530,7 @@ describe("computeFactorMetricCrosstab", () => {
       );
     }
     const rows = computeFactorMetricCrosstab({
+      timeZone: "Europe/Berlin",
       entries,
       measurements,
       now: NOW,
@@ -1517,6 +1570,7 @@ describe("computeFactorMetricCrosstab", () => {
       );
     }
     const rows = computeFactorMetricCrosstab({
+      timeZone: "Europe/Berlin",
       entries,
       measurements,
       now: NOW,
@@ -1543,6 +1597,7 @@ describe("computeFactorMetricCrosstab", () => {
       CROSSTAB_MIN_PRESENT_DAYS + CROSSTAB_MIN_ABSENT_DAYS,
     ).toBeGreaterThan(6);
     const rows = computeFactorMetricCrosstab({
+      timeZone: "Europe/Berlin",
       entries,
       measurements,
       now: NOW,
@@ -1558,7 +1613,12 @@ describe("computeFactorMetricCrosstab", () => {
       measurements.push(meas(i, "SLEEP_DURATION", 420));
     }
     expect(
-      computeFactorMetricCrosstab({ entries, measurements, now: NOW }),
+      computeFactorMetricCrosstab({
+        timeZone: "Europe/Berlin",
+        entries,
+        measurements,
+        now: NOW,
+      }),
     ).toEqual([]);
   });
 

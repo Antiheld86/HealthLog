@@ -55355,8 +55355,8 @@ components:
           description: Trailing-window length in days for the chosen range.
         granularity:
           type: string
-          description: Rollup granularity the read resolved against (`DAY` / `WEEK` / `MONTH` / `YEAR`, or `none` on a coverage
-            miss).
+          description: Rollup granularity the read resolved against (`DAY` / `WEEK` / `MONTH` / `YEAR`), `live` for SLEEP_DURATION
+            (nights are reconstructed from the stage rows), or `none` when there is no data.
         current:
           description: Aggregate over the current window `[now-N, now)`.
           $ref: "#/components/schemas/AnalyticsWindowAggregate"
@@ -55383,9 +55383,10 @@ components:
         - delta
         - deltaPct
       additionalProperties: false
-      description: Single-metric period-over-period aggregate. Reads the current and previous comparable windows from the WMY
-        rollup tier and composes a count-weighted-mean delta. `count/min/max/mean/sum` are linearly composable across
-        buckets; SD/slope/r² are intentionally excluded (not composable).
+      description: Single-metric period-over-period aggregate. Reads the current and previous comparable windows from the
+        rollup tier and composes a count-weighted-mean delta, one source per day. Step-like totals compare average daily
+        totals and SLEEP_DURATION compares average nights, not per-reading means. `count/min/max/mean/sum` are linearly
+        composable across buckets; SD/slope/r² are intentionally excluded (not composable).
     AnalyticsWindowAggregate:
       type: object
       properties:
@@ -55393,7 +55394,8 @@ components:
           type: integer
           minimum: -9007199254740991
           maximum: 9007199254740991
-          description: Reading count composed across buckets.
+          description: Reading count composed across buckets. For step-like totals it is the number of days with a total, for
+            SLEEP_DURATION the number of nights.
         min:
           anyOf:
             - type: number
@@ -55408,7 +55410,8 @@ components:
           anyOf:
             - type: number
             - type: "null"
-          description: Count-weighted mean across buckets; null when empty.
+          description: Count-weighted mean across buckets; null when empty. For step-like totals (steps, energy, distance,
+            flights) it is the average daily total, for SLEEP_DURATION the average time asleep per night.
         sum:
           anyOf:
             - type: number

@@ -34,7 +34,7 @@ vi.mock("@/hooks/use-measurement-reminders", () => ({
 }));
 
 import { VorsorgeSection, postponeOffsetTargets } from "../vorsorge-section";
-import { DISPLAY_TIMEZONE } from "@/lib/format-locale";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * Noon on the day `offsetDays` from today, counted on the DISPLAY zone's
@@ -53,7 +53,7 @@ import { DISPLAY_TIMEZONE } from "@/lib/format-locale";
 function noonOnDisplayDay(offsetDays: number): Date {
   // `en-CA` formats as YYYY-MM-DD, which is the shape we want to add days to.
   const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: DISPLAY_TIMEZONE,
+    timeZone: DEFAULT_TIMEZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -219,7 +219,7 @@ describe("<VorsorgeSection> loading + empty", () => {
     // the wall-clock gap to now exceeds the 24h a rolling delta would key on.
     // Anchor the due instant to noon on the DISPLAY zone's today, not the
     // process clock's. `vitest.config.mts` pins the suite to TZ=UTC while the
-    // component floors in the profile zone (`DISPLAY_TIMEZONE`, Europe/Berlin),
+    // component floors in the profile zone (`DEFAULT_TIMEZONE`, Europe/Berlin),
     // and those two disagree about the date for the two hours before UTC
     // midnight. Anchoring on `setHours` made this case fail every night in
     // that window, which is the same confusion of clocks the assertion exists

@@ -28,7 +28,7 @@ import {
   ensureCycleForBleedingDay,
   removeCycleStartedOn,
 } from "@/lib/cycle/cycle-boundaries";
-import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { getOrCreateCycleProfile } from "@/lib/cycle/profile";
 import { replaceSymptomLinks } from "@/lib/cycle/day-log-write";

@@ -609,3 +609,28 @@ describe("POLAR_OAUTH_SCOPE", () => {
     expect(POLAR_OAUTH_SCOPE).toBe("accesslink.read_all");
   });
 });
+
+describe("date-keyed rows in the user's zone", () => {
+  it.each([
+    ["Pacific/Tongatapu", "2026-05-09T23:00:00.000Z"],
+    ["Pacific/Auckland", "2026-05-10T00:00:00.000Z"],
+    ["America/New_York", "2026-05-10T16:00:00.000Z"],
+    ["Europe/Berlin", "2026-05-10T10:00:00.000Z"],
+  ])(
+    "anchors a day's activity at local noon in %s and names the day",
+    (tz, iso) => {
+      const rows = mapActivity(
+        { start_time: "2026-05-10T00:00:00", steps: 9000 } as never,
+        tz,
+      );
+      expect(rows[0]!.measuredAt.toISOString()).toBe(iso);
+      expect(rows[0]!.day).toBe("2026-05-10");
+      const [load] = mapCardioLoad(
+        { date: "2026-05-10", cardio_load: 12 } as never,
+        tz,
+      );
+      expect(load!.measuredAt.toISOString()).toBe(iso);
+      expect(load!.day).toBe("2026-05-10");
+    },
+  );
+});

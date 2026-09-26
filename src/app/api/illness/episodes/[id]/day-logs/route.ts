@@ -34,7 +34,7 @@ import {
 } from "@/lib/validations/illness";
 import { upsertIllnessDayLog } from "@/lib/illness/day-log-write";
 import { toIllnessDayLogDTO, dayLogSymptomInclude } from "@/lib/illness/dto";
-import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type RouteParams = { params: Promise<{ id: string }> };
 

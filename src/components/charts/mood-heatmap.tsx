@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useTranslations, useFormatters } from "@/lib/i18n/context";
+import {
+  useDisplayTimezone,
+  useFormatters,
+  useTranslations,
+} from "@/lib/i18n/context";
+import { heatmapDays } from "@/lib/charts/heatmap-days";
 import { moodLabelKeyForScore } from "@/lib/mood/labels";
 
 /**
@@ -62,6 +67,7 @@ export function MoodHeatmap({
 }: MoodHeatmapProps) {
   const { t } = useTranslations();
   const fmt = useFormatters();
+  const timeZone = useDisplayTimezone();
   // Day keys are UTC-anchored "YYYY-MM-DD"; format at noon UTC so the
   // locale-aware renderer never lands a day off in either direction.
   const formatDay = (dateKey: string) =>
@@ -147,7 +153,6 @@ export function MoodHeatmap({
       t("charts.months.nov"),
       t("charts.months.dec"),
     ];
-    const now = new Date();
     const cellList: Array<{
       dateKey: string;
       col: number;
@@ -156,30 +161,19 @@ export function MoodHeatmap({
       cell: MoodHeatmapCell | null;
     }> = [];
 
-    const dates: Date[] = [];
-    for (let d = days - 1; d >= 0; d--) {
-      const date = new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
-      dates.push(date);
-    }
-
-    // Monday-align + month markers read off the UTC accessors so the
-    // grid matches the UTC-anchored dateKey (mirrors compliance-heatmap).
-    const firstDate = dates[0];
-    const firstDow = (firstDate.getUTCDay() + 6) % 7; // Monday = 0
+    const dates = heatmapDays(new Date(), timeZone, days);
+    const firstDow = dates[0]?.dow ?? 0;
 
     let col = 0;
     const markers: Array<{ col: number; label: string }> = [];
     let lastMonth = -1;
 
     for (let i = 0; i < dates.length; i++) {
-      const date = dates[i];
-      const dow = (date.getUTCDay() + 6) % 7; // Monday = 0
+      const { dateKey, dow, month } = dates[i];
       const currentCol = Math.floor((i + firstDow) / 7);
       const row = dow;
-      const dateKey = date.toISOString().slice(0, 10);
       const cell = cellData[dateKey] ?? null;
 
-      const month = date.getUTCMonth();
       if (month !== lastMonth) {
         markers.push({ col: currentCol, label: MONTH_LABELS[month] });
         lastMonth = month;
@@ -197,7 +191,7 @@ export function MoodHeatmap({
     }
 
     return { cells: cellList, weeks: col + 1, monthMarkers: markers };
-  }, [cellData, days, t]);
+  }, [cellData, days, t, timeZone]);
 
   const loggedDays = cells.filter((cell) => cell.cell !== null).length;
   const summaryLabel =

@@ -56,6 +56,7 @@ import {
   loadBaselineProfile,
   isDerivedOk,
 } from "@/lib/insights/derived";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** Trailing window for the discovery scan — mirrors the insight route. */
@@ -209,7 +210,7 @@ export async function readCoachCorrelations(
       where: { id: userId },
       select: { timezone: true },
     });
-    const tz = userRow?.timezone ?? "Europe/Berlin";
+    const tz = userRow?.timezone ?? DEFAULT_TIMEZONE;
     const since = new Date(Date.now() - WINDOW_DAYS * MS_PER_DAY);
 
     // The channel set is the shared one, so the Coach scans exactly what the

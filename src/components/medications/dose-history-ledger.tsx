@@ -111,6 +111,7 @@ import {
   type LedgerRow,
 } from "@/components/medications/dose-history-ledger-compute";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/api-fetch";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -182,7 +183,7 @@ export function DoseHistoryLedger({
   // marked — the most-encountered of the set.
   const recordName = useActiveRecordName();
   const queryClient = useQueryClient();
-  const timeZone = user?.timezone || "Europe/Berlin";
+  const timeZone = user?.timezone || DEFAULT_TIMEZONE;
 
   const [addOpen, setAddOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<{

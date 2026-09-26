@@ -233,7 +233,12 @@ export async function preparePulseStatusForUser(
   // Primary metric: recent / weekly fold from the bounded raw read, the
   // monthly / yearly tail comes from the MONTH / YEAR rollup tier (with
   // a full-history in-memory fallback on a cold-tier coverage miss).
-  const pulseGraded = await buildGradedSeriesWithRollups(userId, "PULSE", now);
+  const pulseGraded = await buildGradedSeriesWithRollups(
+    userId,
+    "PULSE",
+    now,
+    userTz,
+  );
   const pulseSummary = summarizeSeries(
     pulseSeries.daily.map((bucket) => ({ value: bucket.value })),
   );
@@ -255,7 +260,7 @@ export async function preparePulseStatusForUser(
     value: entry.score,
   }));
   const moodSeries = applyPayloadBudget(moodPoints, { now, tz: userTz });
-  const moodGraded = buildGradedSeriesFromPoints(moodPoints, now);
+  const moodGraded = buildGradedSeriesFromPoints(moodPoints, now, userTz);
   const moodSummary = summarizeSeries(
     moodSeries.daily.map((bucket) => ({ value: bucket.value })),
   );

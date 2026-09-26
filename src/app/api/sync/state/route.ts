@@ -42,6 +42,7 @@ import {
   NATIVE_REFRESH_TOKEN_DAYS,
   TOMBSTONE_RETENTION_DAYS,
 } from "@/lib/auth/native-client";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 export const GET = apiHandler(async (_request: NextRequest) => {
   const { user } = await requireAuth();
@@ -119,7 +120,7 @@ export const GET = apiHandler(async (_request: NextRequest) => {
 
   return apiSuccess({
     userId: user.id,
-    timezone: currentUser?.timezone ?? "Europe/Berlin",
+    timezone: currentUser?.timezone ?? DEFAULT_TIMEZONE,
     lastSyncedAt: lastSyncedAt?.toISOString() ?? null,
     serverNow: serverNow.toISOString(),
     measurements: {

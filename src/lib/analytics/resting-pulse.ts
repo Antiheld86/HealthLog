@@ -39,7 +39,6 @@
  * Pure & deterministic — unit-tested in `__tests__/resting-pulse.test.ts`.
  */
 import { percentile } from "@/lib/insights/strain-score";
-import { toBerlinDayKey } from "@/lib/tz/resolver";
 
 /** A timestamped heart-rate sample. */
 export interface PulseSample {
@@ -78,12 +77,11 @@ export const RESTING_PROXY_MIN_DAILY_SAMPLES = 3;
 export function deriveRestingProxyFromPulse(
   pulseSamples: ReadonlyArray<PulseSample>,
   /**
-   * Day-key function used to bucket samples. Defaults to Berlin-day so
-   * direct callers / tests stay zero-config; the targets route passes
-   * its own `userDayKey(d, userTz)` so the proxy buckets align with the
-   * route's consistency-strip day buckets for non-Berlin users.
+   * Day-key function used to bucket samples: the user's own day
+   * (`userDayKey(d, userTz)`), so the proxy buckets line up with every other
+   * day bucket the user sees.
    */
-  dayKeyOf: (d: Date) => string = toBerlinDayKey,
+  dayKeyOf: (d: Date) => string,
 ): PulseSample[] {
   if (pulseSamples.length === 0) return [];
   const byDay = new Map<string, { firstAt: Date; values: number[] }>();
@@ -139,10 +137,10 @@ export function deriveRestingProxyFromPulse(
 export function resolveRestingPulseSeries(input: {
   restingSamples: ReadonlyArray<PulseSample>;
   pulseSamples: ReadonlyArray<PulseSample>;
-  /** Optional day-key for the proxy buckets (defaults to Berlin-day). */
-  dayKeyOf?: (d: Date) => string;
+  /** Day key for the proxy buckets: the user's own day. */
+  dayKeyOf: (d: Date) => string;
 }): { series: PulseSample[]; which: "resting" | "proxy" | "none" } {
-  const dayKeyOf = input.dayKeyOf ?? toBerlinDayKey;
+  const dayKeyOf = input.dayKeyOf;
   const byTime = (a: PulseSample, b: PulseSample) =>
     a.measuredAt.getTime() - b.measuredAt.getTime();
 

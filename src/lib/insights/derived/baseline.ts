@@ -220,6 +220,10 @@ export function buildBaselineBand(
  * Rollup tier first (DAY-native, `mean` composes); per-type bounded
  * live-SQL fallback on a coverage miss. Returns the series plus the
  * provenance source the read resolved against.
+ *
+ * Days are UTC days, the DAY rollup grain. A caller that compares the days
+ * with the user's own calendar (today's key, a record's local day) passes
+ * `timeZone`; the series is then folded live on the user's local days.
  */
 export async function readDayMeanSeries(
   userId: string,
@@ -227,8 +231,9 @@ export async function readDayMeanSeries(
   windowDays: number,
   now: Date,
   coverage: RollupCoverageMap,
+  timeZone?: string,
 ): Promise<{ points: DayMeanPoint[]; source: DerivedProvenanceSource }> {
-  const hasBuckets = coverage.get(type) === true;
+  const hasBuckets = timeZone === undefined && coverage.get(type) === true;
 
   if (hasBuckets) {
     // DAY granularity only — the spread invariant forbids composing a
@@ -266,13 +271,14 @@ export async function readDayMeanSeries(
   // stored value the application declares impossible would drag the day's
   // mean with it and the median would carry it into the band. A day whose
   // every reading is implausible produces no point at all. Days are UTC
-  // days, matching the DAY rollup path above.
+  // days, matching the DAY rollup path above, unless the caller asked for
+  // the user's own days.
   const since = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
   const days = await readDayAggregates({
     userId,
     type,
     since,
-    timeZone: "UTC",
+    timeZone: timeZone ?? "UTC",
     valueRange: plausibleMetricRange(type),
   });
   const points = days.map((d) => ({ day: d.day, mean: d.sum / d.n }));

@@ -260,16 +260,8 @@ const RAW_ALLOWLIST: ReadonlyArray<{ file: string; why: string }> = [
     why: "The ISO day the postpone request writes to the API. A wire value, and the wire format is ISO whatever the reader prefers.",
   },
   {
-    file: "src/lib/gamification/achievements.ts",
-    why: "The day key streak arithmetic counts on.",
-  },
-  {
     file: "src/lib/charts/bucket-time-series.ts",
     why: "Bucket boundary arithmetic. The bucket LABELS are a separate step and go through `makeBucketLabelFormatters`.",
-  },
-  {
-    file: "src/lib/ai/prompts/insight-generator.ts",
-    why: "An ISO day inside a model prompt. The model reads ISO; the user never sees this string.",
   },
   {
     file: "src/lib/jobs/measurement-reminder.ts",
@@ -282,10 +274,6 @@ const RAW_ALLOWLIST: ReadonlyArray<{ file: string; why: string }> = [
   {
     file: "src/lib/i18n/relative-time.ts",
     why: "The en-CA day keys that decide today / yesterday. A comparison between two keys, never printed.",
-  },
-  {
-    file: "src/lib/tz/resolver.ts",
-    why: "The Berlin day formatter the zone arithmetic itself is built on.",
   },
 ];
 

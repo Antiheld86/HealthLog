@@ -17,7 +17,7 @@
 import { prisma } from "@/lib/db";
 import { isIllnessEnabled } from "@/lib/illness/gate";
 import { computeEpisodeCorrelation } from "@/lib/illness/correlation-read";
-import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 import { sanitizeForPrompt } from "@/lib/insights/sanitize";
 

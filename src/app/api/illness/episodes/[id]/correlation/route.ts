@@ -22,7 +22,7 @@ import { apiSuccess, apiError } from "@/lib/api-response";
 import { requireIllnessEnabled } from "@/lib/illness/gate";
 import { computeEpisodeCorrelation } from "@/lib/illness/correlation-read";
 import { notifyIllnessRedFlag } from "@/lib/illness/red-flag-notify";
-import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type RouteParams = { params: Promise<{ id: string }> };
 

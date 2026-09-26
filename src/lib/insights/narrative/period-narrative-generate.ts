@@ -53,6 +53,7 @@ import {
   validateNarrativeText,
   buildNarrativeCorrection,
 } from "@/lib/insights/narrative/narrative-grounding";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * Stable identifier for the narrative prompt revision. Bumped whenever the
@@ -347,7 +348,7 @@ export async function generatePeriodNarrative(
     where: { id: userId },
     select: { timezone: true },
   });
-  const tz = profile?.timezone ?? "Europe/Berlin";
+  const tz = profile?.timezone ?? DEFAULT_TIMEZONE;
 
   const completion = await runCompletion({
     userId,

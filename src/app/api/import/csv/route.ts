@@ -11,10 +11,7 @@ import {
   parseCsvMeasurements,
   type CsvRowResult,
 } from "@/lib/import/csv-measurements";
-import {
-  collapseToTypeDayKeys,
-  recomputeBucketsForMeasurement,
-} from "@/lib/rollups/measurement-rollups";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 import type {
   MeasurementType,
   GlucoseContext,
@@ -317,24 +314,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
 
     // One bounded rollup re-fold per touched (type, day) — a 10 000-row CSV
-    // pays at most ~N (type, day) recomputes, not 10 000 per-row hooks.
-    // Best-effort: a populator hiccup never fails the importer.
-    if (touchedMeasurements.length > 0) {
-      try {
-        const keys = collapseToTypeDayKeys(touchedMeasurements);
-        for (const k of keys) {
-          await recomputeBucketsForMeasurement(userId, k.type, k.measuredAt);
-        }
-      } catch (err) {
-        annotate({
-          meta: {
-            measurement_rollup_csv_import_failed: true,
-            measurement_rollup_csv_import_error:
-              err instanceof Error ? err.message : String(err),
-          },
-        });
-      }
-    }
+    // pays at most ~N (type, day) recomputes, not 10 000 per-row hooks — and
+    // the status re-warm for the touched types. Best-effort: a populator
+    // hiccup never fails the importer.
+    await afterMeasurementMutation(userId, touchedMeasurements, "import.csv");
 
     await auditLog("import.csv.upload", {
       userId,

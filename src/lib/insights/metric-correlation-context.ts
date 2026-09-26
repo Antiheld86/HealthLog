@@ -41,6 +41,7 @@ import {
   syncAcceptedPatterns,
 } from "@/lib/insights/correlation-patterns";
 import type { RelevantCorrelation } from "@/lib/insights/assessment-context";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** Trailing window for the discovery scan — mirrors the route. */
@@ -92,7 +93,7 @@ export async function getRelevantCorrelationsForMetric(
       where: { id: userId },
       select: { timezone: true },
     });
-    const tz = profile?.timezone ?? "Europe/Berlin";
+    const tz = profile?.timezone ?? DEFAULT_TIMEZONE;
     const since = new Date(Date.now() - WINDOW_DAYS * MS_PER_DAY);
 
     // The channel set is the shared one — every family the correlations page

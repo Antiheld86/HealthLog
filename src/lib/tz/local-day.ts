@@ -8,6 +8,7 @@
  * user's local calendar day — today's bounds for database queries,
  * the local weekday, and the UTC instant of a local `hh:mm`.
  */
+import { shiftDateKey } from "./format";
 import { wallClockInTz, zonedWallClockToUtc } from "./wall-clock";
 
 /**
@@ -42,15 +43,94 @@ export function getUserTodayBounds(
 }
 
 /**
- * UTC instant of local midnight (00:00 wall-clock) on the calendar day
- * `instant` falls on in `tz`. DST-safe: derives the zone offset at the
- * target local time so the returned instant always represents the user's
- * local start-of-day, never UTC midnight of that calendar date.
+ * The first instant of the local calendar day `year-month-day` in `tz`.
  *
- * Canonical start-of-local-day primitive. The medication-scheduling
- * `startOfLocalDay` (cadence) and `startOfDayInTz` (recurrence) route
- * through this so the day-floor never drifts between surfaces. When `tz`
- * is omitted the host's system-local day is used.
+ * Usually local 00:00. Where midnight itself is skipped by a DST change
+ * (America/Santiago, America/Havana, Asia/Beirut move their clocks at
+ * 00:00), the day starts at the transition instant, 01:00 local. Where
+ * midnight repeats (a change at 01:00 back to 00:00), it is the first of the
+ * two midnights.
+ *
+ * Candidates are local midnight under every offset the zone observes within
+ * 14 hours of that date's UTC midnight (any offset in use lies within
+ * ±14 h); the earliest candidate that already reads the target date is the
+ * day's start. Reading one offset at UTC midnight instead picked the wrong
+ * one on transition days in zones far from UTC (Pacific/Auckland) and landed
+ * a day early where midnight is skipped.
+ */
+function firstInstantOfLocalDay(
+  year: number,
+  month: number,
+  day: number,
+  tz: string,
+): Date {
+  const utcMidnight = Date.UTC(year, month - 1, day);
+  const offsets = new Set<number>();
+  for (const delta of [-14, 0, 14]) {
+    offsets.add(offsetMinutesAt(new Date(utcMidnight + delta * 3_600_000), tz));
+  }
+  let best: number | null = null;
+  for (const offset of offsets) {
+    const candidate = utcMidnight - offset * 60_000;
+    const at = wallClockInTz(new Date(candidate), tz);
+    if (at.year !== year || at.month !== month || at.day !== day) continue;
+    if (best === null || candidate < best) best = candidate;
+  }
+  if (best !== null) return new Date(best);
+  // No sampled offset lands on the date (a zone that skipped the whole day,
+  // such as Pacific/Apia on 2011-12-30): fall back to the converged local
+  // 00:00, which is the next instant that exists.
+  return zonedWallClockToUtc({ year, month, day, hour: 0, minute: 0 }, tz);
+}
+
+/** UTC offset of `tz` at `instant`, in minutes east of UTC. */
+function offsetMinutesAt(instant: Date, tz: string): number {
+  const at = wallClockInTz(instant, tz);
+  const asIfUtc = Date.UTC(
+    at.year,
+    at.month - 1,
+    at.day,
+    at.hour,
+    at.minute,
+    at.second,
+  );
+  return Math.round((asIfUtc - instant.getTime()) / 60_000);
+}
+
+/**
+ * The first instant of the local calendar day `dateKey` (`YYYY-MM-DD`) in
+ * `tz`. The one start-of-day primitive for day keys; see
+ * {@link firstInstantOfLocalDay} for the DST cases.
+ */
+export function startOfLocalDayKey(dateKey: string, tz: string): Date {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return firstInstantOfLocalDay(year, month, day, tz);
+}
+
+/**
+ * The `[dayStart, dayEnd)` UTC window of the local calendar day `dateKey`
+ * in `tz`: 23, 24 or 25 hours long, whatever the day actually lasts. `dayEnd`
+ * is the first instant of the following local day, so `measuredAt >=
+ * dayStart AND measuredAt < dayEnd` selects exactly that day.
+ */
+export function localDayWindow(
+  dateKey: string,
+  tz: string,
+): { dayStart: Date; dayEnd: Date } {
+  return {
+    dayStart: startOfLocalDayKey(dateKey, tz),
+    dayEnd: startOfLocalDayKey(shiftDateKey(dateKey, 1), tz),
+  };
+}
+
+/**
+ * The first instant of the local calendar day `instant` falls on in `tz`
+ * (usually local midnight; see {@link firstInstantOfLocalDay}).
+ *
+ * Canonical start-of-local-day primitive for instants. The
+ * medication-scheduling `startOfLocalDay` (cadence) and `startOfDayInTz`
+ * (recurrence) route through this so the day-floor never drifts between
+ * surfaces. When `tz` is omitted the host's system-local day is used.
  */
 export function startOfLocalDayInTz(
   instant: Date,
@@ -68,29 +148,7 @@ export function startOfLocalDayInTz(
     );
   }
   const parts = wallClockInTz(instant, tz);
-  // Two-pass converge: treat the wall clock as UTC, then correct by the
-  // zone offset at that approximate instant. The second pass settles the
-  // offset across a DST transition for every IANA zone.
-  let guess = new Date(
-    Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0, 0),
-  );
-  for (let i = 0; i < 2; i++) {
-    const at = wallClockInTz(guess, tz);
-    const asIfUtc = Date.UTC(
-      at.year,
-      at.month - 1,
-      at.day,
-      at.hour,
-      at.minute,
-      at.second,
-    );
-    const offsetMin = Math.round((asIfUtc - guess.getTime()) / 60_000);
-    guess = new Date(
-      Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0, 0) -
-        offsetMin * 60_000,
-    );
-  }
-  return guess;
+  return firstInstantOfLocalDay(parts.year, parts.month, parts.day, tz);
 }
 
 /**

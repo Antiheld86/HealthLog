@@ -51,7 +51,8 @@ import {
   UNSTABLE_EXTERNAL_ID_REASON,
   type UnstableExternalIdShape,
 } from "@/lib/validations/external-id";
-import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { moodDateKey } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { levelAForWrite } from "@/lib/mood/level-a";
 import { persistMoodContext } from "@/lib/mood/context";
 import { encryptNote } from "@/lib/crypto/note-cipher";

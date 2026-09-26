@@ -66,9 +66,9 @@ import {
 import {
   canonicalDailyTimestamp,
   canonicalHourlyTimestamp,
-  localDayWindow,
   type PerSampleRow,
 } from "./consolidation-tz";
+import { localDayWindow } from "@/lib/tz/local-day";
 import { meanBucketValue } from "./consolidate-daily-mean";
 import {
   DENSE_INTRADAY_RETENTION_DAYS,

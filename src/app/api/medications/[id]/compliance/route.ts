@@ -9,6 +9,7 @@ import {
 } from "@/lib/medications/compliance-payload";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -43,7 +44,7 @@ export const GET = apiHandler(
       return apiError("Too many compliance requests. Please retry later.", 429);
     }
 
-    const userTz = user.timezone || "Europe/Berlin";
+    const userTz = user.timezone || DEFAULT_TIMEZONE;
 
     // Read-through the per-user compliance cache (15 min fresh TTL +
     // SWR window). The ownership guard and the medication read live

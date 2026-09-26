@@ -37,7 +37,7 @@ import {
   toMenstrualCycleDTO,
   dayLogSymptomInclude,
 } from "@/lib/cycle/dto";
-import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { openCycleAt, type MovedAnchors } from "@/lib/cycle/cycle-boundaries";
 
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postPeriod));

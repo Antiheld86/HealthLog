@@ -206,6 +206,8 @@ export async function buildCoarseTimelineTail(
   type: MeasurementType,
   now: Date,
   tz: string,
+  /** The user's source-priority blob, already loaded by the caller. */
+  userPriorityJson: unknown,
 ): Promise<CoarseTimelineTail | undefined> {
   // `buildTieredSeries` reads fall back on miss — a coverage miss yields empty
   // bands, which collapse to `undefined` here. The try/catch keeps the coarse
@@ -222,6 +224,7 @@ export async function buildCoarseTimelineTail(
       now: now.getTime(),
       tz,
       coarseOnly: true,
+      userPriorityJson,
     });
   } catch {
     return undefined;

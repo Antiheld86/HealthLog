@@ -27,7 +27,7 @@ import {
 import { MIN_PAIRED_N } from "@/lib/insights/correlations";
 import {
   applyPayloadBudget,
-  dayOffsetToBerlinDayKey,
+  dayOffsetToDayKey,
   type DailyBucket,
 } from "@/lib/insights/bucket-series";
 import { round, summarizeSeries } from "@/lib/insights/status-shared";
@@ -294,7 +294,7 @@ export const MOOD_ORANGE_MAX = 3.5;
 /**
  * Pair two daily-bucket series on `dayOffset`. The synthesised `date`
  * field is anchored at the UTC midnight of the Berlin calendar day —
- * `dayOffsetToBerlinDayKey()` is the source of truth so DST boundaries
+ * `dayOffsetToDayKey()` is the source of truth so DST boundaries
  * don't slip the day-key by one. Each pair also carries `dayKey`
  * directly so callers can label points without re-formatting.
  */
@@ -310,7 +310,7 @@ export function pairDailyBuckets(
     .map((entry) => {
       const b = mapB.get(entry.dayOffset);
       if (b == null) return null;
-      const dayKey = dayOffsetToBerlinDayKey(now, entry.dayOffset, tz);
+      const dayKey = dayOffsetToDayKey(now, entry.dayOffset, tz);
       const [y, m, d] = dayKey.split("-").map(Number);
       return {
         a: entry.value,
@@ -626,12 +626,14 @@ export function computeMoodAggregates(args: {
     measurements,
     now,
     userPriorityJson,
+    timeZone: tz,
   });
   const factorCrosstab = computeFactorMetricCrosstab({
     entries,
     measurements,
     now,
     userPriorityJson,
+    timeZone: tz,
   });
 
   // v1.38 — every context value against the day's pleasantness, one BH-FDR
@@ -682,7 +684,7 @@ export function computeMoodAggregates(args: {
         a4: entry.a4 ?? null,
         a5: entry.a5 ?? null,
       })),
-      dayOffsetToBerlinDayKey(now, 0, tz),
+      dayOffsetToDayKey(now, 0, tz),
     ),
     weekday,
     timeOfDay,

@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useTranslations, useFormatters } from "@/lib/i18n/context";
+import {
+  useDisplayTimezone,
+  useFormatters,
+  useTranslations,
+} from "@/lib/i18n/context";
+import { heatmapDays } from "@/lib/charts/heatmap-days";
 
 interface DailyData {
   expected: number;
@@ -79,6 +84,7 @@ export function ComplianceHeatmap({
 }: ComplianceHeatmapProps) {
   const { t } = useTranslations();
   const fmt = useFormatters();
+  const timeZone = useDisplayTimezone();
   // Day keys are UTC-anchored "YYYY-MM-DD"; format at noon UTC so the
   // locale-aware renderer never lands a day off in either direction.
   const formatDay = (dateKey: string) =>
@@ -175,7 +181,6 @@ export function ComplianceHeatmap({
       t("charts.months.nov"),
       t("charts.months.dec"),
     ];
-    const now = new Date();
     const cellList: Array<{
       dateKey: string;
       col: number;
@@ -184,34 +189,18 @@ export function ComplianceHeatmap({
       data: DailyData;
     }> = [];
 
-    // Build array of dates from oldest to newest
-    const dates: Date[] = [];
-    for (let d = days - 1; d >= 0; d--) {
-      const date = new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
-      dates.push(date);
-    }
-
-    // Start from the first date, align to Monday.
-    //
-    // v1.4.27 B7 / BL-P4-2 — read every weekday + month boundary off
-    // the UTC accessor pair (`getUTCDay`, `getUTCMonth`) so the
-    // computation matches the dateKey, which is also UTC-anchored
-    // (`toISOString().slice(0, 10)`). Reading in server-tz here would
-    // shift the Monday-alignment + month-marker placement when the
-    // SSR pass runs on a server in a non-Berlin timezone.
-    const firstDate = dates[0];
-    const firstDow = (firstDate.getUTCDay() + 6) % 7; // Monday = 0
+    // Oldest to newest, one entry per local day in the user's zone.
+    const dates = heatmapDays(new Date(), timeZone, days);
+    const firstDow = dates[0]?.dow ?? 0;
 
     let col = 0;
     const markers: Array<{ col: number; label: string }> = [];
     let lastMonth = -1;
 
     for (let i = 0; i < dates.length; i++) {
-      const date = dates[i];
-      const dow = (date.getUTCDay() + 6) % 7; // Monday = 0
+      const { dateKey, dow, month } = dates[i];
       const currentCol = Math.floor((i + firstDow) / 7);
       const row = dow;
-      const dateKey = date.toISOString().slice(0, 10);
       const data = dailyCompliance[dateKey] ?? {
         expected: 0,
         taken: 0,
@@ -219,7 +208,6 @@ export function ComplianceHeatmap({
       };
 
       // Track month boundaries
-      const month = date.getUTCMonth();
       if (month !== lastMonth) {
         markers.push({ col: currentCol, label: MONTH_LABELS[month] });
         lastMonth = month;
@@ -237,7 +225,7 @@ export function ComplianceHeatmap({
     }
 
     return { cells: cellList, weeks: col + 1, monthMarkers: markers };
-  }, [dailyCompliance, days, t]);
+  }, [dailyCompliance, days, t, timeZone]);
 
   const activeDays = cells.filter((cell) => cell.data.expected > 0).length;
   const summaryLabel =

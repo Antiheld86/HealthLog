@@ -22,6 +22,7 @@ import {
   buildWorkoutEvidence,
   type WorkoutEvidenceInput,
 } from "./workout-evidence";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 interface WorkoutEvidenceRow {
   sportType: string;
@@ -108,7 +109,7 @@ export function createWorkoutEvidenceBuilder(
         sportType: row.sportType,
         source: row.source,
         startedAt: row.startedAt,
-        timezone: profile?.timezone ?? "Europe/Berlin",
+        timezone: profile?.timezone ?? DEFAULT_TIMEZONE,
         durationSec: row.durationSec,
         totalEnergyKcal: row.totalEnergyKcal,
         totalDistanceM: row.totalDistanceM,

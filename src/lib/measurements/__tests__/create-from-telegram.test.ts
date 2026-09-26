@@ -15,8 +15,8 @@ vi.mock("@/lib/cache/invalidate", () => ({
   invalidateUserMeasurements: vi.fn(),
 }));
 
-vi.mock("@/lib/rollups/measurement-rollups", () => ({
-  recomputeBucketsForMeasurement: vi.fn().mockResolvedValue(undefined),
+vi.mock("@/lib/rollups/after-measurement-mutation", () => ({
+  afterMeasurementMutation: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/logging/context", () => ({
@@ -29,6 +29,7 @@ import {
   parseTelegramNumber,
 } from "@/lib/measurements/create-from-telegram";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -90,6 +91,13 @@ describe("logTelegramMeasurement", () => {
     expect(invalidateUserMeasurements).toHaveBeenCalledWith("user-1", {
       evict: true,
     });
+    // Rollups refold and the status assessments re-warm through the one
+    // shared tail.
+    expect(afterMeasurementMutation).toHaveBeenCalledWith(
+      "user-1",
+      [expect.objectContaining({ type: "WEIGHT" })],
+      "telegram-measurement",
+    );
   });
 
   it("rejects a non-numeric reply without writing", async () => {

@@ -63,12 +63,12 @@ export function getWeightUserPrompt(
       ? `\nOPENER HINT: ${openerHint}`
       : "";
   if (instructionLocale(locale) === "en") {
-    return `Date: ${todayKey} (Europe/Berlin)${openerLine}
+    return `Date: ${todayKey}${openerLine}
 Write one short assessment of this person's weight. Open with what the trend MEANS in plain words — the direction and momentum, not the number (e.g. "easing down steadily", "holding right where it's settled") — then bring in ONE concrete number from the snapshot right after as support, read as a continuous trend and pace against their own weekly/monthly baseline (kg/week, plateau, milestone — not the single value, and not the WHO band, which the BMI card covers); never lead with the value. Close with one doable step only when the finding genuinely implies one; when nothing is, skip the step rather than manufacture filler. Judge confidence from the measurement count and recency.${ctxBlock}${extraBlock}
 
 ${snapshotJson}`;
   }
-  return `Datum: ${todayKey} (Europe/Berlin)${openerLine}
+  return `Datum: ${todayKey}${openerLine}
 Schreibe eine kurze Einschätzung zum Gewicht dieser Person. Beginne mit der BEDEUTUNG in klaren Worten — Richtung und Tempo, nicht der Zahl (z. B. "geht ruhig nach unten", "hält sich genau da, wo es sich eingependelt hat") — und bring danach EINE konkrete Zahl aus dem Snapshot als Beleg, als kontinuierlichen Trend und Tempo gegen die eigene Wochen-/Monats-Baseline gelesen (kg/Woche, Plateau, Meilenstein — nicht der Einzelwert und nicht das WHO-Band, das die BMI-Karte trägt); führe nie mit dem Wert. Schließe nur dann mit einem machbaren Schritt, wenn der Befund wirklich einen hergibt; ist nichts umsetzbar, lass den Schritt weg statt Fülltext zu erfinden. Konfidenz aus Messanzahl und Aktualität ableiten.${ctxBlock}${extraBlock}
 
 ${snapshotJson}`;

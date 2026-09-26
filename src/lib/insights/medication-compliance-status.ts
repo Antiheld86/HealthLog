@@ -310,7 +310,7 @@ export async function prepareMedicationComplianceStatusForUser(
       now,
       tz: userTz,
     });
-    const dailySeries = buildGradedSeriesFromPoints(perDayRecords, now);
+    const dailySeries = buildGradedSeriesFromPoints(perDayRecords, now, userTz);
     const latestDay = dailyBudgeted.daily[0] ?? null;
 
     // v1.18.10 (HIGH-4) — the finished recent-vs-baseline adherence comparison

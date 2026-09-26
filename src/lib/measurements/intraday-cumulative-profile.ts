@@ -42,9 +42,9 @@ import { shiftDateKey, userDayKey } from "@/lib/tz/format";
 import {
   dayKeyForUserTz,
   hourOfDayForUserTz,
-  localDayWindow,
   type PerSampleRow,
 } from "./consolidation-tz";
+import { localDayWindow } from "@/lib/tz/local-day";
 
 /** Hours in a stored profile. Always 24, DST days included — see below. */
 export const PROFILE_HOURS = 24;

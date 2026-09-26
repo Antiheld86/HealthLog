@@ -692,6 +692,7 @@ export const POST = apiHandler((request: NextRequest) =>
       userId,
       dbUser?.displayName ?? null,
       locale,
+      await resolveUserTimezone(userId),
     );
 
     // v1.12.7 (B5) — inject the curated SOURCES block for the metric sections

@@ -52,11 +52,12 @@ export function getStravaCredentials(): StravaCredentials | null {
 }
 
 export function getStravaRedirectUri(): string {
-  // `||`, not `??`: the compose whitelist materialises an unset var as an empty
-  // string, which must still fall through to the derived URI.
+  // An empty or blank value counts as unset: the compose whitelist
+  // materialises an unset var as an empty string, which must still fall
+  // through to the derived URI.
   return (
-    process.env.STRAVA_REDIRECT_URI ||
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/strava/callback`
+    process.env.STRAVA_REDIRECT_URI?.trim() ||
+    `${process.env.NEXT_PUBLIC_APP_URL?.trim()}/api/strava/callback`
   );
 }
 

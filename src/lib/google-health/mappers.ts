@@ -14,6 +14,7 @@
  * this file performs I/O — everything is synchronous and deterministic given a
  * payload (+ optional user timezone).
  */
+import { canonicalDailyTimestamp } from "@/lib/measurements/consolidation-tz";
 import { zonedWallClockToUtc } from "@/lib/tz/wall-clock";
 
 /**
@@ -290,8 +291,19 @@ function readPath(obj: unknown, path: string): unknown {
   return cur;
 }
 
-/** Parse a `{year,month,day}` civil-date object into a UTC-midday Date, or null. */
-function parseCivilDateObject(val: unknown): Date | null {
+/**
+ * Read a Google civil date — a `{year,month,day}` object, or a civil string
+ * (`YYYY-MM-DD`, optionally with a time suffix like `2026-06-02T00:00:00`) —
+ * as a `YYYY-MM-DD` day key, or null. The key names the row's externalId; the
+ * row's instant is the key's local noon in the user's zone
+ * (`canonicalDailyTimestamp`), which reads the same calendar day there. Noon
+ * UTC, the previous anchor, is already the next day from UTC+13 on.
+ */
+function parseCivilKey(val: unknown): string | null {
+  if (typeof val === "string") {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(val.trim());
+    return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+  }
   if (!val || typeof val !== "object") return null;
   const o = val as Record<string, unknown>;
   if (
@@ -299,28 +311,10 @@ function parseCivilDateObject(val: unknown): Date | null {
     typeof o.month === "number" &&
     typeof o.day === "number"
   ) {
-    // Google civil dates are 1-based months; anchor at UTC midday so a timezone
-    // shift can't roll the civil day across a boundary.
-    return new Date(Date.UTC(o.year, o.month - 1, o.day, 12));
+    const pad = (n: number, w: number) => String(n).padStart(w, "0");
+    return `${pad(o.year, 4)}-${pad(o.month, 2)}-${pad(o.day, 2)}`;
   }
   return null;
-}
-
-/**
- * Parse a Google civil START anchor — the calendar day a cumulative daily total
- * belongs to — into a UTC-midday Date, or null. Accepts a `{year,month,day}`
- * object OR a civil string (`YYYY-MM-DD`, optionally carrying a time suffix like
- * `2026-06-02T00:00:00`); only the Y-M-D is kept, anchored at UTC midday so a
- * timezone shift can't roll the civil day. Mirrors the Fitbit `parseCivilDate`
- * UTC-midday convention.
- */
-function parseCivilStart(val: unknown): Date | null {
-  if (typeof val === "string") {
-    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(val.trim());
-    if (!m) return null;
-    return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12));
-  }
-  return parseCivilDateObject(val);
 }
 
 /**
@@ -369,7 +363,7 @@ function parseLocalInstant(iso: string, tz?: string): Date | null {
  *   - `sample` → `{key}.sampleTime.physicalTime` (a spot instant; offset-less
  *     strings resolve against `tz`).
  *   - `date`   → `{key}.date` (a `{year,month,day}` object, or a civil string) —
- *     anchored at UTC-midday so a tz shift can't roll the civil day.
+ *     anchored at local noon of that day in the user's zone.
  * Falls back to `fallback` only when nothing parses, so a row is never dropped
  * for a missing anchor. (Sleep / exercise sessions and the rollup types anchor
  * through their own helpers, never here.)
@@ -387,9 +381,8 @@ function resolveMeasuredAt(
       if (d) return d;
     }
   } else if (dataType.timeField === "date") {
-    const dateVal = readPath(point, `${dataType.key}.date`);
-    const civil = parseCivilStart(dateVal);
-    if (civil) return civil;
+    const day = parseCivilKey(readPath(point, `${dataType.key}.date`));
+    if (day) return canonicalDailyTimestamp(day, tz);
   }
   return fallback;
 }
@@ -404,14 +397,14 @@ function externalAnchor(
   dataType: GoogleHealthDataType,
   tz?: string,
 ): string {
-  const at = resolveMeasuredAt(point, dataType, new Date(0), tz);
   // Daily summaries share the civil-day externalId grain so a re-fetched day
   // overwrites in place. (Sleep/exercise sessions and the rollup daily totals
   // mint their own anchors and never reach this helper.)
   if (dataType.timeField === "date") {
-    return at.toISOString().slice(0, 10);
+    const day = parseCivilKey(readPath(point, `${dataType.key}.date`));
+    if (day) return day;
   }
-  return at.toISOString();
+  return resolveMeasuredAt(point, dataType, new Date(0), tz).toISOString();
 }
 
 /**
@@ -429,6 +422,7 @@ function mapSimple(
     valuePaths: string[];
     factor?: number;
   },
+  tz: string | undefined,
 ): GoogleHealthMappedMeasurement[] {
   let value = firstNumber(point, spec.valuePaths);
   if (value === null) return [];
@@ -438,7 +432,7 @@ function mapSimple(
       type: spec.type,
       value: round2(value),
       unit: spec.unit,
-      measuredAt: resolveMeasuredAt(point, dataType, new Date()),
+      measuredAt: resolveMeasuredAt(point, dataType, new Date(), tz),
       fieldTag: `${externalAnchor(point, dataType)}:${spec.fieldTag}`,
     },
   ];
@@ -446,44 +440,63 @@ function mapSimple(
 
 export function mapWeight(
   point: GoogleHealthDataPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.weight;
   // Documented field is `weightGrams` (grams) → kg.
-  return mapSimple(point, dt, {
-    type: "WEIGHT",
-    unit: "kg",
-    fieldTag: "weight",
-    valuePaths: [`${dt.key}.weightGrams`],
-    factor: 0.001,
-  });
+  return mapSimple(
+    point,
+    dt,
+    {
+      type: "WEIGHT",
+      unit: "kg",
+      fieldTag: "weight",
+      valuePaths: [`${dt.key}.weightGrams`],
+      factor: 0.001,
+    },
+    tz,
+  );
 }
 
 export function mapBodyFat(
   point: GoogleHealthDataPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.bodyFat;
-  return mapSimple(point, dt, {
-    type: "BODY_FAT",
-    unit: "%",
-    fieldTag: "body_fat",
-    valuePaths: [`${dt.key}.percentage`],
-  });
+  return mapSimple(
+    point,
+    dt,
+    {
+      type: "BODY_FAT",
+      unit: "%",
+      fieldTag: "body_fat",
+      valuePaths: [`${dt.key}.percentage`],
+    },
+    tz,
+  );
 }
 
 export function mapOxygenSaturation(
   point: GoogleHealthDataPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.oxygenSaturation;
-  return mapSimple(point, dt, {
-    type: "OXYGEN_SATURATION",
-    unit: "%",
-    fieldTag: "spo2",
-    valuePaths: [`${dt.key}.averagePercentage`],
-  });
+  return mapSimple(
+    point,
+    dt,
+    {
+      type: "OXYGEN_SATURATION",
+      unit: "%",
+      fieldTag: "spo2",
+      valuePaths: [`${dt.key}.averagePercentage`],
+    },
+    tz,
+  );
 }
 
 export function mapHeartRateVariability(
   point: GoogleHealthDataPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.heartRateVariability;
   // The daily field is an unlabelled "average HRV ms". Per the design decision
@@ -491,72 +504,102 @@ export function mapHeartRateVariability(
   // (Apple-comparable), NOT WHOOP's `HRV_RMSSD` (reserved for the WHOOP-native
   // estimator). The per-sample type carries explicit RMSSD + SDNN fields —
   // re-confirm the estimator against live data and revisit if warranted.
-  return mapSimple(point, dt, {
-    type: "HEART_RATE_VARIABILITY",
-    unit: "ms",
-    fieldTag: "hrv",
-    valuePaths: [`${dt.key}.averageHeartRateVariabilityMilliseconds`],
-  });
+  return mapSimple(
+    point,
+    dt,
+    {
+      type: "HEART_RATE_VARIABILITY",
+      unit: "ms",
+      fieldTag: "hrv",
+      valuePaths: [`${dt.key}.averageHeartRateVariabilityMilliseconds`],
+    },
+    tz,
+  );
 }
 
 export function mapRestingHeartRate(
   point: GoogleHealthDataPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.restingHeartRate;
   // `beatsPerMinute` is an int64 JSON string — coerced by the extractor.
-  return mapSimple(point, dt, {
-    type: "RESTING_HEART_RATE",
-    unit: "bpm",
-    fieldTag: "rhr",
-    valuePaths: [`${dt.key}.beatsPerMinute`],
-  });
+  return mapSimple(
+    point,
+    dt,
+    {
+      type: "RESTING_HEART_RATE",
+      unit: "bpm",
+      fieldTag: "rhr",
+      valuePaths: [`${dt.key}.beatsPerMinute`],
+    },
+    tz,
+  );
 }
 
 export function mapRespiratoryRate(
   point: GoogleHealthDataPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.respiratoryRate;
   // Documented schema: `{ date, breathsPerMinute }` — `breathsPerMinute` is a
   // plain number ("The average number of breaths taken per minute"). The
   // earlier `dailyRespiratoryRateBpm` leaf does not exist and never parsed.
-  return mapSimple(point, dt, {
-    type: "RESPIRATORY_RATE",
-    unit: "breaths/min",
-    fieldTag: "resp_rate",
-    valuePaths: [`${dt.key}.breathsPerMinute`],
-  });
+  return mapSimple(
+    point,
+    dt,
+    {
+      type: "RESPIRATORY_RATE",
+      unit: "breaths/min",
+      fieldTag: "resp_rate",
+      valuePaths: [`${dt.key}.breathsPerMinute`],
+    },
+    tz,
+  );
 }
 
 export function mapBloodGlucose(
   point: GoogleHealthDataPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.bloodGlucose;
   // Documented field `bloodGlucoseMilligramsPerDeciliter` (number) — already in
   // HealthLog's canonical mg/dL storage unit, no conversion.
-  return mapSimple(point, dt, {
-    type: "BLOOD_GLUCOSE",
-    unit: "mg/dL",
-    fieldTag: "glucose",
-    valuePaths: [`${dt.key}.bloodGlucoseMilligramsPerDeciliter`],
-  });
+  return mapSimple(
+    point,
+    dt,
+    {
+      type: "BLOOD_GLUCOSE",
+      unit: "mg/dL",
+      fieldTag: "glucose",
+      valuePaths: [`${dt.key}.bloodGlucoseMilligramsPerDeciliter`],
+    },
+    tz,
+  );
 }
 
 export function mapCoreBodyTemperature(
   point: GoogleHealthDataPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.coreBodyTemperature;
   // Documented field `temperatureCelsius` (number) → the core BODY_TEMPERATURE
   // slot (distinct from SKIN_TEMPERATURE / WRIST_TEMPERATURE surface readings).
-  return mapSimple(point, dt, {
-    type: "BODY_TEMPERATURE",
-    unit: "celsius",
-    fieldTag: "core_temp",
-    valuePaths: [`${dt.key}.temperatureCelsius`],
-  });
+  return mapSimple(
+    point,
+    dt,
+    {
+      type: "BODY_TEMPERATURE",
+      unit: "celsius",
+      fieldTag: "core_temp",
+      valuePaths: [`${dt.key}.temperatureCelsius`],
+    },
+    tz,
+  );
 }
 
 export function mapWristTemperature(
   point: GoogleHealthDataPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.sleepTemperature;
   // `nightlyTemperatureCelsius` is the ABSOLUTE nightly skin temperature ("the
@@ -565,25 +608,36 @@ export function mapWristTemperature(
   // absolute-reading convention. The sibling `baselineTemperatureCelsius` /
   // `relativeNightlyStddev30dCelsius` derivations are not stored — the user's
   // own series carries the baseline.
-  return mapSimple(point, dt, {
-    type: "WRIST_TEMPERATURE",
-    unit: "celsius",
-    fieldTag: "wrist_temp",
-    valuePaths: [`${dt.key}.nightlyTemperatureCelsius`],
-  });
+  return mapSimple(
+    point,
+    dt,
+    {
+      type: "WRIST_TEMPERATURE",
+      unit: "celsius",
+      fieldTag: "wrist_temp",
+      valuePaths: [`${dt.key}.nightlyTemperatureCelsius`],
+    },
+    tz,
+  );
 }
 
 export function mapHeartRate(
   point: GoogleHealthDataPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.heartRate;
   // `beatsPerMinute` is an int64 JSON string.
-  return mapSimple(point, dt, {
-    type: "PULSE",
-    unit: "bpm",
-    fieldTag: "hr",
-    valuePaths: [`${dt.key}.beatsPerMinute`],
-  });
+  return mapSimple(
+    point,
+    dt,
+    {
+      type: "PULSE",
+      unit: "bpm",
+      fieldTag: "hr",
+      valuePaths: [`${dt.key}.beatsPerMinute`],
+    },
+    tz,
+  );
 }
 
 /** One extracted `height` sample: centimetres + the sample instant (if any). */
@@ -635,8 +689,8 @@ function firstNonNegativeNumber(
 /**
  * Map one `dailyRollUp` aggregate window (`windowSizeDays: 1`) into a single
  * daily-total Measurement reading. The day key comes from the window's
- * `civilStartTime.date` (a `{year,month,day}` object), anchored at UTC-midday
- * per the shared civil-day convention; a window with no parseable civil day is
+ * `civilStartTime.date` (a `{year,month,day}` object), anchored at local noon
+ * of that day in the user's zone; a window with no parseable civil day is
  * dropped (it cannot be keyed). The externalId is the `stats:`-prefixed
  * daily-total shape so a re-fetched day overwrites in place — the same
  * overwrite contract the Apple-Health `stats:<HK>:<YYYY-MM-DD>` daily totals
@@ -651,21 +705,21 @@ function mapDailyRollup(
     valuePaths: string[];
     factor?: number;
   },
+  tz: string | undefined,
 ): GoogleHealthMappedMeasurement[] {
-  const day =
-    parseCivilDateObject(readPath(point, "civilStartTime.date")) ??
-    parseCivilStart(readPath(point, "civilStartTime"));
-  if (!day) return [];
+  const dayKey =
+    parseCivilKey(readPath(point, "civilStartTime.date")) ??
+    parseCivilKey(readPath(point, "civilStartTime"));
+  if (!dayKey) return [];
   let value = firstNonNegativeNumber(point, spec.valuePaths);
   if (value === null) return [];
   if (spec.factor) value = value * spec.factor;
-  const dayKey = day.toISOString().slice(0, 10);
   return [
     {
       type: spec.type,
       value: round2(value),
       unit: spec.unit,
-      measuredAt: day,
+      measuredAt: canonicalDailyTimestamp(dayKey, tz),
       // `stats:<type-tag>:<YYYY-MM-DD>` — the sync layer reads `cumulativeDaily`
       // to assemble the externalId, matching the Apple-Health daily-total shape.
       fieldTag: `${spec.fieldTag}:${dayKey}`,
@@ -676,55 +730,75 @@ function mapDailyRollup(
 
 export function mapSteps(
   point: GoogleHealthRollupPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.steps;
   // `countSum` is an int64 JSON string.
-  return mapDailyRollup(point, {
-    type: "ACTIVITY_STEPS",
-    unit: "steps",
-    fieldTag: "steps",
-    valuePaths: [`${dt.key}.countSum`],
-  });
+  return mapDailyRollup(
+    point,
+    {
+      type: "ACTIVITY_STEPS",
+      unit: "steps",
+      fieldTag: "steps",
+      valuePaths: [`${dt.key}.countSum`],
+    },
+    tz,
+  );
 }
 
 export function mapDistance(
   point: GoogleHealthRollupPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.distance;
   // `millimetersSum` is an int64 JSON string → metres.
-  return mapDailyRollup(point, {
-    type: "WALKING_RUNNING_DISTANCE",
-    unit: "m",
-    fieldTag: "distance",
-    valuePaths: [`${dt.key}.millimetersSum`],
-    factor: 0.001,
-  });
+  return mapDailyRollup(
+    point,
+    {
+      type: "WALKING_RUNNING_DISTANCE",
+      unit: "m",
+      fieldTag: "distance",
+      valuePaths: [`${dt.key}.millimetersSum`],
+      factor: 0.001,
+    },
+    tz,
+  );
 }
 
 export function mapActiveEnergy(
   point: GoogleHealthRollupPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.activeEnergy;
   // ACTIVE energy only — NOT total-calories (which folds in BMR).
-  return mapDailyRollup(point, {
-    type: "ACTIVE_ENERGY_BURNED",
-    unit: "kcal",
-    fieldTag: "active_energy",
-    valuePaths: [`${dt.key}.kcalSum`],
-  });
+  return mapDailyRollup(
+    point,
+    {
+      type: "ACTIVE_ENERGY_BURNED",
+      unit: "kcal",
+      fieldTag: "active_energy",
+      valuePaths: [`${dt.key}.kcalSum`],
+    },
+    tz,
+  );
 }
 
 export function mapFloors(
   point: GoogleHealthRollupPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.floors;
   // `countSum` is an int64 JSON string.
-  return mapDailyRollup(point, {
-    type: "FLIGHTS_CLIMBED",
-    unit: "flights",
-    fieldTag: "floors",
-    valuePaths: [`${dt.key}.countSum`],
-  });
+  return mapDailyRollup(
+    point,
+    {
+      type: "FLIGHTS_CLIMBED",
+      unit: "flights",
+      fieldTag: "floors",
+      valuePaths: [`${dt.key}.countSum`],
+    },
+    tz,
+  );
 }
 
 /**
@@ -735,11 +809,12 @@ export function mapFloors(
  */
 export function mapVo2Max(
   point: GoogleHealthDataPoint,
+  tz?: string,
 ): GoogleHealthMappedMeasurement[] {
   const dt = GOOGLE_HEALTH_DATA_TYPES.vo2Max;
   const value = firstNumber(point, [`${dt.key}.vo2Max`]);
   if (value === null) return [];
-  const measuredAt = resolveMeasuredAt(point, dt, new Date());
+  const measuredAt = resolveMeasuredAt(point, dt, new Date(), tz);
   return [
     {
       type: "VO2_MAX",

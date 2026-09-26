@@ -11,7 +11,8 @@
  *     are fixing for non-Berlin users.
  */
 import { describe, expect, it } from "vitest";
-import { moodDateKey, effectiveMoodTz, DEFAULT_TIMEZONE } from "../date-key";
+import { moodDateKey, effectiveMoodTz } from "../date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 describe("moodDateKey", () => {
   it("formats a UTC instant as a Europe/Berlin YYYY-MM-DD by default", () => {

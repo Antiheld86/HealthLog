@@ -18,6 +18,8 @@ vi.mock("@/lib/db", () => ({
     },
     measurement: { findMany: vi.fn() },
     measurementRollup: { findMany: vi.fn() },
+    // Weekly / monthly / yearly buckets are folded from the DAY tier in SQL.
+    $queryRaw: vi.fn(),
     medication: { findMany: vi.fn() },
     medicationIntakeEvent: { findMany: vi.fn() },
     moodEntry: { findMany: vi.fn() },
@@ -94,6 +96,7 @@ beforeEach(() => {
   // Cold rollup tier: the BP channels fold monthly/yearly from the
   // full-history `measurement.findMany` fallback on a tier miss.
   vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
 });
 
 describe("generateBloodPressureStatusForUser — graded payload", () => {

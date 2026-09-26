@@ -28,6 +28,7 @@ import {
   type JobHandler,
   type JobWithMetadataHandler,
 } from "@/lib/jobs/run-job";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * Cron schedule tuple: `[queueName, cronExpression, sendOptions?]`. The
@@ -223,7 +224,7 @@ export async function createAndSchedule(
       cron,
       {},
       {
-        tz: "Europe/Berlin",
+        tz: DEFAULT_TIMEZONE,
         ...(sendOptions ?? {}),
       },
     );

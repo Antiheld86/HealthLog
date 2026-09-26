@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   getUserTodayBounds,
+  localDayWindow,
   localHmAsUtc,
   startOfLocalDayInTz,
+  startOfLocalDayKey,
 } from "@/lib/tz/local-day";
+import { shiftDateKey, userDayKey } from "@/lib/tz/format";
 import { wallClockInTz, zonedWallClockToUtc } from "@/lib/tz/wall-clock";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -244,5 +247,88 @@ describe("localHmAsUtc — DST transition days", () => {
     const b = localHmAsUtc(post, sydney, 20, 0);
     expect(a.getTime()).toBe(b.getTime());
     expect(localHm(a, sydney)).toBe("20:00");
+  });
+});
+
+describe("startOfLocalDayKey / localDayWindow — every day of the year", () => {
+  const ZONES = [
+    "America/New_York",
+    "America/Santiago",
+    "America/Havana",
+    "Pacific/Auckland",
+    "Pacific/Tongatapu",
+    "Australia/Sydney",
+    "Europe/Berlin",
+    "Asia/Kathmandu",
+    "UTC",
+  ];
+
+  // The first instant of the day reads the day's key, and the millisecond
+  // before it reads the previous key: it is exactly where the day begins.
+  for (const tz of ZONES) {
+    it(`starts each 2026 day at its first local instant in ${tz}`, () => {
+      let key = "2026-01-01";
+      for (let i = 0; i < 365; i++) {
+        const { dayStart, dayEnd } = localDayWindow(key, tz);
+        expect(userDayKey(dayStart, tz), `${tz} ${key}`).toBe(key);
+        expect(
+          userDayKey(new Date(dayStart.getTime() - 1), tz),
+          `${tz} ${key}`,
+        ).toBe(shiftDateKey(key, -1));
+        const hours = (dayEnd.getTime() - dayStart.getTime()) / 3_600_000;
+        expect(hours).toBeGreaterThanOrEqual(23);
+        expect(hours).toBeLessThanOrEqual(25);
+        expect(startOfLocalDayKey(key, tz).getTime()).toBe(dayStart.getTime());
+        key = shiftDateKey(key, 1);
+      }
+    });
+  }
+
+  it.each([
+    // Midnight is skipped: the day begins at 01:00 local.
+    ["America/Santiago", "2026-09-06", "2026-09-06T04:00:00.000Z", 23],
+    ["America/Havana", "2026-03-08", "2026-03-08T05:00:00.000Z", 23],
+    // Far from UTC, the offset at UTC midnight is not the offset at local
+    // midnight on a transition day.
+    ["Pacific/Auckland", "2026-04-05", "2026-04-04T11:00:00.000Z", 25],
+    ["Pacific/Auckland", "2026-09-27", "2026-09-26T12:00:00.000Z", 23],
+    ["Australia/Sydney", "2026-04-05", "2026-04-04T13:00:00.000Z", 25],
+    ["America/New_York", "2026-11-01", "2026-11-01T04:00:00.000Z", 25],
+    ["Europe/Berlin", "2026-03-29", "2026-03-28T23:00:00.000Z", 23],
+    ["Pacific/Tongatapu", "2026-07-01", "2026-06-30T11:00:00.000Z", 24],
+  ])("%s %s starts at %s and lasts %i h", (tz, key, start, hours) => {
+    const { dayStart, dayEnd } = localDayWindow(key, tz);
+    expect(dayStart.toISOString()).toBe(start);
+    expect((dayEnd.getTime() - dayStart.getTime()) / 3_600_000).toBe(hours);
+    expect(
+      startOfLocalDayInTz(new Date(dayStart.getTime() + 3_600_000), tz),
+    ).toEqual(dayStart);
+  });
+});
+
+describe("zonedWallClockToUtc — skipped wall clocks", () => {
+  it("reads a skipped midnight as the moment the clocks jump", () => {
+    expect(
+      zonedWallClockToUtc(
+        { year: 2026, month: 9, day: 6, hour: 0, minute: 0 },
+        "America/Santiago",
+      ).toISOString(),
+    ).toBe("2026-09-06T04:00:00.000Z");
+  });
+
+  it("reads 02:30 on the Berlin spring-forward day as 03:30 summer time", () => {
+    expect(
+      zonedWallClockToUtc(
+        { year: 2026, month: 3, day: 29, hour: 2, minute: 30 },
+        "Europe/Berlin",
+      ).toISOString(),
+    ).toBe("2026-03-29T01:30:00.000Z");
+  });
+
+  it("agrees with the day start at 00:00 where midnight is skipped", () => {
+    const ref = new Date("2026-09-06T15:00:00.000Z");
+    expect(localHmAsUtc(ref, "America/Santiago", 0, 0)).toEqual(
+      startOfLocalDayInTz(ref, "America/Santiago"),
+    );
   });
 });

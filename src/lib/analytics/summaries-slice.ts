@@ -57,6 +57,7 @@
 import pLimit from "p-limit";
 
 import type { MeasurementType } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 
 import { prisma } from "@/lib/db";
 import type { DataSummary } from "@/lib/analytics/trends";
@@ -64,9 +65,11 @@ import { measurementTypeEnum } from "@/lib/validations/measurement";
 import { annotate } from "@/lib/logging/context";
 import {
   ensureUserRollupsFresh,
+  readRollupBuckets,
   ROLLUP_FOLD_WINDOW_MS,
 } from "@/lib/rollups/measurement-rollups";
 import {
+  aggregateBuckets,
   collapseRollupRowsBySource,
   composeWindowedRegression,
   hasPendingAccumulatorBackfill,
@@ -83,7 +86,6 @@ import {
   probeRollupCoverage,
   type RollupCoverageMap,
 } from "@/lib/rollups/measurement-coverage";
-import { readBestGranularityRollups } from "@/lib/rollups/measurement-read-wmy";
 import {
   summarizeSleepNights,
   type SleepSourceDiscrepancy,
@@ -423,6 +425,11 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
     '"source"',
   );
   const rankM = buildSourceRankCase(priorityJson, 'm."type"', 'm."source"');
+  const rankPerSource = buildSourceRankCase(
+    priorityJson,
+    'p."type"',
+    'p."source"',
+  );
 
   // v1.37.19 (A6-10) — where the fold window starts. DAY rollup buckets
   // only exist inside the trailing `ROLLUP_FOLD_WINDOW_MS` (5 y), so the
@@ -514,7 +521,7 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
         WHERE "user_id" = $1
           AND "granularity" = 'DAY'
           AND "bucket_start" >= $2
-        ORDER BY "type", "bucket_start", (${rankUnqualified}), "source"
+        ORDER BY "type", "bucket_start", (${rankUnqualified}), "source"::text
       )
       SELECT
         "type"::text                                       AS type,
@@ -559,16 +566,15 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
           sumYy: true,
         },
       }),
-      // v1.37.19 (A6-10) — all-time remainder OLDER than the fold window.
-      // One grouped aggregate over the pre-fold rows (index range scan on
-      // `(user_id, measured_at)`; empty for any account younger than the
-      // window). Spliced into the per-type figures below so "all-time"
-      // means all time on the rollup path too. Deliberately without the
-      // source-priority collapse: pre-fold history predates the rollup
-      // tier's per-day canonicalisation, and a per-day DISTINCT ON over a
-      // multi-year span is the cost this splice exists to avoid — for
-      // count/min/max/mean over years-old data the raw figures are the
-      // honest ones.
+      // v1.37.19 (A6-10) — all-time remainder OLDER than the fold window,
+      // spliced into the per-type figures below so "all-time" means all time
+      // on the rollup path too (empty for any account younger than the
+      // window). It keeps one source per (type, day) the way the rollup half
+      // and the live path do: without it, a vital recorded by two devices
+      // counted both of them on every pre-fold day. Each source is folded per
+      // day first (a hash aggregate, a few rows per day however dense the
+      // stream), each day then keeps its ladder-canonical source, so the
+      // sort never sees more than one row per source per day.
       prisma.$queryRaw<
         Array<{
           type: string;
@@ -578,17 +584,35 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
           mean: number;
         }>
       >`
+      WITH per_source AS (
+        SELECT
+          m."type",
+          m."source",
+          date_trunc('day', m."measured_at") AS day,
+          COUNT(*)::int                      AS cnt,
+          SUM(m."value")::double precision   AS total,
+          MIN(m."value")::double precision   AS min_value,
+          MAX(m."value")::double precision   AS max_value
+        FROM measurements m
+        WHERE m."user_id" = ${userId}
+          AND m."deleted_at" IS NULL
+          AND m."measured_at" < ${foldSplit}
+        GROUP BY m."type", m."source", 3
+      ),
+      canon AS (
+        SELECT DISTINCT ON (p."type", p.day)
+          p."type", p.cnt, p.total, p.min_value, p.max_value
+        FROM per_source p
+        ORDER BY p."type", p.day, (${Prisma.raw(rankPerSource)}), p."source"::text
+      )
       SELECT
-        m."type"::text                     AS type,
-        COUNT(*)::int                      AS count,
-        MIN(m."value")::double precision   AS min,
-        MAX(m."value")::double precision   AS max,
-        AVG(m."value")::double precision   AS mean
-      FROM measurements m
-      WHERE m."user_id" = ${userId}
-        AND m."deleted_at" IS NULL
-        AND m."measured_at" < ${foldSplit}
-      GROUP BY m."type"
+        c."type"::text                                  AS type,
+        SUM(c.cnt)::int                                 AS count,
+        MIN(c.min_value)::double precision              AS min,
+        MAX(c.max_value)::double precision              AS max,
+        (SUM(c.total) / SUM(c.cnt))::double precision   AS mean
+      FROM canon c
+      GROUP BY c."type"
     `,
     ]);
 
@@ -773,11 +797,10 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
     };
   }
 
-  // v1.4.40 W-WMY-WIRE — populate `avg30LastYear` per type from the
-  // WMY rollup tier. Only types with data in the current window are
-  // probed so we don't pay the per-type round-trip on the long tail
-  // of unlogged measurement enums. Types without YEAR/MONTH coverage
-  // surface as `null` (existing behaviour) — additive only.
+  // Populate `avg30LastYear` per type from the DAY rollup tier. Only types
+  // with data in the current window are probed so we don't pay the per-type
+  // round-trip on the long tail of unlogged measurement enums. Types with no
+  // reading in the year-ago window surface as `null`.
   const avg30LastYearMap = await computeAvg30LastYearMap(userId, typesWithData);
   let yearOverYearTypeCount = 0;
   for (const [type, value] of avg30LastYearMap.entries()) {
@@ -1016,13 +1039,10 @@ async function computeFromLiveAggregate(
     };
   }
 
-  // v1.4.40 W-WMY-WIRE — even on the live-aggregate fallback (DAY
-  // coverage incomplete), the YEAR / MONTH rollup tier may still
-  // carry the year-ago baseline because the boot-time backfill mints
-  // all granularities once per user. Probing here means a partial-
-  // coverage cold mount still surfaces `avg30LastYear` whenever the
-  // long-tail tier is populated, instead of waiting for the next
-  // refresh cycle.
+  // Even on the live-aggregate fallback (trailing DAY coverage incomplete),
+  // the year-ago DAY buckets may already exist because the boot-time
+  // backfill folds the whole history once per user, so a partial-coverage
+  // cold mount still surfaces `avg30LastYear`.
   const avg30LastYearMap = await computeAvg30LastYearMap(userId, typesWithData);
   let yearOverYearTypeCount = 0;
   for (const [type, value] of avg30LastYearMap.entries()) {
@@ -1051,118 +1071,51 @@ async function computeFromLiveAggregate(
 }
 
 /**
- * v1.4.39 W-WMY — long-window summary for a single `(userId, type)`
- * pair, served from the WEEK / MONTH / YEAR rollup tier when the
- * window justifies it.
+ * Year-ago 30-day baseline per type, served from the DAY rollup tier.
  *
- * Why this helper exists
- * ----------------------
- * The slim `computeSummariesSlice` caps its windowed columns at 90 d
- * (`slope7 / slope30`). The v1.5 multi-year trend feature
- * + the Coach drawer's "history" tile need linearly composable stats
- * (count / min / max / mean / sum) over much larger windows — 1 y,
- * 2 y, 3 y. Hitting the live `measurements` table for a 3-year span
- * walks every row the user has ever logged for that type, which on
- * the maintainer's tenant is tens of thousands of rows per type.
+ * `DataSummary.avg30LastYear` is the mean over the 30 days that start 395
+ * days ago, which the dashboard tile uses for "current average vs the same
+ * time last year". The window is exactly those 30 UTC days (the DAY-tier
+ * grain), read as canonical-source DAY buckets and composed count-weighted,
+ * so it is the same per-reading mean `avg30` reports for the last 30 days.
  *
- * The WMY rollup tier already carries the per-bucket stats we need:
- * the writer mints WEEK / MONTH / YEAR buckets via pg-boss on every
- * measurement write and the boot backfill fills the long tail. This
- * helper routes the requested window into the largest granularity
- * that still resolves it (via `readBestGranularityRollups`) and
- * composes the trailing-window aggregate in JS — typically 3-15
- * bucket rows on a multi-year window, vs the thousands of raw rows
- * the live aggregator would scan.
+ * Up to v1.39.2 this read the MONTH tier and kept the months whose first day
+ * fell inside the window, so the baseline was a whole calendar month that
+ * could start up to a month off, or nothing at all when no month began inside
+ * the window.
  *
- * Compositional caveats
- * ---------------------
- * `count / min / max / mean / sum` are mathematically exact across
- * any granularity (linearly composable). `sd / slope / r2` are NOT
- * exact across coarser buckets — this helper deliberately omits them
- * so callers cannot accidentally consume stale slope data. The v1.5
- * multi-year trend card derives its slope from the per-bucket `mean`
- * series instead.
- *
- * Coverage-miss policy
- * --------------------
- * `readBestGranularityRollups` falls back from YEAR → MONTH → WEEK
- * → DAY on per-tier coverage miss. Returns `null` only when the
- * user has zero buckets in the entire window — the caller treats
- * that as "no data" rather than "stale rollup". The route is
- * intentionally NOT wired to live SQL fallback here; the all-time
- * aggregate path inside `computeSummariesSlice` already covers the
- * "rollup tier empty" cold-mount case, and v1.5's multi-year card
- * accepts a `null` "no data yet" state.
- */
-
-/**
- * v1.4.40 W-WMY-WIRE — year-ago 30-day baseline per type, served from
- * the WEEK / MONTH / YEAR rollup tier.
- *
- * Why this helper exists
- * ----------------------
- * `DataSummary.avg30LastYear` is the mean over `[now-395d, now-365d)` —
- * the 30-day window starting 365 days ago. The dashboard tile-strip's
- * delta callout uses it to narrate "current avg vs same time last
- * year". Up to v1.4.39 the slim slice (and the comprehensive
- * aggregator's rollup branch) hardcoded the field to `null` because
- * the 90-day windowed `$queryRaw` cannot reach back a year, and the
- * live `measurements` table walk for a 395-day per-type window is
- * exactly the cold-path cost we're trying to avoid.
- *
- * The WMY rollup tier already carries the per-bucket stats this
- * window needs. `readBestGranularityRollups(userId, type, 395)`
- * routes the 395-day window through YEAR (if covered) → MONTH → WEEK
- * → DAY and returns the buckets whose `bucketStart` falls inside the
- * window. We then keep only the buckets that overlap the
- * `[now-395d, now-365d)` slice and compose `count / mean` linearly to
- * produce the year-ago baseline.
- *
- * Compositional contract
- * ----------------------
- * `count / mean` are linearly composable across any granularity, so
- * the year-ago mean derived from MONTH or YEAR buckets is
- * mathematically equivalent to the per-row average over the same
- * window. The bucket-overlap filter is conservative: we include only
- * buckets whose `bucketStart` is strictly inside the slice. On a
- * YEAR-granularity routing this collapses to at most one bucket and
- * approximates the 30-day mean by the surrounding yearly average —
- * acceptable for a UI hint that explicitly narrates "last year".
- *
- * Coverage-miss policy
- * --------------------
- * Returns `null` when `readBestGranularityRollups` returns null (no
- * coverage at any granularity) OR when no buckets overlap the
- * year-ago slice. The caller leaves the dashboard field as `null`,
- * which the UI already handles as "no comparison available".
+ * Returns `null` when no reading falls in the window; the UI treats that as
+ * "no comparison available".
  */
 async function computeAvg30LastYearForType(
   userId: string,
   type: MeasurementType,
+  priorityJson: unknown,
+  now: number,
 ): Promise<number | null> {
-  const resolved = await readBestGranularityRollups(userId, type, 395);
-  if (!resolved) return null;
-  const now = Date.now();
-  const sliceStart = now - 395 * DAY_MS;
-  const sliceEnd = now - 365 * DAY_MS;
-  const overlapping = resolved.rows.filter((row) => {
-    const t = row.bucketStart.getTime();
-    return t >= sliceStart && t < sliceEnd;
-  });
-  if (overlapping.length === 0) return null;
-  let totalCount = 0;
-  let weighted = 0;
-  for (const row of overlapping) {
-    totalCount += row.count;
-    weighted += row.count * row.mean;
-  }
-  if (totalCount === 0) return null;
-  return weighted / totalCount;
+  const rows = await readRollupBuckets(
+    userId,
+    type,
+    "DAY",
+    startOfUtcDay(new Date(now - 395 * DAY_MS)),
+    startOfUtcDay(new Date(now - 365 * DAY_MS)),
+    priorityJson,
+  );
+  const composed = aggregateBuckets(
+    rows.map((r) => ({
+      day: r.bucketStart,
+      count: r.count,
+      mean: r.mean,
+      minValue: r.minValue,
+      maxValue: r.maxValue,
+    })),
+  );
+  return composed.count > 0 ? composed.mean : null;
 }
 
 /**
  * v1.4.40 W-WMY-WIRE — fan out `computeAvg30LastYearForType` across
- * the types the caller actually surfaces. Runs the per-type WMY reads
+ * the types the caller actually surfaces. Runs the per-type rollup reads
  * in parallel so the long-tail of types doesn't serialise into a
  * per-type round-trip stack.
  *
@@ -1191,12 +1144,16 @@ export async function computeAvg30LastYearMap(
   const out = new Map<string, number | null>();
   if (types.length === 0) return out;
   const limit = pLimit(WMY_FANOUT_CONCURRENCY);
+  const priorityJson = await loadUserSourcePriority(userId);
+  const now = Date.now();
   const results = await Promise.all(
     types.map((type) =>
       limit(async () => {
         const value = await computeAvg30LastYearForType(
           userId,
           type as MeasurementType,
+          priorityJson,
+          now,
         );
         return [type, value] as const;
       }),

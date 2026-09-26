@@ -26,7 +26,7 @@
  */
 import { unlinkSync } from "node:fs";
 import { getHeapStatistics } from "node:v8";
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { MeasurementType, PrismaClient } from "@/generated/prisma/client";
 import { prisma, toJson } from "@/lib/db";
 import type { Job } from "pg-boss";
 
@@ -35,6 +35,8 @@ import { parseAppleHealthEcgCsv } from "@/lib/apple-health/ecg-csv";
 import { importAppleHealthEcg } from "@/lib/apple-health/ecg-import";
 import { extractExportXml } from "@/lib/import/unzip-export-xml";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
+import { invalidateStatusInsightsForTypes } from "@/lib/insights/status-invalidation";
+import { trackBackgroundTask } from "@/lib/logging/background-tasks";
 import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import {
   streamParseExportXml,
@@ -46,6 +48,7 @@ import {
   ROLLUP_FOLD_WINDOW_MS,
 } from "@/lib/rollups/measurement-rollups";
 import { withBackgroundEvent } from "@/lib/logging/background";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * Queue + cron for the periodic orphan-ImportJob sweep. v1.32.1
@@ -371,7 +374,7 @@ export async function handleAppleHealthImport(
     const userTimezone =
       userRow?.timezone && userRow.timezone.length > 0
         ? userRow.timezone
-        : "Europe/Berlin";
+        : DEFAULT_TIMEZONE;
 
     // Phase 1: unpacking
     await writeProgress(prisma, importJobId, "unpacking", {
@@ -530,6 +533,25 @@ export async function handleAppleHealthImport(
       console.warn(
         `[apple-health-import] Rollup recompute failed for user ${userId}`,
         rollupErr,
+      );
+    }
+
+    // The imported types' cached status assessments describe data that just
+    // changed; re-warm them, the second leg every other measurement write
+    // runs (`afterMeasurementMutation`). The rollups above are refolded over
+    // the import's span rather than per day, so the leg is called directly.
+    const importedTypes = Object.entries(result.perType)
+      .filter(([, stat]) => stat.inserted + stat.updated > 0)
+      .map(([type]) => type as MeasurementType);
+    if (importedTypes.length > 0) {
+      // Registered so the test suite can await the detached handle.
+      trackBackgroundTask(
+        invalidateStatusInsightsForTypes(userId, importedTypes).catch((err) => {
+          console.warn(
+            `[apple-health-import] status-insight invalidate failed for user ${userId}`,
+            err,
+          );
+        }),
       );
     }
 

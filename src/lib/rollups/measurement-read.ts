@@ -23,9 +23,13 @@
 import type {
   MeasurementSource,
   MeasurementType,
+  RollupGranularity,
 } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import { buildSourceRankCase } from "@/lib/analytics/source-rank-sql";
 import { metricKeyForType } from "@/lib/measurements/cumulative-day-sum";
+import { startOfUtcDay } from "@/lib/tz/start-of-utc-day";
 import {
   getSourceLadder,
   parseSourcePriority,
@@ -411,4 +415,271 @@ export function aggregateBuckets(rows: DailyMeanRow[]): {
     max: Number.isFinite(max) ? max : null,
     mean: sumWeighted / totalCount,
   };
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Start of the UTC bucket containing `at` at the given granularity. The same
+ * cut Postgres `date_trunc(<unit>, measured_at)` makes on the rollup writer's
+ * UTC wall-clock `measured_at` (weeks are ISO weeks starting on Monday).
+ */
+export function utcBucketStart(at: Date, granularity: RollupGranularity): Date {
+  switch (granularity) {
+    case "DAY":
+      return startOfUtcDay(at);
+    case "WEEK": {
+      const day = startOfUtcDay(at);
+      // getUTCDay(): Sunday = 0 … Saturday = 6; ISO weeks start on Monday.
+      const mondayOffset = (day.getUTCDay() + 6) % 7;
+      return new Date(day.getTime() - mondayOffset * DAY_MS);
+    }
+    case "MONTH":
+      return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1));
+    case "YEAR":
+      return new Date(Date.UTC(at.getUTCFullYear(), 0, 1));
+  }
+}
+
+/** Start of the UTC bucket after the one containing `at`. */
+export function utcBucketEnd(at: Date, granularity: RollupGranularity): Date {
+  const start = utcBucketStart(at, granularity);
+  switch (granularity) {
+    case "DAY":
+      return new Date(start.getTime() + DAY_MS);
+    case "WEEK":
+      return new Date(start.getTime() + 7 * DAY_MS);
+    case "MONTH":
+      return new Date(
+        Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1),
+      );
+    case "YEAR":
+      return new Date(Date.UTC(start.getUTCFullYear() + 1, 0, 1));
+  }
+}
+
+/** One canonical-source bucket, at any granularity. */
+export interface CanonicalRollupBucket {
+  bucketStart: Date;
+  count: number;
+  mean: number;
+  minValue: number;
+  maxValue: number;
+  sumValue: number | null;
+  sd: number | null;
+  slope: number | null;
+  r2: number | null;
+  sumX: number | null;
+  sumXy: number | null;
+  sumXx: number | null;
+  sumYy: number | null;
+  computedAt: Date;
+}
+
+/**
+ * One coarse bucket as the canonical-day fold returns it: the summed
+ * composable stats of the bucket's canonical days.
+ */
+interface FoldedBucketRow {
+  bucket_start: Date;
+  count: number;
+  sum_y: number;
+  min_value: number;
+  max_value: number;
+  /** Null when any day of the bucket lacks the regression accumulators. */
+  sum_x: number | null;
+  sum_xy: number | null;
+  sum_xx: number | null;
+  sum_yy: number | null;
+  computed_at: Date;
+}
+
+/** SQL `date_trunc` unit per coarse granularity (a closed map, never input). */
+const COARSE_TRUNC_UNIT: Record<Exclude<RollupGranularity, "DAY">, string> = {
+  WEEK: "week",
+  MONTH: "month",
+  YEAR: "year",
+};
+
+/**
+ * Compose one coarse bucket from the summed stats of its canonical days.
+ * `count`, `min`, `max`, `sum` and the count-weighted `mean` are exact;
+ * `sd`, `slope` and `r2` come from the summed regression accumulators
+ * (`composeRegression`) and are `null` when a day lacks them.
+ */
+function composeFoldedBucket(row: FoldedBucketRow): CanonicalRollupBucket {
+  const count = Number(row.count);
+  const sumY = Number(row.sum_y);
+  const mean = sumY / count;
+  const accumulatorsComplete =
+    row.sum_x !== null &&
+    row.sum_xy !== null &&
+    row.sum_xx !== null &&
+    row.sum_yy !== null;
+  const sumX = accumulatorsComplete ? Number(row.sum_x) : null;
+  const sumXy = accumulatorsComplete ? Number(row.sum_xy) : null;
+  const sumXx = accumulatorsComplete ? Number(row.sum_xx) : null;
+  const sumYy = accumulatorsComplete ? Number(row.sum_yy) : null;
+  const regression = accumulatorsComplete
+    ? composeRegression([
+        { count, mean, sumValue: sumY, sumX, sumXy, sumXx, sumYy },
+      ])
+    : { slope: null, r2: null, sdPop: null };
+  return {
+    bucketStart: new Date(row.bucket_start),
+    count,
+    mean,
+    minValue: Number(row.min_value),
+    maxValue: Number(row.max_value),
+    sumValue: sumY,
+    // A single reading has no spread; STDDEV_POP of one value is 0.
+    sd: count === 1 && accumulatorsComplete ? 0 : regression.sdPop,
+    slope: regression.slope,
+    r2: regression.r2,
+    sumX,
+    sumXy,
+    sumXx,
+    sumYy,
+    computedAt: new Date(row.computed_at),
+  };
+}
+
+/**
+ * Read one type's canonical rollup buckets at `granularity`.
+ *
+ * Every granularity is built from the DAY tier. The canonical source is a
+ * per-DAY decision: a week, month or year in which the user logged most days
+ * by hand and one day from a device holds readings from both, and each of
+ * those days counts. Collapsing the stored per-source WEEK / MONTH / YEAR
+ * rows instead picked ONE source for the whole bucket, so a month of manual
+ * blood-pressure readings plus one synced one reported the synced day alone,
+ * and a step history that switched devices mid-month lost every day logged by
+ * the losing device. The stored coarse rows are therefore not read.
+ *
+ * DAY: the day's rows collapse to the ladder-canonical source in
+ * `collapseRollupRowsBySource`. WEEK / MONTH / YEAR: the same pick runs in
+ * SQL (`DISTINCT ON` the day, ordered by the ladder rank and then the source
+ * name, the order the JS collapse uses), and the days fold into their bucket
+ * there too, so a five-year read returns a handful of rows, not every day.
+ *
+ * A bucket is returned when its start lies in the window: `bucketStart >=
+ * from`, and `< to` (or `<= to` with `toInclusive`). `to === null` leaves the
+ * window open towards now. A returned bucket always carries all of its days,
+ * including days past `to`, the way the stored coarse rows did.
+ */
+export async function readCanonicalRollupBuckets(opts: {
+  userId: string;
+  type: MeasurementType;
+  granularity: RollupGranularity;
+  from: Date;
+  to: Date | null;
+  toInclusive?: boolean;
+  /** The user's source-priority blob; `undefined` loads it on demand. */
+  userPriorityJson?: unknown;
+}): Promise<CanonicalRollupBucket[]> {
+  const { userId, type, granularity, from, to } = opts;
+  if (granularity === "DAY") {
+    const dayRows = await prisma.measurementRollup.findMany({
+      where: {
+        userId,
+        type,
+        granularity: "DAY",
+        bucketStart:
+          to === null
+            ? { gte: from }
+            : opts.toInclusive
+              ? { gte: from, lte: to }
+              : { gte: from, lt: to },
+      },
+      orderBy: { bucketStart: "asc" },
+      select: {
+        bucketStart: true,
+        source: true,
+        count: true,
+        mean: true,
+        minValue: true,
+        maxValue: true,
+        sumValue: true,
+        sd: true,
+        slope: true,
+        r2: true,
+        sumX: true,
+        sumXy: true,
+        sumXx: true,
+        sumYy: true,
+        computedAt: true,
+      },
+    });
+    if (dayRows.length === 0) return [];
+    const priority =
+      opts.userPriorityJson !== undefined
+        ? opts.userPriorityJson
+        : await loadUserSourcePriority(userId);
+    return collapseRollupRowsBySource(dayRows, type, priority).map(
+      ({ source: _source, ...day }) => day,
+    );
+  }
+
+  const priority =
+    opts.userPriorityJson !== undefined
+      ? opts.userPriorityJson
+      : await loadUserSourcePriority(userId);
+  const unit = Prisma.raw(`'${COARSE_TRUNC_UNIT[granularity]}'`);
+  const rank = Prisma.raw(
+    buildSourceRankCase(priority, 'r."type"', 'r."source"'),
+  );
+  // The DAY read reaches the end of the last bucket that can start inside the
+  // window, so that bucket folds complete; buckets that start before `from`
+  // hold only part of their days and are left out below.
+  const upper =
+    to === null
+      ? Prisma.empty
+      : Prisma.sql`AND r."bucket_start" < ${utcBucketEnd(to, granularity)}`;
+  const rows = await prisma.$queryRaw<FoldedBucketRow[]>`
+    WITH canon AS (
+      SELECT DISTINCT ON (r."bucket_start")
+        r."bucket_start", r."count", r."mean", r."min_value", r."max_value",
+        r."sum_value", r."sum_x", r."sum_xy", r."sum_xx", r."sum_yy",
+        r."computed_at"
+      FROM measurement_rollups r
+      WHERE r."user_id" = ${userId}
+        AND r."type" = ${type}::measurement_type
+        AND r."granularity" = 'DAY'
+        AND r."bucket_start" >= ${from}
+        ${upper}
+      ORDER BY r."bucket_start", (${rank}), r."source"::text
+    )
+    SELECT
+      date_trunc(${unit}, c."bucket_start" AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+                                                             AS bucket_start,
+      SUM(c."count")::int                                    AS count,
+      SUM(COALESCE(c."sum_value", c."count" * c."mean"))::double precision
+                                                             AS sum_y,
+      MIN(c."min_value")::double precision                   AS min_value,
+      MAX(c."max_value")::double precision                   AS max_value,
+      CASE WHEN COUNT(c."sum_x") = COUNT(*) AND COUNT(c."sum_xy") = COUNT(*)
+            AND COUNT(c."sum_xx") = COUNT(*) AND COUNT(c."sum_yy") = COUNT(*)
+        THEN SUM(c."sum_x") END::double precision            AS sum_x,
+      CASE WHEN COUNT(c."sum_x") = COUNT(*) AND COUNT(c."sum_xy") = COUNT(*)
+            AND COUNT(c."sum_xx") = COUNT(*) AND COUNT(c."sum_yy") = COUNT(*)
+        THEN SUM(c."sum_xy") END::double precision           AS sum_xy,
+      CASE WHEN COUNT(c."sum_x") = COUNT(*) AND COUNT(c."sum_xy") = COUNT(*)
+            AND COUNT(c."sum_xx") = COUNT(*) AND COUNT(c."sum_yy") = COUNT(*)
+        THEN SUM(c."sum_xx") END::double precision           AS sum_xx,
+      CASE WHEN COUNT(c."sum_x") = COUNT(*) AND COUNT(c."sum_xy") = COUNT(*)
+            AND COUNT(c."sum_xx") = COUNT(*) AND COUNT(c."sum_yy") = COUNT(*)
+        THEN SUM(c."sum_yy") END::double precision           AS sum_yy,
+      MAX(c."computed_at")                                   AS computed_at
+    FROM canon c
+    GROUP BY 1
+    ORDER BY 1
+  `;
+  const fromMs = from.getTime();
+  const toMs = to?.getTime() ?? null;
+  return rows.map(composeFoldedBucket).filter((b) => {
+    const start = b.bucketStart.getTime();
+    if (start < fromMs) return false;
+    if (toMs === null) return true;
+    return opts.toInclusive ? start <= toMs : start < toMs;
+  });
 }

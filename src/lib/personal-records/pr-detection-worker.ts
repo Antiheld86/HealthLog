@@ -61,6 +61,7 @@ import {
   type MeasurementType,
   type PrismaClient,
 } from "@/generated/prisma/client";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * Minimum sample count per metric before the worker writes its first
@@ -245,7 +246,7 @@ export async function detectPersonalRecordsForUser(
   const tz =
     userRow?.timezone && userRow.timezone.length > 0
       ? userRow.timezone
-      : "Europe/Berlin";
+      : DEFAULT_TIMEZONE;
   const priorityJson = userRow?.sourcePriorityJson ?? null;
 
   // v1.34 — resolve the weight goal once per run: the user's own target band

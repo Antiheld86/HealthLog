@@ -42,7 +42,7 @@ import { prisma } from "@/lib/db";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
 import { hashInsightSnapshot } from "@/lib/insights/snapshot-hash";
 import { PROMPT_VERSION } from "@/lib/ai/prompts/base-system";
-import { toBerlinDayKey } from "@/lib/tz/resolver";
+import { userDayKey } from "@/lib/tz/format";
 import {
   generateBiomarkerStatus,
   biomarkerStatusScope,
@@ -142,7 +142,7 @@ describe("generateBiomarkerStatus — empty-data guard", () => {
 
 describe("generateBiomarkerStatus — cache read", () => {
   it("serves today's cached text without calling the provider", async () => {
-    const todayKey = toBerlinDayKey(new Date());
+    const todayKey = userDayKey(new Date(), "Europe/Berlin");
     vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
       noteRow({
         dateKey: todayKey,

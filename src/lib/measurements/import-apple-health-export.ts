@@ -233,8 +233,17 @@ const UNATTRIBUTED_CUMULATIVE_SOURCE_HASH = createHash("sha256")
  */
 const HK_DEVICE_RUNTIME_ADDRESS = /0x[0-9a-f]+/gi;
 
+/**
+ * The device's `software:` field is its OS version, which changes when the
+ * device updates. Like `sourceVersion`, it names the same device twice on an
+ * update day, so it is dropped from the identity too.
+ */
+const HK_DEVICE_SOFTWARE_VERSION = /software:[^,>]*/gi;
+
 function stableDeviceIdentity(device: string | undefined): string | undefined {
-  return device?.replace(HK_DEVICE_RUNTIME_ADDRESS, "0x0");
+  return device
+    ?.replace(HK_DEVICE_RUNTIME_ADDRESS, "0x0")
+    .replace(HK_DEVICE_SOFTWARE_VERSION, "software:");
 }
 
 /**
@@ -242,15 +251,18 @@ function stableDeviceIdentity(device: string | undefined): string | undefined {
  * separate. Records without source metadata share one stable bucket so parser
  * state remains bounded by actual source cardinality rather than record count.
  * Raw source/device labels never leave the parser.
+ *
+ * The identity is the source and its device, never a version. On the day a
+ * phone or watch updates, its records carry two `sourceVersion` values; keyed
+ * on the version, the one device became two sources, and the per-day pick
+ * (the largest source subtotal) kept only the larger half of that day.
  */
 export function hashCumulativeSourceIdentity(
   sourceName: string | undefined,
-  sourceVersion: string | undefined,
   device: string | undefined,
 ): string {
   const sourceTuple = [
     sourceName?.trim() ?? "",
-    sourceVersion?.trim() ?? "",
     stableDeviceIdentity(device)?.trim() ?? "",
   ];
   if (!sourceTuple.some(Boolean)) {
@@ -899,7 +911,6 @@ export async function streamParseExportXml(
         const dayKey = dayKeyForUserTz(mapped.takenAt, userTimezone);
         const sourceHash = hashCumulativeSourceIdentity(
           attrs.sourceName,
-          attrs.sourceVersion,
           attrs.device,
         );
         let byDay = cumulativeBucket.get(mapped.type);

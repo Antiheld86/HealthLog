@@ -33,7 +33,7 @@ import { TimeFormatSelect } from "@/components/settings/time-format-select";
 import { DateFormatSelect } from "@/components/settings/date-format-select";
 import { UnitPreferenceSelect } from "@/components/settings/unit-preference-select";
 import { GlucoseUnitSelect } from "@/components/settings/glucose-unit-select";
-import { detectBrowserTimezone } from "@/lib/tz/format";
+import { detectBrowserTimezone, DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import {
   describeRejectedProfileField,
@@ -74,7 +74,7 @@ export function AccountSection() {
   const [height, setHeight] = useState<HeightDraft>(EMPTY_HEIGHT_DRAFT);
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState<string>("");
-  const [timezone, setTimezone] = useState<string>("Europe/Berlin");
+  const [timezone, setTimezone] = useState<string>(DEFAULT_TIMEZONE);
   // v1.7.0 — optional patient-identity fields for the health-record export.
   const [fullName, setFullName] = useState("");
   const [insurerName, setInsurerName] = useState("");
@@ -84,7 +84,7 @@ export function AccountSection() {
     height: EMPTY_HEIGHT_DRAFT,
     dateOfBirth: "",
     gender: "",
-    timezone: "Europe/Berlin",
+    timezone: DEFAULT_TIMEZONE,
     fullName: "",
     insurerName: "",
     insuranceNumber: "",

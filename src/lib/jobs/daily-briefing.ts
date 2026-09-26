@@ -28,6 +28,7 @@ import {
   maybeDispatchDailyBriefing,
   type DailyBriefingDispatchDeps,
 } from "@/lib/daily/daily-briefing-push";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 export const DAILY_BRIEFING_QUEUE = "daily-briefing";
 /** Every 15 minutes; the per-user local-hour gate selects the fallback slot. */
@@ -94,7 +95,7 @@ export async function runDailyBriefingTick(
   for (const pref of prefs) {
     const userId = pref.channel?.userId;
     if (!userId) continue;
-    cohort.set(userId, pref.channel.user?.timezone || "Europe/Berlin");
+    cohort.set(userId, pref.channel.user?.timezone || DEFAULT_TIMEZONE);
   }
 
   for (const [userId, tz] of cohort) {
