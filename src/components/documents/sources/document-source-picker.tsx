@@ -415,8 +415,8 @@ export function DocumentSourcePicker({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="space-y-1.5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="col-span-2 space-y-1.5 sm:col-span-1">
             <Label htmlFor="document-source-tag">
               {t("documents.sourcePicker.tagLabel")}
             </Label>
@@ -543,7 +543,9 @@ export function DocumentSourcePicker({
                       "focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
                       allowed && !running && !finished && "hover:bg-muted/50",
                       on && "border-primary/40 bg-primary/5",
-                      !allowed && "opacity-50",
+                      // A row that just ran keeps full contrast: its result is
+                      // the thing to read.
+                      !allowed && !run && "opacity-50",
                     )}
                   >
                     <Check
