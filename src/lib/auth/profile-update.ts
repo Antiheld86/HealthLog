@@ -327,7 +327,8 @@ export async function applyProfileUpdate(
           {
             path: "email",
             code,
-            message: "Confirm your current password to change the email address.",
+            message:
+              "Confirm your current password to change the email address.",
           },
         ];
       }

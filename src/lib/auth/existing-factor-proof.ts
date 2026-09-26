@@ -283,7 +283,8 @@ async function readProof(
   return parsed.success ? parsed.data : "invalid";
 }
 
-export type SensitiveChangeProof = "ok" | "required" | "failed" | "rate_limited";
+export type SensitiveChangeProof =
+  "ok" | "required" | "failed" | "rate_limited";
 
 /**
  * The proof in front of changing the account's email address.
