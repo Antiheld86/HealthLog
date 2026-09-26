@@ -6711,7 +6711,7 @@
       "baseUrl": "Address",
       "allowedOrigins": "Allowed on this server: {origins}",
       "organizationId": "Organization id",
-      "organizationHelp": "The part after /organizations/ in the Papra address bar.",
+      "organizationHelp": "The part after /organizations/ in the Papra address bar. Papra organization ids look like org_ followed by 24 letters and digits.",
       "token": "API token",
       "tokenSaved": "Saved for this address. Leave empty to keep it.",
       "tokenHelpPaperless": "In Paperless-ngx: My Profile, API token.",
@@ -10220,7 +10220,7 @@
         "authRefused": "The archive refused the token. Check the token and its permissions.",
         "versionTooOld": "The archive is too old. Paperless-ngx 2.16 or later is needed.",
         "badResponse": "The archive's answer could not be read. Check that the address points at the archive itself.",
-        "notFound": "The archive has no such document, or no such organization.",
+        "notFound": "The archive has no such document, or the organization id is wrong or not yours.",
         "linkTargetNotFound": "The record to link to no longer exists.",
         "rateLimited": "Too many requests. Wait a minute and try again.",
         "browserOnly": "Document archives can only be used in the browser.",
@@ -10233,7 +10233,8 @@
         "uploadLimit": "The hourly upload limit is reached. Try again later.",
         "uploadBusy": "Other uploads are still running. Try again in a moment.",
         "moduleDisabled": "Documents are switched off in Settings.",
-        "generic": "Something went wrong. Try again."
+        "generic": "Something went wrong. Try again.",
+        "permissionMissing": "The Papra key cannot read tags. Give it the tags:read permission."
       },
       "pickMore": "Pick more",
       "finishedHint": "Search again or change a filter to pick more documents.",

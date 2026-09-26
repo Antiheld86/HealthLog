@@ -6711,7 +6711,7 @@
       "baseUrl": "주소",
       "allowedOrigins": "이 서버에서 허용됨: {origins}",
       "organizationId": "조직 ID",
-      "organizationHelp": "Papra 주소 표시줄에서 /organizations/ 다음 부분입니다.",
+      "organizationHelp": "Papra 주소 표시줄에서 /organizations/ 다음 부분입니다. Papra 조직 ID는 org_ 뒤에 영문자와 숫자 24자가 오는 형식입니다.",
       "token": "API 토큰",
       "tokenSaved": "이 주소에 저장됨. 유지하려면 비워 두세요.",
       "tokenHelpPaperless": "Paperless-ngx: 내 프로필의 API 토큰.",
@@ -10220,7 +10220,7 @@
         "authRefused": "보관함이 토큰을 거부했습니다. 토큰과 권한을 확인하세요.",
         "versionTooOld": "보관함 버전이 너무 오래되었습니다. Paperless-ngx 2.16 이상이 필요합니다.",
         "badResponse": "보관함의 응답을 읽을 수 없습니다. 주소가 보관함 자체를 가리키는지 확인하세요.",
-        "notFound": "보관함에 해당 문서나 조직이 없습니다.",
+        "notFound": "보관함에 해당 문서가 없거나, 조직 ID가 잘못되었거나 본인의 조직이 아닙니다.",
         "linkTargetNotFound": "연결할 기록이 더 이상 존재하지 않습니다.",
         "rateLimited": "요청이 너무 많습니다. 1분 후에 다시 시도하세요.",
         "browserOnly": "문서 보관함은 브라우저에서만 사용할 수 있습니다.",
@@ -10233,7 +10233,8 @@
         "uploadLimit": "시간당 업로드 한도에 도달했습니다. 나중에 다시 시도하세요.",
         "uploadBusy": "다른 업로드가 아직 진행 중입니다. 잠시 후 다시 시도하세요.",
         "moduleDisabled": "설정에서 문서 기능이 꺼져 있습니다.",
-        "generic": "문제가 발생했습니다. 다시 시도하세요."
+        "generic": "문제가 발생했습니다. 다시 시도하세요.",
+        "permissionMissing": "Papra 키가 태그를 읽을 수 없습니다. tags:read 권한을 부여하세요."
       },
       "pickMore": "더 고르기",
       "finishedHint": "다시 검색하거나 필터를 바꿔 문서를 더 고르세요.",

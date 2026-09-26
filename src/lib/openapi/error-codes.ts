@@ -145,6 +145,7 @@ export const ERROR_CODE_CATALOGUE: Readonly<Record<string, readonly string[]>> =
       "documents.sources.notFound",
       "documents.sources.organizationRequired",
       "documents.sources.originNotAllowed",
+      "documents.sources.permissionMissing",
       "documents.sources.rateLimited",
       "documents.sources.redirected",
       "documents.sources.tokenRequired",

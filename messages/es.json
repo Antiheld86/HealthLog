@@ -6711,7 +6711,7 @@
       "baseUrl": "Dirección",
       "allowedOrigins": "Permitido en este servidor: {origins}",
       "organizationId": "Id de organización",
-      "organizationHelp": "La parte que sigue a /organizations/ en la barra de direcciones de Papra.",
+      "organizationHelp": "La parte que sigue a /organizations/ en la barra de direcciones de Papra. Los id de organización de Papra tienen la forma org_ seguida de 24 letras y cifras.",
       "token": "Token de la API",
       "tokenSaved": "Guardado para esta dirección. Déjalo vacío para conservarlo.",
       "tokenHelpPaperless": "En Paperless-ngx: Mi perfil, token de la API.",
@@ -10220,7 +10220,7 @@
         "authRefused": "El archivo rechazó el token. Comprueba el token y sus permisos.",
         "versionTooOld": "El archivo es demasiado antiguo. Se necesita Paperless-ngx 2.16 o posterior.",
         "badResponse": "No se pudo leer la respuesta del archivo. Comprueba que la dirección apunta al propio archivo.",
-        "notFound": "El archivo no tiene ese documento o esa organización.",
+        "notFound": "El archivo no tiene ese documento, o el id de organización es incorrecto o no es tuyo.",
         "linkTargetNotFound": "El registro que se iba a vincular ya no existe.",
         "rateLimited": "Demasiadas solicitudes. Espera un minuto y vuelve a intentarlo.",
         "browserOnly": "Los archivos de documentos solo se pueden usar en el navegador.",
@@ -10233,7 +10233,8 @@
         "uploadLimit": "Se alcanzó el límite de subidas por hora. Inténtalo más tarde.",
         "uploadBusy": "Aún hay otras subidas en curso. Inténtalo en un momento.",
         "moduleDisabled": "Los documentos están desactivados en Ajustes.",
-        "generic": "Algo salió mal. Inténtalo de nuevo."
+        "generic": "Algo salió mal. Inténtalo de nuevo.",
+        "permissionMissing": "La clave de Papra no puede leer etiquetas. Dale el permiso tags:read."
       },
       "pickMore": "Elegir más",
       "finishedHint": "Busca de nuevo o cambia un filtro para elegir más documentos.",

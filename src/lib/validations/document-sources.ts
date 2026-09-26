@@ -10,7 +10,7 @@ import {
   DOCUMENT_PICKER_LINK_KINDS,
   DOCUMENT_PICKER_MAX_PAGE,
   DOCUMENT_PICKER_QUERY_MAX,
-  PAPRA_ID,
+  PAPRA_ORG_ID,
 } from "@/lib/documents/sources/types";
 import {
   documentSourceIdSchema,
@@ -38,7 +38,7 @@ export const documentSourceSaveSchema = z.object({
   organizationId: z
     .string()
     .trim()
-    .regex(PAPRA_ID, "Expected letters, digits, _ or -")
+    .regex(PAPRA_ORG_ID, "Expected a Papra organization id (org_…)")
     .optional(),
   token: z
     .string()

@@ -30,8 +30,9 @@ import {
   DOCUMENT_PICKER_MAX_TAGS,
   DOCUMENT_PICKER_PAGE_SIZE,
   isSourceDocumentId,
-  PAPRA_ID,
+  PAPRA_ORG_ID,
   type DocumentPickerSystem,
+  type DocumentSourceErrorCode,
   type DocumentSourceTagDto,
 } from "./types";
 
@@ -335,13 +336,33 @@ function paperless(connection: SourceConnection): SourceClient {
 
 // ── Papra ──────────────────────────────────────────────────────────────────
 
+/**
+ * Papra's error bodies carry a machine code. Two of them mean "no such
+ * organization" rather than "wrong key": a valid organization id the key's
+ * user is not a member of (403 `user.not_in_organization`), and one Papra
+ * cannot parse (400 `server.invalid_request.params`).
+ */
+function papraError(
+  status: number,
+  code: string | null,
+): DocumentSourceErrorCode | null {
+  if (status === 403 && code === "user.not_in_organization") return "notFound";
+  if (status === 400 && code === "server.invalid_request.params") {
+    return "notFound";
+  }
+  return null;
+}
+
 /** Papra's search syntax quotes a tag name that holds a space. */
 function papraTagTerm(name: string): string {
   return /[\s"]/.test(name) ? `tag:${JSON.stringify(name)}` : `tag:${name}`;
 }
 
 function papra(connection: SourceConnection): SourceClient {
-  if (!connection.organizationId || !PAPRA_ID.test(connection.organizationId)) {
+  if (
+    !connection.organizationId ||
+    !PAPRA_ORG_ID.test(connection.organizationId)
+  ) {
     throw new DocumentSourceError("notFound");
   }
   const org = `/api/organizations/${encodeURIComponent(connection.organizationId)}`;
@@ -352,6 +373,7 @@ function papra(connection: SourceConnection): SourceClient {
       Authorization: `Bearer ${connection.token}`,
       Accept: "application/json",
     },
+    classify: papraError,
   };
   const download: SourceTarget = {
     ...target,
@@ -384,13 +406,31 @@ function papra(connection: SourceConnection): SourceClient {
         `${org}/documents?pageIndex=0&pageSize=1`,
       );
       if (!asRecord(body)) throw shapeError();
+      // The tag filter needs `tags:read`; a key without it would save green
+      // and then fail on the first search.
+      try {
+        await sourceJson(target, `${org}/tags`);
+      } catch (err) {
+        if (err instanceof DocumentSourceError && err.code === "authRefused") {
+          throw new DocumentSourceError(
+            "permissionMissing",
+            err.upstreamStatus,
+          );
+        }
+        throw err;
+      }
     },
 
     tags: listTags,
 
     async search(params) {
-      const terms: string[] = [];
-      if (params.q) terms.push(params.q);
+      // Each word quoted: Papra reads a leading `-` as a negation and a `:` as
+      // a field, and a quoted word still matches as a prefix.
+      const terms: string[] = params.q
+        .split(/\s+/)
+        .map((word) => word.replace(/"/g, ""))
+        .filter((word) => word.length > 0)
+        .map((word) => `"${word}"`);
       if (params.tagId) {
         const tag = (await listTags()).find((t) => t.id === params.tagId);
         // A tag that no longer exists matches nothing, rather than silently
@@ -398,6 +438,10 @@ function papra(connection: SourceConnection): SourceClient {
         if (!tag) return { items: [], hasMore: false };
         terms.push(papraTagTerm(tag.name));
       }
+      // The range goes to Papra as its own `date:` filter; the check on each
+      // row below stays as the net for a version that reads it differently.
+      if (params.from) terms.push(`date:>=${params.from}`);
+      if (params.to) terms.push(`date:<=${params.to}`);
       const pageIndex = params.page - 1;
       const query = new URLSearchParams({
         pageIndex: String(pageIndex),

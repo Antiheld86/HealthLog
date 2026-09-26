@@ -22,6 +22,7 @@ export function isStoppingError(code: string | undefined): boolean {
     code === "documents.inbound.rateLimited" ||
     code === "documents.inbound.quotaExceeded" ||
     code === "documents.sources.authRefused" ||
+    code === "documents.sources.permissionMissing" ||
     code === "documents.sources.unreachable" ||
     code === "documents.sources.originNotAllowed" ||
     code === "documents.sources.notConnected" ||
@@ -45,6 +46,8 @@ export function sourceErrorMessage(t: T, code: string | undefined): string {
       return t("documents.sourcePicker.errors.redirected");
     case "documents.sources.authRefused":
       return t("documents.sourcePicker.errors.authRefused");
+    case "documents.sources.permissionMissing":
+      return t("documents.sourcePicker.errors.permissionMissing");
     case "documents.sources.versionTooOld":
       return t("documents.sourcePicker.errors.versionTooOld");
     case "documents.sources.badResponse":

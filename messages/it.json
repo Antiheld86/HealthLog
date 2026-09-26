@@ -6711,7 +6711,7 @@
       "baseUrl": "Indirizzo",
       "allowedOrigins": "Consentito su questo server: {origins}",
       "organizationId": "Id organizzazione",
-      "organizationHelp": "La parte dopo /organizations/ nella barra degli indirizzi di Papra.",
+      "organizationHelp": "La parte dopo /organizations/ nella barra degli indirizzi di Papra. Gli id organizzazione di Papra hanno la forma org_ seguita da 24 lettere e cifre.",
       "token": "Token API",
       "tokenSaved": "Salvato per questo indirizzo. Lascia vuoto per mantenerlo.",
       "tokenHelpPaperless": "In Paperless-ngx: Il mio profilo, token API.",
@@ -10220,7 +10220,7 @@
         "authRefused": "L'archivio ha rifiutato il token. Controlla il token e i suoi permessi.",
         "versionTooOld": "L'archivio è troppo vecchio. Serve Paperless-ngx 2.16 o successivo.",
         "badResponse": "Non è stato possibile leggere la risposta dell'archivio. Verifica che l'indirizzo punti all'archivio stesso.",
-        "notFound": "L'archivio non ha questo documento o questa organizzazione.",
+        "notFound": "L'archivio non ha questo documento, oppure l'id dell'organizzazione è sbagliato o non è tuo.",
         "linkTargetNotFound": "L'elemento da collegare non esiste più.",
         "rateLimited": "Troppe richieste. Attendi un minuto e riprova.",
         "browserOnly": "Gli archivi di documenti si usano solo nel browser.",
@@ -10233,7 +10233,8 @@
         "uploadLimit": "È stato raggiunto il limite orario di caricamenti. Riprova più tardi.",
         "uploadBusy": "Altri caricamenti sono ancora in corso. Riprova tra un momento.",
         "moduleDisabled": "I documenti sono disattivati nelle impostazioni.",
-        "generic": "Qualcosa è andato storto. Riprova."
+        "generic": "Qualcosa è andato storto. Riprova.",
+        "permissionMissing": "La chiave Papra non può leggere le etichette. Dalle il permesso tags:read."
       },
       "pickMore": "Scegline altri",
       "finishedHint": "Cerca di nuovo o cambia un filtro per scegliere altri documenti.",

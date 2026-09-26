@@ -41,7 +41,7 @@ const PAPRA = {
   system: "PAPRA" as const,
   origin: "https://papra.example.com",
   baseUrl: "https://papra.example.com",
-  organizationId: "org_123",
+  organizationId: "org_a1b2c3d4e5f6g7h8i9j0k1l2",
   token: "ppk_secret",
 };
 
@@ -383,6 +383,74 @@ describe("Paperless-ngx tags", () => {
   });
 });
 
+describe("Papra, as it answers for real", () => {
+  it("quotes each word so a leading dash is not a negation, and sends the date range", async () => {
+    serve({
+      "/api/organizations/org_a1b2c3d4e5f6g7h8i9j0k1l2/documents": () =>
+        json({ documents: [], documentsCount: 0 }),
+    });
+    await sourceClient(PAPRA).search({
+      q: "-Knie  Entlass",
+      tagId: null,
+      from: "2024-01-01",
+      to: "2024-12-31",
+      page: 1,
+    });
+    const list = calledUrls().find((u) => u.pathname.endsWith("/documents"));
+    expect(list?.searchParams.get("searchQuery")).toBe(
+      '"-Knie" "Entlass" date:>=2024-01-01 date:<=2024-12-31',
+    );
+  });
+
+  it("refuses an organization id Papra would not issue", () => {
+    for (const org of ["org_123", "../admin", "ORG_A1B2C3D4E5F6G7H8I9J0K1L2"]) {
+      expect(() => sourceClient({ ...PAPRA, organizationId: org })).toThrow(
+        DocumentSourceError,
+      );
+    }
+    expect(safeFetch).not.toHaveBeenCalled();
+  });
+
+  it("reads 'not in this organization' and a malformed id as no such organization", async () => {
+    serve({
+      "/api/organizations/": () =>
+        json({ error: { code: "user.not_in_organization" } }, { status: 403 }),
+    });
+    expect(
+      ((await failure(sourceClient(PAPRA).test())) as DocumentSourceError).code,
+    ).toBe("notFound");
+    serve({
+      "/api/organizations/": () =>
+        json(
+          { error: { code: "server.invalid_request.params" } },
+          { status: 400 },
+        ),
+    });
+    expect(
+      ((await failure(sourceClient(PAPRA).test())) as DocumentSourceError).code,
+    ).toBe("notFound");
+    // Any other refusal of the key is still the key.
+    serve({
+      "/api/organizations/": () =>
+        json({ error: { code: "auth.unauthorized" } }, { status: 401 }),
+    });
+    expect(
+      ((await failure(sourceClient(PAPRA).test())) as DocumentSourceError).code,
+    ).toBe("authRefused");
+  });
+
+  it("fails the connection test when the key cannot read tags", async () => {
+    serve({
+      "/api/organizations/org_a1b2c3d4e5f6g7h8i9j0k1l2/tags": () =>
+        json({}, { status: 401 }),
+      "/api/organizations/org_a1b2c3d4e5f6g7h8i9j0k1l2/documents": () =>
+        json({ documents: [], documentsCount: 0 }),
+    });
+    const err = await failure(sourceClient(PAPRA).test());
+    expect((err as DocumentSourceError).code).toBe("permissionMissing");
+  });
+});
+
 describe("Papra", () => {
   const tags = {
     tags: [
@@ -393,8 +461,8 @@ describe("Papra", () => {
 
   it("sends the name and the tag through searchQuery and re-checks both", async () => {
     serve({
-      "/api/organizations/org_123/tags": () => json(tags),
-      "/api/organizations/org_123/documents": () =>
+      "/api/organizations/org_a1b2c3d4e5f6g7h8i9j0k1l2/tags": () => json(tags),
+      "/api/organizations/org_a1b2c3d4e5f6g7h8i9j0k1l2/documents": () =>
         json({
           documentsCount: 60,
           documents: [
@@ -431,7 +499,7 @@ describe("Papra", () => {
     });
     const list = calledUrls().find((u) => u.pathname.endsWith("/documents"));
     expect(list?.searchParams.get("searchQuery")).toBe(
-      'blood tag:"Lab results"',
+      '"blood" tag:"Lab results" date:>=2025-01-01',
     );
     expect(list?.searchParams.get("pageIndex")).toBe("0");
     expect(list?.searchParams.get("pageSize")).toBe("25");
@@ -453,7 +521,9 @@ describe("Papra", () => {
   });
 
   it("matches nothing for a tag that no longer exists", async () => {
-    serve({ "/api/organizations/org_123/tags": () => json(tags) });
+    serve({
+      "/api/organizations/org_a1b2c3d4e5f6g7h8i9j0k1l2/tags": () => json(tags),
+    });
     await expect(
       sourceClient(PAPRA).search({
         q: "",
@@ -469,7 +539,9 @@ describe("Papra", () => {
   });
 
   it("lists tags by name and maps an unknown organization to notFound", async () => {
-    serve({ "/api/organizations/org_123/tags": () => json(tags) });
+    serve({
+      "/api/organizations/org_a1b2c3d4e5f6g7h8i9j0k1l2/tags": () => json(tags),
+    });
     await expect(sourceClient(PAPRA).tags()).resolves.toEqual([
       { id: "tag_a", name: "Health" },
       { id: "tag_b", name: "Lab results" },
@@ -482,9 +554,9 @@ describe("Papra", () => {
 
   it("reads a document and downloads its file", async () => {
     serve({
-      "/api/organizations/org_123/documents/doc_1/file": () =>
-        new Response(new Uint8Array([1, 2, 3])),
-      "/api/organizations/org_123/documents/doc_1": () =>
+      "/api/organizations/org_a1b2c3d4e5f6g7h8i9j0k1l2/documents/doc_1/file":
+        () => new Response(new Uint8Array([1, 2, 3])),
+      "/api/organizations/org_a1b2c3d4e5f6g7h8i9j0k1l2/documents/doc_1": () =>
         json({
           document: {
             id: "doc_1",

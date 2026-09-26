@@ -83,6 +83,7 @@ const STATUS: Record<DocumentSourceErrorCode, number> = {
   unreachable: 502,
   redirected: 502,
   authRefused: 502,
+  permissionMissing: 502,
   versionTooOld: 502,
   badResponse: 502,
   notFound: 404,
@@ -99,6 +100,8 @@ const MESSAGE: Record<DocumentSourceErrorCode, string> = {
   redirected:
     "The document archive redirected the request. Use the address it redirects to.",
   authRefused: "The document archive refused the API token.",
+  permissionMissing:
+    "The API key cannot read the archive's tags. Give it the tags:read permission.",
   versionTooOld: "The document archive's version is too old.",
   badResponse: "The document archive gave an answer HealthLog cannot read.",
   notFound: "The document archive has no such document or organization.",

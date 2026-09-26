@@ -43,8 +43,10 @@ export const DOCUMENT_PICKER_MAX_TAGS = 1000;
 
 /** Paperless-ngx document ids are integers. */
 export const PAPERLESS_ID = /^\d{1,18}$/;
-/** Papra document and organization ids: letters, digits, `_` and `-`. */
+/** Papra document ids: letters, digits, `_` and `-`. */
 export const PAPRA_ID = /^[A-Za-z0-9_-]{1,128}$/;
+/** Papra organization ids, as Papra issues them. */
+export const PAPRA_ORG_ID = /^org_[a-z0-9]{24}$/;
 
 /**
  * Is `id` a document id `system` could have issued? Checked before an id is
@@ -134,6 +136,7 @@ export const DOCUMENT_SOURCE_ERROR_CODES = [
   "documents.sources.unreachable",
   "documents.sources.redirected",
   "documents.sources.authRefused",
+  "documents.sources.permissionMissing",
   "documents.sources.versionTooOld",
   "documents.sources.badResponse",
   "documents.sources.notFound",

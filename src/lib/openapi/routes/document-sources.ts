@@ -95,13 +95,13 @@ const refusal = {
 
 const unavailable = {
   description:
-    "`documents.sources.unavailable`: the operator has not listed any origin in `DOCUMENT_SOURCE_ORIGINS`, so the picker is off. `documents.sources.notConnected`: no connection is saved for this system. `documents.sources.notFound`: the source has no such document, or (Papra) no such organization.",
+    "`documents.sources.unavailable`: the operator has not listed any origin in `DOCUMENT_SOURCE_ORIGINS`, so the picker is off. `documents.sources.notConnected`: no connection is saved for this system. `documents.sources.notFound`: the source has no such document, or (Papra) no such organization, including one the key's user is not a member of (Papra 403 `user.not_in_organization`) and one Papra cannot parse (400).",
   content: { "application/json": { schema: errorEnvelope } },
 };
 
 const upstream = {
   description:
-    "The source could not answer usefully, with the reason in `meta.errorCode` and, when the source answered at all, its HTTP status in `meta.upstreamStatus` (its body is never passed on): `documents.sources.unreachable` (no connection, timeout, or a destination refused at dial time), `documents.sources.redirected` (the source answered with a redirect, which is never followed), `documents.sources.authRefused` (401/403 from the source), `documents.sources.versionTooOld` (Paperless-ngx older than 2.16 / API version 9), `documents.sources.badResponse` (not the documented JSON, or larger than 1 MiB).",
+    "The source could not answer usefully, with the reason in `meta.errorCode` and, when the source answered at all, its HTTP status in `meta.upstreamStatus` (its body is never passed on): `documents.sources.unreachable` (no connection, timeout, or a destination refused at dial time), `documents.sources.redirected` (the source answered with a redirect, which is never followed), `documents.sources.authRefused` (401/403 from the source), `documents.sources.permissionMissing` (Papra: the key cannot read tags; needs `tags:read`), `documents.sources.versionTooOld` (Paperless-ngx older than 2.16 / API version 9), `documents.sources.badResponse` (not the documented JSON, or larger than 1 MiB).",
   content: { "application/json": { schema: errorEnvelope } },
 };
 

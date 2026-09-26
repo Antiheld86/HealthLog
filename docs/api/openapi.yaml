@@ -21065,7 +21065,7 @@ paths:
                   maxLength: 2048
                 organizationId:
                   type: string
-                  pattern: ^[A-Za-z0-9_-]{1,128}$
+                  pattern: ^org_[a-z0-9]{24}$
                 token:
                   type: string
                   minLength: 1
@@ -21085,7 +21085,9 @@ paths:
         "404": &a55
           description: "`documents.sources.unavailable`: the operator has not listed any origin in `DOCUMENT_SOURCE_ORIGINS`, so
             the picker is off. `documents.sources.notConnected`: no connection is saved for this system.
-            `documents.sources.notFound`: the source has no such document, or (Papra) no such organization."
+            `documents.sources.notFound`: the source has no such document, or (Papra) no such organization, including
+            one the key's user is not a member of (Papra 403 `user.not_in_organization`) and one Papra cannot parse
+            (400)."
           content:
             application/json:
               schema:
@@ -21104,7 +21106,8 @@ paths:
             all, its HTTP status in `meta.upstreamStatus` (its body is never passed on): `documents.sources.unreachable`
             (no connection, timeout, or a destination refused at dial time), `documents.sources.redirected` (the source
             answered with a redirect, which is never followed), `documents.sources.authRefused` (401/403 from the
-            source), `documents.sources.versionTooOld` (Paperless-ngx older than 2.16 / API version 9),
+            source), `documents.sources.permissionMissing` (Papra: the key cannot read tags; needs `tags:read`),
+            `documents.sources.versionTooOld` (Paperless-ngx older than 2.16 / API version 9),
             `documents.sources.badResponse` (not the documented JSON, or larger than 1 MiB)."
           content:
             application/json:
@@ -21327,9 +21330,10 @@ paths:
         "404":
           description: "`documents.sources.unavailable`: the operator has not listed any origin in `DOCUMENT_SOURCE_ORIGINS`, so
             the picker is off. `documents.sources.notConnected`: no connection is saved for this system.
-            `documents.sources.notFound`: the source has no such document, or (Papra) no such organization.
-            `documents.sources.linkTargetNotFound`: the record in `link` is not the caller's own live conditionEpisode /
-            encounter / vaccination."
+            `documents.sources.notFound`: the source has no such document, or (Papra) no such organization, including
+            one the key's user is not a member of (Papra 403 `user.not_in_organization`) and one Papra cannot parse
+            (400). `documents.sources.linkTargetNotFound`: the record in `link` is not the caller's own live
+            conditionEpisode / encounter / vaccination."
           content:
             application/json:
               schema:
@@ -31239,13 +31243,13 @@ components:
                 documents.sources.authRefused, documents.sources.badResponse, documents.sources.browserOnly,
                 documents.sources.invalidAddress, documents.sources.linkTargetNotFound, documents.sources.notConnected,
                 documents.sources.notFound, documents.sources.organizationRequired, documents.sources.originNotAllowed,
-                documents.sources.rateLimited, documents.sources.redirected, documents.sources.tokenRequired,
-                documents.sources.unavailable, documents.sources.unreachable, documents.sources.versionTooOld; encounter
-                — encounter.invalid, encounter.link.invalid, encounter.practitioner-not-found,
-                encounter.reminder-conflict, encounter.reminder-not-found; environment — environment.invalid,
-                environment.no_home, environment.range_too_large, environment.travel.not_found; export —
-                export.selection.empty, export.selection.unknown_leaf; familyHistory — familyHistory.invalid; feedback —
-                feedback.body.invalid; health_score_config — health_score_config.invalid,
+                documents.sources.permissionMissing, documents.sources.rateLimited, documents.sources.redirected,
+                documents.sources.tokenRequired, documents.sources.unavailable, documents.sources.unreachable,
+                documents.sources.versionTooOld; encounter — encounter.invalid, encounter.link.invalid,
+                encounter.practitioner-not-found, encounter.reminder-conflict, encounter.reminder-not-found; environment
+                — environment.invalid, environment.no_home, environment.range_too_large, environment.travel.not_found;
+                export — export.selection.empty, export.selection.unknown_leaf; familyHistory — familyHistory.invalid;
+                feedback — feedback.body.invalid; health_score_config — health_score_config.invalid,
                 health_score_config.too_narrow; illness — illness.day-log.invalid, illness.disabled,
                 illness.episode.chronic-no-resolve, illness.episode.invalid, illness.episode.invalid-window,
                 illness.episode.parent-not-found, illness.insights.invalid; import — import.write_failed; ingest —

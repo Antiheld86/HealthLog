@@ -6711,7 +6711,7 @@
       "baseUrl": "Adresse",
       "allowedOrigins": "Auf diesem Server erlaubt: {origins}",
       "organizationId": "Organisations-ID",
-      "organizationHelp": "Der Teil nach /organizations/ in der Adresszeile von Papra.",
+      "organizationHelp": "Der Teil nach /organizations/ in der Adresszeile von Papra. Papra-Organisations-IDs sehen aus wie org_ gefolgt von 24 Buchstaben und Ziffern.",
       "token": "API-Token",
       "tokenSaved": "Für diese Adresse gespeichert. Leer lassen, um es zu behalten.",
       "tokenHelpPaperless": "In Paperless-ngx: Mein Profil, API-Token.",
@@ -10220,7 +10220,7 @@
         "authRefused": "Das Archiv hat das Token abgelehnt. Prüfe das Token und seine Berechtigungen.",
         "versionTooOld": "Das Archiv ist zu alt. Nötig ist Paperless-ngx 2.16 oder neuer.",
         "badResponse": "Die Antwort des Archivs ließ sich nicht lesen. Prüfe, ob die Adresse auf das Archiv selbst zeigt.",
-        "notFound": "Das Archiv kennt dieses Dokument oder diese Organisation nicht.",
+        "notFound": "Das Archiv kennt dieses Dokument nicht, oder die Organisations-ID ist falsch oder nicht deine.",
         "linkTargetNotFound": "Der Eintrag, mit dem verknüpft werden sollte, existiert nicht mehr.",
         "rateLimited": "Zu viele Anfragen. Warte eine Minute und versuche es erneut.",
         "browserOnly": "Dokumentarchive lassen sich nur im Browser verwenden.",
@@ -10233,7 +10233,8 @@
         "uploadLimit": "Das stündliche Upload-Limit ist erreicht. Versuche es später erneut.",
         "uploadBusy": "Andere Uploads laufen noch. Versuche es gleich noch einmal.",
         "moduleDisabled": "Dokumente sind in den Einstellungen ausgeschaltet.",
-        "generic": "Etwas ist schiefgelaufen. Versuche es erneut."
+        "generic": "Etwas ist schiefgelaufen. Versuche es erneut.",
+        "permissionMissing": "Der Papra-Schlüssel darf keine Tags lesen. Gib ihm die Berechtigung tags:read."
       },
       "pickMore": "Weitere auswählen",
       "finishedHint": "Suche erneut oder ändere einen Filter, um weitere Dokumente auszuwählen.",

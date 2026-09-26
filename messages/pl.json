@@ -6711,7 +6711,7 @@
       "baseUrl": "Adres",
       "allowedOrigins": "Dozwolone na tym serwerze: {origins}",
       "organizationId": "Identyfikator organizacji",
-      "organizationHelp": "Część po /organizations/ w pasku adresu Papra.",
+      "organizationHelp": "Część po /organizations/ w pasku adresu Papra. Identyfikatory organizacji Papra mają postać org_ i 24 litery oraz cyfry.",
       "token": "Token API",
       "tokenSaved": "Zapisano dla tego adresu. Zostaw puste, aby go zachować.",
       "tokenHelpPaperless": "W Paperless-ngx: Mój profil, token API.",
@@ -10220,7 +10220,7 @@
         "authRefused": "Archiwum odrzuciło token. Sprawdź token i jego uprawnienia.",
         "versionTooOld": "Archiwum jest za stare. Potrzebny jest Paperless-ngx 2.16 lub nowszy.",
         "badResponse": "Nie udało się odczytać odpowiedzi archiwum. Sprawdź, czy adres wskazuje na samo archiwum.",
-        "notFound": "Archiwum nie ma takiego dokumentu ani takiej organizacji.",
+        "notFound": "Archiwum nie ma takiego dokumentu albo identyfikator organizacji jest błędny lub nie należy do ciebie.",
         "linkTargetNotFound": "Wpis, z którym miało nastąpić powiązanie, już nie istnieje.",
         "rateLimited": "Za dużo żądań. Odczekaj minutę i spróbuj ponownie.",
         "browserOnly": "Z archiwów dokumentów można korzystać tylko w przeglądarce.",
@@ -10233,7 +10233,8 @@
         "uploadLimit": "Osiągnięto godzinny limit przesyłania. Spróbuj później.",
         "uploadBusy": "Trwają jeszcze inne przesyłania. Spróbuj za chwilę.",
         "moduleDisabled": "Dokumenty są wyłączone w ustawieniach.",
-        "generic": "Coś poszło nie tak. Spróbuj ponownie."
+        "generic": "Coś poszło nie tak. Spróbuj ponownie.",
+        "permissionMissing": "Klucz Papra nie może odczytać tagów. Nadaj mu uprawnienie tags:read."
       },
       "pickMore": "Wybierz więcej",
       "finishedHint": "Wyszukaj ponownie lub zmień filtr, aby wybrać więcej dokumentów.",

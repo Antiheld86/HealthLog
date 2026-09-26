@@ -62,6 +62,8 @@ export interface SourceTarget {
   /** Origin plus the optional base path, no trailing slash. */
   baseUrl: string;
   headers: Record<string, string>;
+  /** How this source's error bodies read, when they say more than a status. */
+  classify?: ErrorClassifier;
 }
 
 async function sourceRequest(
@@ -103,13 +105,54 @@ async function discard(response: Response): Promise<void> {
   }
 }
 
+/**
+ * A source-specific reading of an error answer: given the status and the
+ * machine code in the body (if any), the error to report, or null for the
+ * generic mapping. The body itself is never passed on.
+ */
+export type ErrorClassifier = (
+  status: number,
+  code: string | null,
+) => DocumentSourceErrorCode | null;
+
+/** Longest error body read to find its machine code. */
+const ERROR_BODY_MAX_BYTES = 4 * 1024;
+
+/** The `code` (or `error.code`) of a JSON error body, if there is one. */
+async function errorCodeOf(response: Response): Promise<string | null> {
+  try {
+    const bytes = await readBoundedBody(response.body, ERROR_BODY_MAX_BYTES);
+    const body = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+    if (!body || typeof body !== "object") return null;
+    const record = body as Record<string, unknown>;
+    const nested = record.error as Record<string, unknown> | undefined;
+    const code =
+      typeof record.code === "string"
+        ? record.code
+        : nested &&
+            typeof nested === "object" &&
+            typeof nested.code === "string"
+          ? nested.code
+          : null;
+    return code && code.length <= 100 ? code : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Map a non-2xx answer to the error the person sees. */
 export async function failFor(
   response: Response,
   notFound: DocumentSourceErrorCode = "notFound",
+  classify?: ErrorClassifier,
 ): Promise<never> {
-  await discard(response);
   const status = response.status;
+  if (classify) {
+    const specific = classify(status, await errorCodeOf(response));
+    if (specific) throw new DocumentSourceError(specific, status);
+  } else {
+    await discard(response);
+  }
   if (status === 401 || status === 403) {
     throw new DocumentSourceError("authRefused", status);
   }
@@ -124,10 +167,19 @@ export async function failFor(
 export async function sourceJson(
   target: SourceTarget,
   path: string,
-  options: { notFound?: DocumentSourceErrorCode } = {},
+  options: {
+    notFound?: DocumentSourceErrorCode;
+    classify?: ErrorClassifier;
+  } = {},
 ): Promise<{ body: unknown; response: Response }> {
   const response = await sourceRequest(target, path, SOURCE_JSON_TIMEOUT_MS);
-  if (!response.ok) return failFor(response, options.notFound);
+  if (!response.ok) {
+    return failFor(
+      response,
+      options.notFound,
+      options.classify ?? target.classify,
+    );
+  }
   const declared = Number(response.headers.get("content-length") ?? 0);
   if (declared > SOURCE_JSON_MAX_BYTES) {
     await discard(response);
@@ -162,7 +214,7 @@ export async function sourceDownload(
     path,
     SOURCE_DOWNLOAD_TIMEOUT_MS,
   );
-  if (!response.ok) return failFor(response);
+  if (!response.ok) return failFor(response, "notFound", target.classify);
   const declared = Number(response.headers.get("content-length") ?? 0);
   if (declared > maxFileBytes) {
     await discard(response);
