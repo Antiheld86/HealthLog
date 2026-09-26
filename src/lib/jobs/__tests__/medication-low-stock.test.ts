@@ -49,6 +49,7 @@ describe("evaluateMedicationRunway", () => {
       dosesRemaining: 6,
       unitsRemaining: 6,
       expiredUnits: 0,
+      asNeeded: false,
     });
   });
 
@@ -442,6 +443,73 @@ describe("runMedicationLowStockTick", () => {
     expect(summary.notified).toBe(0);
     expect(dispatch).not.toHaveBeenCalled();
     expect(prisma.medication.update).not.toHaveBeenCalled();
+  });
+
+  it("an as-needed medication warns once when two doses or fewer are left", async () => {
+    const prn = { ...dailySchedule, scheduleType: "PRN" };
+    const dispatch = okDispatch();
+
+    // Three doses left: no cadence, so no runway, and above the dose floor.
+    const above = prismaMock({
+      users: [userRow()],
+      medications: [medRow({ schedules: [prn], inventoryItems: [item(3)] })],
+    });
+    const quiet = await runMedicationLowStockTick(
+      above as unknown as PrismaClient,
+      now,
+      { dispatch },
+    );
+    expect(quiet.skippedAboveThreshold).toBe(1);
+    expect(dispatch).not.toHaveBeenCalled();
+
+    // Two left: warns, names what is left, and stamps the dose floor.
+    const low = prismaMock({
+      users: [userRow()],
+      medications: [medRow({ schedules: [prn], inventoryItems: [item(2)] })],
+    });
+    const summary = await runMedicationLowStockTick(
+      low as unknown as PrismaClient,
+      now,
+      { dispatch },
+    );
+    expect(summary.notified).toBe(1);
+    const payload = dispatch.mock.calls[0]?.[0] as unknown as {
+      message: string;
+      metadata: Record<string, unknown>;
+    };
+    expect(payload.message).toBe(
+      "Metformin: only 2 units left. Reorder before you need the next dose.",
+    );
+    expect(payload.metadata).toMatchObject({
+      runwayDays: null,
+      triggerDays: null,
+      asNeeded: true,
+      dosesRemaining: 2,
+    });
+    expect(low.medication.update).toHaveBeenCalledWith({
+      where: { id: "med-1" },
+      data: { lowStockNotifiedAt: now, lowStockNotifiedThresholdDays: 2 },
+    });
+
+    // Still two left the next day: no repeat.
+    const again = prismaMock({
+      users: [userRow()],
+      medications: [
+        medRow({
+          schedules: [prn],
+          inventoryItems: [item(1)],
+          lowStockNotifiedAt: daysAgo(1),
+          lowStockNotifiedThresholdDays: 2,
+        }),
+      ],
+    });
+    const repeat = await runMedicationLowStockTick(
+      again as unknown as PrismaClient,
+      now,
+      { dispatch },
+    );
+    expect(repeat.skippedAlreadyNotified).toBe(1);
+    expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
   it("an exhausted supply (runway 0) notifies with the depleted copy", async () => {

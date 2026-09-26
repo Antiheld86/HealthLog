@@ -8085,7 +8085,8 @@
     "bodyToday": "{medName} : {units} unités restantes — moins d’un jour de réserve.",
     "bodyReorder": "{medName} : {units} unités restantes. Le stock sera épuisé vers le {runsOutOn} — recommandez avant le {reorderBy}.",
     "bodyLastDose": "{medName} : {units} unités restantes — environ votre dernière dose. Le stock sera épuisé vers le {runsOutOn}.",
-    "bodyExpired": "{medName} : plus de stock utilisable. {units} unités sont marquées périmées."
+    "bodyExpired": "{medName} : plus de stock utilisable. {units} unités sont marquées périmées.",
+    "bodyAsNeeded": "{medName} : plus que {units} unités. Recommandez avant d’avoir besoin de la prochaine dose."
   },
   "moodReminders": {
     "dailyTitle": "Enregistrer votre humeur",

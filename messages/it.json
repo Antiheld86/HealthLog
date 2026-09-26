@@ -8085,7 +8085,8 @@
     "bodyToday": "{medName}: {units} unità rimaste — meno di un giorno di scorta.",
     "bodyReorder": "{medName}: {units} unità rimaste. Le scorte finiscono intorno al {runsOutOn} — riordina entro il {reorderBy}.",
     "bodyLastDose": "{medName}: {units} unità rimaste — circa la tua ultima dose. Le scorte finiscono intorno al {runsOutOn}.",
-    "bodyExpired": "{medName}: nessuna scorta utilizzabile. {units} unità sono contrassegnate come scadute."
+    "bodyExpired": "{medName}: nessuna scorta utilizzabile. {units} unità sono contrassegnate come scadute.",
+    "bodyAsNeeded": "{medName}: restano solo {units} unità. Riordina prima di aver bisogno della prossima dose."
   },
   "moodReminders": {
     "dailyTitle": "Registra il tuo umore",

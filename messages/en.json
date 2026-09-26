@@ -8085,7 +8085,8 @@
     "bodyToday": "{medName}: {units} units left — less than one day of supply.",
     "bodyReorder": "{medName}: {units} units left. Supply runs out around {runsOutOn} — reorder by {reorderBy}.",
     "bodyLastDose": "{medName}: {units} units left — about your final dose. Supply runs out around {runsOutOn}.",
-    "bodyExpired": "{medName}: no usable supply left. {units} units are marked expired."
+    "bodyExpired": "{medName}: no usable supply left. {units} units are marked expired.",
+    "bodyAsNeeded": "{medName}: only {units} units left. Reorder before you need the next dose."
   },
   "moodReminders": {
     "dailyTitle": "Log your mood",

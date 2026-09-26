@@ -8085,7 +8085,8 @@
     "bodyToday": "{medName}: {units}개 남았어요 — 하루치도 안 돼요.",
     "bodyReorder": "{medName}: {units}개 남았어요. {runsOutOn}쯤 소진돼요 — {reorderBy}까지 재주문하세요.",
     "bodyLastDose": "{medName}: {units}개 남았어요 — 마지막 복용분이에요. {runsOutOn}쯤 소진돼요.",
-    "bodyExpired": "{medName}: 쓸 수 있는 재고가 없어요. {units}개가 유효기간 만료로 표시돼 있어요."
+    "bodyExpired": "{medName}: 쓸 수 있는 재고가 없어요. {units}개가 유효기간 만료로 표시돼 있어요.",
+    "bodyAsNeeded": "{medName}: {units}개만 남았어요. 다음에 필요하기 전에 재주문하세요."
   },
   "moodReminders": {
     "dailyTitle": "기분 기록하기",
