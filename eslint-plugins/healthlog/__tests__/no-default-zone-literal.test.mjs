@@ -1,7 +1,6 @@
 /**
  * Unit tests for the `healthlog/no-default-zone-literal` rule: the literal is
- * banned in application source, allowed in `src/lib/tz/` and in tests, and
- * the pending files are exempt until their owner switches them.
+ * banned in application source and allowed only in `src/lib/tz/` and in tests.
  */
 import { describe, it } from "vitest";
 import { RuleTester } from "eslint";
@@ -41,16 +40,22 @@ ruleTester.run("no-default-zone-literal", rule, {
       filename: "/repo/src/lib/insights/graded-series.ts",
     },
     {
-      // Pending: owned by another change, switched at merge.
-      code: 'const DEFAULT_TZ = "Europe/Berlin";',
-      filename: "/repo/src/lib/medications/window-status.ts",
-    },
-    {
       code: 'const other = "America/New_York";',
       filename: "/repo/src/lib/insights/graded-series.ts",
     },
   ],
   invalid: [
+    {
+      // The medication and reminder trees carry no exemption.
+      code: 'const DEFAULT_TZ = "Europe/Berlin";',
+      filename: "/repo/src/lib/medications/window-status.ts",
+      errors: [{ messageId: "zoneLiteral" }],
+    },
+    {
+      code: 'const tz = timezone || "Europe/Berlin";',
+      filename: "/repo/src/app/api/measurement-reminders/route.ts",
+      errors: [{ messageId: "zoneLiteral" }],
+    },
     {
       code: 'const tz = user.timezone || "Europe/Berlin";',
       filename: "/repo/src/app/api/insights/cards/route.ts",

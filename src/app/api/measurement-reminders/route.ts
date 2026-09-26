@@ -25,8 +25,7 @@ import {
 } from "@/lib/measurement-reminders/scheduling";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
 import { listMeasurementReminders } from "@/lib/measurement-reminders/list-read";
-
-const DEFAULT_TIMEZONE = "Europe/Berlin";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 async function resolveTimezone(userId: string): Promise<string> {
   const row = await prisma.user.findUnique({

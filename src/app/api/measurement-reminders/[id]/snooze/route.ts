@@ -29,10 +29,9 @@ import { annotate } from "@/lib/logging/context";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
 import { snoozeMeasurementReminderSchema } from "@/lib/validations/measurement-reminders";
 import { zonedWallClockToUtc } from "@/lib/tz/wall-clock";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type RouteParams = { params: Promise<{ id: string }> };
-
-const DEFAULT_TIMEZONE = "Europe/Berlin";
 
 /** Furthest a snooze may reach: five years from now. */
 const SNOOZE_CAP_MS = 5 * 365.25 * 24 * 60 * 60 * 1000;

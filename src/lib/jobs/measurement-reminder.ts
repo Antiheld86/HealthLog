@@ -59,6 +59,7 @@ import { satisfyReminder } from "@/lib/measurement-reminders/satisfy";
 import { evaluateCoachContextReminders } from "@/lib/ai/coach/context-reminders";
 import { calendarDaysUntil } from "@/lib/measurement-reminders/due-day";
 import { holdsOpenAfterReminder } from "@/lib/measurement-reminders/holds-open";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * v1.18.0 — map a reminder's `measurementType` to the toggleable module
@@ -231,7 +232,7 @@ export function evaluateMeasurementReminderDue(
   if (!reminder.enabled || reminder.nextDueAt === null) {
     return { fire: false, inHourWindow: false, isDue: false };
   }
-  const tz = timezone || "Europe/Berlin";
+  const tz = timezone || DEFAULT_TIMEZONE;
   const isDue = now.getTime() >= reminder.nextDueAt.getTime();
   const parts = wallClockInTz(now, tz);
   const inHourWindow = parts.hour === reminderSlotHour(reminder, tz);
@@ -326,7 +327,7 @@ export async function runMeasurementReminderTick(
   for (const reminder of reminders) {
     summary.candidatesScanned += 1;
     try {
-      const timezone = reminder.user.timezone || "Europe/Berlin";
+      const timezone = reminder.user.timezone || DEFAULT_TIMEZONE;
 
       // v1.39.2 — a reminder already sent for its current slot stays in
       // this scan every tick until it is satisfied. Outside its notify hour
@@ -587,7 +588,7 @@ export async function runReminderSatisfyForUser(
     where: { id: userId },
     select: { timezone: true },
   });
-  const timezone = user?.timezone || "Europe/Berlin";
+  const timezone = user?.timezone || DEFAULT_TIMEZONE;
 
   const reminders = await prisma.measurementReminder.findMany({
     where: { userId, deletedAt: null, enabled: true },

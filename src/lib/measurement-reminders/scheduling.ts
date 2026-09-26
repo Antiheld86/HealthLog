@@ -30,6 +30,7 @@ import {
   nextOccurrenceAfter,
 } from "@/lib/medications/scheduling/recurrence";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * The reminder fields this module reads. A subset of the Prisma row so
@@ -133,7 +134,7 @@ export function buildReminderRecurrence(
   // `anchorDate` / `endsOn` are instants instead (the form sends local
   // midnight, a Coach course sends `now + days`), so hand the engine the
   // calendar day each instant falls on in the user's zone.
-  const tz = timeZone || "Europe/Berlin";
+  const tz = timeZone || DEFAULT_TIMEZONE;
   const startsOn = calendarDayInZone(
     reminder.anchorDate ?? reminder.createdAt,
     tz,

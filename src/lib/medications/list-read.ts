@@ -35,6 +35,7 @@ import {
 } from "@/lib/medications/intake-tracking";
 import { liveEraStartsByMedication } from "@/lib/medications/scheduling/live-era";
 import { floorWhole } from "@/lib/medications/units-per-dose";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 export type MedicationsListResult = Array<Record<string, unknown>>;
 
@@ -327,7 +328,7 @@ export async function readMedicationsListCached(user: {
   id: string;
   timezone: string | null;
 }): Promise<MedicationsListResult> {
-  const userTz = user.timezone || "Europe/Berlin";
+  const userTz = user.timezone || DEFAULT_TIMEZONE;
   return cachedSwr(
     caches.medications as ServerCache<MedicationsListResult>,
     user.id,

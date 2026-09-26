@@ -33,12 +33,10 @@ import {
 } from "@/lib/measurement-reminders/scheduling";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
 import { wallClockInTz, zonedWallClockToUtc } from "@/lib/tz/wall-clock";
-import { userDayKey } from "@/lib/tz/format";
+import { DEFAULT_TIMEZONE, userDayKey } from "@/lib/tz/format";
 import { holdsOpenAfterReminder } from "@/lib/measurement-reminders/holds-open";
 
 type RouteParams = { params: Promise<{ id: string }> };
-
-const DEFAULT_TIMEZONE = "Europe/Berlin";
 
 async function resolveTimezone(userId: string): Promise<string> {
   const row = await prisma.user.findUnique({

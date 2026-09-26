@@ -19,8 +19,6 @@
  * zone, or a Berlin day computed through an `Intl.DateTimeFormat` built from
  * a variable. It removes the literal, not every way to hard-code a calendar.
  *
- * `PENDING` lists files another change owns at the moment; they switch to the
- * constant when that change lands, and the list shrinks to nothing.
  */
 
 "use strict";
@@ -28,14 +26,6 @@
 const ZONE = "Europe/Berlin";
 
 const EXEMPT_ROOTS = ["src/lib/tz/"];
-
-// Owned by the medication-scheduling change in flight; switched at merge.
-const PENDING = [
-  "src/lib/medications/",
-  "src/lib/jobs/measurement-reminder.ts",
-  "src/lib/measurement-reminders/",
-  "src/app/api/measurement-reminders/",
-];
 
 function toPosix(filename) {
   return filename.replace(/\\/g, "/");
@@ -54,7 +44,6 @@ function isEnforced(filename) {
   const posix = toPosix(filename);
   if (!posix.includes("/src/") && !posix.startsWith("src/")) return false;
   if (EXEMPT_ROOTS.some((root) => posix.includes(root))) return false;
-  if (PENDING.some((p) => posix.includes(p))) return false;
   if (isTestFile(posix)) return false;
   return true;
 }
