@@ -1168,6 +1168,13 @@ model Session {
   // v1.23 — step-up freshness stamp. Set when the session completes a second
   // factor (or re-confirms it); `requireFreshMfa` (a later wave) reads it.
   mfaVerifiedAt DateTime? @map("mfa_verified_at")
+  /// When this session last re-proved a credential through `POST
+  /// /api/auth/reproof` (any method). Read by `requireRecentProof`, which on an
+  /// account without a second factor accepts it as the fresh proof in front of
+  /// exports, share links, token minting and the admin data actions. A
+  /// second-factor proof also stamps `mfaVerifiedAt`; a password proof stamps
+  /// only this, so it never satisfies a gate that asks for a second factor.
+  reproofAt     DateTime? @map("reproof_at")
   // v1.23 — sliding "last seen" for the user-facing active-session list.
   lastActiveAt  DateTime? @map("last_active_at")
 

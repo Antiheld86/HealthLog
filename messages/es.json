@@ -5180,7 +5180,6 @@
             "passphrasePlaceholder": "Contraseña (mín. 12 caracteres)",
             "passphraseHelp": "Deriva la clave del archivo con Argon2id y lo sella con AES-256-GCM. Guarda el archivo con la extensión .hlx.",
             "noRecoveryWarning": "No hay recuperación: si pierdes esta contraseña, el archivo no se podrá abrir. Guárdala en un lugar seguro.",
-            "stepUpNeeded": "Confirma tu segundo factor y vuelve a intentarlo.",
             "detail": "El mismo formato que la copia automática semanal. Algunos tipos de registro aún no se incluyen: el manifiesto del archivo indica qué contiene.",
             "contents": "Tus mediciones, medicamentos, estado de ánimo, ciclo, analíticas, episodios de enfermedad, alergias, antecedentes familiares, nutrientes, entrenamientos, tu perfil de salud y tus métricas personalizadas en un archivo JSON."
           }
@@ -6710,7 +6709,12 @@
       "checklistShown": "La lista vuelve a estar en el panel.",
       "checklistNothingHidden": "La lista no estaba oculta; se abre en el panel."
     },
-    "emailChangePassword": "Contraseña actual (necesaria para cambiar la dirección de correo)"
+    "emailChangePassword": "Contraseña actual (necesaria para cambiar la dirección de correo)",
+    "reproof": {
+      "description": "Esto comparte o exporta tus datos de salud. Confirma que eres tú para continuar.",
+      "signInAgain": "Vuelve a iniciar sesión y inténtalo de nuevo. Tu cuenta no tiene contraseña ni llave de acceso que confirmar aquí.",
+      "failed": "No ha funcionado. Revisa lo que has introducido e inténtalo de nuevo."
+    }
   },
   "admin": {
     "title": "Administration",

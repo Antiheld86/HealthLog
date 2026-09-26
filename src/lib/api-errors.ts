@@ -154,6 +154,13 @@ export class RecordSessionChangedError extends SharingAuthError {
 }
 
 /**
+ * The session carries no proof recent enough for the action, and the request
+ * brought none. The client asks for one (`POST /api/auth/reproof`, or a proof
+ * in the body on the enrollment routes) and retries.
+ */
+export const REPROOF_REQUIRED_CODE = "auth.reproof.required";
+
+/**
  * Error thrown when a step-up gate is not satisfied. Carries `errorCode` so
  * the route can surface a stable machine code (`auth.stepup.required`) the
  * client branches on to launch a re-verification flow rather than parsing
@@ -163,6 +170,13 @@ export class StepUpRequiredError extends HttpError {
   constructor(
     public errorCode: string = "auth.stepup.required",
     message = "Recent second-factor verification required",
+    /**
+     * Extra machine fields for the envelope's `meta`, beside `errorCode`. The
+     * recent-proof gate names the proofs the account can give here
+     * (`methods`), so the client offers exactly those and nothing it would
+     * then refuse.
+     */
+    public extraMeta: Record<string, unknown> = {},
   ) {
     super(401, message);
     this.name = "StepUpRequiredError";

@@ -5180,7 +5180,6 @@
             "passphrasePlaceholder": "Passphrase (mind. 12 Zeichen)",
             "passphraseHelp": "Leitet den Archivschlüssel per Argon2id ab und versiegelt ihn mit AES-256-GCM. Speichere die Datei mit der Endung .hlx.",
             "noRecoveryWarning": "Es gibt keine Wiederherstellung — geht diese Passphrase verloren, lässt sich das Archiv nicht mehr öffnen. Bewahre sie sicher auf.",
-            "stepUpNeeded": "Bestätige deinen zweiten Faktor und versuche es erneut.",
             "detail": "Gleiche Form wie die wöchentliche automatische Sicherung. Einige Satzarten sind noch nicht enthalten — das Manifest der Datei nennt, was drinsteht.",
             "contents": "Deine Messwerte, Medikamente, Stimmung, Zyklus, Laborwerte, Krankheitsepisoden, Allergien, Familienanamnese, Nährstoffe, Workouts, dein Gesundheitsprofil und deine eigenen Messgrößen in einer JSON-Datei."
           }
@@ -6710,7 +6709,12 @@
       "checklistShown": "Die Checkliste ist wieder auf dem Dashboard.",
       "checklistNothingHidden": "Die Checkliste war nicht ausgeblendet; sie öffnet sich auf dem Dashboard."
     },
-    "emailChangePassword": "Aktuelles Passwort (nötig, um die E-Mail-Adresse zu ändern)"
+    "emailChangePassword": "Aktuelles Passwort (nötig, um die E-Mail-Adresse zu ändern)",
+    "reproof": {
+      "description": "Damit werden deine Gesundheitsdaten weitergegeben oder exportiert. Bestätige, dass du es bist, um fortzufahren.",
+      "signInAgain": "Melde dich neu an und versuche es dann noch einmal. Dein Konto hat kein Passwort und keinen Passkey, den du hier bestätigen könntest.",
+      "failed": "Das hat nicht geklappt. Prüfe deine Eingabe und versuche es noch einmal."
+    }
   },
   "admin": {
     "title": "Administration",

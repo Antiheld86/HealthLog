@@ -31,9 +31,17 @@ vi.mock("@/lib/db", () => ({
     consentReceipt: { findMany: vi.fn() },
     nutrientIntakeDay: { findMany: vi.fn().mockResolvedValue([]) },
     user: { findUnique: vi.fn() },
-    passkey: { findMany: vi.fn() },
+    passkey: { findMany: vi.fn(), count: vi.fn(async () => 0) },
     apiToken: { count: vi.fn() },
-    session: { count: vi.fn() },
+    session: {
+      count: vi.fn(),
+      findUnique: vi.fn(async () => ({
+        createdAt: new Date(),
+        mfaVerifiedAt: null,
+        reproofAt: null,
+      })),
+    },
+    webauthnMfaCredential: { count: vi.fn(async () => 0) },
     appSettings: { findUnique: vi.fn() },
     userAchievement: {
       findMany: vi.fn(),

@@ -913,7 +913,11 @@ paths:
         `INSURANCE` leaf is refused with a 422 because the share view never decrypts the insurance number. An optional
         `documentIds` array (bounded ≤50) is validated as the caller's own live documents and frozen onto the link; a
         documents-only share (no report scope, non-empty `documentIds`) is valid. `expiresAt` is required and capped at
-        90 days. Auth via cookie or Bearer; rate-limited (`share-link:<userId>`, 20/h). Strict: unknown keys 422."
+        90 days. Auth via cookie or Bearer; rate-limited (`share-link:<userId>`, 20/h). Strict: unknown keys 422. A
+        browser session needs a fresh proof as well as a live one: a sign-in or `POST /api/auth/reproof` within the last
+        five minutes (with a second factor, on an account that has one). Without it the answer is 401
+        `auth.reproof.required`, with `meta.methods` naming the proofs the account can give. A Bearer caller is not
+        asked for more than its token yet."
       requestBody:
         required: true
         content:
@@ -1582,7 +1586,11 @@ paths:
         `Content-Disposition: attachment` with `healthlog-backup-<userId>-<YYYY-MM-DD>.json`, `Cache-Control: no-store`.
         Shares the `export:<userId>` bucket (10 per hour) with every other export route. Audits as
         `user.export.full-backup` with the row counts. Cookie or Bearer auth; the caller is always resolved as
-        themselves, so this download cannot be delegated to a shared record."
+        themselves, so this download cannot be delegated to a shared record. A browser session needs a fresh proof as
+        well as a live one: a sign-in or `POST /api/auth/reproof` within the last five minutes (with a second factor, on
+        an account that has one). Without it the answer is 401 `auth.reproof.required`, with `meta.methods` naming the
+        proofs the account can give. A Bearer caller presents an `X-Step-Up` elevation from `POST /api/auth/step-up` (a
+        second-factor one on an account with a second factor) and receives 401 `auth.stepup.required` without it."
       responses:
         "200":
           description: The backup payload. `application/json; charset=utf-8`, served as an attachment.
@@ -1783,12 +1791,15 @@ paths:
       tags:
         - Export
       summary: Download the full backup as a passphrase-encrypted archive
-      description: v1.23. Same restore-compatible payload as the plaintext full backup, sealed into an `HLX1` archive
+      description: "v1.23. Same restore-compatible payload as the plaintext full backup, sealed into an `HLX1` archive
         (Argon2id-derived key + AES-256-GCM) under the supplied `passphrase`. Returns `application/octet-stream` (a
-        `.hlx` file). When the account has a second factor enrolled, the call is step-up gated (`requireFreshMfa`,
-        cookie-only) and returns 401 `auth.stepup.required` without a fresh factor; single-factor accounts use a normal
-        session or Bearer. Shared `export:<userId>` rate bucket (10/h). The passphrase is never stored — a forgotten
-        passphrase makes the archive unrecoverable.
+        `.hlx` file). Asks for a fresh proof, like the plaintext full backup. A browser session needs a fresh proof as
+        well as a live one: a sign-in or `POST /api/auth/reproof` within the last five minutes (with a second factor, on
+        an account that has one). Without it the answer is 401 `auth.reproof.required`, with `meta.methods` naming the
+        proofs the account can give. On Bearer, an account without a second factor passes on its token, and one with a
+        second factor presents a second-factor `X-Step-Up` elevation (401 `auth.stepup.required` without it). Shared
+        `export:<userId>` rate bucket (10/h). The passphrase is never stored — a forgotten passphrase makes the archive
+        unrecoverable."
       requestBody:
         required: true
         content:
@@ -2058,9 +2069,12 @@ paths:
         Accepting routes (the complete set): POST /api/auth/me/mfa/totp/setup; POST /api/auth/me/mfa/totp/confirm; POST
         /api/auth/me/mfa/disable; POST /api/auth/me/mfa/recovery-codes/regenerate; POST
         /api/auth/me/mfa/webauthn/register/options; POST /api/auth/me/mfa/webauthn/register/verify; PATCH and DELETE
-        /api/auth/me/mfa/webauthn/{id}; DELETE /api/settings/account; DELETE /api/settings/data. The last three MFA
-        routes, disable, and both erasure routes require a fresh-factor proof. GET /api/auth/me/mfa needs no elevation
-        at all. Nothing else accepts one — admin endpoints stay cookie-only.
+        /api/auth/me/mfa/webauthn/{id}; DELETE /api/settings/account; DELETE /api/settings/data; GET
+        /api/export/full-backup; POST /api/export/encrypted. The last three MFA routes, disable, and both erasure routes
+        require a fresh-factor proof. The two whole-record exports take any elevation on an account without a second
+        factor and a fresh-factor one on an account with one; the full backup requires an elevation on every Bearer
+        call, the encrypted export only on an account with a second factor. GET /api/auth/me/mfa needs no elevation at
+        all. Nothing else accepts one — admin endpoints stay cookie-only.
 
 
         The two erasure routes joined the set so an account with a second factor can be deleted from a native app: their
@@ -2080,6 +2094,64 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StepUpMintEnvelope"
+        "401": *a1
+        "422": *a4
+        "429": *a5
+  /api/auth/reproof:
+    post:
+      tags:
+        - Auth
+      summary: Re-prove a credential on a browser session (cookie only)
+      description: >-
+        Stamps the calling browser session as recently re-proved, so for the next five minutes it may run the actions
+        that ask for a fresh proof: GET /api/export/full-backup, POST /api/export/encrypted, POST /api/share-links, POST
+        /api/mcp/tokens, POST /api/tokens/measurements, POST /api/tokens/documents, and the admin backup download,
+        upload and restore, the admin data wipe and the admin password reset. Those answer 401 `auth.reproof.required`
+        with `meta.methods` (the proofs this account can give) when the session signed in or re-proved more than five
+        minutes ago.
+
+
+        The body takes the same shapes as POST /api/auth/step-up. On an account with a second factor only `totp`,
+        `webauthn` (a security key) or `passkey` are accepted, because a password has never stood in for the second
+        factor; on one without, `password` or `passkey`. A method the account cannot use here is refused with 422
+        `auth.reproof.too_weak` and `meta.methods`, before any guess is spent. A second-factor or passkey proof also
+        refreshes the session's second-factor stamp, exactly as signing in again would. Assertions begin at POST
+        /api/auth/passkey/register-options with `{ method: "passkey" | "webauthn" }`.
+
+
+        Proofs draw on the account's shared re-proof budget (five per fifteen minutes, 429 once spent). A proof that
+        does not verify is 401 `auth.reproof.failed` and is audited. Bearer callers use POST /api/auth/step-up instead.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StepUpMintRequest"
+      responses:
+        "200":
+          description: Proof accepted; the session is stamped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReproofEnvelope"
+        "401": *a1
+        "422": *a4
+        "429": *a5
+    get:
+      tags:
+        - Auth
+      summary: Ask whether this browser session's proof is recent
+      description: "The question the gated routes ask, without acting: 200 `{ recent: true }` when the session signed in or
+        re-proved within five minutes (a second factor on an account that has one), otherwise 401
+        `auth.reproof.required` with `meta.methods`. Lets a client re-prove before sending a large upload rather than
+        after it was refused."
+      responses:
+        "200":
+          description: The session's proof is recent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReproofStatusEnvelope"
         "401": *a1
         "422": *a4
         "429": *a5
@@ -2893,12 +2965,14 @@ paths:
         holder actually has. And it cannot mint another token, this endpoint included.
 
 
-        Minting requires a COOKIE SESSION. No Bearer credential reaches this endpoint at any scope, wildcard included —
-        not because a wildcard lacks the reach, but because of the lifetimes involved: a native access token lives a day
-        and what it could mint here lives a year, so admitting one would let a short-lived compromise leave behind a
-        credential that outlives revoking it. Gated by the operator's instance-wide API switch. Body capped at 16 KiB;
-        10 mints per user per minute, and at most 10 live tokens held at once. Tokens appear in `GET /api/tokens` and
-        are revoked at `DELETE /api/tokens/{id}` like any other — revoking frees a slot against the ceiling.
+        Minting requires a COOKIE SESSION with a fresh proof: a sign-in or `POST /api/auth/reproof` within the last five
+        minutes (with a second factor, on an account that has one), otherwise 401 `auth.reproof.required` with
+        `meta.methods`. No Bearer credential reaches this endpoint at any scope, wildcard included — not because a
+        wildcard lacks the reach, but because of the lifetimes involved: a native access token lives a day and what it
+        could mint here lives a year, so admitting one would let a short-lived compromise leave behind a credential that
+        outlives revoking it. Gated by the operator's instance-wide API switch. Body capped at 16 KiB; 10 mints per user
+        per minute, and at most 10 live tokens held at once. Tokens appear in `GET /api/tokens` and are revoked at
+        `DELETE /api/tokens/{id}` like any other — revoking frees a slot against the ceiling.
       requestBody:
         required: true
         content:
@@ -2985,10 +3059,10 @@ paths:
         it 403.
 
 
-        Minting requires a COOKIE SESSION, for the reason the measurement mint gives: a day-lived native access token
-        must not be able to leave behind a year-lived credential. Gated by the operator's instance-wide API switch. Body
-        capped at 16 KiB; 10 mints per user per minute, and at most 10 live document tokens held at once. Tokens appear
-        in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}`.
+        Minting requires a COOKIE SESSION with a fresh proof, as for the measurement mint, for the reason it gives: a
+        day-lived native access token must not be able to leave behind a year-lived credential. Gated by the operator's
+        instance-wide API switch. Body capped at 16 KiB; 10 mints per user per minute, and at most 10 live document
+        tokens held at once. Tokens appear in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}`.
       requestBody:
         required: true
         content:
@@ -20171,9 +20245,12 @@ paths:
       tags:
         - MCP
       summary: Mint an MCP connector token
-      description: Mints a `health:read` (optionally read+write) Bearer for the manual / stdio path and audits the mint. THE
+      description: "Mints a `health:read` (optionally read+write) Bearer for the manual / stdio path and audits the mint. THE
         RESPONSE CARRIES THE RAW TOKEN — this is the only place it ever exists, and it cannot be retrieved again. Body
-        capped at 16 KiB. Auth via cookie or Bearer.
+        capped at 16 KiB. Auth via cookie or Bearer. A browser session needs a fresh proof as well as a live one: a
+        sign-in or `POST /api/auth/reproof` within the last five minutes (with a second factor, on an account that has
+        one). Without it the answer is 401 `auth.reproof.required`, with `meta.methods` naming the proofs the account
+        can give. A Bearer caller is not asked for more than its token yet."
       requestBody:
         required: true
         content:
@@ -20858,7 +20935,9 @@ paths:
       description: "Decrypts one stored copy and returns the backup document itself, with `Content-Disposition: attachment`
         and `Cache-Control: no-store`. The response is the raw document, not the standard envelope — it is the artefact
         an operator keeps. The ciphertext stays in the database. Admin session cookie required; Bearer tokens cannot
-        reach admin endpoints."
+        reach admin endpoints. A browser session needs a fresh proof as well as a live one: a sign-in or `POST
+        /api/auth/reproof` within the last five minutes (with a second factor, on an account that has one). Without it
+        the answer is 401 `auth.reproof.required`, with `meta.methods` naming the proofs the account can give."
       parameters:
         - in: path
           name: id
@@ -20922,7 +21001,10 @@ paths:
         snapshot was taken for, never the admin running it. The request refuses a missing confirmation, an unknown
         backup and a copy that cannot be decrypted; the file's own checks (schema, declared owner, manifest, documents)
         run in the job before anything is deleted, and a refusal there ends the job as `failed` with the same reason.
-        One restore per account at a time. Admin session cookie required; Bearer tokens cannot reach admin endpoints."
+        One restore per account at a time. Admin session cookie required; Bearer tokens cannot reach admin endpoints. A
+        browser session needs a fresh proof as well as a live one: a sign-in or `POST /api/auth/reproof` within the last
+        five minutes (with a second factor, on an account that has one). Without it the answer is 401
+        `auth.reproof.required`, with `meta.methods` naming the proofs the account can give."
       parameters:
         - in: path
           name: id
@@ -30888,10 +30970,10 @@ components:
                 analytics.invalid_query; anamnesis — anamnesis.fact.conflict, anamnesis.fact.currentExists,
                 anamnesis.fact.invalidValue; auth — auth.admin.required, auth.already_authenticated,
                 auth.mfa.code_invalid, auth.missing, auth.refresh.invalid, auth.refresh.reuse, auth.refresh.revoked,
-                auth.reproof.failed, auth.reproof.required, auth.scope.insufficient, auth.stepup.required,
-                auth.token.expired, auth.token.invalid; backup — backup.payload.undecryptable, backup.restore.active,
-                backup.section.missing, backup.upload.too_large; body-site — body-site.invalid; coach —
-                coach.budget.exceeded, coach.conversation.invalidTitle, coach.conversation.notFound,
+                auth.reproof.failed, auth.reproof.required, auth.reproof.too_weak, auth.scope.insufficient,
+                auth.stepup.required, auth.token.expired, auth.token.invalid; backup — backup.payload.undecryptable,
+                backup.restore.active, backup.section.missing, backup.upload.too_large; body-site — body-site.invalid;
+                coach — coach.budget.exceeded, coach.conversation.invalidTitle, coach.conversation.notFound,
                 coach.fenced.attachmentConflict, coach.fenced.attachmentLimit, coach.fenced.attachmentNotFound,
                 coach.fenced.attachmentNotIndexed, coach.fenced.attachmentRequired, coach.fenced.attachmentUnavailable,
                 coach.fenced.invalid, coach.request.invalid; coach-prefs — coach-prefs.body.invalid_json,
@@ -37875,6 +37957,67 @@ components:
         - expiresInSeconds
         - method
         - satisfiesFreshFactor
+      additionalProperties: false
+    ReproofEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ReproofResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    ReproofResponse:
+      type: object
+      properties:
+        method:
+          type: string
+          enum:
+            - password
+            - totp
+            - webauthn
+            - passkey
+        verifiedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+      required:
+        - method
+        - verifiedAt
+      additionalProperties: false
+    ReproofStatusEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ReproofStatus"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    ReproofStatus:
+      type: object
+      properties:
+        recent:
+          type: boolean
+          const: true
+      required:
+        - recent
       additionalProperties: false
     TotpSetupEnvelope:
       type: object

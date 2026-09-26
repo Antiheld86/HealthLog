@@ -5180,7 +5180,6 @@
             "passphrasePlaceholder": "Hasło-fraza (min. 12 znaków)",
             "passphraseHelp": "Wyprowadza klucz archiwum za pomocą Argon2id i pieczętuje je AES-256-GCM. Zapisz plik z rozszerzeniem .hlx.",
             "noRecoveryWarning": "Nie ma odzyskiwania — jeśli zgubisz tę frazę, archiwum nie da się otworzyć. Przechowuj ją bezpiecznie.",
-            "stepUpNeeded": "Potwierdź drugi składnik i spróbuj ponownie.",
             "detail": "Ten sam kształt co cotygodniowa kopia automatyczna. Niektóre rodzaje wpisów nie są jeszcze przenoszone — manifest pliku wskazuje, co zawiera.",
             "contents": "Twoje pomiary, leki, nastrój, cykl, wyniki badań, epizody chorobowe, alergie, wywiad rodzinny, składniki odżywcze, treningi, Twój profil zdrowia i własne wskaźniki w jednym pliku JSON."
           }
@@ -6710,7 +6709,12 @@
       "checklistShown": "Lista wróciła na panel.",
       "checklistNothingHidden": "Lista nie była ukryta; otwiera się na panelu."
     },
-    "emailChangePassword": "Obecne hasło (potrzebne do zmiany adresu e-mail)"
+    "emailChangePassword": "Obecne hasło (potrzebne do zmiany adresu e-mail)",
+    "reproof": {
+      "description": "Ta czynność udostępnia lub eksportuje Twoje dane zdrowotne. Potwierdź, że to Ty, aby kontynuować.",
+      "signInAgain": "Zaloguj się ponownie, a potem spróbuj jeszcze raz. Twoje konto nie ma hasła ani klucza dostępu do potwierdzenia tutaj.",
+      "failed": "To się nie udało. Sprawdź wprowadzone dane i spróbuj ponownie."
+    }
   },
   "admin": {
     "title": "Administracja",

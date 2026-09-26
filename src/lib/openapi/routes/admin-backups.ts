@@ -170,7 +170,7 @@ export const adminBackupPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Admin"],
       summary: "Download one stored backup as JSON",
       description:
-        "Decrypts one stored copy and returns the backup document itself, with `Content-Disposition: attachment` and `Cache-Control: no-store`. The response is the raw document, not the standard envelope — it is the artefact an operator keeps. The ciphertext stays in the database. Admin session cookie required; Bearer tokens cannot reach admin endpoints.",
+        "Decrypts one stored copy and returns the backup document itself, with `Content-Disposition: attachment` and `Cache-Control: no-store`. The response is the raw document, not the standard envelope — it is the artefact an operator keeps. The ciphertext stays in the database. Admin session cookie required; Bearer tokens cannot reach admin endpoints. A browser session needs a fresh proof as well as a live one: a sign-in or `POST /api/auth/reproof` within the last five minutes (with a second factor, on an account that has one). Without it the answer is 401 `auth.reproof.required`, with `meta.methods` naming the proofs the account can give.",
       requestParams: {
         path: z.object({
           id: z.string().meta({ description: "`DataBackup.id`." }),
@@ -206,7 +206,7 @@ export const adminBackupPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Admin"],
       summary: "Queue the restore of one stored backup over its owner's record",
       description:
-        "Queues a restore that replaces the snapshot owner's data tables from the stored copy, in one transaction, under the ids the file carries, and answers 202 with the job's id. Replacing is not merging: every row the account gained after the snapshot was taken is deleted with the rest of its class. The target is the account the snapshot was taken for, never the admin running it. The request refuses a missing confirmation, an unknown backup and a copy that cannot be decrypted; the file's own checks (schema, declared owner, manifest, documents) run in the job before anything is deleted, and a refusal there ends the job as `failed` with the same reason. One restore per account at a time. Admin session cookie required; Bearer tokens cannot reach admin endpoints.",
+        "Queues a restore that replaces the snapshot owner's data tables from the stored copy, in one transaction, under the ids the file carries, and answers 202 with the job's id. Replacing is not merging: every row the account gained after the snapshot was taken is deleted with the rest of its class. The target is the account the snapshot was taken for, never the admin running it. The request refuses a missing confirmation, an unknown backup and a copy that cannot be decrypted; the file's own checks (schema, declared owner, manifest, documents) run in the job before anything is deleted, and a refusal there ends the job as `failed` with the same reason. One restore per account at a time. Admin session cookie required; Bearer tokens cannot reach admin endpoints. A browser session needs a fresh proof as well as a live one: a sign-in or `POST /api/auth/reproof` within the last five minutes (with a second factor, on an account that has one). Without it the answer is 401 `auth.reproof.required`, with `meta.methods` naming the proofs the account can give.",
       requestParams: {
         path: z.object({
           id: z.string().meta({ description: "`DataBackup.id`." }),

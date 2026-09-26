@@ -19,7 +19,7 @@
  */
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecentProof } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -71,7 +71,11 @@ export const GET = apiHandler(async () => {
 });
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // A connector token outlives the session that mints it, so the cookie path
+  // needs a fresh proof. The shipped app mints these on its token without an
+  // elevation and reads a 401 here as a dead session, so the Bearer arm stays
+  // on the token until it sends one (see the iOS note).
+  const { user } = await requireRecentProof({ bearer: "token" });
   annotate({ action: { name: "mcp.tokens.create" } });
 
   if (!(await isApiGloballyEnabled())) {

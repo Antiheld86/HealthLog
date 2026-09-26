@@ -58,7 +58,10 @@ export function ExistingFactorReauthDialog({
   pending,
   error,
   onProof,
+  description,
 }: {
+  /** Overrides the default "before adding a second factor" sentence. */
+  description?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   methods: ReauthMethod[];
@@ -134,7 +137,7 @@ export function ExistingFactorReauthDialog({
             {t("settings.passkeyReauth.title")}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {t("settings.passkeyReauth.factorDescription")}
+            {description ?? t("settings.passkeyReauth.factorDescription")}
           </AlertDialogDescription>
         </AlertDialogHeader>
 

@@ -9,10 +9,9 @@
  * `application/octet-stream`.
  *
  * SECURITY:
- *  - Step-up: when the account has any second factor enrolled (TOTP OR a
- *    security key), this is gated by `requireFreshMfaIfEnrolled` — exporting the
- *    whole record is a sensitive action. Single-factor accounts fall back to a
- *    normal authenticated session.
+ *  - Fresh proof: `requireRecentProof`, the gate every whole-record export
+ *    shares. A second factor within five minutes on an account that has one;
+ *    otherwise a recent sign-in or a password re-proof.
  *  - The passphrase NEVER hits a log or wide-event: it is read off the parsed
  *    body, passed straight into the KDF, and never `annotate()`d. The egress
  *    redaction denylist already scrubs `/passphrase/i` (key-name) and the
@@ -20,19 +19,16 @@
  *  - There is NO server-side recovery — the passphrase is not stored. A
  *    forgotten passphrase means the archive is unrecoverable; the UI says so.
  *
- * Auth: cookie session OR Bearer for single-factor accounts; cookie + fresh
- * second factor for MFA accounts (Bearer can never satisfy step-up).
+ * Auth: cookie session with a recent proof; Bearer on the token alone for an
+ * account without a second factor, with a second-factor `X-Step-Up`
+ * elevation for one with.
  * Rate-limit: shared `export:<userId>` bucket (10/h) — same bucket as the
  * plaintext export so the encrypted variant cannot be used to bypass the cap.
  * Audit: `user.export.encrypted` with the row counts (never the passphrase).
  */
 import { prisma } from "@/lib/db";
 import { z } from "zod/v4";
-import {
-  apiHandler,
-  requireFreshMfaIfEnrolled,
-  MFA_STEP_UP_MAX_AGE_SECONDS,
-} from "@/lib/api-handler";
+import { apiHandler, requireRecentProof } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -92,13 +88,13 @@ const encryptedExportSchema = z
   .strict();
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  // Resolve the session (cookie or Bearer), then escalate to a fresh second
-  // factor when the account has one enrolled. `requireFreshMfaIfEnrolled`
-  // covers BOTH cohorts — a confirmed TOTP secret AND a registered WebAuthn
-  // security key — so a security-key-only account is gated too. A single-factor
-  // account cannot produce a fresh-MFA proof, so it passes straight through
-  // rather than being locked out of its own encrypted export.
-  const auth = await requireFreshMfaIfEnrolled(MFA_STEP_UP_MAX_AGE_SECONDS);
+  // A fresh proof, like every whole-record export (`requireRecentProof`). On
+  // the cookie path: a second factor within five minutes on an account that
+  // has one, otherwise a recent sign-in or password re-proof. On Bearer the
+  // shipped app calls this route without an elevation, so an account without
+  // a second factor still passes on its token; one with a second factor
+  // presents a second-factor elevation (before, it could not export at all).
+  const auth = await requireRecentProof({ bearer: "elevation-if-enrolled" });
   const user = auth.user;
   annotate({ action: { name: "user.export.encrypted" } });
 
@@ -119,6 +115,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     return returnAllZodIssues(parsed.error);
   }
   const { passphrase } = parsed.data;
+  await auth.commitElevation();
 
   // Sealed as it is produced and spooled to a temporary file, then sent: the
   // format puts the tag in front of the ciphertext, so the archive cannot go

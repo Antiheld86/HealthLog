@@ -25,12 +25,16 @@
  * included; the payload's `manifest` field discloses both, and the export UI
  * states this too.
  *
- * Auth: cookie session OR Bearer token (`requireAuth`).
+ * Auth: a fresh proof (`requireRecentProof`). The file is the whole record in
+ * plain text, so a live session alone is not enough: a cookie session needs a
+ * recent sign-in or re-proof (a second factor on an account that has one), a
+ * Bearer caller an `X-Step-Up` elevation. No shipped client calls this route
+ * on Bearer.
  * Rate-limit: shared `export:<userId>` bucket (10/h).
  * Audit: `user.export.full-backup` with the row counts.
  */
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecentProof } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { apiError, getClientIp } from "@/lib/api-response";
@@ -41,13 +45,15 @@ import { streamToResponseBody } from "@/lib/export/response-stream";
 import { NextRequest, NextResponse } from "next/server";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const auth = await requireRecentProof({ bearer: "elevation" });
+  const { user } = auth;
   annotate({ action: { name: "user.export.full-backup" } });
 
   const rl = await checkRateLimit(`export:${user.id}`, 10, 60 * 60 * 1000);
   if (!rl.allowed) {
     return apiError("Maximum 10 exports per hour", 429);
   }
+  await auth.commitElevation();
 
   // Written into the response as it is produced (`streamFullBackupJson`), not
   // built and stringified first: for an account of 1.25 million measurements

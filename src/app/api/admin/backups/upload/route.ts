@@ -35,7 +35,12 @@ import { BodyTooLargeError, readBoundedBody } from "@/lib/labs/ocr-upload";
 import { NextRequest } from "next/server";
 import { ZodError } from "zod/v4";
 import { prisma } from "@/lib/db";
-import { apiHandler, HttpError, requireAdmin } from "@/lib/api-handler";
+import {
+  apiHandler,
+  HttpError,
+  requireAdmin,
+  assertRecentCookieProof,
+} from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { BackupJsonError, scanBackupJson } from "@/lib/export/backup-json-scan";
@@ -143,7 +148,10 @@ async function* decodedBytes(
 }
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { user: admin } = await requireAdmin();
+  const { user: admin, session } = await requireAdmin();
+  // A fresh proof on top of the admin session: this reaches every account's
+  // data, so a stolen admin session alone must not be enough.
+  await assertRecentCookieProof(admin, session.id);
   annotate({ action: { name: "admin.backups.upload" } });
   const ipAddress = getClientIp(request);
 

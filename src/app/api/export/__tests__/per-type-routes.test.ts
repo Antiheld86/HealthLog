@@ -12,6 +12,15 @@ import { NextRequest } from "next/server";
 
 vi.mock("@/lib/db", () => ({
   prisma: {
+    session: {
+      findUnique: vi.fn(async () => ({
+        createdAt: new Date(),
+        mfaVerifiedAt: null,
+        reproofAt: null,
+      })),
+    },
+    webauthnMfaCredential: { count: vi.fn(async () => 0) },
+    passkey: { count: vi.fn(async () => 0) },
     measurement: { findMany: vi.fn() },
     medication: { findMany: vi.fn() },
     medicationIntakeEvent: { findMany: vi.fn() },

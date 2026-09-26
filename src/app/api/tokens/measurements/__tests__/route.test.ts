@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/api-handler", () => ({
   apiHandler: (fn: unknown) => fn,
   requireCookieAuth: vi.fn(),
+  assertRecentCookieProof: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/issue-token", () => ({
@@ -42,7 +43,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import { POST } from "../route";
-import { requireCookieAuth } from "@/lib/api-handler";
+import { assertRecentCookieProof, requireCookieAuth } from "@/lib/api-handler";
 import { issueApiToken } from "@/lib/auth/issue-token";
 import { isApiGloballyEnabled } from "@/lib/app-settings";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -63,7 +64,11 @@ function req(body: unknown): Request {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(requireCookieAuth).mockResolvedValue({ user: USER } as never);
+  vi.mocked(requireCookieAuth).mockResolvedValue({
+    user: USER,
+    session: { id: "sess-1" },
+  } as never);
+  vi.mocked(assertRecentCookieProof).mockResolvedValue(undefined);
   vi.mocked(isApiGloballyEnabled).mockResolvedValue(true);
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
   vi.mocked(auditLog).mockResolvedValue(undefined as never);
@@ -75,6 +80,26 @@ beforeEach(() => {
     tokenId: "token-1",
     name: "Home Assistant",
   } as never);
+});
+
+describe("the fresh proof in front of the mint", () => {
+  it("mints nothing when the session carries no recent proof", async () => {
+    vi.mocked(assertRecentCookieProof).mockRejectedValue(
+      new Error("auth.reproof.required"),
+    );
+    await expect(POST(req({ name: "Scale" }) as never)).rejects.toThrow(
+      "auth.reproof.required",
+    );
+    expect(issueApiToken).not.toHaveBeenCalled();
+  });
+
+  it("asks about the caller's own session", async () => {
+    await POST(req({ name: "Scale" }) as never);
+    expect(assertRecentCookieProof).toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.any(String) }),
+      "sess-1",
+    );
+  });
 });
 
 describe("what it mints", () => {

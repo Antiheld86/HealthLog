@@ -196,7 +196,7 @@ export const mcpPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["MCP"],
       summary: "Mint an MCP connector token",
       description:
-        "Mints a `health:read` (optionally read+write) Bearer for the manual / stdio path and audits the mint. THE RESPONSE CARRIES THE RAW TOKEN — this is the only place it ever exists, and it cannot be retrieved again. Body capped at 16 KiB. Auth via cookie or Bearer.",
+        "Mints a `health:read` (optionally read+write) Bearer for the manual / stdio path and audits the mint. THE RESPONSE CARRIES THE RAW TOKEN — this is the only place it ever exists, and it cannot be retrieved again. Body capped at 16 KiB. Auth via cookie or Bearer. A browser session needs a fresh proof as well as a live one: a sign-in or `POST /api/auth/reproof` within the last five minutes (with a second factor, on an account that has one). Without it the answer is 401 `auth.reproof.required`, with `meta.methods` naming the proofs the account can give. A Bearer caller is not asked for more than its token yet.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: createMcpTokenRequest } },

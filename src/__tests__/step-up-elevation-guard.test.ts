@@ -118,11 +118,14 @@ function callers(exportName: string, moduleRe: RegExp): string[] {
  *     consult this mechanism at all;
  *   - the trusted-device routes. "Remember this browser" is a browser concept
  *     with no native equivalent to manage;
- *   - `requireFreshMfaIfEnrolled`'s callers (password change, encrypted
- *     export, encryption-key rotation, the sharing invite). Those are
- *     destructive account actions, not second-factor management, and letting an
- *     elevation satisfy them would be exactly the silent widening this file
- *     exists to prevent.
+ *   - `requireFreshMfaIfEnrolled`'s callers (password change, encryption-key
+ *     rotation, the sharing invite). Those are destructive account actions,
+ *     not second-factor management, and letting an elevation satisfy them
+ *     would be exactly the silent widening this file exists to prevent.
+ *
+ * The two whole-record exports reach the elevation through a third gate,
+ * `requireRecentProof`, whose route list and per-route Bearer rule are frozen
+ * in `recent-proof-surface-guard.test.ts`.
  *
  * Account deletion and the record wipe used to sit in that last bullet. They
  * left it deliberately, and through a different gate: see `ERASURE_ROUTES`

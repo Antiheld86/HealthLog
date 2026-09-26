@@ -159,10 +159,13 @@ describe("DELETE /api/admin/data leaves nothing it promised to delete", () => {
     ).toBeGreaterThan(100);
 
     // Created after the generic seed so the cookie carries this session's id.
+    // The seed gives the admin a second factor, and the wipe asks for a fresh
+    // proof, so the session is one that has just completed it.
     const session = await prisma.session.create({
       data: {
         userId: admin.id,
         expiresAt: new Date(Date.now() + 60_000),
+        mfaVerifiedAt: new Date(),
       },
     });
     cookieJar.set("healthlog_session", session.id);

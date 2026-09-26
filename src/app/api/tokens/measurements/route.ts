@@ -30,7 +30,11 @@
  */
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireCookieAuth } from "@/lib/api-handler";
+import {
+  apiHandler,
+  assertRecentCookieProof,
+  requireCookieAuth,
+} from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -94,7 +98,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // front of, and it is the surface this endpoint is reached from anyway. The
   // same argument the passkey-registration and trusted-device routes make, and
   // `requireCookieAuth` is the helper they share.
-  const { user } = await requireCookieAuth();
+  const { user, session } = await requireCookieAuth();
+  // And a fresh proof on top of the session: the token lives far longer than
+  // a stolen session would, so minting one needs the person, not just the
+  // browser.
+  await assertRecentCookieProof(user, session.id);
   annotate({ action: { name: "tokens.measurements.create" } });
 
   if (!(await isApiGloballyEnabled())) {

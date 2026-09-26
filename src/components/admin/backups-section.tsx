@@ -60,6 +60,11 @@ import type {
 import type { BackupRestoreJobView } from "@/lib/jobs/backup-restore";
 import { getApiErrorMessage } from "./_shared";
 import {
+  ReproofCancelledError,
+  throwIfReproofRequired,
+  useRecentProof,
+} from "@/components/settings/security-section/use-recent-proof";
+import {
   isActiveRestore,
   RestoreJobStatus,
   visibleRestoreJobs,
@@ -702,6 +707,57 @@ function ScheduleHealthNotice({
   );
 }
 
+/**
+ * Send a backup file to the admin upload route. Sent as the raw body,
+ * compressed on the way unless it already is: the server reads it as a stream,
+ * and a large export (hundreds of MB of JSON) shrinks about tenfold. No request
+ * timeout, because a file of that size takes longer to check and store than
+ * the default allows. The body is built here, per call, so a retry after a
+ * re-proof sends the file again rather than a spent stream.
+ */
+async function uploadOnce(file: File) {
+  const body = await uploadBody(file);
+  return apiFetch<{
+    id: string;
+    valid: true;
+    summary: {
+      measurements: number;
+      medications: number;
+      intakeEvents: number;
+      moodEntries: number;
+      // Optional for the same reason as the keys below: a file written
+      // before side effects rode the wire carries no key at all.
+      medicationSideEffects?: number;
+      cycles?: number;
+      cycleDayLogs?: number;
+      // v1.28 backup-completeness — optional so an older-schema upload
+      // (pre-v1.28) still totals correctly without these keys.
+      labResults?: number;
+      biomarkers?: number;
+      illnessEpisodes?: number;
+      illnessDayLogs?: number;
+      allergies?: number;
+      familyHistory?: number;
+      workouts?: number;
+      documents?: number;
+      // Optional for the same reason: a file written before each of these
+      // rode the wire carries no key, and an absent key must total as
+      // nothing rather than break the count.
+      nutrientDays?: number;
+      healthProfile?: number;
+      healthProfileFactRevisions?: number;
+      customMetrics?: number;
+      customMetricEntries?: number;
+      intradayProfiles?: number;
+    };
+  }>("/api/admin/backups/upload", {
+    method: "POST",
+    body,
+    headers: { "Content-Type": "application/gzip" },
+    signal: null,
+  });
+}
+
 export function BackupsSection() {
   const { t } = useTranslations();
   const fmt = useFormatters();
@@ -744,52 +800,14 @@ export function BackupsSection() {
 
   // Upload state — single-file flow, drives the file input + button.
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Download, upload and restore reach every account's data, so each asks for
+  // a fresh proof unless this session signed in or re-proved within minutes.
+  const recentProof = useRecentProof();
   const upload = useMutation({
     mutationFn: async (file: File) => {
-      // Sent as the raw body, compressed on the way unless it already is: the
-      // server reads it as a stream, and a large export (hundreds of MB of
-      // JSON) shrinks about tenfold. No request timeout, because a file of
-      // that size takes longer to check and store than the default allows.
-      const body = await uploadBody(file);
-      return apiFetch<{
-        id: string;
-        valid: true;
-        summary: {
-          measurements: number;
-          medications: number;
-          intakeEvents: number;
-          moodEntries: number;
-          // Optional for the same reason as the keys below: a file written
-          // before side effects rode the wire carries no key at all.
-          medicationSideEffects?: number;
-          cycles?: number;
-          cycleDayLogs?: number;
-          // v1.28 backup-completeness — optional so an older-schema upload
-          // (pre-v1.28) still totals correctly without these keys.
-          labResults?: number;
-          biomarkers?: number;
-          illnessEpisodes?: number;
-          illnessDayLogs?: number;
-          allergies?: number;
-          familyHistory?: number;
-          workouts?: number;
-          documents?: number;
-          // Optional for the same reason: a file written before each of these
-          // rode the wire carries no key, and an absent key must total as
-          // nothing rather than break the count.
-          nutrientDays?: number;
-          healthProfile?: number;
-          healthProfileFactRevisions?: number;
-          customMetrics?: number;
-          customMetricEntries?: number;
-          intradayProfiles?: number;
-        };
-      }>("/api/admin/backups/upload", {
-        method: "POST",
-        body,
-        headers: { "Content-Type": "application/gzip" },
-        signal: null,
-      });
+      // Ask first, so a large file is not sent once only to be refused.
+      await recentProof.run(() => apiGet("/api/auth/reproof"));
+      return uploadOnce(file);
     },
     onSuccess: (data) => {
       const total =
@@ -824,6 +842,7 @@ export function BackupsSection() {
       queryClient.invalidateQueries({ queryKey: queryKeys.adminBackups() });
     },
     onError: (err) => {
+      if (err instanceof ReproofCancelledError) return;
       toast.error(
         err instanceof Error && err.message
           ? err.message
@@ -938,10 +957,12 @@ export function BackupsSection() {
       // restore. Include the row id so two different backups can both be
       // restored independently in the same minute.
       const idempotencyKey = `restore-${row.id}-${randomId()}`;
-      return apiPost<{ jobId: string; status: "queued" }>(
-        `/api/admin/backups/${row.id}/restore`,
-        { confirm: "RESTORE", restoreInstanceSettings },
-        { headers: { "Idempotency-Key": idempotencyKey } },
+      return recentProof.run(() =>
+        apiPost<{ jobId: string; status: "queued" }>(
+          `/api/admin/backups/${row.id}/restore`,
+          { confirm: "RESTORE", restoreInstanceSettings },
+          { headers: { "Idempotency-Key": idempotencyKey } },
+        ),
       );
     },
     onSuccess: (data) => {
@@ -955,6 +976,7 @@ export function BackupsSection() {
       });
     },
     onError: (err) => {
+      if (err instanceof ReproofCancelledError) return;
       if (
         err instanceof ApiError &&
         err.meta?.errorCode === "backup.restore.active"
@@ -979,7 +1001,11 @@ export function BackupsSection() {
     try {
       // apiFetchRaw: the download needs the raw Response for the blob +
       // the Content-Disposition filename header.
-      const res = await apiFetchRaw(`/api/admin/backups/${row.id}/download`);
+      const res = await recentProof.run(async () =>
+        throwIfReproofRequired(
+          await apiFetchRaw(`/api/admin/backups/${row.id}/download`),
+        ),
+      );
       if (!res.ok) {
         throw new Error(await getApiErrorMessage(res));
       }
@@ -1002,6 +1028,7 @@ export function BackupsSection() {
       URL.revokeObjectURL(url);
       toast.success(t("admin.section.backups.downloadStarted"));
     } catch (err) {
+      if (err instanceof ReproofCancelledError) return;
       toast.error(
         err instanceof Error && err.message
           ? err.message
@@ -1014,6 +1041,7 @@ export function BackupsSection() {
 
   return (
     <SettingsCard>
+      {recentProof.dialog}
       {/* v1.18.1 E3 — the snapshot count leads (numbers first) and the
           "Run now" button follows. */}
       <SettingsCardHeader
