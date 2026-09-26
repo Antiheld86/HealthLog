@@ -126,7 +126,8 @@
         "nothingSaved": "Rien n'a été enregistré. Corrigez le champ signalé et réessayez.",
         "invalidBody": "La mise à jour du profil n'a pas pu être lue.",
         "emailInUse": "Cette adresse e-mail est déjà utilisée.",
-        "emailRateLimited": "Trop de changements d'adresse e-mail. Réessayez plus tard."
+        "emailRateLimited": "Trop de changements d'adresse e-mail. Réessayez plus tard.",
+        "emailSecondFactorRequired": "Confirmez avec votre second facteur ou une clé d'accès pour changer l'adresse e-mail."
       }
     },
     "auth": {
@@ -5568,7 +5569,8 @@
       "rateLimited": "Modifié trop souvent. Patientez un peu et réessayez.",
       "other": "Cette valeur n'a pas été acceptée. Vérifiez-la et réessayez.",
       "reproofRequired": "Saisissez votre mot de passe actuel pour changer l'adresse e-mail.",
-      "reproofFailed": "Ce mot de passe est incorrect, l'adresse e-mail n'a donc pas été modifiée."
+      "reproofFailed": "Ce mot de passe est incorrect, l'adresse e-mail n'a donc pas été modifiée.",
+      "secondFactorRequired": "Confirmez avec votre second facteur ou une clé d'accès pour changer l'adresse e-mail."
     },
     "avatar": {
       "title": "Photo de profil",

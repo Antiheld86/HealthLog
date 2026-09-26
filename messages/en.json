@@ -126,7 +126,8 @@
         "nothingSaved": "Nothing was saved. Check the highlighted field and try again.",
         "invalidBody": "The profile update could not be read.",
         "emailInUse": "This email address is already in use.",
-        "emailRateLimited": "Too many email-address changes. Try again later."
+        "emailRateLimited": "Too many email-address changes. Try again later.",
+        "emailSecondFactorRequired": "Confirm with your second factor or a passkey to change the email address."
       }
     },
     "auth": {
@@ -5568,7 +5569,8 @@
       "rateLimited": "Changed too often. Wait a little and try again.",
       "other": "This value was not accepted. Check it and try again.",
       "reproofRequired": "Enter your current password to change the email address.",
-      "reproofFailed": "That password is not correct, so the email address was not changed."
+      "reproofFailed": "That password is not correct, so the email address was not changed.",
+      "secondFactorRequired": "Confirm with your second factor or a passkey to change the email address."
     },
     "avatar": {
       "title": "Profile photo",

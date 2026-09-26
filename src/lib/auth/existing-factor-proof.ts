@@ -348,17 +348,29 @@ async function readProof(
 }
 
 export type SensitiveChangeProof =
-  "ok" | "required" | "failed" | "rate_limited";
+  "ok" | "required" | "second_factor_required" | "failed" | "rate_limited";
 
 /**
  * The proof in front of changing the account's email address.
  *
  * The address is what single sign-on matches an existing account by, so it is
  * part of how the account is reached and a stolen session must not rewrite it.
- * Accepted: on a cookie session, a sign-in or second factor inside the last
- * five minutes; on either transport, the current password alongside the
- * change. The password draws on the shared re-proof budget and a wrong one is
- * audited like every other refused proof.
+ *
+ * On an account WITHOUT a second factor: on a cookie session, a sign-in or
+ * re-proof inside the last five minutes; on either transport, the current
+ * password alongside the change. The password draws on the shared re-proof
+ * budget and a wrong one is audited like every other refused proof.
+ *
+ * On an account WITH a second factor, the rule `checkCookieEnrollmentProof`
+ * holds for adding a credential: only possession of a factor counts, which on
+ * a cookie session is `Session.mfaVerifiedAt` inside five minutes (a completed
+ * second factor or passkey, at sign-in or at `POST /api/auth/reproof`). The
+ * password is not verified at all, and neither a young session nor a password
+ * re-proof stands in: a remembered browser skips the factor at sign-in and
+ * still creates a fresh session. The answer is `second_factor_required`, so
+ * the client opens the re-proof dialog with the factors the account holds. A
+ * token carries no such stamp, so a Bearer caller cannot change the address
+ * of such an account; the shipped app does not change it.
  */
 export async function authorizeSensitiveChange(args: {
   user: Pick<
@@ -377,6 +389,8 @@ export async function authorizeSensitiveChange(args: {
 }): Promise<SensitiveChangeProof> {
   const { user, cookieSessionId, currentPassword, ipAddress, stage } = args;
 
+  const enrolled = await hasSecondFactorEnrolled(user);
+
   if (cookieSessionId) {
     const row = await prisma.session.findUnique({
       where: { id: cookieSessionId },
@@ -385,12 +399,22 @@ export async function authorizeSensitiveChange(args: {
     const now = Date.now();
     const recent = (d: Date | null | undefined) =>
       d != null && now - d.getTime() <= RECENT_PROOF_MAX_AGE_MS;
-    if (
-      recent(row?.mfaVerifiedAt) ||
-      recent(row?.createdAt) ||
-      recent(row?.reproofAt)
-    )
-      return "ok";
+    const satisfied = enrolled
+      ? recent(row?.mfaVerifiedAt)
+      : recent(row?.mfaVerifiedAt) ||
+        recent(row?.createdAt) ||
+        recent(row?.reproofAt);
+    if (satisfied) return "ok";
+  }
+
+  // Before any password is looked at: on this account a right password would
+  // not be enough, so checking it would only spend a guess.
+  if (enrolled) {
+    annotate({
+      action: { name: "auth.reproof.method_refused" },
+      meta: { stage, method: currentPassword ? "password" : "none" },
+    });
+    return "second_factor_required";
   }
 
   if (!currentPassword) return "required";
@@ -423,5 +447,6 @@ export async function authorizeSensitiveChange(args: {
     );
     return "failed";
   }
+  await refundReproof(user.id);
   return "ok";
 }

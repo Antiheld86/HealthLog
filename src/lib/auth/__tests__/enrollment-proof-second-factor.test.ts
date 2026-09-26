@@ -50,7 +50,10 @@ import { verifyPassword } from "@/lib/auth/password";
 import { verifyMfaFactor } from "@/lib/auth/mfa/verify-factor";
 import { createRegistrationOptions } from "@/lib/auth/passkey";
 import { requireCookieAuth } from "@/lib/api-handler";
-import { checkCookieEnrollmentProof } from "../existing-factor-proof";
+import {
+  authorizeSensitiveChange,
+  checkCookieEnrollmentProof,
+} from "../existing-factor-proof";
 import { POST as PASSKEY_REGISTER_OPTIONS } from "@/app/api/auth/passkey/register-options/route";
 
 const NOW = Date.now();
@@ -224,5 +227,71 @@ describe("POST /api/auth/passkey/register-options", () => {
     );
     expect(res.status).toBe(200);
     expect(refundRateLimit).toHaveBeenCalledWith("auth:step-up:user-1");
+  });
+});
+
+describe("changing the email address", () => {
+  function change(
+    user: typeof ENROLLED | typeof PLAIN,
+    opts: { cookie?: boolean; password?: string | null } = {},
+  ) {
+    return authorizeSensitiveChange({
+      user: user as never,
+      cookieSessionId: opts.cookie === false ? null : "sess-1",
+      currentPassword: opts.password ?? null,
+      ipAddress: "203.0.113.9",
+      stage: "email_change",
+    });
+  }
+
+  it("with a second factor, a session signed in a minute ago is not enough", async () => {
+    session({ createdAt: fresh });
+    expect(await change(ENROLLED)).toBe("second_factor_required");
+  });
+
+  it("with a second factor, a password re-proof stamp is not enough", async () => {
+    session({ reproofAt: fresh });
+    expect(await change(ENROLLED)).toBe("second_factor_required");
+  });
+
+  it("with a second factor, the right password is not even checked", async () => {
+    session({ createdAt: fresh });
+    vi.mocked(verifyPassword).mockResolvedValue(true);
+    expect(await change(ENROLLED, { password: "correct horse" })).toBe(
+      "second_factor_required",
+    );
+    expect(verifyPassword).not.toHaveBeenCalled();
+    expect(checkRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("with a second factor, a token and the password cannot change it", async () => {
+    vi.mocked(verifyPassword).mockResolvedValue(true);
+    expect(
+      await change(ENROLLED, { cookie: false, password: "correct horse" }),
+    ).toBe("second_factor_required");
+  });
+
+  it("with a second factor, a factor proved within five minutes is", async () => {
+    session({ mfaVerifiedAt: fresh });
+    expect(await change(ENROLLED)).toBe("ok");
+  });
+
+  it("without one, a young session is enough, as before", async () => {
+    session({ createdAt: fresh });
+    expect(await change(PLAIN)).toBe("ok");
+  });
+
+  it("without one, the right password is enough and gives its attempt back", async () => {
+    session({});
+    vi.mocked(verifyPassword).mockResolvedValue(true);
+    expect(await change(PLAIN, { password: "pw" })).toBe("ok");
+    expect(refundRateLimit).toHaveBeenCalledWith("auth:step-up:user-1");
+  });
+
+  it("without one, a wrong password fails and nothing at all is required", async () => {
+    session({});
+    vi.mocked(verifyPassword).mockResolvedValue(false);
+    expect(await change(PLAIN, { password: "nope" })).toBe("failed");
+    expect(await change(PLAIN)).toBe("required");
   });
 });

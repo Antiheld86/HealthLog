@@ -126,7 +126,8 @@
         "nothingSaved": "Non è stato salvato nulla. Controlla il campo evidenziato e riprova.",
         "invalidBody": "Impossibile leggere l'aggiornamento del profilo.",
         "emailInUse": "Questo indirizzo email è già in uso.",
-        "emailRateLimited": "Troppi cambi di indirizzo email. Riprova più tardi."
+        "emailRateLimited": "Troppi cambi di indirizzo email. Riprova più tardi.",
+        "emailSecondFactorRequired": "Conferma con il tuo secondo fattore o una passkey per cambiare l'indirizzo email."
       }
     },
     "auth": {
@@ -5568,7 +5569,8 @@
       "rateLimited": "Modificato troppe volte. Aspetta un momento e riprova.",
       "other": "Questo valore non è stato accettato. Controllalo e riprova.",
       "reproofRequired": "Inserisci la password attuale per cambiare l'indirizzo email.",
-      "reproofFailed": "La password non è corretta, quindi l'indirizzo email non è stato cambiato."
+      "reproofFailed": "La password non è corretta, quindi l'indirizzo email non è stato cambiato.",
+      "secondFactorRequired": "Conferma con il tuo secondo fattore o una passkey per cambiare l'indirizzo email."
     },
     "avatar": {
       "title": "Foto del profilo",

@@ -126,7 +126,8 @@
         "nothingSaved": "Es wurde nichts gespeichert. Korrigiere das markierte Feld und versuche es erneut.",
         "invalidBody": "Die Profilaktualisierung konnte nicht gelesen werden.",
         "emailInUse": "Diese E-Mail-Adresse wird bereits verwendet.",
-        "emailRateLimited": "Zu viele Änderungen der E-Mail-Adresse. Versuche es später erneut."
+        "emailRateLimited": "Zu viele Änderungen der E-Mail-Adresse. Versuche es später erneut.",
+        "emailSecondFactorRequired": "Bestätige mit deinem zweiten Faktor oder einem Passkey, um die E-Mail-Adresse zu ändern."
       }
     },
     "auth": {
@@ -5568,7 +5569,8 @@
       "rateLimited": "Zu oft geändert. Warte kurz und versuche es dann erneut.",
       "other": "Dieser Wert wurde nicht angenommen. Bitte prüfen und erneut versuchen.",
       "reproofRequired": "Gib dein aktuelles Passwort ein, um die E-Mail-Adresse zu ändern.",
-      "reproofFailed": "Das Passwort stimmt nicht, die E-Mail-Adresse wurde nicht geändert."
+      "reproofFailed": "Das Passwort stimmt nicht, die E-Mail-Adresse wurde nicht geändert.",
+      "secondFactorRequired": "Bestätige mit deinem zweiten Faktor oder einem Passkey, um die E-Mail-Adresse zu ändern."
     },
     "avatar": {
       "title": "Profilfoto",

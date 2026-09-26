@@ -126,7 +126,8 @@
         "nothingSaved": "Nic nie zostało zapisane. Sprawdź oznaczone pole i spróbuj ponownie.",
         "invalidBody": "Nie udało się odczytać aktualizacji profilu.",
         "emailInUse": "Ten adres e-mail jest już używany.",
-        "emailRateLimited": "Zbyt wiele zmian adresu e-mail. Spróbuj ponownie później."
+        "emailRateLimited": "Zbyt wiele zmian adresu e-mail. Spróbuj ponownie później.",
+        "emailSecondFactorRequired": "Potwierdź drugim składnikiem lub kluczem dostępu, aby zmienić adres e-mail."
       }
     },
     "auth": {
@@ -5568,7 +5569,8 @@
       "rateLimited": "Zmieniane zbyt często. Odczekaj chwilę i spróbuj ponownie.",
       "other": "Ta wartość nie została przyjęta. Sprawdź ją i spróbuj ponownie.",
       "reproofRequired": "Wpisz obecne hasło, aby zmienić adres e-mail.",
-      "reproofFailed": "Hasło jest nieprawidłowe, więc adres e-mail nie został zmieniony."
+      "reproofFailed": "Hasło jest nieprawidłowe, więc adres e-mail nie został zmieniony.",
+      "secondFactorRequired": "Potwierdź drugim składnikiem lub kluczem dostępu, aby zmienić adres e-mail."
     },
     "avatar": {
       "title": "Zdjęcie profilowe",

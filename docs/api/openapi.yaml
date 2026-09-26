@@ -23019,8 +23019,12 @@ components:
             a second factor in the last five minutes needs nothing more, otherwise this field must carry the current
             password. Without an accepted proof the address is not changed and comes back in `rejectedFields` as
             `reproof_required` or `reproof_failed` (or, when the address was the only field sent, 401
-            `auth.reproof.required` / `auth.reproof.failed`). Attempts draw on the account's shared re-proof budget of
-            five per fifteen minutes. Never stored."
+            `auth.reproof.required` / `auth.reproof.failed`). On an account with a second factor the password is not
+            accepted and not checked: only a second factor or passkey completed in the last five minutes counts (at
+            sign-in or at POST /api/auth/reproof), and without one the address comes back as `second_factor_required`
+            (or 401 `profile.update.emailSecondFactorRequired` when it was the only field). A token cannot change the
+            address of such an account. Attempts draw on the account's shared re-proof budget of five per fifteen
+            minutes. Never stored."
           type: string
           maxLength: 512
       description: Partial profile update. Every field is optional and an omitted field is left untouched. An explicit null
@@ -31522,29 +31526,29 @@ components:
                 onboarding.disclaimer.invalid, onboarding.restart.invalid, onboarding.restart.rateLimited,
                 onboarding.tour.invalid; personal_records — personal_records.invalid_query; practitioner —
                 practitioner.invalid; profile — profile.update.emailInUse, profile.update.emailRateLimited,
-                profile.update.invalidBody, profile.update.nothingSaved; record_write — record_write.rate_limited;
-                report-selection — report-selection.body.invalid_json, report-selection.body.invalid_shape,
-                report-selection.leaves.unknown; route — route.retired; share-link — share-link.document.decryptFailed,
-                share-link.document.notFound, share-link.document.rateLimited, share-link.documents.invalid,
-                share-link.report.notFound, share-link.report.rateLimited, share-link.selection.forbidden_leaf,
-                share-link.selection.unknown_leaf; sharing — sharing.accept.expired, sharing.accept.not_found,
-                sharing.accept.not_pending, sharing.accept.revoked, sharing.access.denied, sharing.invite.duplicate,
-                sharing.invite.invalid, sharing.invite.invalid_scope, sharing.invite.manage_browser_only,
-                sharing.invite.refused, sharing.invite.self, sharing.not_permitted, sharing.renounce.already_ended,
-                sharing.renounce.not_found, sharing.revoke.already_ended, sharing.revoke.not_found,
-                sharing.session.changed, sharing.switch.invalid, sharing.switch.wrong_transport; source-priority —
-                source-priority.body.invalid_json, source-priority.body.invalid_shape; tokens —
-                tokens.documents.ceiling_reached, tokens.measurements.ceiling_reached; vaccination —
-                vaccination.booster-invalid, vaccination.booster-no-antigen, vaccination.booster-out-of-scope,
-                vaccination.encounter-not-found, vaccination.identity-required, vaccination.invalid,
-                vaccination.link.invalid, vaccination.not-found, vaccination.practitioner-not-found; workout —
-                workout.batch.invalid, workout.batch.payload_too_large, workout.batch.too_large; (unprefixed) —
-                about_me_conflict, ai_response_truncated, coach_prefs_conflict, dashboard_layout_conflict, empty_file,
-                health_score_config_conflict, insights_layout_conflict, invalid_base_updated_at,
-                json_carries_no_intake_time, json_not_an_array, medication_layout_conflict, missing_required_columns,
-                modules_conflict, mood_tag_layout_conflict, not_configured, notification_prefs_conflict, oidc_only,
-                private_origin_not_approved, private_origin_not_grantable, rate_limited_self, too_many_rows,
-                unreadable_json, upstream_invalid_json, vapid_not_configured"
+                profile.update.emailSecondFactorRequired, profile.update.invalidBody, profile.update.nothingSaved;
+                record_write — record_write.rate_limited; report-selection — report-selection.body.invalid_json,
+                report-selection.body.invalid_shape, report-selection.leaves.unknown; route — route.retired; share-link
+                — share-link.document.decryptFailed, share-link.document.notFound, share-link.document.rateLimited,
+                share-link.documents.invalid, share-link.report.notFound, share-link.report.rateLimited,
+                share-link.selection.forbidden_leaf, share-link.selection.unknown_leaf; sharing —
+                sharing.accept.expired, sharing.accept.not_found, sharing.accept.not_pending, sharing.accept.revoked,
+                sharing.access.denied, sharing.invite.duplicate, sharing.invite.invalid, sharing.invite.invalid_scope,
+                sharing.invite.manage_browser_only, sharing.invite.refused, sharing.invite.self, sharing.not_permitted,
+                sharing.renounce.already_ended, sharing.renounce.not_found, sharing.revoke.already_ended,
+                sharing.revoke.not_found, sharing.session.changed, sharing.switch.invalid,
+                sharing.switch.wrong_transport; source-priority — source-priority.body.invalid_json,
+                source-priority.body.invalid_shape; tokens — tokens.documents.ceiling_reached,
+                tokens.measurements.ceiling_reached; vaccination — vaccination.booster-invalid,
+                vaccination.booster-no-antigen, vaccination.booster-out-of-scope, vaccination.encounter-not-found,
+                vaccination.identity-required, vaccination.invalid, vaccination.link.invalid, vaccination.not-found,
+                vaccination.practitioner-not-found; workout — workout.batch.invalid, workout.batch.payload_too_large,
+                workout.batch.too_large; (unprefixed) — about_me_conflict, ai_response_truncated, coach_prefs_conflict,
+                dashboard_layout_conflict, empty_file, health_score_config_conflict, insights_layout_conflict,
+                invalid_base_updated_at, json_carries_no_intake_time, json_not_an_array, medication_layout_conflict,
+                missing_required_columns, modules_conflict, mood_tag_layout_conflict, not_configured,
+                notification_prefs_conflict, oidc_only, private_origin_not_approved, private_origin_not_grantable,
+                rate_limited_self, too_many_rows, unreadable_json, upstream_invalid_json, vapid_not_configured"
               type: string
             capability:
               description: "On an AI refusal: the capability that is unavailable, one of the keys of `AiCapabilities` (`coach`,

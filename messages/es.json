@@ -126,7 +126,8 @@
         "nothingSaved": "No se guardó nada. Revisa el campo marcado e inténtalo de nuevo.",
         "invalidBody": "No se pudo leer la actualización del perfil.",
         "emailInUse": "Esta dirección de correo ya está en uso.",
-        "emailRateLimited": "Demasiados cambios de dirección de correo. Inténtalo más tarde."
+        "emailRateLimited": "Demasiados cambios de dirección de correo. Inténtalo más tarde.",
+        "emailSecondFactorRequired": "Confirma con tu segundo factor o una clave de acceso para cambiar el correo electrónico."
       }
     },
     "auth": {
@@ -5568,7 +5569,8 @@
       "rateLimited": "Se ha cambiado demasiadas veces. Espera un poco e inténtalo de nuevo.",
       "other": "No se aceptó este valor. Revísalo e inténtalo de nuevo.",
       "reproofRequired": "Introduce tu contraseña actual para cambiar la dirección de correo.",
-      "reproofFailed": "La contraseña no es correcta, así que la dirección de correo no se ha cambiado."
+      "reproofFailed": "La contraseña no es correcta, así que la dirección de correo no se ha cambiado.",
+      "secondFactorRequired": "Confirma con tu segundo factor o una clave de acceso para cambiar el correo electrónico."
     },
     "avatar": {
       "title": "Foto de perfil",
