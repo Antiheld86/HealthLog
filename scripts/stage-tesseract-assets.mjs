@@ -47,12 +47,12 @@ const files = [
     "tesseract-core-simd-lstm.wasm.js",
     "tesseract-core-relaxedsimd-lstm.wasm.js",
   ].map((file) => [join(coreDir, file), join("core", file)]),
-  ...["deu", "eng"].map((lang) => [
-    join(
-      pkgDir(`@tesseract.js-data/${lang}`),
-      "4.0.0_best_int",
-      `${lang}.traineddata.gz`,
-    ),
+  // Literal specifiers, so the dependency is visible to static analysis.
+  ...[
+    ["deu", require.resolve("@tesseract.js-data/deu/package.json")],
+    ["eng", require.resolve("@tesseract.js-data/eng/package.json")],
+  ].map(([lang, manifest]) => [
+    join(dirname(manifest), "4.0.0_best_int", `${lang}.traineddata.gz`),
     join("lang", `${lang}.traineddata.gz`),
   ]),
 ];
