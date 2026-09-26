@@ -193,13 +193,16 @@ export async function rotateRefreshToken(input: {
   // `row.deviceId ?? input.deviceId` — would sit outside the victim device's
   // containment blast radius.
   //
-  // Both ids must be present to compare. A stored null means the row predates
-  // per-device issuance and cannot be attributed; a presented null means the
-  // caller sent no `X-Device-Id` header. Neither is treated as a mismatch, so
-  // this cannot lock out an older client that never sends the header.
+  // A stored null means the row predates per-device issuance, or the client
+  // sent no `X-Device-Id` when it signed in: nothing to compare, so it
+  // rotates. A stored id must be matched exactly, and an absent header does
+  // not match it. It used to: leaving the header out skipped the check, so a
+  // thief holding a stolen token rotated it simply by not naming a device. A
+  // client that sent its id at sign-in sends it on every refresh, so this
+  // locks out nobody who signed in honestly.
   const presentedId = input.deviceId ?? null;
   const storedId = row.deviceId ?? null;
-  if (presentedId !== null && storedId !== null && presentedId !== storedId) {
+  if (storedId !== null && presentedId !== storedId) {
     return { ok: false, reason: "device_mismatch" };
   }
 
