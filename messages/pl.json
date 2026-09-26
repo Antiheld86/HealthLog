@@ -126,7 +126,8 @@
         "nothingSaved": "Nic nie zostało zapisane. Sprawdź oznaczone pole i spróbuj ponownie.",
         "invalidBody": "Nie udało się odczytać aktualizacji profilu.",
         "emailInUse": "Ten adres e-mail jest już używany.",
-        "emailRateLimited": "Zbyt wiele zmian adresu e-mail. Spróbuj ponownie później."
+        "emailRateLimited": "Zbyt wiele zmian adresu e-mail. Spróbuj ponownie później.",
+        "emailSecondFactorRequired": "Potwierdź drugim składnikiem lub kluczem dostępu, aby zmienić adres e-mail."
       }
     },
     "auth": {
@@ -471,6 +472,13 @@
       "title": "Skonfiguruj drugi składnik",
       "body": "Administrator wymaga drugiego składnika na tym koncie. Dodaj aplikację uwierzytelniającą lub klucz bezpieczeństwa, aby kontynuować.",
       "signOut": "Wyloguj się"
+    },
+    "confirmAccess": {
+      "title": "Potwierdź, że to Ty",
+      "body": "Asystent chce połączyć się z Twoimi danymi w HealthLog. Potwierdź, że to Ty, a potem zdecydujesz, czy na to pozwolić.",
+      "action": "Potwierdź",
+      "failed": "Nie udało się. Spróbuj ponownie.",
+      "nothingToConfirm": "Nie ma tu nic do potwierdzenia. Rozpocznij połączenie ponownie w swoim asystencie."
     }
   },
   "dashboard": {
@@ -5561,7 +5569,8 @@
       "rateLimited": "Zmieniane zbyt często. Odczekaj chwilę i spróbuj ponownie.",
       "other": "Ta wartość nie została przyjęta. Sprawdź ją i spróbuj ponownie.",
       "reproofRequired": "Wpisz obecne hasło, aby zmienić adres e-mail.",
-      "reproofFailed": "Hasło jest nieprawidłowe, więc adres e-mail nie został zmieniony."
+      "reproofFailed": "Hasło jest nieprawidłowe, więc adres e-mail nie został zmieniony.",
+      "secondFactorRequired": "Potwierdź drugim składnikiem lub kluczem dostępu, aby zmienić adres e-mail."
     },
     "avatar": {
       "title": "Zdjęcie profilowe",
@@ -6556,7 +6565,11 @@
       "revokeSessionConfirmBody": "{device} będzie musiało zalogować się ponownie. Zapisane na nim dane pozostają bez zmian.",
       "signOutEverywhereConfirmTitle": "Wylogować wszystkie pozostałe urządzenia?",
       "signOutEverywhereConfirmBody": "Wszystkie inne urządzenia, każdy połączony asystent AI i każdy token API będą musiały zalogować się ponownie lub zostać skonfigurowane od nowa. To urządzenie pozostaje zalogowane. Zapisane dane pozostają bez zmian.",
-      "signOutEverywhereShareLinks": "Zakończ także linki udostępniania dla lekarzy"
+      "signOutEverywhereShareLinks": "Zakończ także linki udostępniania dla lekarzy",
+      "signOutEverywhereInvites": "Zaproszenia do Twojej karty, których nikt jeszcze nie przyjął, zostaną wycofane. Osoby, które już je przyjęły, zachowują dostęp; możesz go zakończyć zaraz potem.",
+      "signOutEverywhereInvitesDone": "Wycofano nieprzyjęte zaproszenia: {count}.",
+      "grantsKeptTitle": "Te osoby nadal widzą Twoją kartę",
+      "grantsKeptBody": "Wylogowanie nie kończy dostępu, który komuś dałeś. Zakończ go tutaj, jeśli go nie dawałeś albo już nie chcesz, żeby go miał."
     },
     "privacy": {
       "encryption": {

@@ -5,10 +5,16 @@ import {
 } from "@/lib/auth/passkey";
 import { createMfaAuthenticationOptions } from "@/lib/auth/mfa/webauthn";
 import {
+  isSecondFactorProof,
   recordReproofFailure,
+  refundReproof,
   throttleReproof,
   verifyExistingFactorProof,
 } from "@/lib/auth/existing-factor-proof";
+import {
+  hasSecondFactorEnrolled,
+  recentProofMethods,
+} from "@/lib/auth/second-factor";
 import { prisma } from "@/lib/db";
 import {
   apiError,
@@ -55,6 +61,25 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const parsed = stepUpMintSchema.safeParse(body);
   if (!parsed.success) return proofRequired();
 
+  // On an account with a second factor a password does not add a sign-in
+  // credential, exactly as it does not satisfy the second factor at sign-in:
+  // a passkey registered on the strength of the password alone would from then
+  // on sign in without the second factor at all. Refused before a guess is
+  // spent, with the proofs that would work.
+  if (
+    !isSecondFactorProof(parsed.data.method) &&
+    (await hasSecondFactorEnrolled(user))
+  ) {
+    annotate({
+      action: { name: "auth.reproof.method_refused" },
+      meta: { stage: "passkey_enroll", method: parsed.data.method },
+    });
+    return apiError("Confirm with your second factor or a passkey", 422, {
+      errorCode: "auth.reproof.too_weak",
+      methods: await recentProofMethods(user, true),
+    });
+  }
+
   // Every proof counts against the account's shared re-proof bucket and every
   // refusal is audited. Without both, a stolen session could guess the account
   // password or a TOTP code here as fast as it could send requests.
@@ -73,6 +98,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     );
     return proofRequired();
   }
+  await refundReproof(user.id);
 
   // A strong existing factor refreshes the session's MFA stamp. Password proof
   // deliberately clears it: registration is authorized by this single-use,

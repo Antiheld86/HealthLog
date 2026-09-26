@@ -70,15 +70,13 @@ describe("grant invitation lapse date", () => {
       ),
       "utf8",
     );
-    const onError = source.slice(
-      source.indexOf("onError: (err) => setError"),
-      source.indexOf(
-        "    );\n  };",
-        source.indexOf("onError: (err) => setError"),
-      ),
-    );
+    // The failure arm of the submit: everything from its `catch` to the end
+    // of the handler.
+    const start = source.indexOf("} catch (err) {");
+    expect(start).toBeGreaterThan(-1);
+    const onError = source.slice(start, source.indexOf("\n  };", start));
 
-    expect(onError).toContain("setError(t(inviteErrorKey(err)))");
+    expect(onError).toContain("t(inviteErrorKey(err))");
     expect(onError).not.toContain("setIdentifier");
     expect(onError).not.toContain("setExpiresOn");
     expect(source).toContain('role="alert"');

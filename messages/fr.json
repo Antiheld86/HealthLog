@@ -126,7 +126,8 @@
         "nothingSaved": "Rien n'a été enregistré. Corrigez le champ signalé et réessayez.",
         "invalidBody": "La mise à jour du profil n'a pas pu être lue.",
         "emailInUse": "Cette adresse e-mail est déjà utilisée.",
-        "emailRateLimited": "Trop de changements d'adresse e-mail. Réessayez plus tard."
+        "emailRateLimited": "Trop de changements d'adresse e-mail. Réessayez plus tard.",
+        "emailSecondFactorRequired": "Confirmez avec votre second facteur ou une clé d'accès pour changer l'adresse e-mail."
       }
     },
     "auth": {
@@ -471,6 +472,13 @@
       "title": "Configurer un second facteur",
       "body": "Votre administrateur exige un second facteur sur ce compte. Ajoutez une application d'authentification ou une clé de sécurité pour continuer.",
       "signOut": "Se déconnecter"
+    },
+    "confirmAccess": {
+      "title": "Confirmez que c'est bien vous",
+      "body": "Un assistant demande à se connecter à vos données HealthLog. Confirmez que c'est bien vous, puis vous déciderez si vous l'autorisez.",
+      "action": "Confirmer",
+      "failed": "Cela n'a pas fonctionné. Veuillez réessayer.",
+      "nothingToConfirm": "Il n'y a rien à confirmer ici. Relancez la connexion depuis votre assistant."
     }
   },
   "dashboard": {
@@ -5561,7 +5569,8 @@
       "rateLimited": "Modifié trop souvent. Patientez un peu et réessayez.",
       "other": "Cette valeur n'a pas été acceptée. Vérifiez-la et réessayez.",
       "reproofRequired": "Saisissez votre mot de passe actuel pour changer l'adresse e-mail.",
-      "reproofFailed": "Ce mot de passe est incorrect, l'adresse e-mail n'a donc pas été modifiée."
+      "reproofFailed": "Ce mot de passe est incorrect, l'adresse e-mail n'a donc pas été modifiée.",
+      "secondFactorRequired": "Confirmez avec votre second facteur ou une clé d'accès pour changer l'adresse e-mail."
     },
     "avatar": {
       "title": "Photo de profil",
@@ -6556,7 +6565,11 @@
       "revokeSessionConfirmBody": "{device} devra se reconnecter. Ce qui y est enregistré n'est pas affecté.",
       "signOutEverywhereConfirmTitle": "Déconnecter tous les autres appareils ?",
       "signOutEverywhereConfirmBody": "Tous les autres appareils, chaque assistant IA connecté et chaque jeton d'API devront se reconnecter ou être reconfigurés. Cet appareil reste connecté. Rien de ce que vous avez enregistré n'est touché.",
-      "signOutEverywhereShareLinks": "Mettre fin aussi aux liens de partage avec les médecins"
+      "signOutEverywhereShareLinks": "Mettre fin aussi aux liens de partage avec les médecins",
+      "signOutEverywhereInvites": "Les invitations à votre dossier que personne n'a encore acceptées sont retirées. Les personnes qui ont déjà accepté gardent leur accès ; vous pourrez y mettre fin ensuite.",
+      "signOutEverywhereInvitesDone": "{count} invitation(s) non acceptée(s) retirée(s).",
+      "grantsKeptTitle": "Ces personnes peuvent toujours voir votre dossier",
+      "grantsKeptBody": "Se déconnecter ne met pas fin à l'accès que vous avez donné à quelqu'un. Mettez-y fin ici si vous ne l'avez pas donné ou si vous ne le souhaitez plus."
     },
     "privacy": {
       "encryption": {

@@ -126,7 +126,8 @@
         "nothingSaved": "Non è stato salvato nulla. Controlla il campo evidenziato e riprova.",
         "invalidBody": "Impossibile leggere l'aggiornamento del profilo.",
         "emailInUse": "Questo indirizzo email è già in uso.",
-        "emailRateLimited": "Troppi cambi di indirizzo email. Riprova più tardi."
+        "emailRateLimited": "Troppi cambi di indirizzo email. Riprova più tardi.",
+        "emailSecondFactorRequired": "Conferma con il tuo secondo fattore o una passkey per cambiare l'indirizzo email."
       }
     },
     "auth": {
@@ -471,6 +472,13 @@
       "title": "Configura un secondo fattore",
       "body": "Il tuo amministratore richiede un secondo fattore su questo account. Aggiungi un'app di autenticazione o una chiave di sicurezza per continuare.",
       "signOut": "Esci"
+    },
+    "confirmAccess": {
+      "title": "Conferma che sei tu",
+      "body": "Un assistente chiede di collegarsi ai tuoi dati HealthLog. Conferma che sei tu, poi deciderai se consentirlo.",
+      "action": "Conferma",
+      "failed": "Non ha funzionato. Riprova.",
+      "nothingToConfirm": "Qui non c'è nulla da confermare. Avvia di nuovo la connessione dal tuo assistente."
     }
   },
   "dashboard": {
@@ -5561,7 +5569,8 @@
       "rateLimited": "Modificato troppe volte. Aspetta un momento e riprova.",
       "other": "Questo valore non è stato accettato. Controllalo e riprova.",
       "reproofRequired": "Inserisci la password attuale per cambiare l'indirizzo email.",
-      "reproofFailed": "La password non è corretta, quindi l'indirizzo email non è stato cambiato."
+      "reproofFailed": "La password non è corretta, quindi l'indirizzo email non è stato cambiato.",
+      "secondFactorRequired": "Conferma con il tuo secondo fattore o una passkey per cambiare l'indirizzo email."
     },
     "avatar": {
       "title": "Foto del profilo",
@@ -6556,7 +6565,11 @@
       "revokeSessionConfirmBody": "{device} dovrà accedere di nuovo. Quanto registrato su di esso non viene toccato.",
       "signOutEverywhereConfirmTitle": "Disconnettere tutti gli altri dispositivi?",
       "signOutEverywhereConfirmBody": "Tutti gli altri dispositivi, ogni assistente IA collegato e ogni token API dovranno accedere di nuovo o essere configurati di nuovo. Questo dispositivo resta connesso. Nulla di ciò che hai registrato viene toccato.",
-      "signOutEverywhereShareLinks": "Termina anche i link di condivisione con i medici"
+      "signOutEverywhereShareLinks": "Termina anche i link di condivisione con i medici",
+      "signOutEverywhereInvites": "Gli inviti alla tua cartella che nessuno ha ancora accettato vengono ritirati. Chi ha già accettato mantiene l'accesso; puoi revocarlo subito dopo.",
+      "signOutEverywhereInvitesDone": "Ritirati {count} inviti non accettati.",
+      "grantsKeptTitle": "Queste persone possono ancora vedere la tua cartella",
+      "grantsKeptBody": "Disconnettersi non revoca l'accesso che hai dato a qualcuno. Revocalo qui se non l'hai dato tu o se non vuoi più che lo abbia."
     },
     "privacy": {
       "encryption": {

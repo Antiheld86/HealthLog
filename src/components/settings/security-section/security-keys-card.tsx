@@ -36,6 +36,7 @@ import { formatDate } from "@/lib/format";
 import {
   ExistingFactorReauthDialog,
   isReproofRequired,
+  offeredReauthMethods,
   type ExistingFactorProof,
   type ReauthMethod,
 } from "./existing-factor-reauth-dialog";
@@ -98,8 +99,14 @@ export function SecurityKeysCard({
   // options call is retried with it from the dialog.
   const [reauthOpen, setReauthOpen] = useState(false);
   const [reauthError, setReauthError] = useState<string | null>(null);
-  const reauthMethods: ReauthMethod[] = [
-    "password",
+  // An account with a second factor confirms with that factor or a passkey;
+  // the server refuses a password there and names what it will take.
+  const hasSecondFactor = totpEnabled || keys.length > 0;
+  const [offeredMethods, setOfferedMethods] = useState<ReauthMethod[] | null>(
+    null,
+  );
+  const reauthMethods: ReauthMethod[] = offeredMethods ?? [
+    ...(hasSecondFactor ? [] : (["password"] as const)),
     ...(totpEnabled ? (["totp"] as const) : []),
     "passkey",
     ...(keys.length > 0 ? (["webauthn"] as const) : []),
@@ -126,6 +133,7 @@ export function SecurityKeysCard({
     },
     onError: (err, proof) => {
       if (isReproofRequired(err)) {
+        setOfferedMethods(offeredReauthMethods(err));
         setError(null);
         setReauthError(null);
         setReauthOpen(true);

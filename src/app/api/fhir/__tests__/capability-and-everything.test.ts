@@ -15,6 +15,21 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    // The whole-record gate reads the session's own stamps: a sign-in a
+    // moment ago is the proof, on an account without a second factor.
+    session: {
+      findUnique: vi.fn(async () => ({
+        createdAt: new Date(),
+        mfaVerifiedAt: null,
+        reproofAt: null,
+      })),
+    },
+    webauthnMfaCredential: { count: vi.fn(async () => 0) },
+    passkey: { count: vi.fn(async () => 0) },
+  },
+}));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: vi.fn() }));
 vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 vi.mock("@/lib/db-compat", () => ({
@@ -39,6 +54,7 @@ vi.mock("next/headers", () => ({
 
 import { GET as metadataGet } from "../metadata/route";
 import { GET as everythingGet } from "../Patient/$everything/route";
+import { prisma } from "@/lib/db";
 import { GET as observationRead } from "../Observation/[id]/route";
 import { GET as patientRead } from "../Patient/[id]/route";
 import { GET as coverageRead } from "../Coverage/[id]/route";
@@ -291,6 +307,17 @@ describe("GET /api/fhir/{type}/{id} — read", () => {
 });
 
 describe("GET /api/fhir/Patient/$everything", () => {
+  it("asks a browser session that signed in an hour ago to confirm first", async () => {
+    vi.mocked(prisma.session.findUnique).mockResolvedValueOnce({
+      createdAt: new Date(Date.now() - 60 * 60 * 1000),
+      mfaVerifiedAt: null,
+      reproofAt: null,
+    } as never);
+    const res = await everythingGet(req("/api/fhir/Patient/$everything"));
+    expect(res.status).toBe(401);
+    expect((await res.json()).meta.errorCode).toBe("auth.reproof.required");
+  });
+
   it("returns every resource family the document bundle carries", async () => {
     const res = await everythingGet(
       req("/api/fhir/Patient/$everything?_count=200"),

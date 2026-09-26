@@ -82,6 +82,7 @@ const REJECTION_REASON_KEYS: Record<string, string> = {
   // these say whether none was given or the one given was wrong.
   reproof_required: "settings.profileRejection.reproofRequired",
   reproof_failed: "settings.profileRejection.reproofFailed",
+  second_factor_required: "settings.profileRejection.secondFactorRequired",
   too_big: "settings.profileRejection.tooBig",
   too_small: "settings.profileRejection.tooSmall",
   invalid_value: "settings.profileRejection.invalidValue",

@@ -50,6 +50,7 @@ vi.mock("@/lib/auth/password", () => ({
 
 vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: vi.fn(),
+  refundRateLimit: vi.fn(),
 }));
 
 vi.mock("@/lib/i18n/server-locale", () => ({
@@ -77,7 +78,7 @@ vi.mock("next/headers", () => ({
 import { POST } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, refundRateLimit } from "@/lib/rate-limit";
 import { verifyPassword, checkPasswordStrength } from "@/lib/auth/password";
 import {
   requireFreshMfaIfEnrolled,
@@ -146,6 +147,9 @@ describe("POST /api/auth/password — MFA step-up (v1.25)", () => {
     expect(res.status).toBe(200);
     expect(requireFreshMfaIfEnrolled).toHaveBeenCalledWith(expect.any(Number));
     expect(prisma.user.update).toHaveBeenCalled();
+    // The right current password was not a guess: the shared re-proof
+    // bucket gets its slot back.
+    expect(refundRateLimit).toHaveBeenCalledWith("auth:step-up:user-1");
   });
 });
 

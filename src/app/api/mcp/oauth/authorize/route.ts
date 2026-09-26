@@ -11,7 +11,9 @@
  *          a GET (confused-deputy mitigation: a third party cannot silently
  *          obtain a grant — an authenticated human must click "Allow").
  *   POST — the consent decision. Requires a session, re-validates every
- *          parameter, and on "Allow" mints a single-use, short-lived,
+ *          parameter, and on "Allow" asks for a recent sign-in or re-proof
+ *          (the GET shows a confirm link instead of the form without one),
+ *          then mints a single-use, short-lived,
  *          self-describing authorization code bound to this user + client +
  *          redirect URI + PKCE challenge + scope + audience, then 303s back.
  *
@@ -30,6 +32,8 @@ import { annotate } from "@/lib/logging/context";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { auditLog } from "@/lib/auth/audit";
 import { getSession } from "@/lib/auth/session";
+import { assertRecentCookieProof } from "@/lib/api-handler";
+import { StepUpRequiredError } from "@/lib/api-errors";
 import { checkAuthSurfaceRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { isApiGloballyEnabled } from "@/lib/app-settings";
 import {
@@ -85,6 +89,42 @@ function html(body: string, status = 200): Response {
       status,
       headers: { "content-type": "text/html; charset=utf-8" },
     },
+  );
+}
+
+/**
+ * Has this session signed in or re-proved recently enough to grant access?
+ *
+ * Allowing a connection hands a standing credential to the record to a third
+ * party, one that outlives the session: the same class of act as minting a
+ * token or making a share link, and it takes the same gate
+ * (`assertRecentCookieProof`: a sign-in or re-proof within five minutes, with
+ * the second factor on an account that has one). Without it, whoever held a
+ * stolen session could connect their own assistant and keep reading the
+ * record after the owner signed everything out.
+ */
+async function hasRecentProof(
+  session: NonNullable<Awaited<ReturnType<typeof getSession>>>,
+): Promise<boolean> {
+  try {
+    await assertRecentCookieProof(session.user, session.session.id);
+    return true;
+  } catch (err) {
+    if (err instanceof StepUpRequiredError) return false;
+    throw err;
+  }
+}
+
+/**
+ * The page shown instead of the consent form while the session carries no
+ * recent proof. It links to the confirm page, which runs the same re-proof
+ * dialog as the rest of the app and then comes back to this exact request.
+ */
+function reproofPage(clientName: string, returnTo: string, status = 200) {
+  const confirmHref = `/confirm-access?next=${encodeURIComponent(returnTo)}`;
+  return html(
+    `<main><h1>Confirm it is you</h1><p>Before <strong>${htmlEscape(clientName)}</strong> can connect to your HealthLog data, confirm it is you. This is asked when you have not signed in or confirmed in the last five minutes.</p><p><a href="${htmlEscape(confirmHref)}">Confirm and continue</a></p></main>`,
+    status,
   );
 }
 
@@ -359,6 +399,11 @@ async function authorizeGet(request: NextRequest): Promise<Response> {
       );
     }
 
+    if (!(await hasRecentProof(session))) {
+      annotate({ action: { name: "mcp.oauth.authorize.reproof_required" } });
+      return reproofPage(v.clientName, url.pathname + url.search);
+    }
+
     annotate({ action: { name: "mcp.oauth.authorize.consent_shown" } });
     // Consent screen — a plain POST form (no inline script/style, CSP-safe).
     const hidden = (name: string, value: string) =>
@@ -497,6 +542,23 @@ async function authorizePost(request: NextRequest): Promise<Response> {
         iss,
         ...(v.state !== undefined ? { state: v.state } : {}),
       });
+    }
+
+    // The same gate the consent page asked for, checked again on the decision
+    // itself: the page may have been left open past the window, or the POST
+    // built by hand. Denying needs no proof, so only "allow" is gated.
+    if (!(await hasRecentProof(session))) {
+      annotate({ action: { name: "mcp.oauth.authorize.reproof_required" } });
+      const back = new URL("/api/mcp/oauth/authorize", request.url);
+      back.searchParams.set("response_type", "code");
+      back.searchParams.set("client_id", v.clientId);
+      back.searchParams.set("redirect_uri", v.redirectUri);
+      back.searchParams.set("code_challenge", v.codeChallenge);
+      back.searchParams.set("code_challenge_method", "S256");
+      back.searchParams.set("scope", v.scope);
+      back.searchParams.set("resource", v.resource);
+      if (v.state !== undefined) back.searchParams.set("state", v.state);
+      return reproofPage(v.clientName, back.pathname + back.search, 401);
     }
 
     const code = signArtifact(

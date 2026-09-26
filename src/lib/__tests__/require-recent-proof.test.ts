@@ -38,7 +38,11 @@ vi.mock("next/headers", () => ({
   })),
 }));
 
-import { requireRecentProof, StepUpRequiredError } from "../api-handler";
+import {
+  requireMfaManagementAuth,
+  requireRecentProof,
+  StepUpRequiredError,
+} from "../api-handler";
 import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { headers } from "next/headers";
@@ -217,5 +221,46 @@ describe("Bearer", () => {
       method: "password",
     } as never);
     await refusal(requireRecentProof({ bearer: "elevation" }));
+  });
+});
+
+describe("adding a factor over Bearer (`freshFactorIfEnrolled`)", () => {
+  const passwordElevation = {
+    userId: "user-1",
+    apiTokenId: "tok-1",
+    consumedAt: null,
+    expiresAt: new Date(Date.now() + 60_000),
+    method: "password",
+  };
+
+  it("a password-proved elevation still adds a first factor", async () => {
+    bearer(PLAIN_USER, `hle_${"a".repeat(64)}`);
+    vi.mocked(prisma.stepUpElevation.findUnique).mockResolvedValue(
+      passwordElevation as never,
+    );
+    const auth = await requireMfaManagementAuth({
+      freshFactorIfEnrolled: true,
+    });
+    expect(auth.transport).toBe("bearer");
+  });
+
+  it("a password-proved elevation does not add a factor beside an existing one", async () => {
+    bearer(MFA_USER, `hle_${"a".repeat(64)}`);
+    vi.mocked(prisma.stepUpElevation.findUnique).mockResolvedValue(
+      passwordElevation as never,
+    );
+    await refusal(requireMfaManagementAuth({ freshFactorIfEnrolled: true }));
+  });
+
+  it("a second-factor elevation does", async () => {
+    bearer(MFA_USER, `hle_${"a".repeat(64)}`);
+    vi.mocked(prisma.stepUpElevation.findUnique).mockResolvedValue({
+      ...passwordElevation,
+      method: "totp",
+    } as never);
+    const auth = await requireMfaManagementAuth({
+      freshFactorIfEnrolled: true,
+    });
+    expect(auth.transport).toBe("bearer");
   });
 });

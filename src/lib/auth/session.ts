@@ -575,6 +575,15 @@ export type CurrentCredential =
  *   and the web offers to keep them because a link already handed to a
  *   doctor is often wanted. The caller's own credential is spared either way.
  *
+ *   `everything` also withdraws every record-sharing invitation this account
+ *   offered that nobody has accepted yet. An invitation outlives the session
+ *   that sent it, so one offered from a stolen session would be waiting for
+ *   the thief's own account to accept it. Accepted grants are NOT ended here:
+ *   they are a person the owner chose (a partner, a carer), usually still
+ *   wanted, and ending them silently would cut a carer off without anyone
+ *   deciding to. The route lists them in its answer instead, and the web
+ *   offers to end each one with a click.
+ *
  * Returns what was removed, so the surface and the audit row can say what
  * happened.
  */
@@ -586,6 +595,7 @@ export interface SignOutResult {
   accessTokensRevoked: number;
   connectorsRevoked: number;
   shareLinksRevoked: number;
+  pendingInvitesRevoked: number;
 }
 
 export async function destroyOtherSessions(
@@ -655,6 +665,7 @@ export async function destroyOtherSessions(
         accessTokensRevoked: access.count,
         connectorsRevoked: 0,
         shareLinksRevoked: 0,
+        pendingInvitesRevoked: 0,
       };
     }
 
@@ -680,11 +691,19 @@ export async function destroyOtherSessions(
           where: { userId, revokedAt: null },
           data: { revokedAt },
         });
+    // Offered by this account and not accepted yet: `acceptedAt` null, not
+    // already ended. Stamped rather than deleted, so the consent record still
+    // shows the invitation and who withdrew it.
+    const invites = await tx.accountGrant.updateMany({
+      where: { grantorId: userId, acceptedAt: null, revokedAt: null },
+      data: { revokedAt, revokedBy: "GRANTOR" },
+    });
     return {
       sessionsRevoked: deleted.count,
       accessTokensRevoked: access.count + tokens.count,
       connectorsRevoked: connectors.count,
       shareLinksRevoked: links.count,
+      pendingInvitesRevoked: invites.count,
     };
   });
 }

@@ -126,7 +126,8 @@
         "nothingSaved": "저장된 내용이 없어요. 표시된 항목을 확인하고 다시 시도해 주세요.",
         "invalidBody": "프로필 변경 내용을 읽지 못했어요.",
         "emailInUse": "이미 사용 중인 이메일 주소예요.",
-        "emailRateLimited": "이메일 주소를 너무 자주 변경했어요. 잠시 후 다시 시도해 주세요."
+        "emailRateLimited": "이메일 주소를 너무 자주 변경했어요. 잠시 후 다시 시도해 주세요.",
+        "emailSecondFactorRequired": "이메일 주소를 바꾸려면 2단계 인증 수단이나 패스키로 확인해 주세요."
       }
     },
     "auth": {
@@ -471,6 +472,13 @@
       "title": "2차 인증 수단 설정",
       "body": "관리자가 이 계정에 2차 인증 수단을 요구해요. 인증 앱이나 보안 키를 추가하고 계속해 주세요.",
       "signOut": "로그아웃"
+    },
+    "confirmAccess": {
+      "title": "본인인지 확인해 주세요",
+      "body": "어시스턴트가 HealthLog 데이터에 연결하려고 해요. 본인인지 확인하면 허용할지 정하는 화면으로 돌아가요.",
+      "action": "확인",
+      "failed": "확인하지 못했어요. 다시 시도해 주세요.",
+      "nothingToConfirm": "여기에서 확인할 것이 없어요. 어시스턴트에서 연결을 다시 시작해 주세요."
     }
   },
   "dashboard": {
@@ -5561,7 +5569,8 @@
       "rateLimited": "너무 자주 바꿨어요. 잠시 후 다시 시도해 주세요.",
       "other": "이 값은 저장하지 못했어요. 확인한 뒤 다시 시도해 주세요.",
       "reproofRequired": "이메일 주소를 변경하려면 현재 비밀번호를 입력하세요.",
-      "reproofFailed": "비밀번호가 올바르지 않아 이메일 주소가 변경되지 않았습니다."
+      "reproofFailed": "비밀번호가 올바르지 않아 이메일 주소가 변경되지 않았습니다.",
+      "secondFactorRequired": "이메일 주소를 바꾸려면 2단계 인증 수단이나 패스키로 확인해 주세요."
     },
     "avatar": {
       "title": "프로필 사진",
@@ -6556,7 +6565,11 @@
       "revokeSessionConfirmBody": "{device} — 다시 로그인해야 해요. 기기에 기록된 내용은 영향받지 않아요.",
       "signOutEverywhereConfirmTitle": "다른 기기를 모두 로그아웃할까요?",
       "signOutEverywhereConfirmBody": "다른 모든 기기, 연결된 모든 AI 어시스턴트와 모든 API 토큰은 다시 로그인하거나 다시 설정해야 합니다. 이 기기는 로그인 상태로 유지됩니다. 기록한 내용에는 영향이 없습니다.",
-      "signOutEverywhereShareLinks": "의료진 공유 링크도 종료"
+      "signOutEverywhereShareLinks": "의료진 공유 링크도 종료",
+      "signOutEverywhereInvites": "아직 아무도 수락하지 않은 기록 공유 초대는 철회됩니다. 이미 수락한 사람은 접근 권한을 유지하며, 이어서 끝낼 수 있어요.",
+      "signOutEverywhereInvitesDone": "수락되지 않은 초대 {count}개를 철회했어요.",
+      "grantsKeptTitle": "이 사람들은 여전히 내 기록을 볼 수 있어요",
+      "grantsKeptBody": "로그아웃해도 다른 사람에게 준 접근 권한은 끝나지 않아요. 직접 준 적이 없거나 더 이상 원하지 않으면 여기에서 끝내세요."
     },
     "privacy": {
       "encryption": {

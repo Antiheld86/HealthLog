@@ -8,7 +8,10 @@
  *
  * The cookie arm additionally passes `checkCookieEnrollmentProof`: a session
  * alone cannot add a security key, for the same reason it cannot enroll TOTP —
- * the new key would satisfy every step-up gate from then on.
+ * the new key would satisfy every step-up gate from then on. On an account that
+ * already has a second factor, both arms want that factor (or a passkey): a
+ * password, or a session that skipped the factor on a remembered browser, does
+ * not add a key.
  */
 import { apiHandler, requireMfaManagementAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
@@ -20,7 +23,7 @@ import { createMfaRegistrationOptions } from "@/lib/auth/mfa/webauthn";
 export const dynamic = "force-dynamic";
 
 export const POST = apiHandler(async (req: Request) => {
-  const auth = await requireMfaManagementAuth();
+  const auth = await requireMfaManagementAuth({ freshFactorIfEnrolled: true });
   const { user } = auth;
 
   const rl = await checkRateLimit(

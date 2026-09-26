@@ -318,3 +318,42 @@ describe("v1.4.41 W-DELETED-2 — soft-delete invisibility", () => {
     }
   });
 });
+
+describe("GET /api/export — the whole record asks for a fresh proof", () => {
+  const stale = {
+    createdAt: new Date(Date.now() - 60 * 60 * 1000),
+    mfaVerifiedAt: null,
+    reproofAt: null,
+  };
+
+  it("type=all on a session that signed in an hour ago is asked to confirm", async () => {
+    vi.mocked(prisma.session.findUnique).mockResolvedValueOnce(stale as never);
+    const { GET } = await import("../route");
+    const res = await GET(mkReq("http://localhost/api/export?type=all"));
+    expect(res.status).toBe(401);
+    expect((await res.json()).meta.errorCode).toBe("auth.reproof.required");
+    expect(prisma.measurement.findMany).not.toHaveBeenCalled();
+  });
+
+  it("no type means the whole record, and is gated the same way", async () => {
+    vi.mocked(prisma.session.findUnique).mockResolvedValueOnce(stale as never);
+    const { GET } = await import("../route");
+    const res = await GET(mkReq("http://localhost/api/export"));
+    expect(res.status).toBe(401);
+  });
+
+  it("type=all right after signing in goes through", async () => {
+    const { GET } = await import("../route");
+    const res = await GET(mkReq("http://localhost/api/export?type=all"));
+    expect(res.status).toBe(200);
+  });
+
+  it("a single-type export stays on the session alone", async () => {
+    vi.mocked(prisma.session.findUnique).mockResolvedValue(stale as never);
+    const { GET } = await import("../route");
+    const res = await GET(
+      mkReq("http://localhost/api/export?type=measurements"),
+    );
+    expect(res.status).toBe(200);
+  });
+});

@@ -56,6 +56,14 @@ const extendedProfileSchema = profileSchema.extend({
 type ExtendedProfileInput = z.infer<typeof extendedProfileSchema>;
 
 /**
+ * A new email address on an account with a second factor, without that
+ * factor proved in the last five minutes. The client answers it with the
+ * re-proof dialog (second factor or passkey) and saves again.
+ */
+export const EMAIL_SECOND_FACTOR_REQUIRED_CODE =
+  "profile.update.emailSecondFactorRequired";
+
+/**
  * The only profile fields a demo instance may write: the three the setup
  * flow's baseline step collects.
  *
@@ -299,7 +307,9 @@ export async function applyProfileUpdate(
             ? "rate_limited"
             : proof === "failed"
               ? "reproof_failed"
-              : "reproof_required";
+              : proof === "second_factor_required"
+                ? "second_factor_required"
+                : "reproof_required";
         // Same narrowing as the email budget below: the address is dropped,
         // the rest of the save lands, and `rejectedFields` says why.
         const { email: _unproven, ...keepable } = data;
@@ -312,13 +322,17 @@ export async function applyProfileUpdate(
                 ? "Verification failed"
                 : proof === "rate_limited"
                   ? "Too many attempts. Please wait 15 minutes."
-                  : "Confirm your current password to change the email address.",
+                  : proof === "second_factor_required"
+                    ? "Confirm with your second factor or a passkey to change the email address."
+                    : "Confirm your current password to change the email address.",
             errorCode:
               proof === "failed"
                 ? REPROOF_FAILED_CODE
                 : proof === "rate_limited"
                   ? "profile.update.emailRateLimited"
-                  : REPROOF_REQUIRED_CODE,
+                  : proof === "second_factor_required"
+                    ? EMAIL_SECOND_FACTOR_REQUIRED_CODE
+                    : REPROOF_REQUIRED_CODE,
           };
         }
         data = keepable;
@@ -328,7 +342,9 @@ export async function applyProfileUpdate(
             path: "email",
             code,
             message:
-              "Confirm your current password to change the email address.",
+              proof === "second_factor_required"
+                ? "Confirm with your second factor or a passkey to change the email address."
+                : "Confirm your current password to change the email address.",
           },
         ];
       }

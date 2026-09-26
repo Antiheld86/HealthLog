@@ -126,7 +126,8 @@
         "nothingSaved": "Nothing was saved. Check the highlighted field and try again.",
         "invalidBody": "The profile update could not be read.",
         "emailInUse": "This email address is already in use.",
-        "emailRateLimited": "Too many email-address changes. Try again later."
+        "emailRateLimited": "Too many email-address changes. Try again later.",
+        "emailSecondFactorRequired": "Confirm with your second factor or a passkey to change the email address."
       }
     },
     "auth": {
@@ -471,6 +472,13 @@
       "title": "Set up a second factor",
       "body": "Your administrator requires a second factor on this account. Add an authenticator app or a security key to continue.",
       "signOut": "Sign out"
+    },
+    "confirmAccess": {
+      "title": "Confirm it is you",
+      "body": "An assistant is asking to connect to your HealthLog data. Confirm it is you, then you will be taken back to decide whether to allow it.",
+      "action": "Confirm",
+      "failed": "That did not work. Please try again.",
+      "nothingToConfirm": "There is nothing to confirm here. Start the connection again from your assistant."
     }
   },
   "dashboard": {
@@ -5561,7 +5569,8 @@
       "rateLimited": "Changed too often. Wait a little and try again.",
       "other": "This value was not accepted. Check it and try again.",
       "reproofRequired": "Enter your current password to change the email address.",
-      "reproofFailed": "That password is not correct, so the email address was not changed."
+      "reproofFailed": "That password is not correct, so the email address was not changed.",
+      "secondFactorRequired": "Confirm with your second factor or a passkey to change the email address."
     },
     "avatar": {
       "title": "Profile photo",
@@ -6556,7 +6565,11 @@
       "revokeSessionConfirmBody": "{device} will need to sign in again. Nothing recorded on it is affected.",
       "signOutEverywhereConfirmTitle": "Sign out every other device?",
       "signOutEverywhereConfirmBody": "Every other device, every connected AI assistant and every API token will need to sign in or be set up again. This device stays signed in. Nothing you have recorded is affected.",
-      "signOutEverywhereShareLinks": "Also end the doctor share links"
+      "signOutEverywhereShareLinks": "Also end the doctor share links",
+      "signOutEverywhereInvites": "Invitations to your record that nobody has accepted yet are withdrawn. People who already accepted keep their access; you can end it next.",
+      "signOutEverywhereInvitesDone": "Withdrew {count} invitation(s) nobody had accepted.",
+      "grantsKeptTitle": "These people can still see your record",
+      "grantsKeptBody": "Signing out does not end access you gave someone. End it here if you did not give it, or no longer want them to have it."
     },
     "privacy": {
       "encryption": {

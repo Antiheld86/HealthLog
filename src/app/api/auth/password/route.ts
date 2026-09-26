@@ -16,6 +16,7 @@ import {
 } from "@/lib/api-response";
 import {
   recordReproofFailure,
+  refundReproof,
   throttleReproof,
 } from "@/lib/auth/existing-factor-proof";
 import {
@@ -72,6 +73,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
     );
     return apiError("Current password is incorrect", 401);
   }
+  // The current password was right, so this attempt was not a guess. Give the
+  // shared re-proof budget its slot back; otherwise a password change followed
+  // by a few confirmations elsewhere runs the owner out of attempts.
+  await refundReproof(user.id);
 
   if (currentPassword === newPassword) {
     return apiError("New password must differ from current password", 422);

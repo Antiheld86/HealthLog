@@ -9,12 +9,8 @@ import {
   safeJson,
   sanitiseZodIssues,
 } from "@/lib/api-response";
-import {
-  checkAuthSurfaceRateLimit,
-  checkRateLimit,
-  rateLimitHeaders,
-  refundRateLimit,
-} from "@/lib/rate-limit";
+import { checkAuthSurfaceRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import { beginAccountLoginAttempt } from "@/lib/auth/login-throttle";
 import { ensureDbCompatibility } from "@/lib/db-compat";
 import { NextRequest, NextResponse } from "next/server";
 import { apiHandler } from "@/lib/api-handler";
@@ -25,15 +21,6 @@ import { consumeTrustedDevice } from "@/lib/auth/trusted-device";
 import { syncMfaEnrollCookie } from "@/lib/auth/mfa-enrollment";
 import { isOidcOnly } from "@/lib/auth/oidc";
 import { readPendingLink } from "@/lib/auth/oidc-pending-link";
-
-/**
- * Failed password sign-ins one account takes per window, from any number of
- * addresses. Twice the per-IP ceiling, so the owner mistyping from one network
- * meets that one first, and small enough that guessing is hopeless.
- */
-const LOGIN_ACCOUNT_BUCKET = "auth:login:account";
-const LOGIN_ACCOUNT_LIMIT = 10;
-const LOGIN_ACCOUNT_WINDOW_MS = 15 * 60 * 1000;
 
 export const POST = apiHandler(async (request: NextRequest) => {
   // OIDC_ONLY means password login must be a dead end, not just a hidden
@@ -105,27 +92,31 @@ export const POST = apiHandler(async (request: NextRequest) => {
     },
   });
 
-  // A per-account ceiling beside the per-IP one. The IP bucket alone is only
-  // as good as the address it is keyed on, and a guesser with many addresses
-  // (or a proxy that forwards whatever address the caller claims) could try
-  // one account's password without end. This bucket follows the account
-  // wherever the guesses come from.
-  //
-  // Keyed on the account when the identifier resolves and on the identifier's
-  // hash when it does not, with the same ceiling, so a locked answer says
-  // nothing about whether the account exists. Charged before the Argon2id
-  // verification (a locked account costs no hashing) and refunded on a
-  // successful sign-in, so it counts failures: the owner signing in does not
-  // use it up. While it is spent, a passkey or single sign-on still works.
-  const accountBucket = user
-    ? `${LOGIN_ACCOUNT_BUCKET}:u:${user.id}`
-    : `${LOGIN_ACCOUNT_BUCKET}:i:${hashToken(identifier.toLowerCase())}`;
-  const accountRl = await checkRateLimit(
-    accountBucket,
-    LOGIN_ACCOUNT_LIMIT,
-    LOGIN_ACCOUNT_WINDOW_MS,
-  );
-  if (!accountRl.allowed) {
+  // Under an SSO-only policy the one password sign-in allowed is the one that
+  // confirms the account a pending single sign-on link names. Any other
+  // account is refused BEFORE its password is checked: refusing after the
+  // check answered "wrong password" and "right password, wrong account"
+  // differently, which made this exception an oracle for every other
+  // account's password.
+  if (pendingLink && pendingLink.userId !== user?.id) {
+    return apiError("Password login is disabled. Sign in with SSO.", 403, {
+      errorCode: "oidc_only",
+    });
+  }
+
+  // The per-account half of the throttle (`@/lib/auth/login-throttle`): a
+  // place this account has signed in from is neither counted nor held back,
+  // anywhere else waits longer after each failure past the first few, up to
+  // fifteen minutes. Decided before the Argon2id verification, so a waiting
+  // attempt costs no hashing.
+  const attempt = await beginAccountLoginAttempt({
+    user,
+    identifier,
+    request,
+    ip: rl.ip,
+  });
+  annotate({ meta: { login_known_source: attempt.source ?? "none" } });
+  if (attempt.waiting) {
     await auditLog("auth.login.account_throttled", {
       userId: user?.id,
       ipAddress: ip,
@@ -137,7 +128,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
         data: null,
         error: "Too many login attempts. Please try again later.",
       },
-      { status: 429, headers: rateLimitHeaders(accountRl) },
+      { status: 429, headers: rateLimitHeaders(attempt.waiting) },
     );
   }
 
@@ -154,6 +145,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const valid = await verifyPasswordOrDummy(user?.passwordHash, password);
 
   if (!user || !user.passwordHash) {
+    await attempt.failed();
     // v1.4.43 W3-SECURITY (H-1): never write the typed identifier into
     // the audit row — `reason` already tells the operator what
     // happened, and PII must not land in operator artefacts. The
@@ -168,6 +160,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   if (!valid) {
+    await attempt.failed();
     await auditLog("auth.login.failed", {
       userId: user.id,
       ipAddress: ip,
@@ -176,14 +169,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
     return apiError("Invalid credentials", 401);
   }
 
-  if (pendingLink && pendingLink.userId !== user.id) {
-    return apiError("Password login is disabled. Sign in with SSO.", 403, {
-      errorCode: "oidc_only",
-    });
-  }
-
   // The password was right: this attempt was not a failed guess.
-  await refundRateLimit(accountBucket);
+  await attempt.succeeded();
 
   const ua = request.headers.get("user-agent");
 

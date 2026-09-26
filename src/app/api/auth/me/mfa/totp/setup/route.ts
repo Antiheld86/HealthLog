@@ -16,8 +16,10 @@
  * factor that later satisfies every step-up gate, so a stolen session must not
  * be able to mint one: the cookie arm also passes `checkCookieEnrollmentProof`
  * — a sign-in or second factor inside the last five minutes, or a password /
- * factor proof in the body (the step-up mint's shapes). The Bearer arm already
- * carries that proof in its elevation. The recovery-code batch is
+ * factor proof in the body (the step-up mint's shapes); on an account that
+ * already has a second factor, only that factor or a passkey. The Bearer arm
+ * carries the proof in its elevation, under the same rule: on an account with
+ * a second factor the elevation must come from one. The recovery-code batch is
  * issued at `/confirm` (after the factor is proven), not here, so an abandoned
  * setup never persists codes.
  */
@@ -41,7 +43,7 @@ const SETUP_RATE_LIMIT = 5;
 const SETUP_WINDOW_MS = 15 * 60 * 1000;
 
 export const POST = apiHandler(async (req: Request) => {
-  const auth = await requireMfaManagementAuth();
+  const auth = await requireMfaManagementAuth({ freshFactorIfEnrolled: true });
   const { user } = auth;
 
   const rl = await checkRateLimit(

@@ -5,7 +5,10 @@
  *                                  connection and token, and (unless
  *                                  `?keepShareLinks=1`) every clinician share
  *                                  link, keeping the caller's current
- *                                  credential. Closes #64.
+ *                                  credential. Closes #64. Also withdraws
+ *                                  record-sharing invitations nobody has
+ *                                  accepted yet, and lists the accepted
+ *                                  grants it left standing (`grantsKept`).
  *
  * v1.23 — the user-facing session/device-management surface. Distinct from
  * `/api/auth/me/devices`, which lists APNs / Web-Push notification devices;
@@ -34,6 +37,8 @@ import {
   type CurrentCredential,
 } from "@/lib/auth/session";
 import { lookupIpLocation } from "@/lib/geo";
+import { GRANT_PARTY_SELECT } from "@/lib/sharing/grant-view";
+import { isGrantActive } from "@/lib/sharing/grants";
 import { coarseDeviceLabel, maskIp } from "@/lib/auth/device-fingerprint";
 
 export const dynamic = "force-dynamic";
@@ -131,10 +136,31 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     accessTokensRevoked,
     connectorsRevoked,
     shareLinksRevoked,
+    pendingInvitesRevoked,
   } = await destroyOtherSessions(user.id, current, {
     reach: "everything",
     keepShareLinks,
   });
+
+  // The accepted grants this account gave, still live. Not ended here: each is
+  // a person the owner chose, often a carer who still needs the record, and a
+  // button labelled "sign out" must not quietly cut them off. They are listed
+  // instead, so the person who just signed everything out can see who can
+  // still read the record and end any of them with one click.
+  const now = new Date();
+  const grantsKept = (
+    await prisma.accountGrant.findMany({
+      where: {
+        grantorId: user.id,
+        acceptedAt: { not: null },
+        revokedAt: null,
+      },
+      orderBy: { acceptedAt: "desc" },
+      include: { grantee: { select: GRANT_PARTY_SELECT } },
+    })
+  )
+    .filter((g) => isGrantActive(g, now))
+    .map((g) => ({ id: g.id, account: g.grantee, access: g.access }));
 
   await auditLog("auth.session.revoke_others", {
     userId: user.id,
@@ -144,6 +170,8 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
       accessTokensRevoked,
       connectorsRevoked,
       shareLinksRevoked,
+      pendingInvitesRevoked,
+      grantsKept: grantsKept.length,
       keepShareLinks,
     },
   });
@@ -155,6 +183,8 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
       access_tokens_revoked: accessTokensRevoked,
       connectors_revoked: connectorsRevoked,
       share_links_revoked: shareLinksRevoked,
+      pending_invites_revoked: pendingInvitesRevoked,
+      grants_kept: grantsKept.length,
     },
   });
 
@@ -163,6 +193,8 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     accessTokensRevoked,
     connectorsRevoked,
     shareLinksRevoked,
+    pendingInvitesRevoked,
+    grantsKept,
   });
 });
 

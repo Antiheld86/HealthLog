@@ -570,7 +570,7 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Account sharing"],
       summary: "Invite an account to this record",
       description:
-        "Offers access to somebody already registered on this instance, at READ, WRITE or MANAGE and over the whole record or named sections; the grant confers nothing until they accept it. An identifier that names no account answers 404 — a deliberate disclosure to an authenticated caller on a household instance, rate-limited to 10 invitations an hour, and the alternative (a silent pending row for a mistyped username) is worse. Refused while acting on another account, so a delegate can neither invite nor re-delegate. Offering MANAGE is step-up gated (`requireFreshMfaIfEnrolled`, cookie-only): an enrolled account without a fresh factor gets 401 `auth.stepup.required`, and a Bearer caller gets 403 `sharing.invite.manage_browser_only` before anything else happens, because the gate it would hit resolves through the session cookie and would otherwise answer 'not authenticated' to a caller it had just authenticated.",
+        "Offers access to somebody already registered on this instance, at READ, WRITE or MANAGE and over the whole record or named sections; the grant confers nothing until they accept it. An identifier that names no account answers 404 — a deliberate disclosure to an authenticated caller on a household instance, rate-limited to 10 invitations an hour, and the alternative (a silent pending row for a mistyped username) is worse. Refused while acting on another account, so a delegate can neither invite nor re-delegate. Offering MANAGE is step-up gated (`requireFreshMfaIfEnrolled`, cookie-only): an enrolled account without a fresh factor gets 401 `auth.stepup.required`, and a Bearer caller gets 403 `sharing.invite.manage_browser_only` before anything else happens, because the gate it would hit resolves through the session cookie and would otherwise answer 'not authenticated' to a caller it had just authenticated. Every invitation, at any level, also needs a fresh proof: a browser session must have signed in or used `POST /api/auth/reproof` within the last five minutes (with the second factor, on an account that has one), or it gets 401 `auth.reproof.required` with `meta.methods`; a Bearer caller presents an `X-Step-Up` elevation from `POST /api/auth/step-up` (a second-factor one on an account with a second factor) and gets 401 `auth.stepup.required` without it. `DELETE /api/auth/me/sessions` withdraws the invitations nobody has accepted yet.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: accountGrantInvite } },
@@ -587,7 +587,7 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "401": {
           description:
-            "Offering MANAGE from an MFA-enrolled account without a recent second-factor proof (`meta.errorCode: auth.stepup.required`). Re-prove the factor and retry; READ and WRITE invitations are never gated.",
+            "No recent proof. A browser session that has not signed in or re-proved within five minutes gets `meta.errorCode: auth.reproof.required` with `meta.methods`; re-prove at POST /api/auth/reproof and retry. A Bearer caller without a valid `X-Step-Up` elevation gets `auth.stepup.required`, as does offering MANAGE from an MFA-enrolled browser session without a recent second-factor proof.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         "403": {

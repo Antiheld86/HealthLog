@@ -270,6 +270,36 @@ describe("applyProfileUpdate — a new address needs a fresh proof", () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
+  it("names the second factor when the account has one", async () => {
+    const alone = await applyWithProof(
+      USER_ID,
+      { email: "someone@example.test" },
+      null,
+      { authorizeEmailChange: async () => "second_factor_required" },
+    );
+    expect(alone.ok).toBe(false);
+    if (!alone.ok) {
+      expect(alone.status).toBe(401);
+      expect(alone.errorCode).toBe("profile.update.emailSecondFactorRequired");
+    }
+
+    const beside = await applyWithProof(
+      USER_ID,
+      { email: "someone@example.test", heightCm: 180 },
+      null,
+      { authorizeEmailChange: async () => "second_factor_required" },
+    );
+    expect(beside.ok).toBe(true);
+    if (beside.ok) {
+      expect(beside.rejectedFields).toEqual([
+        expect.objectContaining({
+          path: "email",
+          code: "second_factor_required",
+        }),
+      ]);
+    }
+  });
+
   it("drops only the address when the save carries other fields", async () => {
     const result = await applyWithProof(
       USER_ID,

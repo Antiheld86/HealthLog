@@ -52,11 +52,17 @@ every anonymous caller into one shared rate-limit bucket. Match the
 value to the actual hop count.
 
 `X-Real-IP` gets the same trust as `X-Forwarded-For`. It is read only
-when `TRUST_PROXY_HOPS` is `1` or more and the request carries no
-`X-Forwarded-For`, which covers a proxy that sets only `X-Real-IP`. With
-`0` neither header is believed, because without a proxy in front both
-come from the caller. If your proxy sets only `X-Real-IP` and you had
-set `0` for it, set `1` instead.
+when `TRUST_PROXY_HOPS` is exactly `1` and the request carries no
+`X-Forwarded-For`, which covers a single proxy that sets only
+`X-Real-IP`. With `0` neither header is believed, because without a proxy
+in front both come from the caller. With `2` or more, the hop count
+describes an `X-Forwarded-For` chain, so have your proxies send one.
+
+If requests arrive with a forwarding header the setting does not let
+HealthLog read, the log shows one warning naming the header and the
+setting. Every anonymous caller then shares one rate-limit bucket, so one
+person mistyping a password can hold sign-in back for everyone. The usual
+cause is `0` behind a proxy that sends only `X-Real-IP`: set `1`.
 
 ## Caddy
 

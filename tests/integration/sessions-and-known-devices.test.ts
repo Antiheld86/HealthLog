@@ -386,6 +386,65 @@ describe("destroyOtherSessions — everything", () => {
     ).toBeNull();
   });
 
+  it("withdraws invitations nobody accepted and leaves accepted grants standing", async () => {
+    const prisma = getPrismaClient();
+    const owner = await makeUser("sess-invites-owner");
+    const carer = await makeUser("sess-invites-carer");
+    const stranger = await makeUser("sess-invites-stranger");
+    const other = await makeUser("sess-invites-other");
+    const accepted = await prisma.accountGrant.create({
+      data: {
+        grantorId: owner.id,
+        granteeId: carer.id,
+        access: "READ",
+        acceptedAt: new Date(),
+      },
+    });
+    const pending = await prisma.accountGrant.create({
+      data: { grantorId: owner.id, granteeId: stranger.id, access: "WRITE" },
+    });
+    // Somebody else's invitation to the owner is not the owner's to withdraw.
+    const received = await prisma.accountGrant.create({
+      data: { grantorId: other.id, granteeId: owner.id, access: "READ" },
+    });
+
+    const result = await destroyOtherSessions(
+      owner.id,
+      { kind: "accessToken", accessTokenHash: "none" },
+      { reach: "everything" },
+    );
+
+    expect(result.pendingInvitesRevoked).toBe(1);
+    const after = async (id: string) =>
+      prisma.accountGrant.findUniqueOrThrow({ where: { id } });
+    expect((await after(pending.id)).revokedAt).not.toBeNull();
+    expect((await after(pending.id)).revokedBy).toBe("GRANTOR");
+    expect((await after(accepted.id)).revokedAt).toBeNull();
+    expect((await after(received.id)).revokedAt).toBeNull();
+  });
+
+  it("sign-ins leaves pending invitations alone", async () => {
+    const prisma = getPrismaClient();
+    const owner = await makeUser("sess-invites-signins");
+    const other = await makeUser("sess-invites-signins-2");
+    const pending = await prisma.accountGrant.create({
+      data: { grantorId: owner.id, granteeId: other.id, access: "READ" },
+    });
+    const result = await destroyOtherSessions(
+      owner.id,
+      { kind: "accessToken", accessTokenHash: "none" },
+      { reach: "sign-ins" },
+    );
+    expect(result.pendingInvitesRevoked).toBe(0);
+    expect(
+      (
+        await prisma.accountGrant.findUniqueOrThrow({
+          where: { id: pending.id },
+        })
+      ).revokedAt,
+    ).toBeNull();
+  });
+
   it("sign-ins leaves connections, tokens and share links alone", async () => {
     const prisma = getPrismaClient();
     const user = await makeUser("sess-signins-only");
