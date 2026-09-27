@@ -357,7 +357,13 @@ function persisted(completed: number) {
  * Serves the conversation as the stubbed server would hold it: one more
  * persisted turn after every POST. Returns the parsed body of every POST.
  */
-async function mockCoach(page: Page): Promise<Array<Record<string, unknown>>> {
+async function mockCoach(
+  page: Page,
+  opts: {
+    /** Holds the first detail refetch after a turn until this resolves. */
+    holdRefetch?: Promise<void>;
+  } = {},
+): Promise<Array<Record<string, unknown>>> {
   const posts: Array<Record<string, unknown>> = [];
   let completed = 0;
 
@@ -401,6 +407,7 @@ async function mockCoach(page: Page): Promise<Array<Record<string, unknown>>> {
         return fulfilJson(route, { results: [] });
       }
       if (url.pathname === `/api/insights/chat/${CONVERSATION_ID}`) {
+        if (completed > 0 && opts.holdRefetch) await opts.holdRefetch;
         return fulfilJson(route, {
           ...summary(),
           attachmentCount: 0,
@@ -448,8 +455,9 @@ async function expectNoAxeViolations(page: Page, label: string) {
 
 /**
  * The streamed reply is replaced by its persisted copy once the detail
- * refetch after `done` lands. The two are separate mounts, so anything
- * toggled on the streamed one before the swap is lost; wait for it.
+ * refetch after `done` lands. The copy takes over the same bubble, so what
+ * the reader toggled survives the swap (pinned below); the steps wait for it
+ * only to read the settled state.
  */
 async function waitForPersistedTwin(page: Page) {
   await expect(
@@ -614,4 +622,55 @@ test.describe("Coach dialog", () => {
       ).toBeVisible();
     });
   }
+
+  test("keeps the reader's view when the persisted copy replaces the streamed reply", async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium-desktop",
+      "viewport-independent; desktop run suffices",
+    );
+    await serveAiBlock(page, aiBlockAvailable());
+    let release: () => void = () => {};
+    const holdRefetch = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await mockCoach(page, { holdRefetch });
+    await useTheme(page, "light");
+
+    await page.goto("/coach", { waitUntil: "domcontentloaded" });
+    await page
+      .locator('[data-slot="coach-input-textarea"]')
+      .fill(FIRST_QUESTION);
+    await page.locator('[data-slot="coach-input-send"]').click();
+
+    // The streamed reply has settled; its persisted copy is held back.
+    const streamed = page.locator(
+      '[role="log"] [data-slot="coach-bubble-assistant"]',
+    );
+    await expect(streamed).toContainText(FIRST_ANSWER, { timeout: 15_000 });
+    await streamed
+      .locator('[data-slot="coach-result-view-table"]')
+      .first()
+      .click();
+    await expect(
+      streamed.locator('[data-slot="coach-result-table"][data-ref="r1"]'),
+    ).toBeVisible();
+
+    release();
+    await waitForPersistedTwin(page);
+
+    // The same bubble, still on the table the reader chose.
+    const bubble = page
+      .locator('[data-slot="coach-bubble-assistant"]')
+      .filter({ hasText: FIRST_ANSWER });
+    await expect(bubble).toHaveCount(1);
+    const table = bubble.locator(
+      '[data-slot="coach-result-table"][data-ref="r1"]',
+    );
+    await expect(table).toBeVisible();
+    await expect(
+      table.locator('[data-slot="coach-result-view-table"]'),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
 });

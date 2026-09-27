@@ -388,6 +388,35 @@ describe("<MessageThread>", () => {
     expect(html).toContain("fresh persisted");
   });
 
+  it("renders a streaming turn and a persisted one in the same wrapper", () => {
+    // The persisted copy replaces the streamed one under the same key; for
+    // React to keep the bubble, both must sit in the same element chain.
+    const live = render(
+      <MessageThread
+        conversation={baseConversation}
+        streaming={streaming({
+          content: "Looking at your data ",
+          metricSource: null,
+          suggestion: null,
+          inProgress: true,
+          messageId: null,
+          errorCode: null,
+        })}
+      />,
+    );
+    const liveTurn = live.match(
+      /<div data-slot="coach-assistant-turn" data-turn-key="coach-turn-1"[^>]*>/,
+    )?.[0];
+    expect(liveTurn).toContain('role="log"');
+    expect(liveTurn).toContain('aria-live="polite"');
+    const persisted = render(<MessageThread conversation={baseConversation} />);
+    const turns =
+      persisted.match(/<div data-slot="coach-assistant-turn"[^>]*>/g) ?? [];
+    expect(turns.length).toBeGreaterThan(0);
+    // Settled, the wrapper is no longer a live region.
+    for (const turn of turns) expect(turn).not.toContain("aria-live");
+  });
+
   it("still renders the streaming bubble while inProgress and id is null", () => {
     // Mid-stream — `messageId` is null, persisted twin can't exist
     // yet. Confirm the streaming branch survives the v1.4.20.1
