@@ -65,6 +65,34 @@ describe("projectResults", () => {
     expect(out.every((t) => !t.displayed && t.chart === null)).toBe(true);
   });
 
+  it("keeps the view a table shown again was given", () => {
+    const shownAgain = {
+      ...table("r1", 5),
+      reusedFrom: { messageId: "m-a1", ref: "r2" },
+    };
+    const [asChart, asTable] = projectResults({
+      locale: "en",
+      calls: [
+        { name: "show_result", result: { present: true, table: shownAgain } },
+        {
+          name: "show_result",
+          result: {
+            present: true,
+            table: { ...shownAgain, ref: "r2", chart: null, chartKind: null },
+          },
+        },
+      ],
+    });
+    expect(asChart.chart).toEqual({
+      kind: "line",
+      x: "day",
+      series: ["value"],
+    });
+    expect(asChart.chartKind).toBe("line");
+    expect(asTable.chart).toBeNull();
+    expect(asTable.chartKind).toBeNull();
+  });
+
   it("trims a table to the row ceiling and says so", () => {
     const [out] = projectResults({
       locale: "en",
