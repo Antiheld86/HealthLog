@@ -22,6 +22,7 @@ import {
 } from "@/lib/ai/coach/chat-request-builder";
 import {
   COACH_TOOL_DEFS,
+  admittedPriorResults,
   buildCoachDataInventory,
   renderDataInventory,
   renderFocusHint,
@@ -217,6 +218,15 @@ export async function runTurnModel(args: {
       // build reuses the snapshot we already computed (60s LRU), so the tools
       // that fire this turn share its reads.
       const inventory = await buildCoachDataInventory(userId, effectiveScope);
+      // Earlier tables whose metric the person has since excluded (or that
+      // fall outside this conversation's scope) are neither named for the
+      // model nor reachable through show_result.
+      const priorResults = await admittedPriorResults({
+        userId,
+        prefs: ctx.coachPrefs,
+        scope: effectiveScope,
+        prior: args.priorResults ?? [],
+      });
       const toolRequest = buildCoachToolRequest({
         systemPrompt: ctx.systemPrompt,
         toolModeAddendum: appendBlocks(buildToolModeAddendum(locale), [
@@ -226,7 +236,7 @@ export async function runTurnModel(args: {
         focusHint: renderFocusHint(effectiveScope?.sources),
         workoutEvidence,
         dataInventory: renderDataInventory(inventory),
-        priorResults: renderPriorResultRefs(args.priorResults ?? []),
+        priorResults: renderPriorResultRefs(priorResults),
         guidedBlock: turnContext.guidedBlock,
         transcript: turnContext.transcript,
         languageName: LANGUAGE_NAMES[locale],
@@ -259,7 +269,7 @@ export async function runTurnModel(args: {
         turn: {
           conversationId,
           locale,
-          priorResults: args.priorResults ?? [],
+          priorResults,
           refs: createResultRefAllocator(),
         },
         // v1.39.4 — live steps: a `running` step as each call starts, its

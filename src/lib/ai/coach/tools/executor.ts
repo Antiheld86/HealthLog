@@ -45,14 +45,21 @@ import { annotate } from "@/lib/logging/context";
 import type { Locale } from "@/lib/i18n/config";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { resolveModuleMap } from "@/lib/modules/gate";
-import { buildCoachSnapshot } from "@/lib/ai/coach/snapshot";
+import {
+  admitCoachSources,
+  buildCoachSnapshot,
+  coachExclusions,
+} from "@/lib/ai/coach/snapshot";
+import type { CoachPrefs } from "@/lib/validations/coach-prefs";
 import { readMessageResults } from "@/lib/ai/coach/persistence";
 import type {
   CoachResultTable,
   CoachScope,
   CoachScopeSource,
   CoachScopeWindow,
+  CoachStepDomain,
 } from "@/lib/ai/coach/types";
+import { COACH_SOURCE_MEASUREMENT_TYPES } from "@/lib/ai/coach/source-measurement-types";
 import {
   METRIC_TABLE_EXCLUDED_SOURCES,
   compareWithCurrent,
@@ -264,7 +271,7 @@ export async function executeCoachTool(args: {
   try {
     const result =
       name === SHOW_RESULT_TOOL_NAME
-        ? await showResult(userId, parsedArgs, turn)
+        ? await showResult(userId, parsedArgs, sharedScope, turn)
         : await dispatch(
             name as CoachToolName,
             userId,
@@ -742,12 +749,56 @@ async function getCorrelations(
  * rows the builder does not, so it asks the builder's gate first rather
  * than keeping a second copy of it.
  */
-function scopeAdmits(
+export function scopeAdmits(
   sections: Record<string, unknown>,
   metric: CoachScopeSource,
 ): boolean {
   const scope = sections.scope as { sources?: unknown } | undefined;
   return Array.isArray(scope?.sources) && scope.sources.includes(metric);
+}
+
+/**
+ * The earlier tables a turn may name and show again: those whose metric the
+ * same gate would read now. With a conversation scope that is the scope's
+ * sources less the person's exclusions and switched-off modules; without
+ * one, every metric not excluded. The exclusion is the snapshot's own
+ * (`coachExclusions`, `admitCoachSources`), so a metric the person excluded
+ * after a table was stored is neither listed for the model nor sent to it.
+ * Tables of other domains (labs) answer to their module when read.
+ */
+export async function admittedPriorResults(args: {
+  userId: string;
+  prefs: Pick<CoachPrefs, "excludeMetrics">;
+  scope: CoachScope | undefined;
+  prior: readonly PriorResultTurn[];
+}): Promise<PriorResultTurn[]> {
+  if (args.prior.length === 0) return [];
+  const excluded = coachExclusions(
+    args.prefs,
+    await resolveModuleMap(args.userId),
+  );
+  const scoped =
+    args.scope?.sources && args.scope.sources.length > 0
+      ? admitCoachSources(args.scope.sources, excluded)
+      : null;
+  const admits = (domain: CoachStepDomain) =>
+    !isCoachScopeSource(domain) ||
+    (scoped
+      ? scoped.has(domain)
+      : admitCoachSources([domain], excluded).size > 0);
+  return args.prior
+    .map((turn) => ({
+      ...turn,
+      results: turn.results.filter((meta) => admits(meta.source.domain)),
+    }))
+    .filter((turn) => turn.results.length > 0);
+}
+
+/** True for a step domain the snapshot scope gates (a metric, not labs). */
+export function isCoachScopeSource(
+  domain: CoachStepDomain,
+): domain is CoachScopeSource {
+  return Object.hasOwn(COACH_SOURCE_MEASUREMENT_TYPES, domain);
 }
 
 async function getMetricTable(
@@ -878,6 +929,7 @@ function withResultView(
 async function showResult(
   userId: string,
   rawArgs: unknown,
+  sharedScope: CoachScope | undefined,
   turn: CoachToolTurnContext | undefined,
 ): Promise<CoachToolResult> {
   const parsed = showResultArgsSchema.safeParse(rawArgs);
@@ -891,6 +943,20 @@ async function showResult(
       meta: { inTurn: turn !== undefined },
     });
     return { present: false, reason: "unknown_result" };
+  }
+
+  // The same gate a fresh read passes, before anything is decrypted: a
+  // metric the person has since excluded from the Coach, or left out of
+  // this conversation's scope, is not sent to the model again either.
+  const domain = target.meta.source.domain;
+  if (isCoachScopeSource(domain)) {
+    const gate = await buildCoachSnapshot(
+      userId,
+      sharedScope ?? { sources: [domain], window: target.meta.source.window },
+    );
+    if (!scopeAdmits(gate.sections, domain)) {
+      return { present: false, reason: "unavailable_in_scope" };
+    }
   }
 
   const modules = await resolveModuleMap(userId);

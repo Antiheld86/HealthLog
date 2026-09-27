@@ -11,7 +11,8 @@ import type { CoachResultTable } from "@/lib/ai/coach/types";
 
 const buildCoachSnapshot =
   vi.fn<(userId: string, scope?: unknown) => Promise<CoachSnapshotResult>>();
-vi.mock("@/lib/ai/coach/snapshot", () => ({
+vi.mock("@/lib/ai/coach/snapshot", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   buildCoachSnapshot: (userId: string, scope?: unknown) =>
     buildCoachSnapshot(userId, scope),
 }));
@@ -43,6 +44,7 @@ vi.mock("@/lib/modules/gate", () => ({
 }));
 
 import {
+  admittedPriorResults,
   executeCoachTool,
   type CoachToolTurnContext,
 } from "@/lib/ai/coach/tools/executor";
@@ -311,6 +313,28 @@ describe("get_metric_table", () => {
 });
 
 describe("show_result", () => {
+  it("sends nothing of a metric the person has since excluded", async () => {
+    // The snapshot gate no longer admits pulse: the stored table is not
+    // even decrypted.
+    buildCoachSnapshot.mockResolvedValue(snapshot({ scope: { sources: [] } }));
+    readMessageResults.mockResolvedValue([STORED]);
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "show_result",
+      rawArguments: JSON.stringify({ ref: "m2.r1" }),
+      turn: turn(),
+    });
+    expect(result).toEqual({
+      present: false,
+      reason: "unavailable_in_scope",
+    });
+    expect(buildCoachSnapshot).toHaveBeenCalledWith("u1", {
+      sources: ["pulse"],
+      window: "last7days",
+    });
+    expect(readMessageResults).not.toHaveBeenCalled();
+  });
+
   it("copies a stored table of this conversation under a new name", async () => {
     readMessageResults.mockResolvedValue([STORED]);
     const result = await executeCoachTool({
@@ -495,5 +519,67 @@ describe("projections of the older tools", () => {
     ]);
     // What the model reads is the tool's own payload, unchanged.
     expect((result.data as { totalInWindow: number }).totalInWindow).toBe(6);
+  });
+});
+
+describe("admittedPriorResults", () => {
+  const meta = (ref: string, domain: string) => ({
+    ...turn().priorResults[0].results[0],
+    ref,
+    source: { ...STORED.source, domain } as CoachResultTable["source"],
+  });
+  const prior = [
+    {
+      messageId: "m-a2",
+      turnIndex: 2,
+      results: [meta("r1", "pulse"), meta("r2", "steps"), meta("r3", "labs")],
+    },
+    { messageId: "m-a4", turnIndex: 4, results: [meta("r1", "steps")] },
+  ];
+
+  it("drops a metric the person excluded and keeps what no exclusion names", async () => {
+    const out = await admittedPriorResults({
+      userId: "u1",
+      prefs: { excludeMetrics: ["steps"] },
+      scope: undefined,
+      prior,
+    });
+    expect(
+      out.map((t) => [t.turnIndex, t.results.map((r) => r.source.domain)]),
+    ).toEqual([[2, ["pulse", "labs"]]]);
+  });
+
+  it("keeps to the conversation's scope", async () => {
+    const out = await admittedPriorResults({
+      userId: "u1",
+      prefs: { excludeMetrics: [] },
+      scope: { sources: ["steps"] },
+      prior,
+    });
+    expect(
+      out.map((t) => [t.turnIndex, t.results.map((r) => r.source.domain)]),
+    ).toEqual([
+      [2, ["steps", "labs"]],
+      [4, ["steps"]],
+    ]);
+  });
+
+  it("drops a metric whose module is switched off", async () => {
+    resolveModuleMap.mockResolvedValue({ mood: false });
+    const out = await admittedPriorResults({
+      userId: "u1",
+      prefs: { excludeMetrics: [] },
+      scope: undefined,
+      prior: [
+        {
+          messageId: "m-a2",
+          turnIndex: 2,
+          results: [meta("r1", "mood"), meta("r2", "pulse")],
+        },
+      ],
+    });
+    expect(out.flatMap((t) => t.results.map((r) => r.source.domain))).toEqual([
+      "pulse",
+    ]);
   });
 });

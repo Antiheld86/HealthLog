@@ -21,6 +21,7 @@ import {
   parseCoachPrefs,
   type CoachExcludeMetric,
   type CoachDataCluster,
+  type CoachPrefs,
 } from "@/lib/validations/coach-prefs";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/resolver";
 import { locales, defaultLocale, type Locale } from "@/lib/i18n/config";
@@ -298,6 +299,51 @@ function blockFailed(block: string): (err: unknown) => null {
   };
 }
 
+/**
+ * What the Coach may not read for this person: their own `excludeMetrics`
+ * plus every source a switched-off module owns (`moduleMap[key] === false`;
+ * the gate has already resolved every delegation, so the map is
+ * authoritative).
+ */
+export function coachExclusions(
+  prefs: Pick<CoachPrefs, "excludeMetrics">,
+  moduleMap: Readonly<Record<ModuleKey, boolean>>,
+): ReadonlySet<CoachExcludeMetric> {
+  const excluded = new Set<CoachExcludeMetric>(prefs.excludeMetrics);
+  for (const [key, srcs] of Object.entries(MODULE_EXCLUDED_SOURCES)) {
+    if (moduleMap[key as ModuleKey] === false) {
+      for (const src of srcs ?? []) {
+        // Every entry in MODULE_EXCLUDED_SOURCES is a CoachScopeSource that
+        // also exists in the CoachExcludeMetric enum overlap the
+        // source-narrowing check reads.
+        excluded.add(src as unknown as CoachExcludeMetric);
+      }
+    }
+  }
+  return excluded;
+}
+
+/**
+ * The sources of a scope the Coach may read: the scope minus the
+ * exclusions, and no medication compliance when medications are excluded
+ * (excluding medications means no medication data at all). The one gate
+ * every read passes, the snapshot's own and the table tools' alike.
+ */
+export function admitCoachSources(
+  scoped: Iterable<CoachScopeSource>,
+  excluded: ReadonlySet<CoachExcludeMetric>,
+): Set<CoachScopeSource> {
+  const sources = new Set<CoachScopeSource>();
+  for (const src of scoped) {
+    // The `excludeMetrics` enum is a superset of `CoachScopeSource`
+    // (medications + anthropometrics live on the exclude-only side); the
+    // runtime `has` check only catches the overlapping members.
+    if (!excluded.has(src as unknown as CoachExcludeMetric)) sources.add(src);
+  }
+  if (excluded.has("medications")) sources.delete("compliance");
+  return sources;
+}
+
 async function buildCoachSnapshotImpl(
   userId: string,
   scope?: CoachScope,
@@ -380,42 +426,14 @@ async function buildCoachSnapshotImpl(
   // before any row is read — the model never sees a disabled domain.
   const moduleMap = await moduleMapPromise;
   const recoveryDisabled = moduleMap.recovery === false;
-  const excluded = new Set<CoachExcludeMetric>(prefs.excludeMetrics);
-  for (const [key, srcs] of Object.entries(MODULE_EXCLUDED_SOURCES)) {
-    if (moduleMap[key as ModuleKey] === false) {
-      for (const src of srcs ?? []) {
-        // Every entry in MODULE_EXCLUDED_SOURCES is a CoachScopeSource that
-        // also exists in the CoachExcludeMetric enum overlap the
-        // source-narrowing loop checks against; the cast mirrors the one the
-        // loop already uses below.
-        excluded.add(src as unknown as CoachExcludeMetric);
-      }
-    }
-  }
+  const excluded = coachExclusions(prefs, moduleMap);
   // v1.4.36 W3 T2 — `medications` and `anthropometrics` are
   // exclude-only toggles (not in `CoachScopeSource`); they gate the
   // GLP-1 weeklyContext / compliance branch and the anthropometrics
-  // block respectively. The mapping below treats them as additive to
-  // the existing source-level exclusions.
+  // block respectively.
   const excludesMedications = excluded.has("medications");
   const excludesAnthropometrics = excluded.has("anthropometrics");
-  const sources = new Set<CoachScopeSource>();
-  for (const src of scopedSources) {
-    // The `excludeMetrics` enum is a superset of `CoachScopeSource` now
-    // (medications + anthropometrics live on the exclude-only side);
-    // the cast was safe before v1.4.36 because the enums matched 1:1,
-    // and the runtime `excluded.has` check still only catches the
-    // overlapping members.
-    if (!excluded.has(src as unknown as CoachExcludeMetric)) {
-      sources.add(src);
-    }
-  }
-  // `medications` exclusion also drops the compliance source so the
-  // intake-event branch below short-circuits — keeps the contract
-  // consistent (excluding medications == no medication data at all).
-  if (excludesMedications) {
-    sources.delete("compliance");
-  }
+  const sources = admitCoachSources(scopedSources, excluded);
 
   const windowDays = windowToDays(window);
   // v1.11.3 — kick the feature extraction off as a promise now and await
