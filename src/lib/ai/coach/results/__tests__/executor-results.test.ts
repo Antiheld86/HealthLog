@@ -47,6 +47,7 @@ import {
   type CoachToolTurnContext,
 } from "@/lib/ai/coach/tools/executor";
 import { createResultRefAllocator } from "../refs";
+import { findUnverifiedCoachNumbers } from "@/lib/ai/coach/coach-prose-grounding";
 
 const NOW = new Date("2026-09-27T10:00:00Z");
 
@@ -222,6 +223,67 @@ describe("get_metric_table", () => {
     expect(result.present).toBe(false);
     expect(result.reason).toBe("no_data");
     expect(result.table).toBeUndefined();
+  });
+
+  it("hands an earlier period the current one and the change, so a correct delta grounds and a wrong one does not", async () => {
+    // BP: 20–26 September average 128/82 (the week before), 27 September
+    // onwards 132/80 — the current week reads higher systolic.
+    readDailySeries.mockImplementation(
+      async ({ type, from }: { type: string; from: Date }) => {
+        const earlier = from.getTime() < Date.parse("2026-09-21T00:00:00Z");
+        const [sys, dia] = earlier ? [128, 82] : [132, 80];
+        const day = earlier ? "2026-09-18" : "2026-09-25";
+        return [
+          {
+            type,
+            value: type === "BLOOD_PRESSURE_SYS" ? sys : dia,
+            measuredAt: `${day}T00:00:00.000Z`,
+            count: 1,
+          },
+        ];
+      },
+    );
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "get_metric_table",
+      rawArguments: JSON.stringify({
+        metric: "bp",
+        window: "last7days",
+        period: "previous",
+      }),
+      turn: turn(),
+    });
+    const data = result.data as Record<string, unknown>;
+    expect(data.comparison).toMatchObject({
+      with: { window: "last7days", period: "current" },
+      current: { stats: { systolic: { mean: 132 }, diastolic: { mean: 80 } } },
+      change: {
+        systolic: { mean: { delta: 4, pctChange: 3.1 } },
+        diastolic: { mean: { delta: -2, pctChange: -2.4 } },
+      },
+    });
+    expect(
+      findUnverifiedCoachNumbers(
+        "Your systolic is up 4 mmHg on the week before, about 3.1%.",
+        [data],
+      ),
+    ).toEqual([]);
+    const wrong = findUnverifiedCoachNumbers(
+      "Your systolic is up 9 mmHg on the week before.",
+      [data],
+    );
+    expect(wrong.map((f) => f.value)).toContain(9);
+  });
+
+  it("adds no comparison to a current read", async () => {
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "get_metric_table",
+      rawArguments: JSON.stringify({ metric: "pulse", window: "last7days" }),
+      turn: turn(),
+    });
+    expect(result.data).not.toHaveProperty("comparison");
+    expect(readDailySeries).toHaveBeenCalledTimes(1);
   });
 
   it("refuses arguments outside the schema", async () => {

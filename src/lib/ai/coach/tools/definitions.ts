@@ -373,7 +373,7 @@ export const COACH_TOOL_DEFS: AiToolDef[] = [
           type: "string",
           enum: coachResultPeriodSchema.options,
           description:
-            "current (default), previous (the window just before), or yearAgo (the same window a year earlier).",
+            "current (default), previous (the window just before), or yearAgo (the same window a year earlier). An earlier period also returns `comparison`: the current window's figures and the change from this table to them; cite that change rather than subtracting figures yourself.",
         },
       },
     },

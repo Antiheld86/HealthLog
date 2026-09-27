@@ -975,3 +975,91 @@ export function summariseTable(
   }
   return view;
 }
+
+// ── Comparison with the current window ──────────────────────────────────
+
+function numericCells(table: CoachResultTable, key: string): number[] {
+  const index = table.columns.findIndex((column) => column.key === key);
+  if (index < 0) return [];
+  return table.rows
+    .map((row) => row[index])
+    .filter(
+      (cell): cell is number =>
+        typeof cell === "number" && Number.isFinite(cell),
+    );
+}
+
+function change(
+  earlier: number,
+  current: number,
+  decimals: number,
+): { delta: number; pctChange?: number } {
+  const delta = round(current - earlier, decimals);
+  return earlier === 0
+    ? { delta }
+    : {
+        delta,
+        pctChange: round(((current - earlier) / Math.abs(earlier)) * 100, 1),
+      };
+}
+
+/**
+ * How an earlier window (the period before, or the same window a year ago)
+ * compares with the current one, for the model's summary of the earlier
+ * table. The grounding ledger derives differences only between figures of
+ * one payload, so a correct "down 4 mmHg from last month" drawn from two
+ * separate reads was withheld as unverified; with the current figures and
+ * the change computed here, beside the earlier ones, the reply's delta is a
+ * figure the model was shown, and a wrong one still is not.
+ *
+ * `delta` is the current value minus the earlier one; `pctChange` is that
+ * change relative to the earlier value, omitted when the earlier value is 0.
+ */
+export function compareWithCurrent(
+  earlier: CoachResultTable,
+  current: CoachResultTable,
+): Record<string, unknown> | null {
+  const currentStats: Record<string, Record<string, number>> = {};
+  const changes: Record<string, Record<string, unknown>> = {};
+  for (const column of earlier.columns) {
+    if (column.kind !== "number") continue;
+    const before = numericCells(earlier, column.key);
+    const now = numericCells(current, column.key);
+    if (before.length === 0 || now.length === 0) continue;
+    const decimals = column.decimals ?? 1;
+    const sumBefore = before.reduce((s, v) => s + v, 0);
+    const sumNow = now.reduce((s, v) => s + v, 0);
+    const meanBefore = sumBefore / before.length;
+    const meanNow = sumNow / now.length;
+    const isTotal = column.labelKey === COACH_RESULT_COLUMN_KEYS.total;
+    currentStats[column.key] = {
+      mean: round(meanNow, decimals),
+      ...(isTotal ? { total: round(sumNow, decimals) } : {}),
+    };
+    changes[column.key] = {
+      mean: change(meanBefore, meanNow, decimals),
+      ...(isTotal ? { total: change(sumBefore, sumNow, decimals) } : {}),
+    };
+  }
+  if (Object.keys(changes).length === 0) return null;
+  const periodIndex = current.columns.findIndex((c) => c.kind === "period");
+  const withValues = current.rows.filter((row) =>
+    row.some(
+      (cell, index) => index !== periodIndex && typeof cell === "number",
+    ),
+  );
+  return {
+    with: { window: current.source.window, period: "current" },
+    current: {
+      ...(withValues.length > 0
+        ? {
+            first: withValues[0][periodIndex],
+            last: withValues[withValues.length - 1][periodIndex],
+          }
+        : {}),
+      stats: currentStats,
+    },
+    change: changes,
+    changeIs: "current minus this table; pctChange relative to this table",
+  };
+}

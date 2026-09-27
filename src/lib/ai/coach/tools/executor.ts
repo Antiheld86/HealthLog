@@ -55,6 +55,7 @@ import type {
 } from "@/lib/ai/coach/types";
 import {
   METRIC_TABLE_EXCLUDED_SOURCES,
+  compareWithCurrent,
   readMetricTable,
   summariseTable,
 } from "@/lib/ai/coach/results/metric-table-tool";
@@ -800,17 +801,38 @@ async function getMetricTable(
       window,
     );
   }
+  // An earlier window is read to be compared: read the current one too and
+  // hand the model both, and the change between them, in one summary.
+  let comparison: Record<string, unknown> | null = null;
+  if (period !== "current") {
+    const current = await readMetricTable({
+      userId,
+      metric,
+      window,
+      period: "current",
+      granularity,
+      timeZone,
+      locale: turn?.locale ?? "en",
+      ref: "r0",
+      now: turn?.now,
+    });
+    comparison = current ? compareWithCurrent(table, current) : null;
+  }
+  const summarise = (t: CoachResultTable) => ({
+    ...summariseTable(t),
+    ...(comparison ? { comparison } : {}),
+  });
   const ref = turn?.refs.next() ?? null;
   if (!ref) {
     // Outside a chat turn, or past the sixth table: the model still gets
     // the figures, there is just no table to name.
-    return { present: true, data: summariseTable(table) };
+    return { present: true, data: summarise(table) };
   }
   const named = { ...table, ref };
   return {
     present: true,
     resultRef: ref,
-    data: summariseTable(named),
+    data: summarise(named),
     table: named,
   };
 }
