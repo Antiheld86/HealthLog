@@ -96,4 +96,43 @@ describe("runCoachToolLoop — result tables", () => {
     expect(toolTurn?.content).not.toContain("987654");
     expect(JSON.stringify(out.toolResults)).not.toContain("987654");
   });
+
+  it("adds the table rules to the rounds after the first table, not before", async () => {
+    executeCoachTool
+      .mockResolvedValueOnce({ present: true, data: { n: 1 } })
+      .mockResolvedValueOnce({
+        present: true,
+        resultRef: "r1",
+        data: { periods: 1 },
+        table: TABLE,
+      });
+    const call = (id: string, name: string) => ({
+      id,
+      name,
+      arguments: '{"metric":"pulse"}',
+    });
+    runRawCompletionWithFallback
+      .mockResolvedValueOnce(round("", [call("a", "get_metric_series")]))
+      .mockResolvedValueOnce(round("", [call("b", "get_metric_table")]))
+      .mockResolvedValueOnce(round("answer"));
+
+    await runCoachToolLoop({
+      userId: "u1",
+      providers: [],
+      system: "sys",
+      systemOnceTableShown: "sys+tables",
+      messages: [{ role: "user", content: "q" }],
+      tools: COACH_TOOL_DEFS,
+      turn: {
+        conversationId: "c1",
+        locale: "en",
+        priorResults: [],
+        refs: createResultRefAllocator(),
+      },
+    });
+    const systems = runRawCompletionWithFallback.mock.calls.map(
+      ([arg]) => (arg as { params: { system: string } }).params.system,
+    );
+    expect(systems).toEqual(["sys", "sys", "sys+tables"]);
+  });
 });

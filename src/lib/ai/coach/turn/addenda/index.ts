@@ -11,12 +11,22 @@ import { followUpsAddendum } from "./followups";
 import { methodAddendum } from "./method";
 import { resultsAddendum } from "./results";
 
-export function buildDialogAddenda(locale: Locale): string {
+/**
+ * The addenda for a turn. `tableRules` adds the recheck and follow-up rules,
+ * which only matter once there is a table to recheck or follow up on: the
+ * turn sends them when the conversation already holds one, and from the
+ * round after its own first table otherwise.
+ */
+export function buildDialogAddenda(
+  locale: Locale,
+  opts: { tableRules: boolean } = { tableRules: true },
+): string {
   return [
     resultsAddendum(locale),
     clarifyAddendum(locale),
-    methodAddendum(locale),
-    followUpsAddendum(locale),
+    ...(opts.tableRules
+      ? [methodAddendum(locale), followUpsAddendum(locale)]
+      : []),
   ]
     .filter((block) => block.length > 0)
     .join("\n\n");

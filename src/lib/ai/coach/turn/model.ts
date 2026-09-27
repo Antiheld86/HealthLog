@@ -218,29 +218,36 @@ export async function runTurnModel(args: {
       // build reuses the snapshot we already computed (60s LRU), so the tools
       // that fire this turn share its reads.
       const inventory = await buildCoachDataInventory(userId, effectiveScope);
-      // Earlier tables whose metric the person has since excluded (or that
-      // fall outside this conversation's scope) are neither named for the
-      // model nor reachable through show_result.
+      // Earlier tables whose metric the person has since excluded are
+      // neither named for the model nor reachable through show_result. The
+      // scope is the one every tool of the turn reads under.
       const priorResults = await admittedPriorResults({
         userId,
         prefs: ctx.coachPrefs,
-        scope: effectiveScope,
+        scope: inventory.probeScope,
         prior: args.priorResults ?? [],
       });
-      const toolRequest = buildCoachToolRequest({
-        systemPrompt: ctx.systemPrompt,
-        toolModeAddendum: appendBlocks(buildToolModeAddendum(locale), [
-          buildDialogAddenda(locale),
-          ...args.turnHints,
-        ]),
-        focusHint: renderFocusHint(effectiveScope?.sources),
-        workoutEvidence,
-        dataInventory: renderDataInventory(inventory),
-        priorResults: renderPriorResultRefs(priorResults),
-        guidedBlock: turnContext.guidedBlock,
-        transcript: turnContext.transcript,
-        languageName: LANGUAGE_NAMES[locale],
-      });
+      const requestWith = (tableRules: boolean) =>
+        buildCoachToolRequest({
+          systemPrompt: ctx.systemPrompt,
+          toolModeAddendum: appendBlocks(buildToolModeAddendum(locale), [
+            buildDialogAddenda(locale, { tableRules }),
+            ...args.turnHints,
+          ]),
+          focusHint: renderFocusHint(effectiveScope?.sources),
+          workoutEvidence,
+          dataInventory: renderDataInventory(inventory),
+          priorResults: renderPriorResultRefs(priorResults),
+          guidedBlock: turnContext.guidedBlock,
+          transcript: turnContext.transcript,
+          languageName: LANGUAGE_NAMES[locale],
+        });
+      // The recheck and follow-up rules are about tables: they ride the
+      // prompt once the conversation holds one, or from the round after this
+      // turn produced its first.
+      const withTables = requestWith(true);
+      const toolRequest =
+        priorResults.length > 0 ? withTables : requestWith(false);
       // v1.39.4 — every call this turn settled, by its turn-wide index, for
       // the result tables. Only this turn's own calls ever reach them.
       const settled: SettledToolCall[] = [];
@@ -248,6 +255,7 @@ export async function runTurnModel(args: {
         userId,
         providers: chain,
         system: toolRequest.system,
+        systemOnceTableShown: withTables.system,
         messages: toolRequest.messages,
         tools: COACH_TOOL_DEFS,
         temperature: AI_BUDGETS.coach.temperature,

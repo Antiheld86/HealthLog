@@ -106,6 +106,12 @@ export async function runCoachToolLoop(args: {
   userId: string;
   providers: ProviderChainResolved[];
   system: string;
+  /**
+   * v1.39.4 — the system prompt for the rounds after a call produced a
+   * table, when it differs (the table rules ride it). Absent: `system`
+   * throughout.
+   */
+  systemOnceTableShown?: string;
   /** The conversation messages (history + the new user turn). */
   messages: AiMessage[];
   tools: AiToolDef[];
@@ -156,7 +162,6 @@ export async function runCoachToolLoop(args: {
   const {
     userId,
     providers,
-    system,
     tools,
     temperature,
     maxTokens,
@@ -171,6 +176,7 @@ export async function runCoachToolLoop(args: {
   } = args;
 
   const messages: AiMessage[] = [...args.messages];
+  let system = args.system;
   let totalTokens = 0;
   let cachedTokens = 0;
   let rounds = 0;
@@ -261,7 +267,10 @@ export async function runCoachToolLoop(args: {
         // does. It reads the compact summary in `data`, and the verifier
         // grades the prose against that same summary.
         notify(() => onCallSettled?.(call, settled, index));
-        const { table: _table, ...toolResult } = settled;
+        const { table, ...toolResult } = settled;
+        if (table && args.systemOnceTableShown) {
+          system = args.systemOnceTableShown;
+        }
         const validArgs = parseCoachToolArgs(call.name, call.arguments);
         toolTrace.push({
           name: call.name,
