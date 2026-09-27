@@ -758,6 +758,11 @@ export interface CoachConversationDetailDTO extends CoachConversationDTO {
    * `insights.coach.fence_drift` audit). Equal to `attachments.length`.
    */
   attachmentCount: number;
+  /**
+   * v1.39.4 — server-internal: the assistant messages older than the loaded
+   * window, when the turn asked for the count. Never sent to a client.
+   */
+  earlierAssistantMessages?: number;
 }
 
 /**

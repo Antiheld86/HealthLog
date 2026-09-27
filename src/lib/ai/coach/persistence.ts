@@ -609,20 +609,7 @@ export async function recordProactiveNudge(
 // newest messages up to this cap cover the rendered window without the
 // unbounded per-open AES-decrypt cost. The response shape is unchanged —
 // the messages array still arrives oldest->newest (see the reverse below).
-export const CONVERSATION_MESSAGE_DETAIL_CAP = 200;
-
-/**
- * The assistant messages of a conversation written before `before`. The
- * caller has already read the conversation owner-narrowed; this only counts.
- */
-export function countAssistantMessagesBefore(
-  conversationId: string,
-  before: Date,
-): Promise<number> {
-  return prisma.coachMessage.count({
-    where: { conversationId, role: "assistant", createdAt: { lt: before } },
-  });
-}
+const CONVERSATION_MESSAGE_DETAIL_CAP = 200;
 
 /**
  * Fetch one conversation + its messages, decrypting each body on
@@ -649,7 +636,17 @@ export async function fetchConversationWithMessages(
    *     the path id so it can only ever load a conversation that actually holds
    *     that document. Never combined with `documentScoped`.
    */
-  opts?: { documentScoped?: boolean; attachedDocumentId?: string },
+  opts?: {
+    documentScoped?: boolean;
+    attachedDocumentId?: string;
+    /**
+     * v1.39.4 — also count the assistant messages older than the loaded
+     * window (`earlierAssistantMessages`), so a turn names earlier tables by
+     * their place in the whole conversation. One count, read only when the
+     * window is full.
+     */
+    countEarlierAssistant?: boolean;
+  },
 ): Promise<CoachConversationDetailDTO | null> {
   const row = await prisma.coachConversation.findFirst({
     where: {
@@ -714,6 +711,19 @@ export async function fetchConversationWithMessages(
   }
 
   const attachments = mapAttachments(row.attachments);
+  const oldestLoaded = orderedMessages[0];
+  const earlierAssistantMessages =
+    opts?.countEarlierAssistant &&
+    oldestLoaded &&
+    row.messages.length >= CONVERSATION_MESSAGE_DETAIL_CAP
+      ? await prisma.coachMessage.count({
+          where: {
+            conversationId: row.id,
+            role: "assistant",
+            createdAt: { lt: oldestLoaded.createdAt },
+          },
+        })
+      : undefined;
   return {
     id: row.id,
     title: readConversationTitle(row),
@@ -726,6 +736,9 @@ export async function fetchConversationWithMessages(
     attachments,
     attachmentCount: attachments.length,
     documentTitle: attachments[0]?.title ?? null,
+    ...(earlierAssistantMessages !== undefined
+      ? { earlierAssistantMessages }
+      : {}),
   };
 }
 

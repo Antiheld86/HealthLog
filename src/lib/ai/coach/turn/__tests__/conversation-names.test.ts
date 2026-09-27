@@ -6,19 +6,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
-  fetchConversationWithMessages: vi.fn(),
-  countAssistantMessagesBefore: vi.fn(),
+  findFirst: vi.fn(),
+  count: vi.fn(),
 }));
 
-vi.mock("@/lib/db", () => ({ prisma: {} }));
-vi.mock("@/lib/auth/audit", () => ({ auditLog: vi.fn() }));
-vi.mock("@/lib/ai/coach/persistence", () => ({
-  CONVERSATION_MESSAGE_DETAIL_CAP: 200,
-  appendMessage: vi.fn(),
-  createConversation: vi.fn(),
-  fetchConversationWithMessages: m.fetchConversationWithMessages,
-  countAssistantMessagesBefore: m.countAssistantMessagesBefore,
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    coachConversation: { findFirst: m.findFirst },
+    coachMessage: { count: m.count },
+  },
 }));
+vi.mock("@/lib/ai/coach/bytes-codec", () => ({
+  encryptToBytes: vi.fn(),
+  decryptFromBytes: vi.fn(() => "x"),
+}));
+vi.mock("@/lib/auth/audit", () => ({ auditLog: vi.fn() }));
 
 import { resolveTurnConversation } from "../conversation";
 
@@ -38,24 +40,42 @@ const TABLE = {
   displayed: true,
 };
 
-/** `n` messages alternating user / assistant, the last one holding a table. */
-function window(n: number) {
-  return Array.from({ length: n }, (_, i) => ({
-    id: `m${i}`,
-    role: i % 2 === 0 ? "user" : "assistant",
-    content: "x",
-    createdAt: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(),
-    metricSource: i === n - 1 ? { results: [TABLE] } : null,
-    providerType: i % 2 === 0 ? null : "openai",
-  }));
+/**
+ * The newest `n` messages as the detail read returns them (newest first),
+ * alternating user / assistant, the newest assistant one holding a table.
+ */
+function rows(n: number) {
+  return Array.from({ length: n }, (_, i) => {
+    const age = i; // 0 = newest
+    const assistant = age % 2 === 0;
+    return {
+      id: `m${n - age}`,
+      role: assistant ? "assistant" : "user",
+      encryptedContent: new Uint8Array(),
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, n - age)),
+      metricSourceJson:
+        age === 0
+          ? JSON.stringify({ windows: [], metrics: [], results: [TABLE] })
+          : null,
+      providerType: assistant ? "openai" : null,
+      promptVersion: null,
+      tokensUsed: null,
+      model: null,
+    };
+  });
 }
 
-async function priorOf(messages: ReturnType<typeof window>) {
-  m.fetchConversationWithMessages.mockResolvedValue({
+async function priorOf(messages: ReturnType<typeof rows>) {
+  m.findFirst.mockResolvedValue({
     id: "c1",
+    titleEncrypted: null,
+    title: "t",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    documentScoped: false,
+    summaryEncrypted: null,
     messages,
-    attachmentCount: 0,
-    summary: null,
+    attachments: [],
   });
   const out = await resolveTurnConversation({
     userId: "u1",
@@ -68,25 +88,28 @@ async function priorOf(messages: ReturnType<typeof window>) {
 }
 
 beforeEach(() => {
-  m.fetchConversationWithMessages.mockReset();
-  m.countAssistantMessagesBefore.mockReset();
+  m.findFirst.mockReset();
+  m.count.mockReset();
 });
 
 describe("prior table names across the loaded window", () => {
   it("counts the assistant messages before a full window", async () => {
-    m.countAssistantMessagesBefore.mockResolvedValue(40);
-    const prior = await priorOf(window(200));
+    m.count.mockResolvedValue(40);
+    const prior = await priorOf(rows(200));
     // 100 assistant messages in the window, 40 before it.
     expect(prior.map((p) => p.turnIndex)).toEqual([140]);
-    expect(m.countAssistantMessagesBefore).toHaveBeenCalledWith(
-      "c1",
-      new Date(Date.UTC(2026, 0, 1, 0, 0)),
-    );
+    expect(m.count).toHaveBeenCalledWith({
+      where: {
+        conversationId: "c1",
+        role: "assistant",
+        createdAt: { lt: new Date(Date.UTC(2026, 0, 1, 0, 1)) },
+      },
+    });
   });
 
   it("reads no count while the whole conversation is loaded", async () => {
-    const prior = await priorOf(window(10));
+    const prior = await priorOf(rows(10));
     expect(prior.map((p) => p.turnIndex)).toEqual([5]);
-    expect(m.countAssistantMessagesBefore).not.toHaveBeenCalled();
+    expect(m.count).not.toHaveBeenCalled();
   });
 });
