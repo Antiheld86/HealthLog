@@ -11,8 +11,10 @@
  *
  * Every reader goes through {@link readRouteGeometry}: the ciphertext when a
  * row has one, the legacy readable column for a row the boot-time backfill has
- * not reached yet. A ciphertext that does not open throws (fail-closed), the
- * same posture as `readNote`; it is never replaced by the readable column.
+ * not reached yet. A ciphertext that does not open reads as no track, with a
+ * warning on the request's event: it is never replaced by the readable column,
+ * and one damaged track must not fail the workout detail or the insight job
+ * that reads it. `decryptRouteGeometry` itself still throws.
  *
  * The wire shape is unchanged: readers hand back the same GeoJSON object the
  * JSONB column used to return.
@@ -21,6 +23,7 @@ import { Buffer } from "node:buffer";
 
 import { decryptBytes, encryptBytes } from "@/lib/crypto";
 import { WORKOUT_ROUTE_GEOMETRY_AAD } from "@/lib/crypto/encrypted-columns";
+import { getEvent } from "@/lib/logging/context";
 
 /** Seal a route's GeoJSON geometry for `WorkoutRoute.geometryEncrypted`. */
 export function encryptRouteGeometry(
@@ -43,14 +46,24 @@ export function decryptRouteGeometry(sealed: Uint8Array): unknown {
 
 /**
  * The geometry a route row holds: the ciphertext first, the legacy readable
- * column only when there is no ciphertext. Null when the row holds neither.
+ * column only when there is no ciphertext. Null when the row holds neither,
+ * and null (with a warning) when the ciphertext does not open.
  */
 export function readRouteGeometry(row: {
   geometry?: unknown;
   geometryEncrypted?: Uint8Array | null;
 }): unknown {
   if (row.geometryEncrypted && row.geometryEncrypted.byteLength > 0) {
-    return decryptRouteGeometry(row.geometryEncrypted);
+    try {
+      return decryptRouteGeometry(row.geometryEncrypted);
+    } catch (err) {
+      getEvent()?.addWarning(
+        `workout route decrypt failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return null;
+    }
   }
   return row.geometry ?? null;
 }
