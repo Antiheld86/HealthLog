@@ -84,18 +84,21 @@ export function redactSecrets(input: string): string {
       // identifiers. Capture group 1 = the leading separator (preserved).
       .replace(/(^|[^A-Za-z0-9])sk-(?:ant-)?[A-Za-z0-9_-]{8,}/g, "$1[REDACTED]")
       // HealthLog hex-bodied credentials: `hlk_` access token, `hlr_` refresh
-      // token, `hls_` session cookie secret (v1.30.32), `hle_` step-up
-      // elevation (v1.30.34). Same boundary-aware shape as the `sk-` rule. The
+      // token, `hls_` session cookie secret (v1.30.32) and clinician share
+      // token, `hle_` step-up elevation (v1.30.34), `hlv_` registration invite.
+      // Same boundary-aware shape as the `sk-` rule. The
       // idempotency replay-cache already rejects bodies containing
       // these prefixes (CLAUDE.md headless-client-API patterns); this
       // is the matching egress guard for log/error surfaces.
-      .replace(/(^|[^A-Za-z0-9])hl[kres]_[A-Fa-f0-9]{32,}/g, "$1[REDACTED]")
+      .replace(/(^|[^A-Za-z0-9])hl[kresv]_[A-Fa-f0-9]{32,}/g, "$1[REDACTED]")
       // v1.22.0 — the MCP OAuth bridge artifacts: the authorization code
       // (`hlac_`), refresh token (`hlrt_`), and DCR client id (`hlc_`). All
       // are signed, base64url-bodied, and credential-bearing, so they are
       // scrubbed at the egress boundary like the native token formats above.
+      // `hlh_` is the one-time native sign-in handoff code, base64url too; it
+      // rides a custom-scheme redirect and is exchanged for a token pair.
       .replace(
-        /(^|[^A-Za-z0-9])hl(?:ac|rt|c)_[A-Za-z0-9_.-]{16,}/g,
+        /(^|[^A-Za-z0-9])hl(?:ac|rt|c|h)_[A-Za-z0-9_.-]{16,}/g,
         "$1[REDACTED]",
       )
       // v1.7.0 — `insurance`/`insuranceNumber`/`kvnr` (German statutory-

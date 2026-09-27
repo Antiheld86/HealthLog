@@ -15,7 +15,7 @@
 import { randomBytes } from "node:crypto";
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecentProof } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { hashToken } from "@/lib/auth/hmac";
@@ -136,7 +136,12 @@ function toSummary(row: {
 }
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // A share link is a standing credential to the record that works without
+  // signing in, so making one needs a fresh proof on the cookie path, not only
+  // a live session. The shipped app creates links on its token without an
+  // elevation, and reads any 401 here as a dead session, so the Bearer arm
+  // stays on the token until the app sends one (see the iOS note).
+  const { user } = await requireRecentProof({ bearer: "token" });
   annotate({ action: { name: "share-link.create" } });
 
   const rl = await checkRateLimit(`share-link:${user.id}`, 20, 60 * 60 * 1000);

@@ -136,6 +136,12 @@ describe("GET /api/export/measurements", () => {
     const audits = await prisma.auditLog.findMany({
       where: { userId: me.id, action: "user.export.measurements" },
     });
+    console.log(
+      "DBG",
+      JSON.stringify(
+        await prisma.auditLog.findMany({ where: { userId: me.id } }),
+      ),
+    );
     expect(audits.length).toBe(1);
   });
 });
@@ -258,6 +264,12 @@ describe("GET /api/export/mood", () => {
     const audits = await prisma.auditLog.findMany({
       where: { userId: me.id, action: "user.export.mood" },
     });
+    console.log(
+      "DBG",
+      JSON.stringify(
+        await prisma.auditLog.findMany({ where: { userId: me.id } }),
+      ),
+    );
     expect(audits.length).toBe(1);
   });
 });
@@ -317,9 +329,13 @@ describe("GET /api/export/full-backup", () => {
     expect(parsed.measurements.length).toBe(1);
     expect(parsed.moodEntries.length).toBe(1);
 
-    const audits = await prisma.auditLog.findMany({
-      where: { userId: me.id, action: "user.export.full-backup" },
+    // The audit row is written once the last byte has gone out, which is
+    // after the body resolves here; wait for it rather than race it.
+    await vi.waitFor(async () => {
+      const audits = await prisma.auditLog.findMany({
+        where: { userId: me.id, action: "user.export.full-backup" },
+      });
+      expect(audits.length).toBe(1);
     });
-    expect(audits.length).toBe(1);
   });
 });

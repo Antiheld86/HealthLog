@@ -31,6 +31,7 @@
  * — the MaxMind tarball nests a single `.mmdb` under one date-stamped directory,
  * a shape a ~40-line reader handles without a dependency.
  */
+import { envFlag } from "@/lib/env";
 import zlib from "node:zlib";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -241,7 +242,7 @@ async function downloadAndExtractEdition(
 export async function fetchGeoLite2Databases(
   opts: { skipIfPresent?: boolean } = {},
 ): Promise<Geolite2FetchResult> {
-  if (process.env.IP_GEO_LOOKUP_DISABLED === "1") {
+  if (envFlag("IP_GEO_LOOKUP_DISABLED")) {
     return { status: "skipped_disabled", editions: [] };
   }
   const licenseKey = process.env.MAXMIND_LICENSE_KEY?.trim();

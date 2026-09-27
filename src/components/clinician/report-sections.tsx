@@ -309,14 +309,14 @@ export function MedicationsSection({
       empty={medications.length === 0 && complianceEntries.length === 0}
     >
       {medications.map((med) => {
-        const comp = report.compliance[med.name];
+        const comp = report.compliance[med.id];
         const rate =
           complianceOn && comp && comp.total > 0
             ? `${Math.round((comp.taken / comp.total) * 100)}%`
             : null;
         return (
           <StatRow
-            key={med.name}
+            key={med.id}
             label={med.dose ? `${med.name} — ${med.dose}` : med.name}
             value={
               rate
@@ -327,11 +327,11 @@ export function MedicationsSection({
         );
       })}
       {complianceEntries
-        .filter(([name]) => !medications.some((m) => m.name === name))
-        .map(([name, c]) => (
+        .filter(([id]) => !medications.some((m) => m.id === id))
+        .map(([id, c]) => (
           <StatRow
-            key={name}
-            label={name}
+            key={id}
+            label={c.name}
             value={t("clinicianView.adherence", {
               rate: `${Math.round((c.taken / c.total) * 100)}%`,
             })}

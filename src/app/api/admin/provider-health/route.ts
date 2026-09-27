@@ -3,6 +3,7 @@ import { buildDateKey } from "@/lib/ai/coach/budget";
 import { prisma } from "@/lib/db";
 import { apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
+import { OPERATOR_HELD_PROVIDER_TYPES } from "@/lib/ai/provider-egress";
 
 export const dynamic = "force-dynamic";
 
@@ -43,8 +44,11 @@ interface ProviderHealthSummary {
   lastFailureStatus: number | null;
 }
 
-/** The two operator-managed tags sort first — they affect every user on the chain. */
-const CENTRAL_TYPES = ["admin-openai", "admin-codex"];
+/**
+ * The operator-managed tags sort first — they affect every user on the chain.
+ * Read from the one definition, in its order (the OpenAI key, then Codex).
+ */
+const CENTRAL_TYPES = [...OPERATOR_HELD_PROVIDER_TYPES];
 
 export const GET = apiHandler(async () => {
   await requireAdmin();

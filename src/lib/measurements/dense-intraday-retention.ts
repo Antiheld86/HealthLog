@@ -67,6 +67,7 @@ import { meanBucketValue } from "./consolidate-daily-mean";
 import { recomputeBucketsForMeasurement } from "@/lib/rollups/measurement-rollups";
 import { percentile } from "@/lib/insights/strain-score";
 import type { PerSampleRow } from "./drain-per-sample-cumulative";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * iOS#34 / #69 — heart-rate (PULSE) is the densest spot signal after
@@ -533,7 +534,7 @@ export async function runDenseIntradayRetention(
 
   // The base walks users serially; recordBucket needs the current user's tz
   // for the dry-run hourly fan-out estimate (writeDay never runs on dry-run).
-  let currentTz = "Europe/Berlin";
+  let currentTz = DEFAULT_TIMEZONE;
 
   const walk = await runConsolidation<MeasurementType>({
     prismaClient,

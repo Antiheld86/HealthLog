@@ -549,7 +549,11 @@ describe("canonical disaster-recovery backup round-trip", () => {
     const offhostObject = s3.objects.get(`2026-07-02/user-${ownerId}.json.enc`);
     expect(offhostObject).toBeDefined();
     const payload = parseBackupPayload(
-      decryptBackup(offhostObject!, Buffer.from(OFFHOST_ENCRYPTION_KEY, "hex")),
+      decryptBackup(
+        offhostObject!,
+        Buffer.from(OFFHOST_ENCRYPTION_KEY, "hex"),
+        `2026-07-02/user-${ownerId}.json.enc`,
+      ),
     );
     expect(payload).toMatchObject({
       schemaVersion: "2",

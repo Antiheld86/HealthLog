@@ -44,8 +44,7 @@ import {
   type ReminderScheduleInput,
 } from "@/lib/measurement-reminders/scheduling";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
-
-const DEFAULT_TIMEZONE = "Europe/Berlin";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 async function postAction(request: NextRequest): Promise<Response> {
   const { user } = await requireAuth();

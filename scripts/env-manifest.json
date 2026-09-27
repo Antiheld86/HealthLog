@@ -123,8 +123,12 @@
       "required": false,
       "variables": [
         {
+          "name": "AI_PRIVATE_ORIGINS",
+          "purpose": "AI endpoints on the operator's own network (Ollama, LM Studio, LiteLLM). Comma-separated exact origins (scheme://host[:port]), e.g. \"http://ollama.lan:11434\". Unset, a private AI base URL is refused (apart from what the deprecated ALLOW_LOCAL_AI_PRIVATE_HOSTS=true still covers). Link-local, metadata and unspecified addresses stay refused even when listed; a malformed entry is logged once and grants nothing."
+        },
+        {
           "name": "ALLOW_LOCAL_AI_PRIVATE_HOSTS",
-          "purpose": "Local-AI SSRF opt-in. Unset rejects private/internal hosts; set an exact comma-separated host allowlist or \"true\" to allow any private host."
+          "purpose": "Older form of AI_PRIVATE_ORIGINS, kept for existing installs: an exact comma-separated host list still grants those hosts. \"true\" is deprecated since v1.39.3: it covers only the admin AI key and AI settings saved on an admin account (pinned; metadata and link-local refused), is reported at boot and on the admin AI settings page, and will be removed in a later release."
         },
         {
           "name": "INSIGHTS_MAX_TOKENS",
@@ -160,6 +164,25 @@
         {
           "name": "MAXMIND_LICENSE_KEY",
           "purpose": "MaxMind licence key for the runtime GeoLite2 fetch (issue #659). Set it and the worker downloads both databases into GEOLITE2_DIR on boot and monthly, no rebuild or manual mount. Free at maxmind.com/en/geolite2/signup."
+        }
+      ]
+    },
+    {
+      "name": "Outbound requests",
+      "description": "Switches for the requests HealthLog makes to third parties on its own. All default to on; set any of them to 1, true or yes to turn that request off.",
+      "required": false,
+      "variables": [
+        {
+          "name": "IP_GEO_LOOKUP_DISABLED",
+          "purpose": "Stops the online IP-to-location lookup for login events and the monthly MaxMind download. Only the local GeoLite2 databases are used."
+        },
+        {
+          "name": "PASSWORD_BREACH_CHECK_DISABLED",
+          "purpose": "Stops the HaveIBeenPwned range query made when a password is set. The query carries the first five hex characters of the password's SHA-1, never the password or the full hash."
+        },
+        {
+          "name": "UPDATE_CHECK_DISABLED",
+          "purpose": "Stops the daily request to the GitHub releases API behind the About page and the admin version tile."
         }
       ]
     },
@@ -246,6 +269,17 @@
       ]
     },
     {
+      "name": "Document picker",
+      "description": "Operator grant for the document picker, which lets a person search their own Paperless-ngx or Papra instance and import picked documents. Unset, the picker is off. Optional.",
+      "required": false,
+      "variables": [
+        {
+          "name": "DOCUMENT_SOURCE_ORIGINS",
+          "purpose": "Comma-separated exact origins (scheme://host[:port], no path, no wildcard, no CIDR), e.g. \"https://paperless.example.com,http://papra.lan:1221\". Only listed origins are contacted, public or private; redirects are not followed; link-local, metadata and unspecified addresses stay refused even when listed; a malformed entry is logged once and grants nothing."
+        }
+      ]
+    },
+    {
       "name": "Off-host backups",
       "description": "Required ALL-OR-NONE: any of these without the rest disables backups silently.",
       "required": false,
@@ -292,6 +326,11 @@
           "name": "TRUST_PROXY_HOPS",
           "purpose": "Trusted reverse-proxy hop count; the client IP is read that many entries from the right of X-Forwarded-For.",
           "example": "1"
+        },
+        {
+          "name": "BACKUP_ENCRYPTION_PREVIOUS_KEYS",
+          "purpose": "Comma-separated off-host backup keys that are no longer written with but may still be needed to read older objects. Set during a rotation of BACKUP_ENCRYPTION_KEY until the bucket's lifecycle rule has retired every object written under the old key.",
+          "example": ""
         },
         {
           "name": "BACKUP_MAX_STORED_MB",

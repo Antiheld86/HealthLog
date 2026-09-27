@@ -2,6 +2,7 @@ import {
   reduceCurrentWindowStatus,
   type ScheduleWindowInput,
 } from "@/lib/medications/window-status";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 export interface DefaultMedicationOption {
   id: string;
@@ -23,8 +24,6 @@ const DEFAULT_THRESHOLDS: MedicationDueThresholds = {
   lateMinutes: 120,
   missedMinutes: 240,
 };
-
-const DEFAULT_TIMEZONE = "Europe/Berlin";
 
 /**
  * Pick the medication that should be pre-selected when an intake form opens.

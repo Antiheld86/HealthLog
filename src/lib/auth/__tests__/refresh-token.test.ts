@@ -509,10 +509,9 @@ describe("rotateRefreshToken", () => {
     expect(legitimate.ok).toBe(true);
   });
 
-  it("still rotates when the caller sends no device id at all", async () => {
-    // An older client that never sends `X-Device-Id` must not be locked out
-    // by the device binding — a presented null is unattributable, not a
-    // mismatch.
+  it("refuses a device-bound token presented with no device id", async () => {
+    // Leaving the header out must not be a way round the device binding: a
+    // token issued to dev-1 is rotated only by a caller that says dev-1.
     const dev1 = await issueAccessAndRefresh({
       userId: "u1",
       policy: NATIVE_POLICY,
@@ -522,6 +521,26 @@ describe("rotateRefreshToken", () => {
 
     const result = await rotateRefreshToken({
       refreshToken: dev1.refreshToken,
+      policy: NATIVE_POLICY,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("device_mismatch");
+    expect(dbState.refreshTokens[0].usedAt).toBeNull();
+  });
+
+  it("still rotates a token issued without a device id, header or not", async () => {
+    // An older client that never sent `X-Device-Id` holds rows with no stored
+    // id, and nothing to compare means nothing to refuse.
+    const legacy = await issueAccessAndRefresh({
+      userId: "u1",
+      policy: NATIVE_POLICY,
+      source: "login.password",
+    });
+
+    const result = await rotateRefreshToken({
+      refreshToken: legacy.refreshToken,
       policy: NATIVE_POLICY,
     });
 

@@ -55,6 +55,8 @@ export const stepUpMintSchema = z
       "Re-prove a factor to mint a single-use, token-bound step-up elevation. `password` reaches the same routes a plain cookie session reaches; `totp`, `webauthn`, and `passkey` additionally satisfy the fresh-factor routes (disable, recovery-code rotation, security-key removal), matching exactly the ceremonies for which the web stamps a session second-factor-verified.",
   });
 
+export type StepUpMintRequest = z.infer<typeof stepUpMintSchema>;
+
 /** Which assertion ceremony to begin at `POST /api/auth/step-up/options`. */
 export const stepUpOptionsSchema = z
   .object({

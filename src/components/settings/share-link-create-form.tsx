@@ -40,6 +40,10 @@ import { orderLeaves } from "@/lib/report-selection/selection";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiPost } from "@/lib/api/api-fetch";
+import {
+  recentProofErrorMessage,
+  useRecentProof,
+} from "@/components/settings/security-section/use-recent-proof";
 
 /** Maximum lifetime, in days — mirrors `SHARE_LINK_MAX_DAYS` on the server. */
 export const MAX_DAYS = 90;
@@ -240,6 +244,10 @@ export function ShareLinkCreateForm({
     };
   }, [qrUrl]);
 
+  // A share link opens the record without signing in, so making one asks for
+  // a fresh proof unless the session signed in or re-proved within minutes.
+  const recentProof = useRecentProof();
+
   const createMutation = useMutation({
     mutationFn: () => {
       // Surface the same expiry-bound the server enforces before the round
@@ -247,16 +255,16 @@ export function ShareLinkCreateForm({
       if (expiryDays < 1 || expiryDays > MAX_DAYS) {
         return Promise.reject(new Error("EXPIRY_RANGE"));
       }
-      return apiPost<ShareLinkCreated>(
-        "/api/share-links",
-        buildShareLinkCreatePayload({
-          label,
-          rangeDays,
-          expiryDays,
-          leaves: orderLeaves(selectedLeaves),
-          documentIds: selectedDocs.map((d) => d.id),
-          documentOnly,
-        }),
+      const payload = buildShareLinkCreatePayload({
+        label,
+        rangeDays,
+        expiryDays,
+        leaves: orderLeaves(selectedLeaves),
+        documentIds: selectedDocs.map((d) => d.id),
+        documentOnly,
+      });
+      return recentProof.run(() =>
+        apiPost<ShareLinkCreated>("/api/share-links", payload),
       );
     },
     onSuccess: (result) => {
@@ -277,7 +285,7 @@ export function ShareLinkCreateForm({
       setFormError(
         err.message === "EXPIRY_RANGE"
           ? t("settings.sharing.expiryInvalid", { max: MAX_DAYS })
-          : t("common.error"),
+          : recentProofErrorMessage(err, t("common.error")),
       );
     },
   });
@@ -294,6 +302,7 @@ export function ShareLinkCreateForm({
 
   return (
     <>
+      {recentProof.dialog}
       <form
         className="space-y-4"
         onSubmit={(e) => {

@@ -23,7 +23,7 @@ import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
 import { healthScoreNoticeItemKey } from "@/lib/daily/priority-item-key";
 import { annotate, getEvent } from "@/lib/logging/context";
 
-import { ACTIVITY_WINDOW_DAYS } from "./activity";
+import { ACTIVITY_WINDOW_DAYS, activityWindowKeys } from "./activity";
 import { SLEEP_WINDOW_DAYS } from "./sleep";
 import { attachScoreDelta } from "./composite";
 import {
@@ -239,9 +239,8 @@ export async function readActivityDays(args: {
       canonical
         .filter((row) => {
           const day = userDayKey(row.measuredAt, args.timezone);
-          const endDay = userDayKey(args.asOf, args.timezone);
-          const startDay = userDayKey(
-            new Date(args.asOf.getTime() - (ACTIVITY_WINDOW_DAYS - 1) * DAY_MS),
+          const { startDay, endDay } = activityWindowKeys(
+            args.asOf,
             args.timezone,
           );
           return day >= startDay && day <= endDay;
@@ -461,10 +460,7 @@ function scoreInputsFor(args: {
   const { asOf, input } = args;
   const ageYears = getAgeFromDateOfBirth(input.profile.dateOfBirth);
   const asOfDay = userDayKey(asOf, input.profile.timezone);
-  const activitySinceDay = userDayKey(
-    new Date(asOf.getTime() - (ACTIVITY_WINDOW_DAYS - 1) * DAY_MS),
-    input.profile.timezone,
-  );
+  const activityWindow = activityWindowKeys(asOf, input.profile.timezone);
   const sleepSinceDay = userDayKey(
     new Date(asOf.getTime() - (SLEEP_WINDOW_DAYS - 1) * DAY_MS),
     input.profile.timezone,
@@ -548,7 +544,11 @@ function scoreInputsFor(args: {
       days: args.activity.value.days,
       sources: uniqueSources(
         args.activity.value.sourceDays
-          .filter((row) => row.day >= activitySinceDay && row.day <= asOfDay)
+          .filter(
+            (row) =>
+              row.day >= activityWindow.startDay &&
+              row.day <= activityWindow.endDay,
+          )
           .map((row) => row.source),
       ),
     },
@@ -629,7 +629,7 @@ export async function computeUserHealthScore(
   const db = input.prisma ?? prisma;
   const since = new Date(input.now.getTime() - SCORE_READ_DAYS * DAY_MS);
   const activitySince = new Date(
-    input.now.getTime() - (28 + HISTORY_OFFSET_DAYS) * DAY_MS,
+    input.now.getTime() - (ACTIVITY_WINDOW_DAYS + HISTORY_OFFSET_DAYS) * DAY_MS,
   );
   const [
     glucose,

@@ -248,14 +248,36 @@ describe("B2/B3 — the medication-ingest surface is unchanged", () => {
 });
 
 describe("B4 — the native client is not broken", () => {
-  it("admits a ['*'] token on GET /api/export/full-backup", async () => {
+  it("admits a ['*'] token on POST /api/export/encrypted", async () => {
     // Login, passkey login-verify and refresh rotation all mint `["*"]`, so
-    // this is exactly the credential the iOS app holds. If this case ever
-    // goes red, the native client is down.
+    // this is exactly the credential the iOS app holds, on the whole-record
+    // export the app calls. If this case ever goes red, the app's backup is
+    // down.
+    await armToken(["*"], "wildcard");
+    const { POST } = await import("@/app/api/export/encrypted/route");
+    const res = await POST(
+      new NextRequest("https://health.example/api/export/encrypted", {
+        method: "POST",
+        headers: {
+          authorization: headerJar.get("authorization")!,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ passphrase: "a long enough passphrase" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.arrayBuffer();
+  });
+
+  it("passes a ['*'] token through the scope check on GET /api/export/full-backup, to the elevation it needs", async () => {
+    // The plaintext full backup asks a Bearer caller for a step-up
+    // elevation. No shipped client calls it on Bearer. What this pins is that
+    // the refusal is the proof gate's 401, not the scope layer's 403.
     await armToken(["*"], "wildcard");
     const { GET } = await import("@/app/api/export/full-backup/route");
     const res = await GET(req("/api/export/full-backup"));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(401);
+    expect((await res.json()).meta.errorCode).toBe("auth.stepup.required");
   });
 
   it("admits a ['*'] token on a batch ingest route", async () => {

@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAdmin } from "@/lib/api-handler";
+import {
+  apiHandler,
+  requireAdmin,
+  assertRecentCookieProof,
+} from "@/lib/api-handler";
 import { hashPassword, checkPasswordStrength } from "@/lib/auth/password";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -14,7 +18,7 @@ import { destroyAllSessions } from "@/lib/auth/session";
 import { revokeStepUpElevations } from "@/lib/auth/step-up";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
-import { checkPasswordBreach } from "@/lib/auth/hibp";
+import { checkPasswordBreachIfEnabled } from "@/lib/password-breach-check";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 
 export const POST = apiHandler(
@@ -31,7 +35,10 @@ export const POST = apiHandler(
       );
     }
 
-    const { user } = await requireAdmin();
+    const { user, session } = await requireAdmin();
+    // A fresh proof on top of the admin session: this reaches every account's
+    // data, so a stolen admin session alone must not be enough.
+    await assertRecentCookieProof(user, session.id);
 
     const { id } = await params;
     annotate({
@@ -70,7 +77,7 @@ export const POST = apiHandler(
 
     // v1.23 — reject an admin-set password found in a known breach corpus
     // (HIBP k-anonymity). Fail-open on an unreachable HIBP.
-    const breach = await checkPasswordBreach(password);
+    const breach = await checkPasswordBreachIfEnabled(password);
     if (breach?.breached) {
       return apiError(
         getServerTranslator(locale).t("auth.passwordBreached"),

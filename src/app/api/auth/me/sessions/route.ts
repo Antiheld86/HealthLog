@@ -1,8 +1,14 @@
 /**
  * GET    /api/auth/me/sessions   — list the user's active web sessions.
  * DELETE /api/auth/me/sessions   — "sign out everywhere": revoke every OTHER
- *                                  session (and native refresh tokens), keeping
- *                                  the caller's current session. Closes #64.
+ *                                  session, device login, AI-assistant
+ *                                  connection and token, and (unless
+ *                                  `?keepShareLinks=1`) every clinician share
+ *                                  link, keeping the caller's current
+ *                                  credential. Closes #64. Also withdraws
+ *                                  record-sharing invitations nobody has
+ *                                  accepted yet, and lists the accepted
+ *                                  grants it left standing (`grantsKept`).
  *
  * v1.23 — the user-facing session/device-management surface. Distinct from
  * `/api/auth/me/devices`, which lists APNs / Web-Push notification devices;
@@ -31,6 +37,8 @@ import {
   type CurrentCredential,
 } from "@/lib/auth/session";
 import { lookupIpLocation } from "@/lib/geo";
+import { GRANT_PARTY_SELECT } from "@/lib/sharing/grant-view";
+import { isGrantActive } from "@/lib/sharing/grants";
 import { coarseDeviceLabel, maskIp } from "@/lib/auth/device-fingerprint";
 
 export const dynamic = "force-dynamic";
@@ -114,15 +122,58 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
         }
       : { kind: "session", sessionId: auth.session.id };
 
-  const { sessionsRevoked, accessTokensRevoked } = await destroyOtherSessions(
-    user.id,
-    current,
-  );
+  // "Everywhere" reaches every credential that works without signing in: AI
+  // assistant connections, programmatic tokens and, unless the caller asks to
+  // keep them, clinician share links. The default is to revoke, because the
+  // person pressing this is often doing it after losing a device or a session,
+  // and a share link made by whoever held it would otherwise keep working. A
+  // client that sends nothing (the shipped app) gets the safe default.
+  const keepShareLinks =
+    new URL(request.url).searchParams.get("keepShareLinks") === "1";
+
+  const {
+    sessionsRevoked,
+    accessTokensRevoked,
+    connectorsRevoked,
+    shareLinksRevoked,
+    pendingInvitesRevoked,
+  } = await destroyOtherSessions(user.id, current, {
+    reach: "everything",
+    keepShareLinks,
+  });
+
+  // The accepted grants this account gave, still live. Not ended here: each is
+  // a person the owner chose, often a carer who still needs the record, and a
+  // button labelled "sign out" must not quietly cut them off. They are listed
+  // instead, so the person who just signed everything out can see who can
+  // still read the record and end any of them with one click.
+  const now = new Date();
+  const grantsKept = (
+    await prisma.accountGrant.findMany({
+      where: {
+        grantorId: user.id,
+        acceptedAt: { not: null },
+        revokedAt: null,
+      },
+      orderBy: { acceptedAt: "desc" },
+      include: { grantee: { select: GRANT_PARTY_SELECT } },
+    })
+  )
+    .filter((g) => isGrantActive(g, now))
+    .map((g) => ({ id: g.id, account: g.grantee, access: g.access }));
 
   await auditLog("auth.session.revoke_others", {
     userId: user.id,
     ipAddress: getClientIp(request),
-    details: { sessionsRevoked, accessTokensRevoked },
+    details: {
+      sessionsRevoked,
+      accessTokensRevoked,
+      connectorsRevoked,
+      shareLinksRevoked,
+      pendingInvitesRevoked,
+      grantsKept: grantsKept.length,
+      keepShareLinks,
+    },
   });
 
   annotate({
@@ -130,10 +181,21 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     meta: {
       sessions_revoked: sessionsRevoked,
       access_tokens_revoked: accessTokensRevoked,
+      connectors_revoked: connectorsRevoked,
+      share_links_revoked: shareLinksRevoked,
+      pending_invites_revoked: pendingInvitesRevoked,
+      grants_kept: grantsKept.length,
     },
   });
 
-  return apiSuccess({ sessionsRevoked });
+  return apiSuccess({
+    sessionsRevoked,
+    accessTokensRevoked,
+    connectorsRevoked,
+    shareLinksRevoked,
+    pendingInvitesRevoked,
+    grantsKept,
+  });
 });
 
 /**

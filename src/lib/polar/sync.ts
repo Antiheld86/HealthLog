@@ -81,6 +81,7 @@ import {
 } from "@/lib/sleep/sweep-stale-segments";
 import { getPolarConnection } from "./credentials";
 import { PolarApiError, classifyPolarError } from "./response-classifier";
+import { resolveUserTimezone } from "@/lib/tz/resolver";
 
 /** Map a Polar error onto the shared integration-ledger failure kind. */
 export function classifyPolarFailure(err: unknown): FailureKind {
@@ -134,12 +135,12 @@ function toUpsert(
     // Reconstructed sleep segments supply their own indexed externalId so the
     // several rows of one night stay distinct; everything else keys on
     // `<resource>:<date>:<fieldTag>` — stable across re-syncs of the same day.
-    // The date is read off `measuredAt` for untimed rows (midnight-UTC
-    // anchored), so a mapper-supplied externalId is honoured verbatim to avoid
-    // the timed sleep instants drifting the date slice.
+    // A date-keyed row names its date (`day`): its instant is local noon in
+    // the user's zone, which east of UTC+12 falls on the previous UTC date.
+    // A timed row keys on its instant's UTC date, as it always has.
     externalId:
       m.externalId ??
-      `${resourcePrefix}:${m.measuredAt.toISOString().slice(0, 10)}:${m.fieldTag}`,
+      `${resourcePrefix}:${m.day ?? m.measuredAt.toISOString().slice(0, 10)}:${m.fieldTag}`,
     sleepStage: m.sleepStage ?? null,
   }));
 }
@@ -178,6 +179,8 @@ export interface PolarCollectionFailure {
 export async function syncUserPolar(userId: string): Promise<SyncWriteResult> {
   const conn = await getPolarConnection(userId);
   if (!conn) return { imported: 0, failed: false };
+  // Date-keyed rows are anchored at local noon of their date in this zone.
+  const tz = await resolveUserTimezone(userId);
 
   // Filled by the sleep collection's closure as it maps records; carried so the
   // caller can run the record-scoped sweep before the upsert. A collection that
@@ -190,7 +193,7 @@ export async function syncUserPolar(userId: string): Promise<SyncWriteResult> {
       name: "recharge",
       collect: async (t) =>
         (await fetchNightlyRecharges(t)).flatMap((r) =>
-          toUpsert(mapNightlyRecharge(r), "recharge"),
+          toUpsert(mapNightlyRecharge(r, tz), "recharge"),
         ),
     },
     {
@@ -199,7 +202,7 @@ export async function syncUserPolar(userId: string): Promise<SyncWriteResult> {
         const records = await fetchSleeps(t);
         const rowsOut: PolarMeasurementUpsert[] = [];
         for (const s of records) {
-          const rows = toUpsert(mapSleep(s), "sleep");
+          const rows = toUpsert(mapSleep(s, tz), "sleep");
           rowsOut.push(...rows);
           // Night-scoped sweep entry: the reconstructed segments of this date
           // all key under `sleep:<date>:seg:` (mapper-supplied). Any live row
@@ -223,14 +226,14 @@ export async function syncUserPolar(userId: string): Promise<SyncWriteResult> {
       name: "activity",
       collect: async (t) =>
         (await fetchActivities(t)).flatMap((a) =>
-          toUpsert(mapActivity(a), "activity"),
+          toUpsert(mapActivity(a, tz), "activity"),
         ),
     },
     {
       name: "cardioload",
       collect: async (t) =>
         (await fetchCardioLoads(t)).flatMap((c) =>
-          toUpsert(mapCardioLoad(c), "cardioload"),
+          toUpsert(mapCardioLoad(c, tz), "cardioload"),
         ),
     },
     {

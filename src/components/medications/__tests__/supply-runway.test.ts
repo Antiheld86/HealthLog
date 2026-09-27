@@ -371,3 +371,98 @@ describe("units runway with a mixed units-per-dose value (#1034)", () => {
     expect(estimateUnitsRunwayDays(10, [morning], 1.2)).toBe(8);
   });
 });
+
+describe("estimateDailyDoseCount — cadence parts the rate used to drop", () => {
+  it("stretches a monthly RRULE by its INTERVAL (every third month)", () => {
+    const perDay = estimateDailyDoseCount([
+      schedule({ rrule: "FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=10" }),
+    ]);
+    expect(perDay).toBeCloseTo(1 / 90, 10);
+    // Two doses left last about half a year, not two months.
+    expect(
+      estimateRunwayDays(2, [
+        schedule({ rrule: "FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=10" }),
+      ]),
+    ).toBe(180);
+  });
+
+  it("counts each BYMONTHDAY of a monthly RRULE", () => {
+    expect(
+      estimateDailyDoseCount([
+        schedule({ rrule: "FREQ=MONTHLY;BYMONTHDAY=1,15" }),
+      ]),
+    ).toBeCloseTo(2 / 30, 10);
+  });
+
+  it.each([
+    // Every Monday of the month is a weekly dose, not one a month.
+    ["FREQ=MONTHLY;BYDAY=MO", 1 / 7],
+    ["FREQ=MONTHLY;BYDAY=MO,TH", 2 / 7],
+    // With an ordinal it is one day of the month.
+    ["FREQ=MONTHLY;BYDAY=1MO", 1 / 30],
+    ["FREQ=MONTHLY;BYDAY=1MO,-1FR", 2 / 30],
+    // The last weekday of the month: BYSETPOS picks one of the five.
+    ["FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1", 1 / 30],
+    ["FREQ=MONTHLY;INTERVAL=2;BYDAY=MO", 1 / 14],
+    // Every Monday in January, and the first Monday of March and September.
+    ["FREQ=YEARLY;BYMONTH=1;BYDAY=MO", 30 / 7 / 365],
+    ["FREQ=YEARLY;BYMONTH=3,9;BYDAY=1MO", 2 / 365],
+  ])("counts the occurrences of %s", (rrule, perDay) => {
+    expect(estimateDailyDoseCount([schedule({ rrule })])).toBeCloseTo(
+      perDay,
+      10,
+    );
+  });
+
+  it("stretches a daily RRULE by its INTERVAL (every other day)", () => {
+    expect(
+      estimateDailyDoseCount([schedule({ rrule: "FREQ=DAILY;INTERVAL=2" })]),
+    ).toBeCloseTo(1 / 2, 10);
+  });
+
+  it("stretches a yearly RRULE by its INTERVAL and counts BYMONTH", () => {
+    expect(
+      estimateDailyDoseCount([
+        schedule({ rrule: "FREQ=YEARLY;INTERVAL=2;BYMONTH=1;BYMONTHDAY=1" }),
+      ]),
+    ).toBeCloseTo(1 / 730, 10);
+    expect(
+      estimateDailyDoseCount([
+        schedule({ rrule: "FREQ=YEARLY;BYMONTH=3,9;BYMONTHDAY=1" }),
+      ]),
+    ).toBeCloseTo(2 / 365, 10);
+  });
+
+  it("scales a CYCLIC schedule by its on share (3 weeks on, 1 off)", () => {
+    const cyclic = schedule({
+      rrule: "FREQ=DAILY",
+      scheduleType: "CYCLIC",
+      cyclicOnWeeks: 3,
+      cyclicOffWeeks: 1,
+    });
+    expect(estimateDailyDoseCount([cyclic])).toBeCloseTo(3 / 4, 10);
+    expect(estimateRunwayDays(21, [cyclic])).toBe(28);
+  });
+
+  it("counts nothing for an as-needed (PRN) schedule", () => {
+    expect(estimateDailyDoseCount([schedule({ scheduleType: "PRN" })])).toBe(0);
+  });
+});
+
+describe("whole counts survive binary floating point", () => {
+  it("2.4 units at 0.8 per dose is three doses", () => {
+    // 2.4 / 0.8 === 2.9999999999999996 in IEEE 754.
+    expect(effectiveUnitsPerDose([schedule({})], 0.8)).toBe(0.8);
+    expect(estimateUnitsRunwayDays(2.4, [schedule({})], 0.8)).toBe(3);
+  });
+
+  it("a dose-count runway that divides exactly is not a day short", () => {
+    // Three doses on Mon/Wed/Fri: 9/7 a day, and 9 / (9/7) is
+    // 6.999999999999999 in IEEE 754 — a week of supply, not six days.
+    const s = schedule({
+      daysOfWeek: "1,3,5",
+      timesOfDay: ["08:00", "12:00", "20:00"],
+    });
+    expect(estimateRunwayDays(9, [s])).toBe(7);
+  });
+});

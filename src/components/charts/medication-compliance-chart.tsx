@@ -69,6 +69,7 @@ import { useViewportWidth } from "@/hooks/use-viewport-width";
 import { chooseTickInterval } from "@/lib/charts/x-axis-density";
 import { apiGet } from "@/lib/api/api-fetch";
 import { shouldFireDataReady } from "@/lib/charts/data-ready-latch";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 interface DailyCompliancePoint {
   /** Berlin calendar day, "YYYY-MM-DD". */
@@ -208,7 +209,7 @@ interface MedicationComplianceChartProps {
 
 export function MedicationComplianceChart({
   title,
-  userTimezone = "Europe/Berlin",
+  userTimezone = DEFAULT_TIMEZONE,
   compareBaseline,
   onDataReady,
 }: MedicationComplianceChartProps) {

@@ -33,8 +33,12 @@ import { TimeFormatSelect } from "@/components/settings/time-format-select";
 import { DateFormatSelect } from "@/components/settings/date-format-select";
 import { UnitPreferenceSelect } from "@/components/settings/unit-preference-select";
 import { GlucoseUnitSelect } from "@/components/settings/glucose-unit-select";
-import { detectBrowserTimezone } from "@/lib/tz/format";
-import { apiFetchRaw } from "@/lib/api/api-fetch";
+import { detectBrowserTimezone, DEFAULT_TIMEZONE } from "@/lib/tz/format";
+import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
+import {
+  recentProofErrorMessage,
+  useRecentProof,
+} from "@/components/settings/security-section/use-recent-proof";
 import {
   describeRejectedProfileField,
   describeRejectedProfileFields,
@@ -71,10 +75,20 @@ export function AccountSection() {
   );
 
   const [email, setEmail] = useState("");
+  // A new email address needs the current password unless the session signed
+  // in within the last few minutes; the server decides and names the field if
+  // it wanted one. Never stored beyond this form.
+  const [emailPassword, setEmailPassword] = useState("");
+  // On an account with a second factor the password does not move the
+  // address: the server asks for the factor instead (`second_factor_required`)
+  // and the save runs once more after the re-proof dialog. Once that is
+  // known the password field is not offered, since it could only be refused.
+  const [emailNeedsFactor, setEmailNeedsFactor] = useState(false);
+  const recentProof = useRecentProof();
   const [height, setHeight] = useState<HeightDraft>(EMPTY_HEIGHT_DRAFT);
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState<string>("");
-  const [timezone, setTimezone] = useState<string>("Europe/Berlin");
+  const [timezone, setTimezone] = useState<string>(DEFAULT_TIMEZONE);
   // v1.7.0 — optional patient-identity fields for the health-record export.
   const [fullName, setFullName] = useState("");
   const [insurerName, setInsurerName] = useState("");
@@ -84,7 +98,7 @@ export function AccountSection() {
     height: EMPTY_HEIGHT_DRAFT,
     dateOfBirth: "",
     gender: "",
-    timezone: "Europe/Berlin",
+    timezone: DEFAULT_TIMEZONE,
     fullName: "",
     insurerName: "",
     insuranceNumber: "",
@@ -185,8 +199,50 @@ export function AccountSection() {
     navigate,
   });
 
-  async function handleSaveProfile(e: React.FormEvent) {
-    e.preventDefault();
+  const emailChanged =
+    email.trim() !== "" &&
+    email.trim().toLowerCase() !== profileSeed.email.trim().toLowerCase();
+
+  /**
+   * Did the server keep the new address back until a second factor is
+   * proved? Either as the one rejected field of a partial save, or as the
+   * whole answer when the address was all that changed.
+   */
+  function needsSecondFactor(
+    rejected: RejectedProfileField[] | undefined,
+    errorCode: string | undefined,
+  ): boolean {
+    return (
+      errorCode === "profile.update.emailSecondFactorRequired" ||
+      (rejected ?? []).some(
+        (r) => r.path === "email" && r.code === "second_factor_required",
+      )
+    );
+  }
+
+  /**
+   * Ask for the second factor (or a passkey) through the shared re-proof
+   * dialog, then save once more. Returns false when the person closed the
+   * dialog or could not confirm, leaving the message to show.
+   */
+  async function proveFactorThenSave(): Promise<boolean> {
+    setEmailNeedsFactor(true);
+    try {
+      await recentProof.run(() => apiGet("/api/auth/reproof"));
+    } catch (err) {
+      const message = recentProofErrorMessage(err, "");
+      if (message) {
+        setSaveMsg({ text: message });
+        setSaveMsgType("error");
+      }
+      return false;
+    }
+    await handleSaveProfile(undefined, true);
+    return true;
+  }
+
+  async function handleSaveProfile(e?: React.FormEvent, afterFactor = false) {
+    e?.preventDefault();
     setSaving(true);
     setSaveMsg(null);
     setSaveMsgType(null);
@@ -212,6 +268,9 @@ export function AccountSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: savedProfile.email || null,
+          ...(emailChanged && emailPassword
+            ? { currentPassword: emailPassword }
+            : {}),
           heightCm: heightAdapter.toCanonicalCm(savedProfile.height),
           dateOfBirth: savedProfile.dateOfBirth || null,
           gender: savedProfile.gender || null,
@@ -229,6 +288,8 @@ export function AccountSection() {
         : Promise.resolve({ ok: true } as Response),
     ]);
 
+    setEmailPassword("");
+
     if (profileRes.ok && tzRes.ok) {
       // Instant same-tab flip of every rendered timestamp (issue #490):
       // mirror the accepted zone before the `/me` refetch confirms it —
@@ -241,6 +302,10 @@ export function AccountSection() {
         data?: { rejectedFields?: RejectedProfileField[] };
       } | null;
       const rejected = profileJson?.data?.rejectedFields;
+
+      if (!afterFactor && needsSecondFactor(rejected, undefined)) {
+        if (await proveFactorThenSave()) return;
+      }
 
       if (rejected && rejected.length > 0) {
         // The write is field-independent: everything but the rejected
@@ -291,6 +356,9 @@ export function AccountSection() {
         details?: { issues?: RejectedProfileField[] };
       } | null;
       const errorCode = json?.meta?.errorCode;
+      if (!afterFactor && needsSecondFactor(undefined, errorCode)) {
+        if (await proveFactorThenSave()) return;
+      }
       const field = describeRejectedProfileField(json?.details?.issues, t);
       setFieldErrors(describeRejectedProfileFields(json?.details?.issues, t));
       if (errorCode === "profile.update.nothingSaved" && field) {
@@ -337,7 +405,10 @@ export function AccountSection() {
 
       <SettingsCard>
         <SettingsCardHeader icon={User} title={t("settings.profile")} />
-        <form onSubmit={handleSaveProfile} className="space-y-4">
+        <form
+          onSubmit={(event) => void handleSaveProfile(event)}
+          className="space-y-4"
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="username">{t("settings.username")}</Label>
@@ -373,6 +444,24 @@ export function AccountSection() {
                 aria-describedby={fieldErrors.email ? "email-error" : undefined}
               />
               <FieldError id="email-error" message={fieldErrors.email} />
+              {emailChanged && !emailNeedsFactor && (
+                <div className="space-y-2 pt-1">
+                  <Label htmlFor="email-current-password">
+                    {t("settings.emailChangePassword")}
+                  </Label>
+                  <Input
+                    id="email-current-password"
+                    type="password"
+                    value={emailPassword}
+                    onChange={(e) => {
+                      setEmailPassword(e.target.value);
+                      clearFieldError("email");
+                    }}
+                    autoComplete="current-password"
+                    maxLength={512}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -605,6 +694,7 @@ export function AccountSection() {
             </Button>
           </SettingsCardActions>
         </form>
+        {recentProof.dialog}
       </SettingsCard>
 
       {/* v1.18.0 (S5) — injection-site exclusions moved to the dedicated

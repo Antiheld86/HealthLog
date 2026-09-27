@@ -26,7 +26,7 @@ import { useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { listSupportedTimezones } from "@/lib/tz/format";
+import { listSupportedTimezones, DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { useTranslations } from "@/lib/i18n/context";
 
 // v1.4.27 MB7 / CF-52 — the in-file `NATIVE_SELECT_CLASS` constant
@@ -67,7 +67,7 @@ export function TimezonePicker({
           id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Europe/Berlin"
+          placeholder={DEFAULT_TIMEZONE}
           autoComplete="off"
         />
         <p className="text-muted-foreground text-xs">{labelHint}</p>

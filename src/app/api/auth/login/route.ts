@@ -10,6 +10,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { checkAuthSurfaceRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import { beginAccountLoginAttempt } from "@/lib/auth/login-throttle";
 import { ensureDbCompatibility } from "@/lib/db-compat";
 import { NextRequest, NextResponse } from "next/server";
 import { apiHandler } from "@/lib/api-handler";
@@ -19,12 +20,19 @@ import { createMfaChallenge } from "@/lib/auth/mfa/challenge";
 import { consumeTrustedDevice } from "@/lib/auth/trusted-device";
 import { syncMfaEnrollCookie } from "@/lib/auth/mfa-enrollment";
 import { isOidcOnly } from "@/lib/auth/oidc";
+import { readPendingLink } from "@/lib/auth/oidc-pending-link";
 
 export const POST = apiHandler(async (request: NextRequest) => {
   // OIDC_ONLY means password login must be a dead end, not just a hidden
   // button — otherwise a pre-existing password (or a leaked/reused one)
   // stays a live bypass of the operator's SSO-only policy.
-  if (isOidcOnly()) {
+  //
+  // One exception, and only for one account: a browser the SSO callback sent
+  // here to confirm an existing account carries a sealed pending link naming
+  // that account. It may prove that account's password (checked again once
+  // the account is resolved) so the link can be made; nothing else opens.
+  const pendingLink = isOidcOnly() ? await readPendingLink() : null;
+  if (isOidcOnly() && !pendingLink) {
     return apiError("Password login is disabled. Sign in with SSO.", 403, {
       errorCode: "oidc_only",
     });
@@ -84,6 +92,46 @@ export const POST = apiHandler(async (request: NextRequest) => {
     },
   });
 
+  // Under an SSO-only policy the one password sign-in allowed is the one that
+  // confirms the account a pending single sign-on link names. Any other
+  // account is refused BEFORE its password is checked: refusing after the
+  // check answered "wrong password" and "right password, wrong account"
+  // differently, which made this exception an oracle for every other
+  // account's password.
+  if (pendingLink && pendingLink.userId !== user?.id) {
+    return apiError("Password login is disabled. Sign in with SSO.", 403, {
+      errorCode: "oidc_only",
+    });
+  }
+
+  // The per-account half of the throttle (`@/lib/auth/login-throttle`): a
+  // place this account has signed in from is neither counted nor held back,
+  // anywhere else waits longer after each failure past the first few, up to
+  // fifteen minutes. Decided before the Argon2id verification, so a waiting
+  // attempt costs no hashing.
+  const attempt = await beginAccountLoginAttempt({
+    user,
+    identifier,
+    request,
+    ip: rl.ip,
+  });
+  annotate({ meta: { login_known_source: attempt.source ?? "none" } });
+  if (attempt.waiting) {
+    await auditLog("auth.login.account_throttled", {
+      userId: user?.id,
+      ipAddress: ip,
+      details: { identifierHash },
+    });
+    annotate({ action: { name: "auth.login.account_throttled" } });
+    return NextResponse.json(
+      {
+        data: null,
+        error: "Too many login attempts. Please try again later.",
+      },
+      { status: 429, headers: rateLimitHeaders(attempt.waiting) },
+    );
+  }
+
   // One verification for every outcome. An unknown identifier and an
   // account carrying no password hash (a passkey-only account) used to
   // return here before any hashing, so the three answers cost one indexed
@@ -97,6 +145,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const valid = await verifyPasswordOrDummy(user?.passwordHash, password);
 
   if (!user || !user.passwordHash) {
+    await attempt.failed();
     // v1.4.43 W3-SECURITY (H-1): never write the typed identifier into
     // the audit row — `reason` already tells the operator what
     // happened, and PII must not land in operator artefacts. The
@@ -111,6 +160,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   if (!valid) {
+    await attempt.failed();
     await auditLog("auth.login.failed", {
       userId: user.id,
       ipAddress: ip,
@@ -118,6 +168,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
     });
     return apiError("Invalid credentials", 401);
   }
+
+  // The password was right: this attempt was not a failed guess.
+  await attempt.succeeded();
 
   const ua = request.headers.get("user-agent");
 

@@ -9,14 +9,13 @@
  * instead of shipping silently.
  *
  * The LOCAL AI client and (since v1.37.30) the openai-client's gateway and
- * admin-key tags are the deliberate exceptions: they stay CONDITIONAL
- * (`requirePublicHost: !allowPrivate`) so an operator can opt into LAN hosts
- * via `ALLOW_LOCAL_AI_PRIVATE_HOSTS`. v1.18.7 (SECURITY LOW) — that flag is
- * now a host ALLOWLIST (`true` = any private host; a comma-separated list =
- * only those), resolved by `isLocalAiHostAllowed`. We assert the client keeps
- * the conditional shape AND derives `allowPrivate` from the allowlist helper
- * (not a raw `=== "true"` binary), never an unconditional `true` (which would
- * break LAN local models) and never absent (which would re-open the default).
+ * admin-key tags are the deliberate exceptions: an operator can grant a LAN
+ * endpoint. Since v1.39.3 the grant is an exact origin (`AI_PRIVATE_ORIGINS`,
+ * or the legacy host list) and the call is dialled through the pinned
+ * operator-approved dispatcher, never unpinned; the whole policy comes from
+ * `aiEgressPolicyFor`. We assert every AI dial site spreads that policy, and
+ * that neither an unconditional `false` (no pin) nor a local
+ * `isLocalAiHostAllowed` decision (a grant with no pin) reappears there.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -35,8 +34,9 @@ describe("SSRF requirePublicHost pin inventory", () => {
   it("openai-client routes person-typed base URLs through the allowlist with a pinned floor", () => {
     const src = read("ai/openai-client.ts");
     expect(src).toMatch(
-      /requirePublicHost:\s*this\.isGateway \|\| this\.type === "admin-key"\s*\? requirePublicHostFor\(this\.config\.baseUrl\)\s*:\s*true/,
+      /this\.isGateway \|\| this\.type === "admin-key"\s*\?\s*aiEgressPolicyFor\(url,\s*\{\s*operatorTrusted:\s*this\.config\.operatorTrusted,?\s*\}\)\s*:\s*\{\s*requirePublicHost:\s*true as const\s*\}/,
     );
+    expect(src).not.toMatch(/requirePublicHost:\s*false/);
   });
 
   it("anthropic-client pins the BYO base-URL outbound unconditionally", () => {
@@ -83,16 +83,20 @@ describe("SSRF requirePublicHost pin inventory", () => {
     },
   );
 
-  it("local AI client keeps the pin CONDITIONAL (LAN escape hatch)", () => {
+  it("local AI client dials every call through the shared egress policy", () => {
     const src = read("ai/local-client.ts");
-    // Must carry the conditional form …
-    expect(src).toMatch(/requirePublicHost:\s*!?\s*allowPrivate/);
-    // … and must NOT be hardened to an unconditional true (that would break
-    // a deliberately-private LAN local model).
-    expect(src).not.toMatch(/requirePublicHost:\s*true/);
-    // … and `allowPrivate` must come from the host-allowlist helper, not a
-    // raw binary `=== "true"` (v1.18.7 — the flag became an allowlist).
-    expect(src).toMatch(/allowPrivate\s*=\s*isLocalAiHostAllowed\(/);
-    expect(src).not.toMatch(/ALLOW_LOCAL_AI_PRIVATE_HOSTS\s*===\s*"true"/);
+    // Both the buffered and the streaming call derive the policy …
+    expect([
+      ...src.matchAll(
+        /const egress = aiEgressPolicyFor\(url,\s*\{\s*operatorTrusted:\s*this\.config\.operatorTrusted,?\s*\}\)/g,
+      ),
+    ]).toHaveLength(2);
+    // … and spread it into safeFetch …
+    expect([...src.matchAll(/\.\.\.egress,/g)]).toHaveLength(2);
+    // … with no local decision beside it: no hard-coded pin value (true
+    // would break a granted LAN model, false would drop the pin) and no
+    // grant check that could skip the operator-approved dispatcher.
+    expect(src).not.toMatch(/requirePublicHost:\s*(?:true|false|!)/);
+    expect(src).not.toMatch(/isLocalAiHostAllowed\(/);
   });
 });

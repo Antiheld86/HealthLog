@@ -928,6 +928,9 @@ model User {
   // v1.39.2 — further source keys an import answered with an existing
   // document (same bytes under another key). See DocumentSourceAlias.
   documentSourceAliases                     DocumentSourceAlias[]
+  // v1.39.3 — the person's own connection to a Paperless-ngx or Papra
+  // instance for the document picker. See DocumentSourceConnection.
+  documentSourceConnections                 DocumentSourceConnection[]
   extractedFacts                            ExtractedFact[]
   documentConditionLinks                    DocumentConditionLink[]
   documentContentIndexes                    DocumentContentIndex[]
@@ -1168,6 +1171,13 @@ model Session {
   // v1.23 — step-up freshness stamp. Set when the session completes a second
   // factor (or re-confirms it); `requireFreshMfa` (a later wave) reads it.
   mfaVerifiedAt DateTime? @map("mfa_verified_at")
+  /// When this session last re-proved a credential through `POST
+  /// /api/auth/reproof` (any method). Read by `requireRecentProof`, which on an
+  /// account without a second factor accepts it as the fresh proof in front of
+  /// exports, share links, token minting and the admin data actions. A
+  /// second-factor proof also stamps `mfaVerifiedAt`; a password proof stamps
+  /// only this, so it never satisfies a gate that asks for a second factor.
+  reproofAt     DateTime? @map("reproof_at")
   // v1.23 — sliding "last seen" for the user-facing active-session list.
   lastActiveAt  DateTime? @map("last_active_at")
 
@@ -4970,19 +4980,29 @@ model PushSubscription {
 // ─── Data Backups ────────────────────────────────────────────
 
 model DataBackup {
-  id            String   @id @default(cuid())
-  userId        String   @map("user_id")
-  type          String   @default("WEEKLY_AUTO") // WEEKLY_AUTO, MANUAL_UPLOAD_<ms>
+  id                  String   @id @default(cuid())
+  userId              String   @map("user_id")
+  type                String   @default("WEEKLY_AUTO") // WEEKLY_AUTO, MANUAL_UPLOAD_<ms>
   /// The whole encrypted copy as one value: how every backup was stored up
   /// to v1.39.1. NULL for a copy stored in pieces (`chunks`), which is how
   /// every backup is written from v1.39.2 on. A row carries one or the other.
-  data          String?
+  data                String?
   /// How many pieces a chunked copy has, and the random id sealed into every
   /// one of them (`src/lib/export/backup-chunks.ts`). The reader checks both
   /// against the pieces before it releases a byte; NULL on a single-value copy.
-  chunkCount    Int?     @map("chunk_count")
-  chunkStreamId String?  @map("chunk_stream_id")
-  createdAt     DateTime @default(now()) @map("created_at")
+  chunkCount          Int?     @map("chunk_count")
+  chunkStreamId       String?  @map("chunk_stream_id")
+  /// The application key ids the ciphertext INSIDE this copy was written
+  /// under, recorded as the copy is written (`createBackupKeyIdTextScanner`).
+  /// Key rotation re-seals the copy's envelope but not what is inside it, so
+  /// a key stays needed while any copy lists it. NULL for a copy written
+  /// before v1.39.3, which the admin encryption view counts as unrecorded.
+  /// Consumer: `GET /api/admin/encryption/status` (`backups.stored`).
+  innerKeyIds         String[] @default([]) @map("inner_key_ids")
+  /// Whether `innerKeyIds` was recorded; false on every copy written before
+  /// v1.39.3. Consumer: the same status read (`backups.unrecorded`).
+  innerKeyIdsRecorded Boolean  @default(false) @map("inner_key_ids_recorded")
+  createdAt           DateTime @default(now()) @map("created_at")
 
   user   User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   chunks DataBackupChunk[]
@@ -5146,6 +5166,43 @@ model OffhostBackupState {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("offhost_backup_state")
+}
+
+/// Per application key id, when the nightly off-host run last put an object
+/// in the bucket whose inner ciphertext needed that key. The bucket's
+/// lifecycle rule keeps each object for its retention, so a retired key is
+/// needed until that long after this date. Not per account: the question it
+/// answers is about keys. Written by `runOffhostBackup`; consumer:
+/// `GET /api/admin/encryption/status` (`backups.offhost`).
+model OffhostBackupKeyUse {
+  keyId          String   @id @map("key_id")
+  firstWrittenAt DateTime @map("first_written_at")
+  lastWrittenAt  DateTime @map("last_written_at")
+
+  @@map("offhost_backup_key_use")
+}
+
+/// An account whose off-host copies have to leave the bucket: it was deleted,
+/// or its data was wiped. Written in the same transaction as the deletion, so
+/// the request cannot be lost between the two, and deleted once every object
+/// for the account is gone. `subjectId` is deliberately not a relation: for a
+/// deleted account the user row is already gone. Written by
+/// `requestOffhostPurge`; consumer: `processOffhostPurges` (the
+/// `offhost-backup-purge` job) and the off-host card's pending count behind
+/// `GET /api/admin/backups`.
+model OffhostPurgeRequest {
+  id            String    @id @default(cuid())
+  subjectId     String    @map("subject_id")
+  /// `account_deleted`, `data_wiped` or `managed_profile_deleted`.
+  reason        String
+  requestedAt   DateTime  @default(now()) @map("requested_at")
+  attempts      Int       @default(0)
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  /// The bucket's last refusal, trimmed; shown to the operator.
+  lastFailure   String?   @map("last_failure")
+
+  @@index([requestedAt])
+  @@map("offhost_purge_requests")
 }
 
 // ─── Apple Health export.zip import (v1.4.34) ───────────────
@@ -5789,7 +5846,15 @@ model CustomMetricEntry {
   /// Unit snapshot from the metric at write time.
   unit           String
   measuredAt     DateTime  @map("measured_at")
+  /// @internal: legacy plaintext note, read only as a fallback for rows the
+  /// free-text encryption backfill has not reached yet (v1.39.3). Every write
+  /// since then goes to `noteEncrypted` and leaves this NULL; the backfill
+  /// nulls it on the old rows. DROP this column in a later release, once the
+  /// backfill reports zero remaining rows on every instance.
   note           String?
+  /// v1.39.3 — AES-256-GCM ciphertext of the note. Same Bytes codec as the
+  /// measurement and mood notes.
+  noteEncrypted  Bytes?    @map("note_encrypted")
   createdAt      DateTime  @default(now()) @map("created_at")
   /// v1.37.20 — soft-delete tombstone, peer parity with Measurement /
   /// MoodEntry (every other entry surface deletes recoverably with an undo
@@ -5800,6 +5865,10 @@ model CustomMetricEntry {
   metric CustomMetric @relation(fields: [customMetricId], references: [id], onDelete: Cascade)
 
   @@index([userId, customMetricId, measuredAt])
+  // `custom_metric_entries_note_backfill_idx` is a partial index over
+  // `(user_id) WHERE note IS NOT NULL` — see
+  // migration 0357 for the free-text encryption boot-discovery scan. Raw SQL
+  // only (partial predicate not expressible in Prisma).
   @@map("custom_metric_entries")
 }
 
@@ -6050,7 +6119,15 @@ model RecommendationFeedback {
 model CoachConversation {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
-  title     String
+  /// @internal: legacy plaintext title, read only as a fallback for rows the
+  /// free-text encryption backfill has not reached yet (v1.39.3). Every write
+  /// since then goes to `titleEncrypted` and leaves this NULL; the backfill
+  /// nulls it on the old rows. DROP this column in a later release, once the
+  /// backfill reports zero remaining rows on every instance.
+  title     String?
+  /// v1.39.3 — AES-256-GCM ciphertext of the title (the first 80 characters of
+  /// the opening Coach message, or the rename). Same Bytes codec as the notes.
+  titleEncrypted Bytes? @map("title_encrypted")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -6084,6 +6161,10 @@ model CoachConversation {
   // and the tool-route send path filters on the flag. Replaces the retired
   // [userId, documentId, updatedAt] composite.
   @@index([userId, documentScoped, updatedAt])
+  // `coach_conversations_title_backfill_idx` is a partial index over
+  // `(user_id) WHERE title IS NOT NULL` — see
+  // migration 0357 for the free-text encryption boot-discovery scan. Raw SQL
+  // only (partial predicate not expressible in Prisma).
   @@map("coach_conversations")
 }
 
@@ -8008,15 +8089,24 @@ model InboundDocument {
   /// and the Paperless workflow recipe; shown on the detail sheet.
   sourceSystem       String?               @map("source_system") @db.VarChar(16)
   /// v1.39.2 (#1038) — the document's id in `sourceSystem`. Together with
-  /// `userId` + `sourceSystem` it is unique across live AND tombstoned rows
-  /// (raw SQL in migration 0353, not expressible in Prisma):
-  ///   CREATE UNIQUE INDEX inbound_documents_user_source_key
-  ///     ON inbound_documents (user_id, source_system, source_id)
-  ///     WHERE source_id IS NOT NULL;
+  /// `userId`, `sourceSystem` and `sourceInstance` it is unique across live
+  /// AND tombstoned rows (raw SQL in migrations 0353 and 0356, not expressible
+  /// in Prisma; see `sourceInstance` for the current definition).
   /// Including tombstones is the point: re-running an importer must not bring
   /// back a document the person deleted. The purge carries the key over to
   /// `DocumentImportKey` when it removes the row.
   sourceId           String?               @map("source_id") @db.VarChar(128)
+  /// v1.39.3 (#1038) — which instance of `sourceSystem` the document came
+  /// from: the normalised origin (`scheme://host[:port]`) of the Paperless-ngx
+  /// or Papra it was fetched from, so id 123 on one Paperless and id 123 on
+  /// another are two keys. Plaintext; an address, not health data. Null for a
+  /// key sent without one (every v1.39.2 import, an older script, a workflow
+  /// that does not send it): such a key matches any instance of its system,
+  /// and a lookup without an instance matches any stored instance. Part of the
+  /// source-key unique index since migration 0356, which rebuilt it as
+  ///   (user_id, source_system, source_instance, source_id) NULLS NOT DISTINCT
+  ///   WHERE source_id IS NOT NULL.
+  sourceInstance     String?               @map("source_instance") @db.VarChar(512)
   /// v1.39.2 (#1038) — the upload asked for `aiRead=defer`: nothing may send
   /// this document to an AI provider on its own (the summary catch-up, the
   /// summary job, lab auto-staging all skip it). Cleared when the person
@@ -8078,18 +8168,24 @@ model InboundDocument {
 /// own, so deleting the document keeps every key that ever reached it deleted.
 /// Cascades with the document; the purge copies it first.
 model DocumentSourceAlias {
-  id           String   @id @default(cuid())
-  userId       String   @map("user_id")
-  documentId   String   @map("document_id")
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  documentId     String   @map("document_id")
   /// Same closed vocabulary as `InboundDocument.sourceSystem`.
-  sourceSystem String   @map("source_system") @db.VarChar(16)
-  sourceId     String   @map("source_id") @db.VarChar(128)
-  createdAt    DateTime @default(now()) @map("created_at")
+  sourceSystem   String   @map("source_system") @db.VarChar(16)
+  sourceId       String   @map("source_id") @db.VarChar(128)
+  /// v1.39.3 — the source instance, as on `InboundDocument.sourceInstance`
+  /// (null matches any instance of the system).
+  sourceInstance String?  @map("source_instance") @db.VarChar(512)
+  createdAt      DateTime @default(now()) @map("created_at")
 
   user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   document InboundDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, sourceSystem, sourceId])
+  // NULLS NOT DISTINCT in migration 0356 (hand-written; Prisma would
+  // regenerate it NULLS DISTINCT): a key stored without an instance still
+  // collides with the same key without one.
+  @@unique([userId, sourceSystem, sourceInstance, sourceId])
   @@index([documentId])
   @@map("document_source_aliases")
 }
@@ -8101,17 +8197,60 @@ model DocumentSourceAlias {
 /// "deleted" instead of storing the document again. Written by the purge only;
 /// read by the upload route's source-key check. Holds no document content.
 model DocumentImportKey {
-  id           String   @id @default(cuid())
-  userId       String   @map("user_id")
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
   /// Same closed vocabulary as `InboundDocument.sourceSystem`.
-  sourceSystem String   @map("source_system") @db.VarChar(16)
-  sourceId     String   @map("source_id") @db.VarChar(128)
-  createdAt    DateTime @default(now()) @map("created_at")
+  sourceSystem   String   @map("source_system") @db.VarChar(16)
+  sourceId       String   @map("source_id") @db.VarChar(128)
+  /// v1.39.3 — the source instance, as on `InboundDocument.sourceInstance`
+  /// (null matches any instance of the system).
+  sourceInstance String?  @map("source_instance") @db.VarChar(512)
+  createdAt      DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, sourceSystem, sourceId])
+  // NULLS NOT DISTINCT in migration 0356 (hand-written; Prisma would
+  // regenerate it NULLS DISTINCT): a key stored without an instance still
+  // collides with the same key without one.
+  @@unique([userId, sourceSystem, sourceInstance, sourceId])
   @@map("document_import_keys")
+}
+
+/// v1.39.3 (#1038) — one person's connection to a Paperless-ngx or Papra
+/// instance, used by the document picker to search that system by name, tag
+/// and date and import the documents the person picks. One per system per
+/// person. Only reachable when the operator lists the instance's origin in
+/// `DOCUMENT_SOURCE_ORIGINS`; the origin is re-checked on every request, so
+/// removing it from the list cuts the connection off without touching the
+/// row. No background job reads it: every request to the source is one the
+/// person started. Not carried in backups (a third-party credential for a
+/// service on the operator's network; see `NOT_IN_BACKUP_MODELS`); removed by
+/// Delete all data and with the account.
+model DocumentSourceConnection {
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  /// `PAPERLESS` | `PAPRA` (`DOCUMENT_PICKER_SYSTEMS` in
+  /// `src/lib/documents/sources/types.ts`).
+  system         String    @map("system") @db.VarChar(16)
+  /// Base address of the instance, origin plus an optional path. Plaintext:
+  /// its origin is compared with the operator's list on every use, and the
+  /// settings card shows it. Not health data.
+  baseUrl        String    @map("base_url") @db.VarChar(2048)
+  /// Papra organization id; null for Paperless-ngx.
+  organizationId String?   @map("organization_id") @db.VarChar(128)
+  /// The API token (Paperless-ngx) or API key (Papra), AES-256-GCM via
+  /// `encrypt()`. No route returns it, in whole or in part.
+  tokenEncrypted String    @map("token_encrypted")
+  /// Last time the source answered a test with this token: the save's live
+  /// check or the settings card's Test button. Shown on the card.
+  lastVerifiedAt DateTime? @map("last_verified_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, system])
+  @@map("document_source_connections")
 }
 
 model ExtractedFact {

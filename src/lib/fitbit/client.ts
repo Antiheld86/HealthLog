@@ -39,8 +39,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import { getEvent } from "@/lib/logging/context";
 import { safeFetch } from "@/lib/safe-fetch";
+import { canonicalDailyTimestamp } from "@/lib/measurements/consolidation-tz";
 import { zonedWallClockToUtc } from "@/lib/tz/wall-clock";
 import { FitbitApiError, classifyFitbitResponse } from "./response-classifier";
+import { envValue } from "@/lib/env";
 
 /** Classic Fitbit Web API base. */
 export const FITBIT_API_BASE = "https://api.fitbit.com";
@@ -76,8 +78,11 @@ export interface FitbitCredentials {
  *   - when derived from `NEXT_PUBLIC_APP_URL`, must stay same-origin with it.
  */
 export function getFitbitRedirectUri(): string {
-  const explicit = process.env.FITBIT_REDIRECT_URI;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  // An empty or blank value counts as unset: the compose whitelist
+  // materialises an unset var as an empty string, which must fall through to
+  // the derived URI rather than read as "not configured".
+  const explicit = envValue("FITBIT_REDIRECT_URI");
+  const appUrl = envValue("NEXT_PUBLIC_APP_URL");
   const raw =
     explicit ?? (appUrl ? `${appUrl}/api/fitbit/callback` : undefined);
 
@@ -528,15 +533,16 @@ function toFiniteNumber(v: unknown): number | null {
 }
 
 /**
- * Parse a Fitbit `YYYY-MM-DD` civil date into a UTC-midday Date. Anchored at
- * midday so a timezone shift can't roll the civil day across a boundary. Returns
- * null for an unparseable string.
+ * Validate a Fitbit `YYYY-MM-DD` civil date and return it as a day key, or
+ * null for an unparseable string. The key names the row's externalId; the
+ * row's instant is the key's local noon in the user's zone
+ * (`canonicalDailyTimestamp`), which reads the same calendar day there.
+ * Noon UTC, the previous anchor, is already the next day from UTC+13 on.
  */
-function parseCivilDate(dateStr: unknown): Date | null {
+function parseCivilKey(dateStr: unknown): string | null {
   if (typeof dateStr !== "string") return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
-  if (!m) return null;
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12));
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
 /**
@@ -584,28 +590,45 @@ interface FitbitBodyLogEntry {
   fat?: number;
 }
 
-/** Resolve the measuredAt for a body-log entry from its `date` + `time`. */
-function bodyLogInstant(entry: FitbitBodyLogEntry): Date {
+/**
+ * Resolve the measuredAt for a body-log entry from its `date` + `time`. Both
+ * are the user's local wall clock (Fitbit logs carry no offset), so they are
+ * read in the user's zone. Reading them as UTC put a morning weigh-in hours
+ * off, and on the previous or next day for anyone far from UTC.
+ */
+function bodyLogInstant(entry: FitbitBodyLogEntry, tz?: string): Date {
   const date = typeof entry.date === "string" ? entry.date : undefined;
   const time = typeof entry.time === "string" ? entry.time : "12:00:00";
   if (date) {
-    const d = new Date(`${date}T${time}Z`);
-    if (!Number.isNaN(d.getTime())) return d;
-    const civil = parseCivilDate(date);
-    if (civil) return civil;
+    const d = parseLocalInstant(`${date}T${time}`, tz ?? "UTC");
+    if (d) return d;
+    const civil = parseCivilKey(date);
+    if (civil) return canonicalDailyTimestamp(civil, tz);
   }
   return new Date();
 }
 
-/** Stable anchor for a body-log externalId — the logId, else the instant. */
+/**
+ * Stable anchor for a body-log externalId — the logId, else the logged wall
+ * clock. The wall clock is spelled the way earlier versions spelled it (as
+ * if it were UTC), so an entry without a logId keeps its externalId.
+ */
 function bodyLogAnchor(entry: FitbitBodyLogEntry): string {
   if (typeof entry.logId === "number" && Number.isFinite(entry.logId)) {
     return String(entry.logId);
   }
-  return bodyLogInstant(entry).toISOString();
+  const date = typeof entry.date === "string" ? entry.date : undefined;
+  const time = typeof entry.time === "string" ? entry.time : "12:00:00";
+  const asWritten = date ? new Date(`${date}T${time}Z`) : null;
+  return asWritten && !Number.isNaN(asWritten.getTime())
+    ? asWritten.toISOString()
+    : bodyLogInstant(entry).toISOString();
 }
 
-export function mapWeight(body: unknown): FitbitMappedMeasurement[] {
+export function mapWeight(
+  body: unknown,
+  tz?: string,
+): FitbitMappedMeasurement[] {
   const arr = readArray(body, "weight");
   const out: FitbitMappedMeasurement[] = [];
   for (const raw of arr) {
@@ -615,14 +638,17 @@ export function mapWeight(body: unknown): FitbitMappedMeasurement[] {
       type: "WEIGHT",
       value: round2(e.weight),
       unit: "kg",
-      measuredAt: bodyLogInstant(e),
+      measuredAt: bodyLogInstant(e, tz),
       fieldTag: `${bodyLogAnchor(e)}:weight`,
     });
   }
   return out;
 }
 
-export function mapBodyFat(body: unknown): FitbitMappedMeasurement[] {
+export function mapBodyFat(
+  body: unknown,
+  tz?: string,
+): FitbitMappedMeasurement[] {
   const arr = readArray(body, "fat");
   const out: FitbitMappedMeasurement[] = [];
   for (const raw of arr) {
@@ -632,7 +658,7 @@ export function mapBodyFat(body: unknown): FitbitMappedMeasurement[] {
       type: "BODY_FAT",
       value: round2(e.fat),
       unit: "%",
-      measuredAt: bodyLogInstant(e),
+      measuredAt: bodyLogInstant(e, tz),
       fieldTag: `${bodyLogAnchor(e)}:body_fat`,
     });
   }
@@ -665,10 +691,11 @@ function mapDailySummary(
     leaves: string[];
     factor?: number;
   },
+  tz: string | undefined,
 ): FitbitMappedMeasurement[] {
   const out: FitbitMappedMeasurement[] = [];
   for (const row of rows) {
-    const day = parseCivilDate(row.dateTime);
+    const day = parseCivilKey(row.dateTime);
     if (!day) continue;
     const value = firstPositiveLeaf(row.value, spec.leaves);
     if (value === null) continue;
@@ -677,8 +704,8 @@ function mapDailySummary(
       type: spec.type,
       value: round2(scaled),
       unit: spec.unit,
-      measuredAt: day,
-      fieldTag: `${fitbitDate(day)}:${spec.fieldTag}`,
+      measuredAt: canonicalDailyTimestamp(day, tz),
+      fieldTag: `${day}:${spec.fieldTag}`,
     });
   }
   return out;
@@ -694,41 +721,60 @@ function firstPositiveLeaf(obj: unknown, leaves: string[]): number | null {
   return null;
 }
 
-export function mapOxygenSaturation(body: unknown): FitbitMappedMeasurement[] {
+export function mapOxygenSaturation(
+  body: unknown,
+  tz?: string,
+): FitbitMappedMeasurement[] {
   // The SpO2 summary endpoint returns a BARE ARRAY of daily rows (not wrapped).
   const rows = Array.isArray(body) ? (body as FitbitDailyRow[]) : [];
-  return mapDailySummary(rows, {
-    type: "OXYGEN_SATURATION",
-    unit: "%",
-    fieldTag: "spo2",
-    leaves: ["avg"],
-  });
+  return mapDailySummary(
+    rows,
+    {
+      type: "OXYGEN_SATURATION",
+      unit: "%",
+      fieldTag: "spo2",
+      leaves: ["avg"],
+    },
+    tz,
+  );
 }
 
 export function mapHeartRateVariability(
   body: unknown,
+  tz?: string,
 ): FitbitMappedMeasurement[] {
   // Fitbit's HRV summary is an RMSSD estimator (`value.dailyRmssd`). It lands in
   // the canonical `HEART_RATE_VARIABILITY` slot that FITBIT occupies in the
   // source-priority `hrv` ladder (alongside Apple / Oura), keeping cross-source
   // comparison on one axis. (`HRV_RMSSD` is reserved for the WHOOP-native slot.)
   const rows = readArray(body, "hrv") as FitbitDailyRow[];
-  return mapDailySummary(rows, {
-    type: "HEART_RATE_VARIABILITY",
-    unit: "ms",
-    fieldTag: "hrv",
-    leaves: ["dailyRmssd"],
-  });
+  return mapDailySummary(
+    rows,
+    {
+      type: "HEART_RATE_VARIABILITY",
+      unit: "ms",
+      fieldTag: "hrv",
+      leaves: ["dailyRmssd"],
+    },
+    tz,
+  );
 }
 
-export function mapRespiratoryRate(body: unknown): FitbitMappedMeasurement[] {
+export function mapRespiratoryRate(
+  body: unknown,
+  tz?: string,
+): FitbitMappedMeasurement[] {
   const rows = readArray(body, "br") as FitbitDailyRow[];
-  return mapDailySummary(rows, {
-    type: "RESPIRATORY_RATE",
-    unit: "breaths/min",
-    fieldTag: "resp_rate",
-    leaves: ["breathingRate"],
-  });
+  return mapDailySummary(
+    rows,
+    {
+      type: "RESPIRATORY_RATE",
+      unit: "breaths/min",
+      fieldTag: "resp_rate",
+      leaves: ["breathingRate"],
+    },
+    tz,
+  );
 }
 
 /**
@@ -736,14 +782,21 @@ export function mapRespiratoryRate(body: unknown): FitbitMappedMeasurement[] {
  * GET /1/user/-/activities/heart/date/{start}/{end}.json
  *   → { "activities-heart": [{ dateTime, value: { restingHeartRate } }] }
  */
-export function mapRestingHeartRate(body: unknown): FitbitMappedMeasurement[] {
+export function mapRestingHeartRate(
+  body: unknown,
+  tz?: string,
+): FitbitMappedMeasurement[] {
   const rows = readArray(body, "activities-heart") as FitbitDailyRow[];
-  return mapDailySummary(rows, {
-    type: "RESTING_HEART_RATE",
-    unit: "bpm",
-    fieldTag: "rhr",
-    leaves: ["restingHeartRate"],
-  });
+  return mapDailySummary(
+    rows,
+    {
+      type: "RESTING_HEART_RATE",
+      unit: "bpm",
+      fieldTag: "rhr",
+      leaves: ["restingHeartRate"],
+    },
+    tz,
+  );
 }
 
 /**
@@ -753,11 +806,14 @@ export function mapRestingHeartRate(body: unknown): FitbitMappedMeasurement[] {
  * The value is a STRING that may be a single number or a range; a range resolves
  * to its midpoint. Daily latest-wins, day-keyed externalId.
  */
-export function mapVo2Max(body: unknown): FitbitMappedMeasurement[] {
+export function mapVo2Max(
+  body: unknown,
+  tz?: string,
+): FitbitMappedMeasurement[] {
   const rows = readArray(body, "cardioScore") as FitbitDailyRow[];
   const out: FitbitMappedMeasurement[] = [];
   for (const row of rows) {
-    const day = parseCivilDate(row.dateTime);
+    const day = parseCivilKey(row.dateTime);
     if (!day) continue;
     const v = parseVo2Max(
       (row.value as Record<string, unknown> | undefined)?.vo2Max,
@@ -767,8 +823,8 @@ export function mapVo2Max(body: unknown): FitbitMappedMeasurement[] {
       type: "VO2_MAX",
       value: round2(v),
       unit: "mL/(kg·min)",
-      measuredAt: day,
-      fieldTag: `vo2_max:${fitbitDate(day)}`,
+      measuredAt: canonicalDailyTimestamp(day, tz),
+      fieldTag: `vo2_max:${day}`,
       cumulativeDaily: true,
     });
   }
@@ -811,11 +867,12 @@ function mapActivitySeries(
     fieldTag: string;
     factor?: number;
   },
+  tz: string | undefined,
 ): FitbitMappedMeasurement[] {
   const rows = readArray(body, spec.arrayKey) as FitbitDailyRow[];
   const out: FitbitMappedMeasurement[] = [];
   for (const row of rows) {
-    const day = parseCivilDate(row.dateTime);
+    const day = parseCivilKey(row.dateTime);
     if (!day) continue;
     const n = toFiniteNumber(row.value);
     if (n === null || !nonNegative(n)) continue;
@@ -824,52 +881,80 @@ function mapActivitySeries(
       type: spec.type,
       value: round2(scaled),
       unit: spec.unit,
-      measuredAt: day,
-      fieldTag: `${spec.fieldTag}:${fitbitDate(day)}`,
+      measuredAt: canonicalDailyTimestamp(day, tz),
+      fieldTag: `${spec.fieldTag}:${day}`,
       cumulativeDaily: true,
     });
   }
   return out;
 }
 
-export function mapSteps(body: unknown): FitbitMappedMeasurement[] {
-  return mapActivitySeries(body, {
-    arrayKey: "activities-steps",
-    type: "ACTIVITY_STEPS",
-    unit: "steps",
-    fieldTag: "steps",
-  });
+export function mapSteps(
+  body: unknown,
+  tz?: string,
+): FitbitMappedMeasurement[] {
+  return mapActivitySeries(
+    body,
+    {
+      arrayKey: "activities-steps",
+      type: "ACTIVITY_STEPS",
+      unit: "steps",
+      fieldTag: "steps",
+    },
+    tz,
+  );
 }
 
-export function mapDistance(body: unknown): FitbitMappedMeasurement[] {
+export function mapDistance(
+  body: unknown,
+  tz?: string,
+): FitbitMappedMeasurement[] {
   // The metric-locale distance series reports kilometres → metres.
-  return mapActivitySeries(body, {
-    arrayKey: "activities-distance",
-    type: "WALKING_RUNNING_DISTANCE",
-    unit: "m",
-    fieldTag: "distance",
-    factor: 1000,
-  });
+  return mapActivitySeries(
+    body,
+    {
+      arrayKey: "activities-distance",
+      type: "WALKING_RUNNING_DISTANCE",
+      unit: "m",
+      fieldTag: "distance",
+      factor: 1000,
+    },
+    tz,
+  );
 }
 
-export function mapActiveCalories(body: unknown): FitbitMappedMeasurement[] {
+export function mapActiveCalories(
+  body: unknown,
+  tz?: string,
+): FitbitMappedMeasurement[] {
   // `activityCalories` is the ACTIVE portion (excludes BMR), unlike the total
   // `calories` resource.
-  return mapActivitySeries(body, {
-    arrayKey: "activities-activityCalories",
-    type: "ACTIVE_ENERGY_BURNED",
-    unit: "kcal",
-    fieldTag: "active_calories",
-  });
+  return mapActivitySeries(
+    body,
+    {
+      arrayKey: "activities-activityCalories",
+      type: "ACTIVE_ENERGY_BURNED",
+      unit: "kcal",
+      fieldTag: "active_calories",
+    },
+    tz,
+  );
 }
 
-export function mapFloors(body: unknown): FitbitMappedMeasurement[] {
-  return mapActivitySeries(body, {
-    arrayKey: "activities-floors",
-    type: "FLIGHTS_CLIMBED",
-    unit: "flights",
-    fieldTag: "floors",
-  });
+export function mapFloors(
+  body: unknown,
+  tz?: string,
+): FitbitMappedMeasurement[] {
+  return mapActivitySeries(
+    body,
+    {
+      arrayKey: "activities-floors",
+      type: "FLIGHTS_CLIMBED",
+      unit: "flights",
+      fieldTag: "floors",
+    },
+    tz,
+  );
 }
 
 /**

@@ -19,7 +19,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiGet } from "@/lib/api/api-fetch";
 import { queryKeys } from "@/lib/query-keys";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
-import { userDayKey, shiftDateKey } from "@/lib/tz/format";
+import { userDayKey, shiftDateKey, DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { TileHeader } from "@/components/insights/tile-header";
 import { Button } from "@/components/ui/button";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
@@ -94,7 +94,7 @@ export function IntradayPulseChart({
   const { isAuthenticated } = useAuth();
   const { t } = useTranslations();
   const fmt = useFormatters();
-  const tz = userTimezone ?? "Europe/Berlin";
+  const tz = userTimezone ?? DEFAULT_TIMEZONE;
   const todayKey = userDayKey(new Date(), tz);
   // `null` tracks "today" live (so a session left open across midnight keeps
   // following the current day); a non-null value pins the viewed day once

@@ -1,6 +1,6 @@
 import { safeFetch } from "@/lib/safe-fetch";
 import { annotate } from "@/lib/logging/context";
-import { isLocalAiHostAllowed } from "./local-host-allowlist";
+import { aiEgressPolicyFor } from "./local-host-allowlist";
 import type {
   AIProvider,
   AiMessage,
@@ -27,6 +27,13 @@ interface LocalClientConfig {
   apiKey?: string | null;
   model: string;
   baseUrl: string;
+  /**
+   * v1.39.3 — true when the base URL belongs to the operator: the
+   * instance-wide admin provider, or provider settings saved on an admin
+   * account. Only such a URL is still covered by the deprecated
+   * `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` (see `local-host-allowlist.ts`).
+   */
+  operatorTrusted?: boolean;
 }
 
 const STRICT_JSON_PREFIX =
@@ -193,11 +200,14 @@ export class LocalOpenAICompatibleClient implements AIProvider {
     // pin (issue #217) extends the same flag with a connect-time
     // resolved-IP check to also defeat DNS rebinding. Operators who
     // legitimately point at a self-hosted Ollama / LM Studio on an
-    // RFC1918 address opt in via `ALLOW_LOCAL_AI_PRIVATE_HOSTS` — either the
-    // legacy `=true` (any private host) or a comma-separated host allowlist
-    // (only those hostnames). Enforced at write-time in /api/user/ai-provider
-    // too. v1.18.7 (SECURITY LOW) — the binary flag became a host allowlist.
-    const allowPrivate = isLocalAiHostAllowed(url);
+    // RFC1918 address opt in via `AI_PRIVATE_ORIGINS` (exact origins) or the
+    // legacy host list. A granted origin is dialled through the pinned
+    // operator-approved dispatcher, never unpinned, so the metadata range and
+    // link-local stay unreachable even for a granted name (v1.39.3). Enforced
+    // at write-time in /api/user/ai-provider too.
+    const egress = aiEgressPolicyFor(url, {
+      operatorTrusted: this.config.operatorTrusted,
+    });
     const res = await safeFetch(
       url,
       {
@@ -210,7 +220,7 @@ export class LocalOpenAICompatibleClient implements AIProvider {
       {
         // v1.22 (#89) — honour the caller's per-request timeout override; default 60 s.
         timeoutMs: params.timeoutMs ?? 60_000,
-        requirePublicHost: !allowPrivate,
+        ...egress,
         signal: params.signal,
       },
     );
@@ -335,7 +345,9 @@ export class LocalOpenAICompatibleClient implements AIProvider {
     onDelta: (delta: string) => void,
   ): Promise<CompletionResult> {
     const { url, headers, body } = this.buildRequest(params, true);
-    const allowPrivate = isLocalAiHostAllowed(url);
+    const egress = aiEgressPolicyFor(url, {
+      operatorTrusted: this.config.operatorTrusted,
+    });
 
     // Idle controller: aborts the upstream when no chunk arrives within the
     // per-idle window. Composed with the caller's cancel signal so a client
@@ -355,7 +367,7 @@ export class LocalOpenAICompatibleClient implements AIProvider {
           // Absolute backstop only — the per-idle timer below is the real
           // ceiling. A server that streams forever still cannot pin a worker.
           timeoutMs: STREAM_ABSOLUTE_CEILING_MS,
-          requirePublicHost: !allowPrivate,
+          ...egress,
           signal,
         },
       );

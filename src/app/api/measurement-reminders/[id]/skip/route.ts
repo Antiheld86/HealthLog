@@ -22,10 +22,9 @@ import { apiSuccess, apiError, getClientIp } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { skipReminder } from "@/lib/measurement-reminders/satisfy";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type RouteParams = { params: Promise<{ id: string }> };
-
-const DEFAULT_TIMEZONE = "Europe/Berlin";
 
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {

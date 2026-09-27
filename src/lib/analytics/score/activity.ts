@@ -1,5 +1,5 @@
 import type { Derived } from "@/lib/insights/derived/types";
-import { userDayKey } from "@/lib/tz/format";
+import { shiftDateKey, userDayKey } from "@/lib/tz/format";
 
 import type { ActivityPillarInput, PillarValue } from "./types";
 import {
@@ -18,6 +18,23 @@ export const OLDER_ADULT_AGE = 60;
 export const YOUNGER_STEP_PLATEAU = 10_000;
 export const OLDER_STEP_PLATEAU = 8_000;
 
+/**
+ * The activity window: the `ACTIVITY_WINDOW_DAYS` completed local days that
+ * end yesterday, as inclusive `YYYY-MM-DD` keys. Today is left out because
+ * its step total is still growing: counting it pulled every score computed
+ * during the day down by a partial day.
+ */
+export function activityWindowKeys(
+  asOf: Date,
+  timezone: string,
+): { startDay: string; endDay: string } {
+  const today = userDayKey(asOf, timezone);
+  return {
+    startDay: shiftDateKey(today, -ACTIVITY_WINDOW_DAYS),
+    endDay: shiftDateKey(today, -1),
+  };
+}
+
 export function computeActivityPillar(
   input: ActivityPillarInput,
 ): Derived<PillarValue> {
@@ -29,13 +46,9 @@ export function computeActivityPillar(
     });
   }
 
-  const asOfDay = userDayKey(input.asOf, input.timezone);
-  const sinceDay = userDayKey(
-    new Date(input.asOf.getTime() - (ACTIVITY_WINDOW_DAYS - 1) * 86_400_000),
-    input.timezone,
-  );
+  const { startDay, endDay } = activityWindowKeys(input.asOf, input.timezone);
   const points = input.days.filter(
-    (point) => point.day <= asOfDay && point.day >= sinceDay,
+    (point) => point.day <= endDay && point.day >= startDay,
   );
   if (points.length < ACTIVITY_MIN_DAYS) {
     return insufficientPillar({

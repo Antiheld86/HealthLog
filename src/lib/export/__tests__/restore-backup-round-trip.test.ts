@@ -420,9 +420,15 @@ function recordingTx(
 
   return new Proxy({} as Record<string, unknown>, {
     // `$executeRaw` and friends: the restore's per-account lock, and the
-    // measurement insert, which answer with a row count.
+    // measurement insert, which answer with a row count. `$queryRaw` is the
+    // tenant check's read of the schema's foreign keys, which a mock has none
+    // of (the integration suite runs it against the real catalogue).
     get: (_t, model: string) =>
-      model.startsWith("$") ? async () => 0 : delegate(model),
+      model === "$queryRaw"
+        ? async () => []
+        : model.startsWith("$")
+          ? async () => 0
+          : delegate(model),
   });
 }
 
@@ -572,8 +578,11 @@ describe("backup round trip — export, wire schema, restore", () => {
     expect(entries[0]).toMatchObject({
       value: 44.5,
       unit: "kg",
-      note: "felt strong",
     });
+    // v1.39.3 — the note comes back sealed; the readable column is never
+    // written, even for a row that was still readable when it was exported.
+    expect(entries[0]).not.toHaveProperty("note");
+    expect(entries[0].noteEncrypted).toBeInstanceOf(Uint8Array);
   });
 
   it("writes persisted pattern identity and dismissal evidence back", async () => {

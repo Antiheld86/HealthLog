@@ -18,6 +18,10 @@ import { useModuleEnabled } from "@/hooks/use-module-enabled";
 import { ApiError } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
 import { useInviteGrant } from "@/lib/queries/use-account-grants";
+import {
+  ReproofCancelledError,
+  useRecentProof,
+} from "@/components/settings/security-section/use-recent-proof";
 import { SHARE_DOMAINS, type ShareDomain } from "@/lib/sharing/scope";
 import { DEFAULT_TIMEZONE, isValidTimezone } from "@/lib/tz/format";
 import { wallClockInTz, zonedWallClockToUtc } from "@/lib/tz/wall-clock";
@@ -79,6 +83,7 @@ import { wallClockInTz, zonedWallClockToUtc } from "@/lib/tz/wall-clock";
 export function GrantInviteCard() {
   const { t } = useTranslations();
   const invite = useInviteGrant();
+  const recentProof = useRecentProof();
   const ownerTimezone = useInvitationOwnerTimezone();
   const [identifier, setIdentifier] = useState("");
   const [expiresOn, setExpiresOn] = useState("");
@@ -118,31 +123,40 @@ export function GrantInviteCard() {
     setError(null);
   };
 
-  const submit = (event: React.FormEvent) => {
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const value = identifier.trim();
     if (value.length === 0 || choice.blocked) return;
     setError(null);
     setInvited(null);
-    invite.mutate(
-      {
-        identifier: value,
-        access,
-        scope: choice.scope,
-        expiresAt: endOfDayIso(expiresOn, ownerTimezone),
-      },
-      {
-        onSuccess: (grant) => {
-          setIdentifier("");
-          setExpiresOn("");
-          setAccess("READ");
-          setNarrowed(null);
-          setSections([]);
-          setInvited(grant.account.username);
-        },
-        onError: (err) => setError(t(inviteErrorKey(err))),
-      },
-    );
+    // Offering access hands somebody a standing way into the record, so the
+    // server asks for a fresh proof unless the session signed in or re-proved
+    // within five minutes; the dialog collects it and the invitation is sent
+    // again.
+    try {
+      const grant = await recentProof.run(() =>
+        invite.mutateAsync({
+          identifier: value,
+          access,
+          scope: choice.scope,
+          expiresAt: endOfDayIso(expiresOn, ownerTimezone),
+        }),
+      );
+      setIdentifier("");
+      setExpiresOn("");
+      setAccess("READ");
+      setNarrowed(null);
+      setSections([]);
+      setInvited(grant.account.username);
+    } catch (err) {
+      if (err instanceof ReproofCancelledError) return;
+      setError(
+        err instanceof ApiError &&
+          err.meta?.errorCode === "auth.reproof.sign_in_again"
+          ? err.message
+          : t(inviteErrorKey(err)),
+      );
+    }
   };
 
   return (
@@ -159,7 +173,7 @@ export function GrantInviteCard() {
           "recordSharing.invite.needsAccount",
         )}`}
       />
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={(event) => void submit(event)} className="space-y-3">
         <div className="space-y-1.5">
           <Label htmlFor="grant-invite-identifier">
             {t("recordSharing.invite.identifierLabel")}
@@ -373,6 +387,7 @@ export function GrantInviteCard() {
           </Button>
         </SettingsCardActions>
       </form>
+      {recentProof.dialog}
     </SettingsCard>
   );
 }

@@ -102,6 +102,14 @@ x-healthlog-env: &healthlog_env
   IP_GEO_LOOKUP_URL: "${IP_GEO_LOOKUP_URL:-}"
   IP_GEO_LOOKUP_DISABLED: "${IP_GEO_LOOKUP_DISABLED:-}"
   IP_GEO_ALLOW_INSECURE: "${IP_GEO_ALLOW_INSECURE:-}"
+  # Outbound requests an operator can turn off (1 / true / yes). Both are on
+  # by default. PASSWORD_BREACH_CHECK_DISABLED stops the HaveIBeenPwned range
+  # query made when a password is set (only the first five characters of the
+  # password's SHA-1 are sent). UPDATE_CHECK_DISABLED stops the daily request
+  # to the GitHub releases API behind the About page and the admin version
+  # tile. Listed here so an operator value in .env reaches the container.
+  PASSWORD_BREACH_CHECK_DISABLED: "${PASSWORD_BREACH_CHECK_DISABLED:-}"
+  UPDATE_CHECK_DISABLED: "${UPDATE_CHECK_DISABLED:-}"
   # Directory the offline GeoLite2 databases are read from. Default
   # `/opt/geolite2` — the path the published image bakes its own copy
   # into, if the build had a MaxMind licence key. Point this at a
@@ -125,6 +133,7 @@ x-healthlog-env: &healthlog_env
   # web = serve HTTP only; pair with a separate app-worker service
   HEALTHLOG_PROCESS_TYPE: "${HEALTHLOG_PROCESS_TYPE:-all}"
   BACKUP_ENCRYPTION_KEY: "${BACKUP_ENCRYPTION_KEY:-}"
+  BACKUP_ENCRYPTION_PREVIOUS_KEYS: "${BACKUP_ENCRYPTION_PREVIOUS_KEYS:-}"
   BACKUP_S3_ENDPOINT: "${BACKUP_S3_ENDPOINT:-}"
   BACKUP_S3_BUCKET: "${BACKUP_S3_BUCKET:-}"
   BACKUP_S3_ACCESS_KEY: "${BACKUP_S3_ACCESS_KEY:-}"
@@ -215,6 +224,13 @@ x-healthlog-env: &healthlog_env
   # and unspecified addresses stay refused even when listed. See
   # docs/self-hosting/notifications.md.
   NOTIFICATION_PRIVATE_ORIGINS: "${NOTIFICATION_PRIVATE_ORIGINS:-}"
+  # Paperless-ngx and Papra instances the document picker may reach,
+  # comma-separated exact origins (e.g. "https://paperless.example.com,
+  # http://papra.lan:1221"). Unset, the picker is off. Only listed origins are
+  # ever contacted, public or private; redirects are not followed and
+  # link-local, metadata and unspecified addresses stay refused even when
+  # listed. See docs/self-hosting/document-sources.md.
+  DOCUMENT_SOURCE_ORIGINS: "${DOCUMENT_SOURCE_ORIGINS:-}"
   # Open-Meteo endpoints for the environment/weather correlation. Default to
   # the hosted service; point them at your own Open-Meteo deployment to keep
   # the coordinate lookups off a third party.
@@ -253,12 +269,17 @@ x-healthlog-env: &healthlog_env
   # container (the `environment:` block is a whitelist). See
   # docs/ops/tls-cert-pin.md.
   TLS_LEAF_SPKI_PINS: "${TLS_LEAF_SPKI_PINS:-}"
-  # Local-AI SSRF opt-in (optional). The local AI provider rejects
-  # private/internal hosts by default; set this to an exact host allowlist
-  # (e.g. "ollama.lan,10.0.0.5") or "true" for any private host, intended
-  # for a self-hosted Ollama / LM Studio. Listed here so an operator value
-  # in .env reaches the container (the `environment:` block is a whitelist).
-  # See docs/integrations/ai-providers.md.
+  # AI endpoints on your own network (optional): a self-hosted Ollama,
+  # LM Studio or LiteLLM gateway, comma-separated exact origins (e.g.
+  # "http://ollama.lan:11434,http://10.0.0.5:4000"). Without it an AI base
+  # URL on a private address is refused. Link-local, metadata and
+  # unspecified addresses stay refused even when listed. See
+  # docs/integrations/ai-providers.md.
+  AI_PRIVATE_ORIGINS: "${AI_PRIVATE_ORIGINS:-}"
+  # Older form of the above, kept for existing installs: an exact host list
+  # (e.g. "ollama.lan,10.0.0.5") still works. "true" is deprecated: it now
+  # covers only the admin AI key and admin accounts' own AI settings, and
+  # will be removed in a later release; move to AI_PRIVATE_ORIGINS.
   ALLOW_LOCAL_AI_PRIVATE_HOSTS: "${ALLOW_LOCAL_AI_PRIVATE_HOSTS:-}"
   # Extra hosts the admin-configured AI base URL may point at, on top of the
   # built-in public providers. Comma-separated bare hostnames. Set it when

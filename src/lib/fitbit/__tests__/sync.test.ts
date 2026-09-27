@@ -288,7 +288,12 @@ describe("upsertFitbitMeasurements — batched write, tombstones resurrect", () 
     const measuredAt = new Date("2026-05-10T07:00:00.000Z");
     // A re-fetched daily summary: the live row already exists.
     prismaMock.measurement.findMany.mockResolvedValue([
-      { id: "m-live", type: "WEIGHT", externalId: "stats:weight:2026-05-10" },
+      {
+        id: "m-live",
+        type: "WEIGHT",
+        externalId: "stats:weight:2026-05-10",
+        measuredAt,
+      },
     ]);
 
     const { imported } = await upsertFitbitMeasurements("user1", [
@@ -319,7 +324,12 @@ describe("upsertFitbitMeasurements — batched write, tombstones resurrect", () 
     // probe returns it; planning an insert instead would be dropped silently
     // by `skipDuplicates` and wedge the key forever.
     prismaMock.measurement.findMany.mockResolvedValue([
-      { id: "m-dead", type: "WEIGHT", externalId: "stats:weight:2026-05-10" },
+      {
+        id: "m-dead",
+        type: "WEIGHT",
+        externalId: "stats:weight:2026-05-10",
+        measuredAt,
+      },
     ]);
 
     const { imported } = await upsertFitbitMeasurements("user1", [
@@ -342,11 +352,52 @@ describe("upsertFitbitMeasurements — batched write, tombstones resurrect", () 
     expect(updateArg.data.deletedAt).toBeNull();
   });
 
+  it("moves a daily row to its new anchor and refolds the day it left", async () => {
+    // A step total written at the old noon-UTC anchor, re-fetched for a user
+    // in Tonga, whose local noon is 23:00 UTC the day before.
+    const legacy = new Date("2026-05-10T12:00:00.000Z");
+    const localNoon = new Date("2026-05-09T23:00:00.000Z");
+    prismaMock.measurement.findMany.mockResolvedValue([
+      {
+        id: "m-steps",
+        type: "ACTIVITY_STEPS",
+        externalId: "stats:steps:2026-05-10",
+        value: 8421,
+        unit: "steps",
+        measuredAt: legacy,
+        sleepStage: null,
+        deletedAt: null,
+      },
+    ]);
+
+    const { touched } = await upsertFitbitMeasurements("user1", [
+      {
+        type: "ACTIVITY_STEPS",
+        value: 8421,
+        unit: "steps",
+        measuredAt: localNoon,
+        externalId: "stats:steps:2026-05-10",
+      },
+    ]);
+
+    expect(prismaMock.measurement.createManyAndReturn).not.toHaveBeenCalled();
+    expect(prismaMock.measurement.update).toHaveBeenCalledTimes(1);
+    const updateArg = prismaMock.measurement.update.mock.calls[0]![0] as {
+      data: { measuredAt: Date };
+    };
+    expect(updateArg.data.measuredAt).toEqual(localNoon);
+    expect(touched.map((t) => t.measuredAt.toISOString())).toEqual(
+      expect.arrayContaining([localNoon.toISOString(), legacy.toISOString()]),
+    );
+  });
+
   it("splits a mixed batch: matched-live → update, unmatched → createMany", async () => {
     const measuredAt = new Date("2026-05-10T07:00:00.000Z");
-    prismaMock.measurement.findMany.mockResolvedValue([
-      { id: "m-live", type: "WEIGHT", externalId: "live-key" },
-    ]);
+    prismaMock.measurement.findMany
+      .mockResolvedValueOnce([
+        { id: "m-live", type: "WEIGHT", externalId: "live-key", measuredAt },
+      ])
+      .mockResolvedValueOnce([]); // natural-key rescue: no twin
 
     const { imported } = await upsertFitbitMeasurements("user1", [
       {
@@ -438,7 +489,7 @@ describe("upsertFitbitMeasurements — write-catch ledger (F-2)", () => {
     // fresh → create branch. Second findMany is the natural-key rescue probe.
     prismaMock.measurement.findMany
       .mockResolvedValueOnce([
-        { id: "m-live", type: "WEIGHT", externalId: "live-key" },
+        { id: "m-live", type: "WEIGHT", externalId: "live-key", measuredAt },
       ])
       .mockResolvedValueOnce([]); // natural-key rescue: no twin
     prismaMock.measurement.createManyAndReturn.mockRejectedValueOnce(
@@ -478,8 +529,8 @@ describe("upsertFitbitMeasurements — write-catch ledger (F-2)", () => {
     // throws; the loop must continue to the second, and the create still runs.
     prismaMock.measurement.findMany
       .mockResolvedValueOnce([
-        { id: "m-live-1", type: "WEIGHT", externalId: "live-1" },
-        { id: "m-live-2", type: "WEIGHT", externalId: "live-2" },
+        { id: "m-live-1", type: "WEIGHT", externalId: "live-1", measuredAt },
+        { id: "m-live-2", type: "WEIGHT", externalId: "live-2", measuredAt },
       ])
       .mockResolvedValueOnce([]); // natural-key rescue: no twin
     prismaMock.measurement.update

@@ -38,6 +38,10 @@ import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { type AdminUser, PasswordInput } from "./_shared";
 import { apiGet, apiPost, apiPut } from "@/lib/api/api-fetch";
+import {
+  recentProofErrorMessage,
+  useRecentProof,
+} from "@/components/settings/security-section/use-recent-proof";
 
 /**
  * Filter values for the v1.5 users sub-route. The User model does NOT
@@ -103,16 +107,22 @@ export function UserManagementSection() {
     },
   });
 
+  // Setting another account's password asks for a fresh proof unless this
+  // session signed in or re-proved within five minutes.
+  const recentProof = useRecentProof();
+
   const resetPw = useMutation({
     mutationFn: async ({ id, password }: { id: string; password: string }) => {
-      await apiPost(`/api/admin/users/${id}/reset-password`, { password });
+      await recentProof.run(() =>
+        apiPost(`/api/admin/users/${id}/reset-password`, { password }),
+      );
     },
     onSuccess: () => {
       setResetMsg(t("admin.passwordReset"));
       setResetPassword("");
     },
     onError: (err: Error) => {
-      setResetMsg(err.message);
+      setResetMsg(recentProofErrorMessage(err, err.message));
     },
   });
 
@@ -265,6 +275,7 @@ export function UserManagementSection() {
 
   return (
     <SettingsCard>
+      {recentProof.dialog}
       <SettingsCardHeader
         icon={Users}
         title={t("admin.userManagement")}

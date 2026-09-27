@@ -61,7 +61,7 @@ import { loadDenseMeasurementBuckets } from "./dense-buckets";
 import { summariseDenseBuckets } from "./measurement-series";
 import { emptyGlucoseClinical } from "./glucose-panel";
 import { buildAdministrationLedger, buildGlp1Block } from "./medications";
-import { validTimezoneOr } from "@/lib/tz/format";
+import { userDayKey, validTimezoneOr, DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import {
   loadAllergies,
   loadAnamnesis,
@@ -147,7 +147,13 @@ export async function collectDoctorReportData(
       insurerIkNumber: true,
     },
   });
-  const reportTz = validTimezoneOr(userProfile?.timezone, "Europe/Berlin");
+  const reportTz = validTimezoneOr(userProfile?.timezone, DEFAULT_TIMEZONE);
+  // `startsOn` / `endsOn` are calendar dates (stored as UTC midnight), so
+  // they compare against the window's first and last day in the report zone,
+  // not its instants: west of UTC the window starts hours after UTC midnight,
+  // and a course that ended on the first day read as over before it began.
+  const firstDay = new Date(`${userDayKey(start, reportTz)}T00:00:00.000Z`);
+  const lastDay = new Date(`${userDayKey(end, reportTz)}T00:00:00.000Z`);
 
   const aggregateDenseTypes = days > DENSE_REPORT_RAW_WINDOW_DAYS;
   const densePulse = aggregateDenseTypes && !excluded.includes("PULSE");
@@ -189,7 +195,34 @@ export async function collectDoctorReportData(
       }),
       wantsMedications
         ? prisma.medication.findMany({
-            where: { userId, active: true },
+            // The report describes its window, and a link can pin that window
+            // in the past: a medication whose course had not begun by the
+            // window's end, or had ended before it began, is not part of it.
+            // One with a dose scheduled inside the window was taken then,
+            // whenever it was entered. Dose history and the last intake stop
+            // at the window's end too, so a report for March does not show a
+            // dose set in June.
+            where: {
+              userId,
+              active: true,
+              AND: [
+                {
+                  OR: [
+                    { startsOn: { lte: lastDay } },
+                    { startsOn: null, createdAt: { lte: end } },
+                    {
+                      intakeEvents: {
+                        some: {
+                          deletedAt: null,
+                          scheduledFor: { gte: start, lte: end },
+                        },
+                      },
+                    },
+                  ],
+                },
+                { OR: [{ endsOn: null }, { endsOn: { gte: firstDay } }] },
+              ],
+            },
             include: {
               schedules: {
                 select: { ...SCHEDULE_COMPLIANCE_SELECT, label: true },
@@ -205,9 +238,12 @@ export async function collectDoctorReportData(
                 },
               },
               pauseEras: { select: { pausedAt: true, resumedAt: true } },
-              doseChanges: { orderBy: { effectiveFrom: "asc" } },
+              doseChanges: {
+                where: { effectiveFrom: { lte: end } },
+                orderBy: { effectiveFrom: "asc" },
+              },
               intakeEvents: {
-                where: { takenAt: { not: null } },
+                where: { takenAt: { not: null, lte: end } },
                 orderBy: { takenAt: "desc" },
                 take: 1,
                 select: { takenAt: true, injectionSite: true },
@@ -583,6 +619,7 @@ export async function collectDoctorReportData(
     compliance: gate.admits("MEDICATION_COMPLIANCE") ? compliance : {},
     medications: gate.admits("MEDICATION_LIST")
       ? medications.map((m) => ({
+          id: m.id,
           name: m.name,
           dose: m.dose,
           atcCode: m.atcCode,

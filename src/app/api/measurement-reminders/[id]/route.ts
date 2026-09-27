@@ -29,16 +29,15 @@ import { annotate } from "@/lib/logging/context";
 import { updateMeasurementReminderSchema } from "@/lib/validations/measurement-reminders";
 import {
   computeReminderNextDueAt,
+  parseReminderAnchor,
   type ReminderScheduleInput,
 } from "@/lib/measurement-reminders/scheduling";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
 import { wallClockInTz, zonedWallClockToUtc } from "@/lib/tz/wall-clock";
-import { userDayKey } from "@/lib/tz/format";
+import { DEFAULT_TIMEZONE, userDayKey } from "@/lib/tz/format";
 import { holdsOpenAfterReminder } from "@/lib/measurement-reminders/holds-open";
 
 type RouteParams = { params: Promise<{ id: string }> };
-
-const DEFAULT_TIMEZONE = "Europe/Berlin";
 
 async function resolveTimezone(userId: string): Promise<string> {
   const row = await prisma.user.findUnique({
@@ -143,9 +142,12 @@ export const PATCH = apiHandler(
         updateData.intervalDays = null;
       }
     }
+    const timezone = await resolveTimezone(user.id);
     if (data.anchorDate !== undefined) {
       updateData.anchorDate =
-        data.anchorDate != null ? new Date(data.anchorDate) : null;
+        data.anchorDate != null
+          ? parseReminderAnchor(data.anchorDate, timezone)
+          : null;
     }
     if (data.notifyHour !== undefined) updateData.notifyHour = data.notifyHour;
     if (data.location !== undefined) updateData.location = data.location;
@@ -168,7 +170,6 @@ export const PATCH = apiHandler(
     // auto-clear a few lines up — so keying off its own keys (present, even
     // when the value is `null`) can never diverge from what the database
     // ends up holding.
-    const timezone = await resolveTimezone(user.id);
     const now = new Date();
     const merged: ReminderScheduleInput = {
       intervalDays: Object.hasOwn(updateData, "intervalDays")
@@ -195,10 +196,10 @@ export const PATCH = apiHandler(
     // open, overdue check-up quietly moved it to its next slot. Compared by
     // value, because a client may resend every field on each save.
     //
-    // The first due date is compared by CALENDAR DAY in the profile zone. The
-    // web form sends a date as the browser's local midnight, and a booster
-    // row stores the dose instant plus N days, so the same day arrives as a
-    // different instant. A resent same-day anchor is dropped from the write
+    // The first due date is compared by CALENDAR DAY in the profile zone. A
+    // client may send a date-time (older web builds sent the browser's local
+    // midnight), and a booster row stores the dose instant plus N days, so the
+    // same day arrives as a different instant. A resent same-day anchor is dropped from the write
     // altogether, so the stored instant stays what it was.
     const sameInstant = (a: Date | null, b: Date | null) =>
       (a?.getTime() ?? null) === (b?.getTime() ?? null);

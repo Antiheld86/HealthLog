@@ -117,6 +117,17 @@ describe("redactSecrets", () => {
     ).toBe('{"token": "[REDACTED]"}');
   });
 
+  it.each([
+    ["an invite token", `hlv_${"0a".repeat(32)}`],
+    ["a session secret", `hls_${"ab".repeat(32)}`],
+    ["an elevation", `hle_${"cd".repeat(32)}`],
+    ["a native sign-in handoff code", `hlh_${"Ab9_-".repeat(9)}Ab`],
+    ["an MCP refresh token", `hlrt_${"x".repeat(40)}`],
+  ])("redacts %s wherever it appears", (_label, token) => {
+    expect(redactSecrets(`code=${token} next`)).not.toContain(token);
+    expect(redactSecrets(`value: ${token}`)).toBe("value: [REDACTED]");
+  });
+
   it("does NOT redact non-token strings starting with `hl`", () => {
     expect(redactSecrets("html_render finished")).toBe("html_render finished");
     expect(redactSecrets("healthcheck ok")).toBe("healthcheck ok");

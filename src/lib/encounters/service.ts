@@ -27,8 +27,7 @@ import {
   reanchorAppointmentReminder,
   type AppointmentReminderInput,
 } from "@/lib/encounters/appointment-reminder";
-
-const DEFAULT_TIMEZONE = "Europe/Berlin";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * The record owner's zone AND language, read together.

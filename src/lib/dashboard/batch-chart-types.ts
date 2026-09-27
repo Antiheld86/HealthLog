@@ -25,16 +25,12 @@
  *    prefetch-off / legacy / fail-soft paths where no prop arrives.
  *
  * Import-safe from the server RSC and the client component alike: pure, no
- * Prisma / db / `node:*` imports (only the client-safe `@/lib/tz/format`
- * Intl helpers and the layout type).
+ * Prisma / db / `node:*` imports (only the client-safe `@/lib/tz` Intl
+ * helpers and the layout type).
  */
 import type { DashboardLayout } from "@/lib/dashboard-layout";
-import {
-  DEFAULT_TIMEZONE,
-  isValidTimezone,
-  tzOffsetMinutes,
-  userDayKey,
-} from "@/lib/tz/format";
+import { DEFAULT_TIMEZONE, isValidTimezone, userDayKey } from "@/lib/tz/format";
+import { localDayWindow } from "@/lib/tz/local-day";
 
 /**
  * Day-span the batched dashboard series (`series-batch`) fetches. Threaded to
@@ -97,21 +93,13 @@ export interface BatchWindow {
 }
 
 /**
- * End-of-day of `now` in `timezone`, as a UTC instant. Falls back to the
- * project default zone for an unusable IANA id. Two-step offset refine so the
- * rare DST edge (a transition between the as-if-UTC guess and the true local
- * instant) still resolves to the right offset.
+ * Last millisecond of the local day `now` falls on in `timezone`, as a UTC
+ * instant. Falls back to the project default zone for an unusable IANA id.
  */
 function endOfLocalDayUtc(now: Date, timezone: string): Date {
   const safeTz = isValidTimezone(timezone) ? timezone : DEFAULT_TIMEZONE;
-  const dayKey = userDayKey(now, safeTz); // YYYY-MM-DD in the zone
-  const [year, month, day] = dayKey.split("-").map(Number);
-  // Wall-clock 23:59:59.999 treated as-if-UTC, then shifted by the zone offset.
-  const asIfUtc = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
-  const offset1 = tzOffsetMinutes(new Date(asIfUtc), safeTz);
-  const corrected = new Date(asIfUtc - offset1 * 60_000);
-  const offset2 = tzOffsetMinutes(corrected, safeTz);
-  return new Date(asIfUtc - offset2 * 60_000);
+  const { dayEnd } = localDayWindow(userDayKey(now, safeTz), safeTz);
+  return new Date(dayEnd.getTime() - 1);
 }
 
 /**

@@ -47,6 +47,7 @@ import {
 } from "@/lib/crypto/note-cipher";
 import { NextRequest } from "next/server";
 import { dueSchedules } from "@/lib/medications/intake-tracking";
+import { floorWhole } from "@/lib/medications/units-per-dose";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -175,7 +176,7 @@ export const GET = apiHandler(
         0,
       );
       const pensRemaining = usable.length;
-      const dosesRemaining = Math.floor(
+      const dosesRemaining = floorWhole(
         unitsRemaining / (Number(medication.unitsPerDose) || 1),
       );
       const weeksOfSupply = dosesRemaining;

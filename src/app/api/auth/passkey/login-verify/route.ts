@@ -18,6 +18,7 @@ import {
 } from "@/lib/auth/native-client";
 import { issueAccessAndRefresh } from "@/lib/auth/refresh-token";
 import { isOidcOnly } from "@/lib/auth/oidc";
+import { completePendingOidcLink } from "@/lib/auth/oidc-pending-link";
 
 export const POST = apiHandler(async (request: NextRequest) => {
   // OIDC_ONLY must block passkey login too, not just password login — a
@@ -87,6 +88,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // meets an MFA-enforcement policy AND passes `requireFreshMfa` step-up,
   // exactly like a completed password+TOTP login. (The password+TOTP path is
   // unchanged — it stamps the session at `/api/auth/mfa/verify`.)
+  // The passkey proved this account's own credential, so a single sign-on
+  // identity this browser was sent here to confirm may now be linked to it.
+  await completePendingOidcLink(user.id, ip ?? null);
+
   const ua = request.headers.get("user-agent");
   await createSession(
     user.id,

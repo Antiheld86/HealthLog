@@ -50,6 +50,11 @@ import {
   queryKeys,
 } from "@/lib/query-keys";
 import { apiFetchRaw, apiGet, apiPatch } from "@/lib/api/api-fetch";
+import {
+  recentProofErrorMessage,
+  throwIfReproofRequired,
+  useRecentProof,
+} from "@/components/settings/security-section/use-recent-proof";
 
 interface McpTokenInfo {
   id: string;
@@ -289,21 +294,30 @@ function McpTokensCard() {
     enabled: isAuthenticated,
   });
 
+  // A connector token outlives the session, so minting one asks for a fresh
+  // proof unless the session signed in or re-proved within five minutes.
+  const recentProof = useRecentProof();
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setCreating(true);
     setTokenMsg(null);
     setNewToken(null);
     try {
-      const res = await apiFetchRaw("/api/mcp/tokens", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newName.trim(),
-          // Closed choice — read-only, or read + the audience-bound write scope.
-          scope: allowWrite ? "read_write" : "read",
-        }),
+      const body = JSON.stringify({
+        name: newName.trim(),
+        // Closed choice — read-only, or read + the audience-bound write scope.
+        scope: allowWrite ? "read_write" : "read",
       });
+      const res = await recentProof.run(async () =>
+        throwIfReproofRequired(
+          await apiFetchRaw("/api/mcp/tokens", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          }),
+        ),
+      );
       const json = await res.json();
       if (res.ok) {
         setNewToken(json.data.token);
@@ -313,8 +327,8 @@ function McpTokensCard() {
       } else {
         setTokenMsg(json.error || t("common.error"));
       }
-    } catch {
-      setTokenMsg(t("common.networkError"));
+    } catch (err) {
+      setTokenMsg(recentProofErrorMessage(err, t("common.networkError")));
     } finally {
       setCreating(false);
     }
@@ -351,6 +365,7 @@ function McpTokensCard() {
 
   return (
     <SettingsCard>
+      {recentProof.dialog}
       <SettingsCardHeader
         icon={Key}
         title={t("settings.mcp.tokensTitle")}

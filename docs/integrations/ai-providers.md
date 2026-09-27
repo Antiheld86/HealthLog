@@ -140,16 +140,35 @@ Base URL `http://<vllm-host>:8000/v1`, API key `your-shared-secret`,
 model `Qwen/Qwen2.5-14B-Instruct`. The local-client encrypts the
 API key at rest like every other provider credential.
 
-**SSRF guard.** Local endpoints route through the same validation
-as every other outbound URL HealthLog hits. The guard rejects
-private-IP-range targets by default. `ALLOW_LOCAL_AI_PRIVATE_HOSTS`
-opens the escape hatch and accepts two forms: a comma-separated host
-allowlist (e.g. `ALLOW_LOCAL_AI_PRIVATE_HOSTS=ollama.lan,10.0.0.5`),
-which permits only those exact hostnames, or the legacy
-`ALLOW_LOCAL_AI_PRIVATE_HOSTS=true`, which permits any private host —
-including the cloud-metadata endpoint, so prefer the host list. Leave
-it unset on public-facing instances unless you specifically run an
-internal endpoint.
+**Private endpoints.** Any user of the instance can type a base URL,
+so HealthLog refuses one on a private address unless the operator has
+listed it. List the endpoint's exact origin in `AI_PRIVATE_ORIGINS`,
+comma-separated, the same way `NOTIFICATION_PRIVATE_ORIGINS` works for
+notification relays:
+
+```bash
+AI_PRIVATE_ORIGINS="http://ollama.lan:11434,http://10.0.0.5:4000"
+```
+
+An origin is `scheme://host[:port]` and nothing else: no path, no
+wildcard, no range. A listed endpoint is called through a pinned
+connection that refuses to follow redirects, and the cloud-metadata
+address, link-local addresses and the unspecified address stay
+unreachable even when listed or when a listed name resolves to one.
+
+`ALLOW_LOCAL_AI_PRIVATE_HOSTS`, the older setting, still works as a
+host list (`ollama.lan,10.0.0.5`, any port), with the same pinning.
+
+Its `true` form used to open every private host on the network to
+every user. It is deprecated since v1.39.3 and will be removed in a
+later release. Until then it still covers the operator's own AI
+configurations, the server key in the admin panel and AI settings
+saved on an admin account, over the same pinned connection, so the
+metadata address and link-local addresses stay unreachable. Any other
+account's base URL needs its origin in `AI_PRIVATE_ORIGINS`. The boot
+summary names the setting while it is set, and the admin AI settings
+page shows the exact `AI_PRIVATE_ORIGINS` line for the endpoints saved
+on the instance.
 
 **Model sizing.** Roughly: 7-8B for 8 GB GPU / Apple Silicon base
 (briefings fine, deeper Coach reasoning gets terse), 14-24B for
@@ -186,9 +205,9 @@ therefore never be sent to a host you typed into a different form,
 and that property is structural rather than a comment — the OPENAI
 arm has no code path that reads the gateway's base URL.
 
-**SSRF guard.** The gateway's base URL passes the same floor as the
-Local provider's: a public host always, a private one only when the
-operator allowlisted it via `ALLOW_LOCAL_AI_PRIVATE_HOSTS` (documented
+**Private endpoints.** The gateway's base URL passes the same floor
+as the Local provider's: a public host always, a private one only when
+the operator listed its origin in `AI_PRIVATE_ORIGINS` (documented
 under Local endpoints above). LAN gateways are the normal case for LiteLLM and vLLM, so
 the escape hatch matters here as much as it does for Ollama.
 
@@ -439,12 +458,12 @@ upstream error.
 - **"No AI provider configured."** Either set up at least one BYOK
   provider in `/settings/ai`, or configure an admin-shared OpenAI
   key in the admin panel.
-- **Local endpoint rejected as "internal/private host".** Set
-  `ALLOW_LOCAL_AI_PRIVATE_HOSTS` to the endpoint's exact hostname
-  (e.g. `ollama.lan`; comma-separate several) in the container
-  environment, or to `true` to allow any private host. Prefer the host
-  list; leave it unset on internet-facing instances unless you
-  specifically want to allow private-range targets.
+- **Local endpoint rejected as "internal/private host".** Add the
+  endpoint's exact origin to `AI_PRIVATE_ORIGINS` in the container
+  environment (e.g. `http://ollama.lan:11434`; comma-separate several)
+  and restart. With `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true` an admin
+  account's endpoint still works, but no other account's does; the
+  admin AI settings page lists the origins to add.
 - **Codex disconnects after a few weeks of inactivity.** ChatGPT
   refresh tokens lapse after extended idle periods. Reconnect via
   the **Connect ChatGPT** button — HealthLog re-runs the device-code

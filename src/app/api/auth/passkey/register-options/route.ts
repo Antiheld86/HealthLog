@@ -2,16 +2,26 @@ import { NextRequest } from "next/server";
 import {
   createAuthenticationOptions,
   createRegistrationOptions,
-  verifyAuthentication,
 } from "@/lib/auth/passkey";
+import { createMfaAuthenticationOptions } from "@/lib/auth/mfa/webauthn";
 import {
-  createMfaAuthenticationOptions,
-  verifyMfaAuthentication,
-} from "@/lib/auth/mfa/webauthn";
-import { verifyMfaFactor } from "@/lib/auth/mfa/verify-factor";
-import { verifyPassword } from "@/lib/auth/password";
+  isSecondFactorProof,
+  recordReproofFailure,
+  refundReproof,
+  throttleReproof,
+  verifyExistingFactorProof,
+} from "@/lib/auth/existing-factor-proof";
+import {
+  hasSecondFactorEnrolled,
+  recentProofMethods,
+} from "@/lib/auth/second-factor";
 import { prisma } from "@/lib/db";
-import { apiError, apiSuccess, safeJson } from "@/lib/api-response";
+import {
+  apiError,
+  apiSuccess,
+  getClientIp,
+  safeJson,
+} from "@/lib/api-response";
 import { apiHandler, requireCookieAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { stepUpMintSchema } from "@/lib/validations/step-up";
@@ -51,49 +61,44 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const parsed = stepUpMintSchema.safeParse(body);
   if (!parsed.success) return proofRequired();
 
-  let proved = false;
-
-  if (parsed.data.method === "password") {
-    proved = Boolean(
-      user.passwordHash &&
-      (await verifyPassword(user.passwordHash, parsed.data.password)),
-    );
-  } else if (parsed.data.method === "totp") {
-    const result = await verifyMfaFactor(user, "totp", parsed.data.code);
-    proved = result.ok;
-  } else {
-    const expectedType =
-      parsed.data.method === "passkey"
-        ? "authentication"
-        : "mfa_authentication";
-    const challenge = await prisma.authChallenge.findUnique({
-      where: { id: parsed.data.challengeId },
-      select: { userId: true, type: true },
+  // On an account with a second factor a password does not add a sign-in
+  // credential, exactly as it does not satisfy the second factor at sign-in:
+  // a passkey registered on the strength of the password alone would from then
+  // on sign in without the second factor at all. Refused before a guess is
+  // spent, with the proofs that would work.
+  if (
+    !isSecondFactorProof(parsed.data.method) &&
+    (await hasSecondFactorEnrolled(user))
+  ) {
+    annotate({
+      action: { name: "auth.reproof.method_refused" },
+      meta: { stage: "passkey_enroll", method: parsed.data.method },
     });
-
-    if (challenge?.userId === user.id && challenge.type === expectedType) {
-      try {
-        if (parsed.data.method === "passkey") {
-          const result = await verifyAuthentication(
-            parsed.data.challengeId,
-            parsed.data.credential,
-          );
-          proved =
-            result.verification.verified && result.passkey.userId === user.id;
-        } else {
-          proved = await verifyMfaAuthentication(
-            parsed.data.challengeId,
-            user.id,
-            parsed.data.credential,
-          );
-        }
-      } catch {
-        proved = false;
-      }
-    }
+    return apiError("Confirm with your second factor or a passkey", 422, {
+      errorCode: "auth.reproof.too_weak",
+      methods: await recentProofMethods(user, true),
+    });
   }
 
-  if (!proved) return proofRequired();
+  // Every proof counts against the account's shared re-proof bucket and every
+  // refusal is audited. Without both, a stolen session could guess the account
+  // password or a TOTP code here as fast as it could send requests.
+  const ip = getClientIp(request);
+  const limited = await throttleReproof(user.id, ip, "passkey_enroll");
+  if (limited) return limited;
+
+  const outcome = await verifyExistingFactorProof(user, parsed.data);
+  if (!outcome.ok) {
+    await recordReproofFailure(
+      user.id,
+      ip,
+      "passkey_enroll",
+      parsed.data.method,
+      outcome.reason,
+    );
+    return proofRequired();
+  }
+  await refundReproof(user.id);
 
   // A strong existing factor refreshes the session's MFA stamp. Password proof
   // deliberately clears it: registration is authorized by this single-use,

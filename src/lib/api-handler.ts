@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import type { AccountGrant, User } from "@/generated/prisma/client";
+import {
+  applyBypassRouteHeaders,
+  bypassRouteRefusal,
+  isProxyBypassRoute,
+} from "@/lib/http/proxy-bypass-routes";
 import { prisma } from "@/lib/db";
 import { WideEventBuilder } from "./logging/event-builder";
 import { annotate, eventStorage, getEvent } from "./logging/context";
 import { emitIfSampled } from "./logging/transports";
 import { redactOptional, redactSecrets } from "./logging/redact";
 import { getSession } from "./auth/session";
+import {
+  hasSecondFactorEnrolled,
+  recentProofMethods,
+  type RecentProofMethod,
+} from "./auth/second-factor";
+
+export { recentProofMethods, type RecentProofMethod };
 import { auditLog, recordDelegatedAccess } from "./auth/audit";
 import {
   resolveBearerToken,
@@ -88,6 +100,7 @@ import {
   SharingNotPermittedError,
   RecordSessionChangedError,
   StepUpRequiredError,
+  REPROOF_REQUIRED_CODE,
 } from "./api-errors";
 
 export {
@@ -200,6 +213,19 @@ export function apiHandler<T extends (...args: any[]) => Promise<Response>>(
       }
     })();
 
+    // A route the proxy matcher leaves out (large uploads, see
+    // `proxy-bypass-routes.ts`) gets the proxy's refusals and headers here.
+    const isBypassRoute = isProxyBypassRoute(url.pathname);
+    if (isBypassRoute) {
+      const refusal = bypassRouteRefusal(
+        safeRequestProp(request, (r) => r.method, "GET"),
+      );
+      if (refusal) {
+        applyBypassRouteHeaders(refusal.headers);
+        return refusal;
+      }
+    }
+
     const evt = new WideEventBuilder("http");
 
     // Propagate x-request-id if present
@@ -271,7 +297,7 @@ export function apiHandler<T extends (...args: any[]) => Promise<Response>>(
               {
                 data: null,
                 error: error.message,
-                meta: { errorCode: error.errorCode },
+                meta: { ...error.extraMeta, errorCode: error.errorCode },
               },
               { status: error.statusCode },
             );
@@ -330,6 +356,7 @@ export function apiHandler<T extends (...args: any[]) => Promise<Response>>(
         }
         const nr = response as NextResponse;
         nr.headers.set("x-request-id", evt.getRequestId());
+        if (isBypassRoute) applyBypassRouteHeaders(nr.headers);
         // v1.37.0 — echo the record context this response was actually served
         // under, when one was decided. The value comes from the wide event and
         // from nowhere else: the fence stamps it on every call it makes, so
@@ -1369,35 +1396,116 @@ export async function requireFreshMfaOrElevationIfEnrolled(
 }
 
 /**
- * Does this account have a SECOND FACTOR at all?
+ * How the recent-proof gate treats a Bearer caller.
  *
- * Either factor enrols it: a confirmed TOTP secret OR a registered WebAuthn
- * security key. A webauthn-only account must clear step-up too, so every
- * boundary that asks this question tracks `requireFreshMfa`'s either-factor
- * rule rather than reading `totpConfirmedAt` alone. It was written out three
- * times before it was a function, which is two more places for the second arm
- * to be forgotten.
+ *   `elevation` — the Bearer twin of the cookie rule: an `X-Step-Up` elevation
+ *   minted by `POST /api/auth/step-up`. On an account with a second factor it
+ *   must come from a second-factor proof; without one, a password-proved
+ *   elevation is enough. For routes no shipped client calls on Bearer.
  *
- * DELIBERATELY DOES NOT COUNT A PRIMARY PASSKEY, even though a passkey login
- * stamps `mfaVerifiedAt` and could therefore satisfy the gate. This predicate
- * answers "is there a second factor", and that is the question
- * `requireFreshMfaIfEnrolled` asks before deciding whether account deletion, the
- * data reset, the password change, the encrypted export and key rotation demand
- * a step-up at all. Counting a passkey here would silently pull every
- * passkey-holding account into a gate those routes have never applied to them —
- * a behaviour change to five destructive actions, made in passing, for the
- * benefit of a sixth. {@link canProveFreshFactor} is where the wider question
- * lives.
+ *   `elevation-if-enrolled` — the erasure routes' rule
+ *   (`requireFreshMfaOrElevationIfEnrolled`): an account with a second factor
+ *   presents a second-factor elevation, one without passes on the token. For a
+ *   route the shipped app calls, where the second-factor arm was already
+ *   refused before and the other arm must keep working.
+ *
+ *   `token` — the token is the proof, as before. Only for routes the shipped
+ *   app calls without an elevation, where a refusal would sign the app out (it
+ *   reads a 401 outside its known paths as a dead session). Each one is named
+ *   in the iOS note and in `recent-proof-surface-guard.test.ts`, so tightening
+ *   it later is a visible edit.
  */
-async function hasSecondFactorEnrolled(user: {
-  id: string;
-  totpConfirmedAt: Date | null;
-}): Promise<boolean> {
-  if (user.totpConfirmedAt) return true;
-  const webauthnKeyCount = await prisma.webauthnMfaCredential.count({
-    where: { userId: user.id },
+export type RecentProofBearerRule =
+  "elevation" | "elevation-if-enrolled" | "token";
+
+/**
+ * The fresh-proof gate in front of the actions that hand the record, or a
+ * standing credential to it, to somebody: exporting the whole record, making a
+ * clinician share link, minting a token, and the admin backup, restore, wipe
+ * and reset actions. A live session is not enough for those, because whoever
+ * holds a stolen session would otherwise walk off with the record or leave a
+ * credential behind that outlives the session.
+ *
+ * Cookie session, account WITH a second factor: `Session.mfaVerifiedAt`
+ * within five minutes — exactly `requireFreshMfa`. Signing in completes the
+ * factor; later, `POST /api/auth/reproof` with a TOTP code, security key or
+ * passkey stamps it again.
+ *
+ * Cookie session, account WITHOUT a second factor: any of the session's
+ * creation (a sign-in), `mfaVerifiedAt` (a passkey sign-in or re-proof) or
+ * `reproofAt` (a password re-proof) within five minutes. Such an account
+ * re-enters its password, or uses a passkey.
+ *
+ * The refusal is 401 `auth.reproof.required` with `meta.methods`, the proofs
+ * this account can give; the web opens the re-proof dialog on it and retries.
+ * An empty list means the account holds nothing to re-prove in place (an
+ * SSO-only account), and signing in again is the way through.
+ *
+ * Returns the caller plus `commitElevation`, which spends a Bearer elevation
+ * and is a no-op otherwise. Call it right before acting.
+ */
+export async function requireRecentProof(options: {
+  bearer: RecentProofBearerRule;
+}): Promise<ErasureAuthContext> {
+  const auth = await requireAuth();
+  const noop = async () => {};
+
+  if (auth.authMethod === "cookie") {
+    await assertRecentCookieProof(auth.user, auth.session.id);
+    return { ...auth, commitElevation: noop };
+  }
+
+  const enrolled = await hasSecondFactorEnrolled(auth.user);
+  if (options.bearer === "token") {
+    annotate({ meta: { recent_proof: "bearer_token" } });
+    return { ...auth, commitElevation: noop };
+  }
+  if (options.bearer === "elevation-if-enrolled" && !enrolled) {
+    annotate({ meta: { recent_proof: "bearer_token" } });
+    return { ...auth, commitElevation: noop };
+  }
+  const commitElevation = await resolveBearerElevation(
+    { user: auth.user, apiTokenId: auth.session.id },
+    { freshFactor: enrolled, proofSource: "second-factor" },
+  );
+  return { ...auth, commitElevation };
+}
+
+/**
+ * The cookie arm of {@link requireRecentProof}, for routes that resolve the
+ * caller themselves (the admin routes, which must stay on `requireAdmin`).
+ */
+export async function assertRecentCookieProof(
+  user: User,
+  sessionId: string,
+): Promise<void> {
+  const enrolled = await hasSecondFactorEnrolled(user);
+  const row = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: { mfaVerifiedAt: true, createdAt: true, reproofAt: true },
   });
-  return webauthnKeyCount > 0;
+  const now = Date.now();
+  const fresh = (d: Date | null | undefined) =>
+    d != null && now - d.getTime() <= MFA_STEP_UP_MAX_AGE_SECONDS * 1000;
+  const satisfied = enrolled
+    ? fresh(row?.mfaVerifiedAt)
+    : fresh(row?.mfaVerifiedAt) ||
+      fresh(row?.createdAt) ||
+      fresh(row?.reproofAt);
+  if (satisfied) {
+    annotate({ meta: { recent_proof: "session" } });
+    return;
+  }
+  const methods = await recentProofMethods(user, enrolled);
+  annotate({
+    action: { name: "auth.reproof.required" },
+    meta: { second_factor: enrolled, methods: methods.join(",") },
+  });
+  throw new StepUpRequiredError(
+    REPROOF_REQUIRED_CODE,
+    "Confirm it is you to continue",
+    { methods },
+  );
 }
 
 /**
@@ -1554,10 +1662,17 @@ export type MfaManagementContext = {
  *   set. Passkey removal passes `"any-possession"` because a primary passkey IS
  *   the proof there — see {@link FreshFactorProofSource}. It changes only the
  *   reachability pre-check; the gate itself is identical either way.
+ * @param options.freshFactorIfEnrolled the Bearer arm of ADDING a factor
+ *   (TOTP setup, security-key registration). On an account that already has a
+ *   second factor, the elevation must come from a second-factor or passkey
+ *   proof, the rule `checkCookieEnrollmentProof` holds on the cookie arm; on
+ *   one without, a password-proved elevation is still enough. The cookie arm
+ *   is not changed by it: those routes run their own enrollment proof there.
  */
 export async function requireMfaManagementAuth(
   options: {
     freshFactor?: boolean;
+    freshFactorIfEnrolled?: boolean;
     proofSource?: FreshFactorProofSource;
   } = {},
 ): Promise<MfaManagementContext> {
@@ -1582,9 +1697,13 @@ export async function requireMfaManagementAuth(
   // Bearer path. Resolution first: an unknown, revoked, expired, or narrow-scope
   // token is refused here and never gets as far as presenting an elevation.
   const auth = await requireBearerAuth();
+  const bearerFreshFactor =
+    freshFactor ||
+    (options.freshFactorIfEnrolled === true &&
+      (await hasSecondFactorEnrolled(auth.user)));
   const commitElevation = await resolveBearerElevation(
     { user: auth.user, apiTokenId: auth.apiTokenId },
-    { freshFactor, proofSource },
+    { freshFactor: bearerFreshFactor, proofSource },
   );
 
   return {

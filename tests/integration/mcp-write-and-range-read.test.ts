@@ -10,6 +10,10 @@
  *     trailing windows use and filters to the requested span — exercised end to
  *     end through `compareMetric` (which seeds real DAY rollups via the measure
  *     write core).
+ *   - v1.39.3: `search` finds visits, conditions and documents through the
+ *     real ciphertext and the real blind content index, `fetch` hydrates each
+ *     id it returned with its links, one account never sees another's
+ *     records, and a switched-off module's records drop out.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -19,6 +23,8 @@ process.env.ENCRYPTION_KEY ??=
 import { logMcpBloodPressure, logMcpMeasurement } from "@/lib/mcp/writes";
 import { compareMetric } from "@/lib/mcp/rich-reads";
 import { MCP_TOOLS } from "@/lib/mcp/tools";
+import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { upsertContentIndex } from "@/lib/documents/content-index";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 
 import { getPrismaClient, truncateAllTables } from "./setup";
@@ -264,5 +270,166 @@ describe("compareMetric — explicit {from,to} range over real rollups", () => {
     expect(res.b?.mean).toBe(84);
     expect(res.a?.from).toBe(from);
     expect(res.delta?.mean).toBe(2);
+  });
+});
+
+describe("search + fetch over clinical records — real DB (v1.39.3)", () => {
+  async function seed(suffix: string) {
+    const prisma = getPrismaClient();
+    const user = await makeUser(suffix);
+    const practitioner = await prisma.practitioner.create({
+      data: { userId: user.id, name: "Dr. Weber", specialty: "Orthopädie" },
+    });
+    const visit = await prisma.encounter.create({
+      data: {
+        userId: user.id,
+        occurredAt: new Date("2023-05-02T08:00:00Z"),
+        kind: "PROCEDURE",
+        status: "DONE",
+        practitionerId: practitioner.id,
+        bodySiteEncrypted: encryptToBytes("Knie"),
+        laterality: "LEFT",
+        reasonEncrypted: encryptToBytes("Arthroskopie"),
+      },
+    });
+    const condition = await prisma.illnessEpisode.create({
+      data: {
+        userId: user.id,
+        label: "Meniskusriss",
+        type: "INJURY",
+        onsetAt: new Date("2023-04-01T00:00:00Z"),
+        bodySiteEncrypted: encryptToBytes("Knie"),
+        laterality: "LEFT",
+      },
+    });
+    const document = await prisma.inboundDocument.create({
+      data: {
+        userId: user.id,
+        kind: "DISCHARGE_LETTER",
+        title: "Brief Klinikum",
+        mimeType: "application/pdf",
+        byteSize: 3,
+        contentEncrypted: encryptToBytes("pdf"),
+      },
+    });
+    await upsertContentIndex({
+      userId: user.id,
+      documentId: document.id,
+      text: "Befund nach Arthroskopie: Innenmeniskus teilreseziert.",
+      source: "local-pdf",
+    });
+    await prisma.encounterConditionLink.create({
+      data: { userId: user.id, encounterId: visit.id, episodeId: condition.id },
+    });
+    await prisma.encounterDocumentLink.create({
+      data: { userId: user.id, encounterId: visit.id, documentId: document.id },
+    });
+    return { user, visit, condition, document };
+  }
+
+  async function search(userId: string, query: string) {
+    return (await readTool("search").run(readCtx(userId), { query })) as {
+      results: Array<{ id: string; title: string; url: string }>;
+    };
+  }
+
+  it("finds the left knee operation and round-trips it through fetch", async () => {
+    const mine = await seed("rec-a");
+    const theirs = await seed("rec-b");
+
+    const hit = await search(mine.user.id, "my left knee operation");
+    expect(hit.results[0]?.id).toBe(`visit:${mine.visit.id}`);
+    const ids = hit.results.map((r) => r.id);
+    expect(ids).toContain(`condition:${mine.condition.id}`);
+    // Nothing of the other account, which holds an identical record.
+    expect(ids.some((id) => id.endsWith(theirs.visit.id))).toBe(false);
+    expect(ids.some((id) => id.endsWith(theirs.condition.id))).toBe(false);
+
+    const visit = (await readTool("fetch").run(readCtx(mine.user.id), {
+      id: `visit:${mine.visit.id}`,
+    })) as { text: string; metadata: Record<string, unknown> };
+    expect(visit.metadata.present).toBe(true);
+    expect(visit.metadata.bodySite).toBe(
+      "<<<USER_TEXT_START>>>Knie<<<USER_TEXT_END>>>",
+    );
+    const linkIds = (visit.metadata.links as Array<{ id: string }>).map(
+      (l) => l.id,
+    );
+    expect(linkIds).toEqual(
+      expect.arrayContaining([
+        `condition:${mine.condition.id}`,
+        `document:${mine.document.id}`,
+      ]),
+    );
+
+    // The other account cannot fetch it by id.
+    const foreign = (await readTool("fetch").run(readCtx(theirs.user.id), {
+      id: `visit:${mine.visit.id}`,
+    })) as { title: string };
+    expect(foreign.title).toBe("Not found");
+  });
+
+  it("finds a document by a word of its indexed text and returns an excerpt", async () => {
+    const mine = await seed("rec-doc");
+    const byText = await search(mine.user.id, "Innenmeniskus");
+    expect(byText.results.map((r) => r.id)).toEqual([
+      `document:${mine.document.id}`,
+    ]);
+    const byKind = await search(mine.user.id, "the discharge letter");
+    expect(byKind.results[0]?.id).toBe(`document:${mine.document.id}`);
+
+    const doc = (await readTool("fetch").run(readCtx(mine.user.id), {
+      id: `document:${mine.document.id}`,
+    })) as { url: string; metadata: Record<string, unknown> };
+    expect(doc.metadata.indexed).toBe(true);
+    expect(doc.metadata.excerpt).toContain("Innenmeniskus");
+    expect(doc.url).toContain(`/documents?doc=${mine.document.id}`);
+  });
+
+  it("keeps a condition note and a held-back document's text off the wire", async () => {
+    const prisma = getPrismaClient();
+    const mine = await seed("rec-private");
+    await prisma.illnessEpisode.update({
+      where: { id: mine.condition.id },
+      data: { noteEncrypted: encryptToBytes("Treppensteigen schmerzhaft") },
+    });
+    await prisma.inboundDocument.update({
+      where: { id: mine.document.id },
+      data: { aiReadDeferred: true },
+    });
+
+    expect((await search(mine.user.id, "Treppensteigen")).results).toEqual([]);
+    expect((await search(mine.user.id, "Innenmeniskus")).results).toEqual([]);
+    // Still found by its title.
+    expect(
+      (await search(mine.user.id, "Klinikum")).results.map((r) => r.id),
+    ).toContain(`document:${mine.document.id}`);
+
+    const condition = await readTool("fetch").run(readCtx(mine.user.id), {
+      id: `condition:${mine.condition.id}`,
+    });
+    expect(JSON.stringify(condition)).not.toContain("Treppensteigen");
+    const doc = (await readTool("fetch").run(readCtx(mine.user.id), {
+      id: `document:${mine.document.id}`,
+    })) as { metadata: Record<string, unknown> };
+    expect(doc.metadata.excerpt).toBeNull();
+    expect(doc.metadata.reason).toBe("ai_read_deferred");
+  });
+
+  it("drops a switched-off module's records from search and fetch", async () => {
+    const prisma = getPrismaClient();
+    const mine = await seed("rec-gate");
+    await prisma.user.update({
+      where: { id: mine.user.id },
+      data: { modulePreferencesJson: { illness: false } },
+    });
+    const ids = (await search(mine.user.id, "knie")).results.map((r) => r.id);
+    expect(ids).toContain(`visit:${mine.visit.id}`);
+    expect(ids.some((id) => id.startsWith("condition:"))).toBe(false);
+
+    const condition = (await readTool("fetch").run(readCtx(mine.user.id), {
+      id: `condition:${mine.condition.id}`,
+    })) as { metadata: Record<string, unknown> };
+    expect(condition.metadata.reason).toBe("module_disabled");
   });
 });

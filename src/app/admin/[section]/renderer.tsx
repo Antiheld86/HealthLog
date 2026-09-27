@@ -12,10 +12,11 @@
  * read `useAuth()` to gate rendering).
  */
 
-import type { JSX } from "react";
+import { Children, type JSX } from "react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { AboutSection } from "@/components/settings/about-section";
+import { AdminCardBoundary } from "@/components/admin/admin-card-boundary";
 import { AiQualitySection } from "@/components/admin/ai-quality-section";
 import { AiServerKeySection } from "@/components/admin/ai-server-key-section";
 import { ProviderHealthSection } from "@/components/admin/provider-health-section";
@@ -189,5 +190,13 @@ export function AdminSectionRenderer({
  * believes, so it is gone.
  */
 function SectionFrame({ children }: { children: React.ReactNode }) {
-  return <div className="space-y-6">{children}</div>;
+  // Each card fails alone: one that throws while rendering paints an error
+  // card in its place instead of taking its neighbours down with it.
+  return (
+    <div className="space-y-6">
+      {Children.map(children, (card) => (
+        <AdminCardBoundary>{card}</AdminCardBoundary>
+      ))}
+    </div>
+  );
 }

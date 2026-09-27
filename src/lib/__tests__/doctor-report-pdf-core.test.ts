@@ -71,10 +71,17 @@ function makeData(overrides?: Partial<DoctorReportData>): DoctorReportData {
     glucoseUnit: "mg/dL",
     bmi: 24.1,
     compliance: {
-      Ramipril: { total: 90, taken: 85, skipped: 3, missed: 2 },
+      "med-ramipril": {
+        name: "Ramipril",
+        total: 90,
+        taken: 85,
+        skipped: 3,
+        missed: 2,
+      },
     },
     medications: [
       {
+        id: "med-ramipril",
         name: "Ramipril",
         dose: "5mg",
         schedules: [
@@ -324,7 +331,8 @@ describe("doctor-report pagination", () => {
   it("paginates a long compliance table across pages without throwing", () => {
     const compliance: DoctorReportData["compliance"] = {};
     for (let i = 0; i < 60; i++) {
-      compliance[`Medication ${i}`] = {
+      compliance[`med-${i}`] = {
+        name: `Medication ${i}`,
         total: 90,
         taken: 80,
         skipped: 5,
@@ -899,7 +907,8 @@ describe("extracted doctor-report section boundaries", () => {
   it("footer is drawn once on every dynamically added page", async () => {
     const compliance: DoctorReportData["compliance"] = {};
     for (let i = 0; i < 60; i += 1) {
-      compliance[`Medication ${i}`] = {
+      compliance[`med-${i}`] = {
+        name: `Medication ${i}`,
         total: 90,
         taken: 80,
         skipped: 5,

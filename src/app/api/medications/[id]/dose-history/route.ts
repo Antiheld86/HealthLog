@@ -41,6 +41,7 @@ import {
 } from "@/lib/medications/scheduling/worker-helpers";
 import { assertMedicationOwnership } from "@/lib/medications/route-guards";
 import { dueSchedules } from "@/lib/medications/intake-tracking";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -120,7 +121,7 @@ export const GET = apiHandler(
     }
 
     const now = new Date();
-    const userTz = user.timezone || "Europe/Berlin";
+    const userTz = user.timezone || DEFAULT_TIMEZONE;
 
     const medication = await prisma.medication.findUnique({
       where: { id },

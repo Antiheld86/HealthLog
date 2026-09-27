@@ -119,7 +119,11 @@ describe("computePhaseMetricCrosstab — MOOD + GLUCOSE outcomes (QA HIGH)", () 
 
   it("surfaces a luteal-vs-follicular GLUCOSE contrast", () => {
     const { phaseByDay, measurements } = contrastFor("BLOOD_GLUCOSE", 105, 92);
-    const rows = computePhaseMetricCrosstab({ phaseByDay, measurements });
+    const rows = computePhaseMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      phaseByDay,
+      measurements,
+    });
     const glucose = rows.find((r) => r.metricKey === "bloodGlucose");
     expect(glucose).toBeDefined();
     expect(glucose!.display).toBe("glucose");
@@ -133,7 +137,11 @@ describe("computePhaseMetricCrosstab — MOOD + GLUCOSE outcomes (QA HIGH)", () 
       4.4,
       2.6,
     );
-    const rows = computePhaseMetricCrosstab({ phaseByDay, measurements });
+    const rows = computePhaseMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      phaseByDay,
+      measurements,
+    });
     const mood = rows.find((r) => r.metricKey === "mood");
     expect(mood).toBeDefined();
     expect(mood!.display).toBe("mood");
@@ -164,7 +172,11 @@ describe("computePhaseMetricCrosstab", () => {
       lutealRhr: 63,
       follicularRhr: 57,
     });
-    const rows = computePhaseMetricCrosstab({ phaseByDay, measurements });
+    const rows = computePhaseMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      phaseByDay,
+      measurements,
+    });
     const rhr = rows.find((r) => r.metricKey === "restingHeartRate");
     expect(rhr).toBeDefined();
     // luteal higher → positive delta (lutealAvg − follicularAvg)
@@ -183,7 +195,11 @@ describe("computePhaseMetricCrosstab", () => {
       lutealRhr: 63,
       follicularRhr: 57,
     });
-    const rows = computePhaseMetricCrosstab({ phaseByDay, measurements });
+    const rows = computePhaseMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      phaseByDay,
+      measurements,
+    });
     expect(rows).toEqual([]);
   });
 
@@ -193,7 +209,11 @@ describe("computePhaseMetricCrosstab", () => {
       lutealRhr: 60,
       follicularRhr: 60,
     });
-    const rows = computePhaseMetricCrosstab({ phaseByDay, measurements });
+    const rows = computePhaseMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      phaseByDay,
+      measurements,
+    });
     // No real separation → nothing clears p < 0.05.
     expect(
       rows.find((r) => r.metricKey === "restingHeartRate"),
@@ -216,7 +236,11 @@ describe("computePhaseMetricCrosstab", () => {
       phaseByDay.set(key, i % 2 === 0 ? "MENSTRUAL" : "OVULATORY");
       measurements.push(m("RESTING_HEART_RATE", key, 200));
     }
-    const rows = computePhaseMetricCrosstab({ phaseByDay, measurements });
+    const rows = computePhaseMetricCrosstab({
+      timeZone: "Europe/Berlin",
+      phaseByDay,
+      measurements,
+    });
     const rhr = rows.find((r) => r.metricKey === "restingHeartRate")!;
     // Means reflect only the luteal/follicular days, not the 200-bpm noise.
     expect(rhr.lutealAvg).toBeLessThan(70);
@@ -226,6 +250,7 @@ describe("computePhaseMetricCrosstab", () => {
   it("returns empty for an empty phase map", () => {
     expect(
       computePhaseMetricCrosstab({
+        timeZone: "Europe/Berlin",
         phaseByDay: new Map(),
         measurements: [m("RESTING_HEART_RATE", "2026-03-01", 60)],
       }),
@@ -287,6 +312,7 @@ describe("discoverPhaseCorrelations", () => {
       );
     }
     const result = discoverPhaseCorrelations({
+      timeZone: "Europe/Berlin",
       phaseByDay,
       measurements,
       locale: "en",
@@ -320,6 +346,7 @@ describe("discoverPhaseCorrelations", () => {
       measurements.push(m("RESTING_HEART_RATE", key, 60)); // constant → no variance
     }
     const result = discoverPhaseCorrelations({
+      timeZone: "Europe/Berlin",
       phaseByDay,
       measurements,
       locale: "en",

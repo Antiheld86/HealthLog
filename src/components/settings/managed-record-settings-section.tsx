@@ -39,6 +39,7 @@ import { Switch } from "@/components/ui/switch";
 import { SettingsCardActions } from "./_card-actions";
 import { SettingsCardHeader } from "./_card-header";
 import { SettingsCard } from "./settings-card";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 interface ManagedRecordSettingsResponse {
   recordId: string;
@@ -414,7 +415,7 @@ function ProfileSettingsForm({
       <label className="grid gap-1 text-sm" htmlFor="managed-timezone">
         {t("settings.sharedRecord.managedSettings.profile.timezone")}
         <Input
-          defaultValue={asString(settings.timezone, "Europe/Berlin")}
+          defaultValue={asString(settings.timezone, DEFAULT_TIMEZONE)}
           disabled={disabled}
           id="managed-timezone"
           name="timezone"

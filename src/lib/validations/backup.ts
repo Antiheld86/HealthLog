@@ -83,6 +83,7 @@ import {
 } from "@/lib/validations/emergency-profile";
 import {
   DOCUMENT_SOURCE_ID_MAX,
+  DOCUMENT_SOURCE_INSTANCE_MAX,
   DOCUMENT_SOURCE_SYSTEMS,
 } from "@/lib/validations/inbound-documents";
 import { REMINDER_EVENT_SOURCES } from "@/lib/measurement-reminders/satisfy";
@@ -798,6 +799,8 @@ const customMetricEntryBackupSchema = z
     unit: z.string().min(1),
     measuredAt: isoDateTime,
     note: z.string().nullable().default(null),
+    /// v1.39.3 — the note's ciphertext, DR payloads only.
+    noteEncrypted: base64BytesSchema.nullable().optional(),
     createdAt: isoDateTime.optional(),
     /// v1.37.20 (A3-11) — the entry tombstone rides DR payloads so a restore
     /// brings the account back exactly as it stood, undo affordance included.
@@ -1365,7 +1368,10 @@ const coachConversationDocumentBackupSchema = z
 const coachConversationBackupSchema = z
   .object({
     id: z.string().min(1),
-    title: z.string(),
+    // v1.39.3 — a portable file (and every file written before) carries the
+    // readable title; a disaster-recovery file carries only the ciphertext.
+    title: z.string().optional(),
+    titleEncrypted: base64BytesSchema.optional(),
     // NOT optional with a default. The fence is permanent and a file that does
     // not state it is a file that cannot be trusted to re-fence the
     // conversation, so the absence has to be visible rather than defaulted to
@@ -1636,6 +1642,14 @@ const documentBackupSchema = z
     // restore cannot write a system the detail sheet has no name for.
     sourceSystem: z.enum(DOCUMENT_SOURCE_SYSTEMS).nullable().optional(),
     sourceId: z.string().max(DOCUMENT_SOURCE_ID_MAX).nullable().optional(),
+    // v1.39.3 — the source instance (an origin). Length-bounded here and
+    // normalised on restore; a value that is not an origin restores as null
+    // (matches any instance) rather than failing the restore.
+    sourceInstance: z
+      .string()
+      .max(DOCUMENT_SOURCE_INSTANCE_MAX)
+      .nullable()
+      .optional(),
     aiReadDeferred: z.boolean().optional(),
     summary: z.string().nullable().optional(),
     createdAt: isoDateTime.optional(),

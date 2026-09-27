@@ -48,7 +48,7 @@ import { useTranslations } from "@/lib/i18n/context";
 
 const POLL_INTERVAL_MS = 60_000;
 const SESSION_GUARD_KEY = "healthlog:version-reload-attempted";
-const SHELL_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "";
+const SHELL_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "";
 
 export type VersionPollDecision = "up-to-date" | "reload" | "already-attempted";
 

@@ -48,6 +48,7 @@ import { apiGet } from "@/lib/api/api-fetch";
 import { useMedicationComplianceSummaryAll } from "@/lib/queries/use-medication-compliance-summary";
 import { useMedicationListLayout } from "@/lib/queries/use-medication-list-layout";
 import { applyMedicationOrder } from "@/lib/medications/medication-order";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 interface Schedule {
   id: string;
@@ -397,7 +398,7 @@ export default function MedicationsPageClient() {
   // medications past their band tail stay takeable from the batch. Page
   // order is preserved so the confirm dialog lists medications as rendered.
   const dueMeds = deriveDueMedications(activeMeds, {
-    tz: user?.timezone || "Europe/Berlin",
+    tz: user?.timezone || DEFAULT_TIMEZONE,
     thresholds: thresholds ?? undefined,
     doseStatusById: new Map(
       (complianceRows ?? []).map((row) => [

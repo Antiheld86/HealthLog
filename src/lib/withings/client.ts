@@ -8,6 +8,7 @@ import {
   WithingsApiError,
   classifyWithingsResponse,
 } from "./response-classifier";
+import { envOr, envValue } from "@/lib/env";
 
 const WITHINGS_OAUTH_URL =
   "https://account.withings.com/oauth2_user/authorize2";
@@ -21,9 +22,12 @@ export interface WithingsCredentials {
 }
 
 export function getWithingsRedirectUri(): string {
-  return (
-    process.env.WITHINGS_REDIRECT_URI ??
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/withings/callback`
+  // An empty or blank value counts as unset: the compose whitelist
+  // materialises an unset var as an empty string, which must fall through to
+  // the derived URI rather than go out as `redirect_uri=`.
+  return envOr(
+    "WITHINGS_REDIRECT_URI",
+    `${envValue("NEXT_PUBLIC_APP_URL")}/api/withings/callback`,
   );
 }
 

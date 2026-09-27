@@ -143,13 +143,22 @@ const cadenceRefinement = (
   }
 };
 
+/**
+ * The first-due date: a calendar date (`YYYY-MM-DD`, read as that day in the
+ * user's zone) or a date-time (the instant it names).
+ */
+const anchorDateField = z.union([
+  z.iso.date(),
+  z.iso.datetime({ offset: true }),
+]);
+
 export const createMeasurementReminderSchema = z
   .object({
     label: z.string().trim().min(1).max(120),
     measurementType: measurementReminderTypeEnum.nullish(),
     intervalDays: z.number().int().min(1).max(3650).nullish(),
     rrule: rruleField.nullish(),
-    anchorDate: z.iso.datetime({ offset: true }).nullish(),
+    anchorDate: anchorDateField.nullish(),
     notifyHour: z.number().int().min(0).max(23).default(9),
     location: z.string().trim().max(200).nullish(),
     enabled: z.boolean().default(true),
@@ -177,7 +186,7 @@ export const updateMeasurementReminderSchema = z
     measurementType: measurementReminderTypeEnum.nullish(),
     intervalDays: z.number().int().min(1).max(3650).nullish(),
     rrule: rruleField.nullish(),
-    anchorDate: z.iso.datetime({ offset: true }).nullish(),
+    anchorDate: anchorDateField.nullish(),
     notifyHour: z.number().int().min(0).max(23).optional(),
     location: z.string().trim().max(200).nullish(),
     enabled: z.boolean().optional(),

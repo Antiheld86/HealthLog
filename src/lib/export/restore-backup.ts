@@ -30,6 +30,7 @@
 import { Buffer } from "node:buffer";
 
 import { prisma, toJson } from "@/lib/db";
+import { normaliseSourceInstance } from "@/lib/validations/inbound-documents";
 import { auditLog } from "@/lib/auth/audit";
 import {
   isStoredBackupReadError,
@@ -46,6 +47,17 @@ import {
   type BackupSource,
   type StreamedBackup,
 } from "@/lib/export/streamed-backup";
+import {
+  assessBackupKeys,
+  BACKUP_KEY_MISSING_CODE,
+  describeBackupKeyProblem,
+} from "@/lib/export/backup-key-ids";
+import {
+  assertNoNewForeignReferences,
+  countForeignReferences,
+  ForeignReferenceError,
+  listTenantEdges,
+} from "@/lib/export/tenant-boundary";
 import { encryptNote } from "@/lib/crypto/note-cipher";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { encryptContextToBytes } from "@/lib/labs/biomarker-store";
@@ -239,6 +251,8 @@ export type RestoreFailureCode =
   | "owner_not_found"
   | "backup.section.missing"
   | "document_ciphertext_missing"
+  | "backup.key.missing"
+  | "backup.foreign_reference"
   | "time_budget"
   | "transaction_failed"
   | "interrupted"
@@ -474,6 +488,40 @@ export async function restoreBackup(
     );
   }
 
+  // The ciphertext inside the file is written back verbatim, so every key it
+  // was written under has to be on this host, and has to be the key that
+  // wrote it. A copy taken before a key rotation still needs the key the
+  // rotation retired: the rotation re-seals the stored copy's envelope but
+  // cannot reach inside it. Refused here, above the first delete, because the
+  // alternative is an account whose notes, documents and coach history come
+  // back as rows no reader can open. The instance settings count only when
+  // the operator asked for them back.
+  const keyVerdict = assessBackupKeys(streamed.keys, {
+    ignoreSections: restoreInstanceSettings
+      ? new Set<string>()
+      : new Set(["appSettings"]),
+  });
+  const keyProblem = describeBackupKeyProblem(keyVerdict);
+  if (keyProblem) {
+    const keyIds = [...keyVerdict.missing, ...keyVerdict.unreadable];
+    await auditLog("admin.backups.restore.failed", {
+      userId: input.actorUserId,
+      ipAddress: input.ipAddress,
+      details: {
+        backupId: backup.id,
+        ownerId,
+        reason: "key_missing",
+        missingKeyIds: keyVerdict.missing,
+        unreadableKeyIds: keyVerdict.unreadable,
+        affectedValues: keyVerdict.affectedValues,
+      },
+    });
+    return refused(422, BACKUP_KEY_MISSING_CODE, keyProblem, {
+      errorCode: BACKUP_KEY_MISSING_CODE,
+      keyIds,
+    });
+  }
+
   // Audit the *intent* before the transaction begins so the trail
   // describing "an admin is about to restore <user>" survives even
   // if the operation crashes midway.
@@ -604,6 +652,17 @@ export async function restoreBackup(
         // commit or roll back, then replaces the account again from its own
         // file, which is what it was asked to do.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`backup-restore:${ownerId}`}))`;
+        // Every reference this restore writes stays inside the account: the
+        // references that leave it are counted now and again after the last
+        // write, and any that grew rolls the whole transaction back
+        // (`tenant-boundary.ts` says why the check is derived from the schema
+        // rather than written per section).
+        const tenantEdges = await listTenantEdges(tx);
+        const foreignBefore = await countForeignReferences(
+          tx,
+          ownerId,
+          tenantEdges,
+        );
         // Declared INSIDE the transaction so a rollback takes the report with
         // it. An accumulator that outlived a failed attempt would carry drops
         // that never happened into the next one.
@@ -1834,7 +1893,7 @@ export async function restoreBackup(
         for (const episode of payload.illnessEpisodes) {
           if (episode.parentConditionId) {
             await tx.illnessEpisode.update({
-              where: { id: episode.id },
+              where: { id: episode.id, userId: ownerId },
               data: { parentConditionId: episode.parentConditionId },
             });
           }
@@ -2057,6 +2116,14 @@ export async function restoreBackup(
               sourceId: document.sourceSystem
                 ? (document.sourceId ?? null)
                 : null,
+              // A file written before v1.39.3 has no instance: the key then
+              // matches any instance of its system, as it did when stored.
+              sourceInstance:
+                document.sourceSystem && document.sourceId
+                  ? document.sourceInstance
+                    ? normaliseSourceInstance(document.sourceInstance)
+                    : null
+                  : null,
               createdAt: new Date(document.createdAt!),
               updatedAt: new Date(document.updatedAt!),
             })),
@@ -2279,6 +2346,10 @@ export async function restoreBackup(
             environmentCleared.environmentTravelLocations,
           ecgRecordings: ecgCleared.ecgRecordings,
         };
+        assertNoNewForeignReferences(
+          foreignBefore,
+          await countForeignReferences(tx, ownerId, tenantEdges),
+        );
         progress.sectionsDone = RESTORE_SECTION_STEPS.length;
         report("sections", true);
         return { cleared, skipped: summarizeRestoreSkips(skips) };
@@ -2307,6 +2378,12 @@ export async function restoreBackup(
       },
     });
     annotate({ meta: { restoreFailReason: verbose } });
+    if (err instanceof ForeignReferenceError) {
+      return refused(422, "backup.foreign_reference", err.message, {
+        errorCode: "backup.foreign_reference",
+        references: err.edges,
+      });
+    }
     if (isStoredBackupReadError(err)) {
       // The second read, inside the transaction, found the copy replaced or
       // altered. The transaction rolled back, so nothing was changed.

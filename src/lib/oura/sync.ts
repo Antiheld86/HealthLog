@@ -90,6 +90,8 @@ import {
 } from "./credentials";
 import { OuraApiError, classifyOuraError } from "./response-classifier";
 import { syncUserOuraCyclePhases } from "./cycle-sync";
+import { shiftDateKey, userDayKey } from "@/lib/tz/format";
+import { resolveUserTimezone } from "@/lib/tz/resolver";
 
 /** Floor of the lookback window (days) for an incremental sync. Oura finalises
  * a night's scores hours after wake; 7 days re-fetches a handful of records
@@ -194,6 +196,7 @@ export interface OuraMeasurementUpsert {
 function toUpsert(
   mapped: MappedMeasurement[],
   resourcePrefix: string,
+  dateOnlyDay?: string,
 ): OuraMeasurementUpsert[] {
   return mapped.map((m) => ({
     type: m.type,
@@ -202,9 +205,13 @@ function toUpsert(
     measuredAt: m.measuredAt,
     // A mapper that needs a record-scoped key (sleep rows — per-segment timeline
     // + nightly scalars) carries its own externalId; everything else falls back
-    // to the day-keyed `<resource>:<day>:<fieldTag>` shape.
+    // to the day-keyed `<resource>:<day>:<fieldTag>` shape. A record with no
+    // instant of its own (`dateOnlyDay`) keys on its date: its row sits at
+    // local noon in the user's zone, which east of UTC+12 is the previous UTC
+    // date. A timed record keys on its instant's UTC date, as it always has.
     externalId:
-      m.externalId ?? `${resourcePrefix}:${ymd(m.measuredAt)}:${m.fieldTag}`,
+      m.externalId ??
+      `${resourcePrefix}:${dateOnlyDay ?? ymd(m.measuredAt)}:${m.fieldTag}`,
     sleepStage: m.sleepStage ?? null,
   }));
 }
@@ -260,9 +267,15 @@ async function fetchAll(
   refreshTokenCiphertext: string,
   lookbackDays: number,
 ): Promise<OuraFetchResult> {
-  const now = new Date();
-  const start = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
-  const query = { startDate: ymd(start), endDate: ymd(now) };
+  // Oura keys its daily collections by the user's calendar date, so the
+  // window is cut on the user's own days, and date-only records are anchored
+  // at local noon of their date in this zone.
+  const tz = await resolveUserTimezone(userId);
+  const today = userDayKey(new Date(), tz);
+  const query = {
+    startDate: shiftDateKey(today, -lookbackDays),
+    endDate: today,
+  };
 
   // Filled by the sleep collection's closure as it maps records; carried on
   // the result so the caller can run the record-scoped sweep before the
@@ -275,7 +288,11 @@ async function fetchAll(
       name: "readiness",
       collect: async (t) =>
         (await fetchReadiness(t, query)).flatMap((r) =>
-          toUpsert(mapReadiness(r), "readiness"),
+          toUpsert(
+            mapReadiness(r, tz),
+            "readiness",
+            r.timestamp ? undefined : r.day,
+          ),
         ),
     },
     {
@@ -284,7 +301,11 @@ async function fetchAll(
         const records = await fetchSleep(t, query);
         const ups: OuraMeasurementUpsert[] = [];
         for (const s of records) {
-          const rows = toUpsert(mapSleep(s), "sleep");
+          const rows = toUpsert(
+            mapSleep(s, tz),
+            "sleep",
+            s.bedtime_end ? undefined : s.day,
+          );
           ups.push(...rows);
           // Record-scoped sweep entry: every SLEEP_DURATION row of this
           // record keys under `sleep:<id>:` (hypnogram runs AND the
@@ -306,42 +327,50 @@ async function fetchAll(
       name: "activity",
       collect: async (t) =>
         (await fetchDailyActivity(t, query)).flatMap((a) =>
-          toUpsert(mapDailyActivity(a), "activity"),
+          toUpsert(
+            mapDailyActivity(a, tz),
+            "activity",
+            a.timestamp ? undefined : a.day,
+          ),
         ),
     },
     {
       name: "daily_sleep",
       collect: async (t) =>
         (await fetchDailySleep(t, query)).flatMap((d) =>
-          toUpsert(mapDailySleep(d), "daily_sleep"),
+          toUpsert(
+            mapDailySleep(d, tz),
+            "daily_sleep",
+            d.timestamp ? undefined : d.day,
+          ),
         ),
     },
     {
       name: "spo2",
       collect: async (t) =>
         (await fetchDailySpo2(t, query)).flatMap((s) =>
-          toUpsert(mapDailySpo2(s), "spo2"),
+          toUpsert(mapDailySpo2(s, tz), "spo2", s.day),
         ),
     },
     {
       name: "vo2max",
       collect: async (t) =>
         (await fetchVo2Max(t, query)).flatMap((v) =>
-          toUpsert(mapVo2Max(v), "vo2max"),
+          toUpsert(mapVo2Max(v, tz), "vo2max", v.timestamp ? undefined : v.day),
         ),
     },
     {
       name: "cardio_age",
       collect: async (t) =>
         (await fetchCardiovascularAge(t, query)).flatMap((c) =>
-          toUpsert(mapCardiovascularAge(c), "cardio_age"),
+          toUpsert(mapCardiovascularAge(c, tz), "cardio_age", c.day),
         ),
     },
     {
       name: "resilience",
       collect: async (t) =>
         (await fetchResilience(t, query)).flatMap((r) =>
-          toUpsert(mapResilience(r), "resilience"),
+          toUpsert(mapResilience(r, tz), "resilience", r.day),
         ),
     },
   ];
@@ -480,11 +509,14 @@ export async function syncUserOura(
   try {
     const freshConn = await getOuraConnection(userId);
     if (freshConn) {
-      await syncUserOuraCyclePhases(
-        userId,
-        freshConn.accessToken,
-        lookbackDays,
+      const cycleToday = userDayKey(
+        new Date(),
+        await resolveUserTimezone(userId),
       );
+      await syncUserOuraCyclePhases(userId, freshConn.accessToken, {
+        startDate: shiftDateKey(cycleToday, -lookbackDays),
+        endDate: cycleToday,
+      });
     }
   } catch (err) {
     getEvent()?.addWarning(

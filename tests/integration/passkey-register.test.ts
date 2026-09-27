@@ -359,6 +359,61 @@ describe("passkey register-options existing-factor proof (real Postgres)", () =>
     await expectNoCredential();
   });
 
+  it("refuses a code from a TOTP secret that was never confirmed", async () => {
+    const secret = await seedTotp();
+    await getPrismaClient().user.update({
+      where: { id: USER_ID },
+      data: { totpConfirmedAt: null },
+    });
+
+    const response = await registerOptions({
+      method: "totp",
+      code: currentTotpCode(secret),
+    });
+
+    expect(response.status).toBe(401);
+    expect(await getPrismaClient().authChallenge.count()).toBe(0);
+    const session = await getPrismaClient().session.findFirstOrThrow({
+      where: { userId: USER_ID },
+      select: { mfaVerifiedAt: true },
+    });
+    expect(session.mfaVerifiedAt).toBeNull();
+  });
+
+  it("audits every wrong proof and stops guessing after five", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const response = await registerOptions({
+        method: "password",
+        password: `wrong-guess-${i}`,
+      });
+      statuses.push(response.status);
+    }
+
+    expect(statuses).toEqual([401, 401, 401, 401, 401, 429]);
+    const failed = await getPrismaClient().auditLog.findMany({
+      where: { userId: USER_ID, action: "auth.mfa.failed" },
+      select: { details: true },
+    });
+    expect(failed).toHaveLength(5);
+    const details = failed[0].details;
+    expect(
+      typeof details === "string" ? JSON.parse(details) : details,
+    ).toMatchObject({
+      stage: "passkey_enroll",
+      method: "password",
+      reason: "bad_password",
+    });
+
+    // The bucket is spent, so even the right password waits it out.
+    const correct = await registerOptions({
+      method: "password",
+      password: PASSWORD,
+    });
+    expect(correct.status).toBe(429);
+    expect(await getPrismaClient().authChallenge.count()).toBe(0);
+  });
+
   it.each([
     ["wildcard", ["*"]],
     ["narrow", ["medication:ingest"]],

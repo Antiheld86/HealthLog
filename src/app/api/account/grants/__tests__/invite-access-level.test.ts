@@ -27,11 +27,19 @@ vi.mock("@/lib/api-handler", async () => {
     await vi.importActual<typeof import("@/lib/api-handler")>(
       "@/lib/api-handler",
     );
+  const requireAuth = vi.fn();
   return {
     ...actual,
     apiHandler: <T extends (...args: never[]) => Promise<Response>>(h: T): T =>
       h,
-    requireAuth: vi.fn(),
+    requireAuth,
+    // The invitation takes the fresh-proof gate; here it resolves the caller
+    // the stubbed `requireAuth` names, so these cases stay about the row.
+    // The gate itself has its own case in `invite-recent-proof.test.ts`.
+    requireRecentProof: vi.fn(async () => ({
+      ...(await requireAuth()),
+      commitElevation: async () => {},
+    })),
   };
 });
 

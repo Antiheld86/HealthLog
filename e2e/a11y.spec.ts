@@ -755,6 +755,15 @@ async function installA11yMocks(page: Page) {
             freshness: "unknown",
           },
         ],
+        // A deletion the bucket refused, and a bucket with no expiry rule:
+        // both lines paint only in these states, and both are what an
+        // operator has to read and act on.
+        pendingDeletions: {
+          count: 2,
+          oldestRequestedAt: "2026-07-18T03:00:00.000Z",
+          lastFailure: "AccessDenied",
+        },
+        lifecycle: { state: "missing", expirationDays: null },
       },
     }),
   );

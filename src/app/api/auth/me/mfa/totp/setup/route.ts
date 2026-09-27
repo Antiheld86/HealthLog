@@ -10,7 +10,16 @@
  *
  * Gated by `requireMfaManagementAuth`: a cookie session, or a Bearer token
  * presenting a single-use step-up elevation minted against a re-proved factor.
- * A token on its own can still never enrol MFA. The recovery-code batch is
+ * A token on its own can still never enrol MFA.
+ *
+ * A cookie session on its own cannot either. Enrolling hands the caller a
+ * factor that later satisfies every step-up gate, so a stolen session must not
+ * be able to mint one: the cookie arm also passes `checkCookieEnrollmentProof`
+ * — a sign-in or second factor inside the last five minutes, or a password /
+ * factor proof in the body (the step-up mint's shapes); on an account that
+ * already has a second factor, only that factor or a passkey. The Bearer arm
+ * carries the proof in its elevation, under the same rule: on an account with
+ * a second factor the elevation must come from one. The recovery-code batch is
  * issued at `/confirm` (after the factor is proven), not here, so an abandoned
  * setup never persists codes.
  */
@@ -26,6 +35,7 @@ import { prisma } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { generateTotpSecret, buildOtpauthUri } from "@/lib/auth/mfa/totp";
+import { checkCookieEnrollmentProof } from "@/lib/auth/existing-factor-proof";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +43,7 @@ const SETUP_RATE_LIMIT = 5;
 const SETUP_WINDOW_MS = 15 * 60 * 1000;
 
 export const POST = apiHandler(async (req: Request) => {
-  const auth = await requireMfaManagementAuth();
+  const auth = await requireMfaManagementAuth({ freshFactorIfEnrolled: true });
   const { user } = auth;
 
   const rl = await checkRateLimit(
@@ -55,6 +65,17 @@ export const POST = apiHandler(async (req: Request) => {
   if (user.totpConfirmedAt) {
     annotate({ action: { name: "auth.mfa.totp.setup.already_active" } });
     throw new HttpError(409, "A second factor is already active");
+  }
+
+  if (auth.transport === "cookie") {
+    const refusal = await checkCookieEnrollmentProof({
+      user,
+      sessionId: auth.session.id,
+      request: req,
+      ipAddress: getClientIp(req),
+      stage: "totp_enroll",
+    });
+    if (refusal) return refusal;
   }
 
   // Rate limit and the already-active check have passed; the write is next.

@@ -39,6 +39,11 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
+import {
+  recentProofErrorMessage,
+  throwIfReproofRequired,
+  useRecentProof,
+} from "@/components/settings/security-section/use-recent-proof";
 
 interface ApiTokenInfo {
   id: string;
@@ -138,6 +143,9 @@ function IngestTokenCard({
   const [creating, setCreating] = useState(false);
   const [tokenMsg, setTokenMsg] = useState<string | null>(null);
   const [tokenCopied, setTokenCopied] = useState(false);
+  // The token outlives the session, so minting one asks for a fresh proof
+  // unless the session signed in or re-proved within five minutes.
+  const recentProof = useRecentProof();
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -145,13 +153,18 @@ function IngestTokenCard({
     setTokenMsg(null);
     setNewToken(null);
     try {
-      const res = await apiFetchRaw(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // No scope field: the endpoint mints one shape, so there is nothing
-        // here for a caller to choose or for this form to get wrong.
-        body: JSON.stringify({ name: newName.trim() }),
-      });
+      // No scope field: the endpoint mints one shape, so there is nothing
+      // here for a caller to choose or for this form to get wrong.
+      const body = JSON.stringify({ name: newName.trim() });
+      const res = await recentProof.run(async () =>
+        throwIfReproofRequired(
+          await apiFetchRaw(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          }),
+        ),
+      );
       const json = await res.json();
       if (res.ok) {
         setNewToken(json.data.token);
@@ -164,8 +177,8 @@ function IngestTokenCard({
         // this specific action when it did not.
         setTokenMsg(json.error || copy.createFailed);
       }
-    } catch {
-      setTokenMsg(t("common.networkError"));
+    } catch (err) {
+      setTokenMsg(recentProofErrorMessage(err, t("common.networkError")));
     } finally {
       setCreating(false);
     }
@@ -185,6 +198,7 @@ function IngestTokenCard({
 
   return (
     <SettingsCard>
+      {recentProof.dialog}
       <SettingsCardHeader
         icon={icon}
         title={copy.title}

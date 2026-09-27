@@ -67,6 +67,7 @@ import { userDayKey, DEFAULT_TIMEZONE } from "@/lib/tz/resolver";
 import { validTimezoneOr } from "@/lib/tz/format";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { buildMedsTodayBlock } from "@/lib/dashboard/meds-today";
+import { computeStreak } from "@/lib/dashboard/streak";
 import {
   readLatestEver,
   readSparkBuckets,
@@ -254,53 +255,6 @@ function trendOf(values: number[]): MetricCard["trend"] {
   const epsilon = Math.max(1, Math.abs(first) * 0.01);
   if (Math.abs(delta) < epsilon) return "flat";
   return delta > 0 ? "up" : "down";
-}
-
-interface StreakInfo {
-  currentDays: number;
-  longest: number;
-}
-
-/** Compute the current logging-day streak (days where any measurement or
- *  intake event was recorded, in the user's display timezone) plus the
- *  longest streak in the last `STREAK_WINDOW_DAYS` days.
- *
- *  v1.4.25 W7b — `userTz` parameterises the "today" pivot so a Pacific/
- *  Auckland user gets their Auckland-day streak rather than the Berlin
- *  one. The activity-day Set entries are already produced in the same
- *  zone by the caller (via `userDayKey`), so the cursor walk only needs
- *  the same zone here to align. */
-function computeStreak(activityDays: Set<string>, userTz: string): StreakInfo {
-  if (activityDays.size === 0) return { currentDays: 0, longest: 0 };
-
-  const sorted = [...activityDays].sort();
-  let longest = 1;
-  let run = 1;
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = new Date(`${sorted[i - 1]}T00:00:00.000Z`).getTime();
-    const cur = new Date(`${sorted[i]}T00:00:00.000Z`).getTime();
-    if (cur - prev === 86_400_000) {
-      run += 1;
-      longest = Math.max(longest, run);
-    } else {
-      run = 1;
-    }
-  }
-
-  // Current streak: walk back from today (user's tz).
-  const todayKey = userDayKey(new Date(), userTz);
-  let currentDays = 0;
-  let cursor = new Date(`${todayKey}T00:00:00.000Z`);
-  // Allow yesterday's last day to count if today not yet logged.
-  if (!activityDays.has(userDayKey(cursor, userTz))) {
-    cursor = new Date(cursor.getTime() - 86_400_000);
-  }
-  while (activityDays.has(userDayKey(cursor, userTz))) {
-    currentDays += 1;
-    cursor = new Date(cursor.getTime() - 86_400_000);
-  }
-
-  return { currentDays, longest };
 }
 
 /** v1.4.38 W-F — distinct activity day-keys from the streak window.

@@ -43,12 +43,13 @@ This needs Paperless-ngx 3.0 or later, the first release with the
   - **Use parameters for webhook body:** on. **Send webhook payload as
     JSON:** off. **Webhook params:**
 
-    | Name           | Value                                                |
-    | -------------- | ---------------------------------------------------- |
-    | `title`        | `{{doc_title}}`                                      |
-    | `documentDate` | `{{created_year}}-{{created_month}}-{{created_day}}` |
-    | `sourceSystem` | `PAPERLESS`                                          |
-    | `sourceId`     | `{{doc_id}}`                                         |
+    | Name             | Value                                                    |
+    | ---------------- | -------------------------------------------------------- |
+    | `title`          | `{{doc_title}}`                                          |
+    | `documentDate`   | `{{created_year}}-{{created_month}}-{{created_day}}`     |
+    | `sourceSystem`   | `PAPERLESS`                                              |
+    | `sourceId`       | `{{doc_id}}`                                             |
+    | `sourceInstance` | `https://paperless.example.com` (your Paperless address) |
 
   - **Include document:** on. Paperless then sends the original file along
     with the parameters, which is exactly what HealthLog expects.
@@ -151,8 +152,15 @@ What it does:
   quick. Documents you deleted in HealthLog stay deleted, also after they
   are removed for good. The same goes for a file you had already uploaded
   by hand: the import recognises it by its content (sending it once to
-  compare), and if you delete it later, the import leaves it deleted. An
-  interrupted run simply picks up where it stopped.
+  compare), and if you delete it later, the import leaves it deleted. Since
+  v1.39.3 a deleted document is also recognised by its content while it is
+  in the 30-day undo window: the same file arriving from another system or
+  under a new id is answered "deleted" and not stored again. After the purge
+  HealthLog keeps the ids it saw, not the content. An interrupted run simply
+  picks up where it stopped.
+- Once HealthLog has refused one file as too large, the script skips any
+  further document the source already lists as larger (Papra lists sizes)
+  without downloading it.
 - When HealthLog asks it to slow down, it waits as long as HealthLog says
   and carries on. By default a document token may send 120 uploads an hour,
   so an archive of a thousand documents takes a night. Every upload that
@@ -230,6 +238,15 @@ id. Anything else is sent as `OTHER`, and `OTHER` is one shared set of ids
 per account: if you push documents from two other systems, make sure their
 ids cannot collide, for example by prefixing them (`nextcloud-123`,
 `scanner-123`).
+
+Since v1.39.3 a key can also name its instance: `sourceInstance`, the
+address of the Paperless-ngx or Papra it came from (only its origin,
+`scheme://host[:port]`, counts). With it, document 123 on one Paperless and
+document 123 on another are two documents. The import script sends it
+automatically; add it to a Paperless workflow as shown above. A key sent or
+stored without an instance (everything imported with v1.39.2, or a workflow
+without the parameter) matches that id on any instance of its system, so
+nothing imported earlier is stored twice or brought back after a deletion.
 
 The same file sent under a different id is stored once, and HealthLog
 remembers the extra id for it, up to 20 extra ids per document. A 21st is

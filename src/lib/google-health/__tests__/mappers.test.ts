@@ -762,3 +762,37 @@ describe("chunkCivilRange — dailyRollUp 90-day slicing", () => {
     ).toEqual([]);
   });
 });
+
+describe("daily anchors in the user's zone", () => {
+  it.each([
+    ["Pacific/Tongatapu", "2026-05-31T23:00:00.000Z"],
+    ["Pacific/Auckland", "2026-06-01T00:00:00.000Z"],
+    ["America/New_York", "2026-06-01T16:00:00.000Z"],
+    ["Europe/Berlin", "2026-06-01T10:00:00.000Z"],
+  ])(
+    "anchors a daily total and a daily summary at local noon in %s",
+    (tz, iso) => {
+      const [steps] = mapSteps(
+        {
+          civilStartTime: { date: { year: 2026, month: 6, day: 1 } },
+          steps: { countSum: "8500" },
+        },
+        tz,
+      );
+      expect(steps!.measuredAt.toISOString()).toBe(iso);
+      // The externalId stays on the civil date whatever the zone.
+      expect(steps!.fieldTag).toBe("steps:2026-06-01");
+      const [spo2] = mapOxygenSaturation(
+        {
+          dailyOxygenSaturation: {
+            averagePercentage: 97.4,
+            date: { year: 2026, month: 6, day: 1 },
+          },
+        },
+        tz,
+      );
+      expect(spo2!.measuredAt.toISOString()).toBe(iso);
+      expect(spo2!.fieldTag).toBe("2026-06-01:spo2");
+    },
+  );
+});

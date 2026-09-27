@@ -48,6 +48,7 @@ import {
   wallClockInTz,
   type WallClockParts,
 } from "@/lib/tz/wall-clock";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /** One explicit per-dose on-time window as the API serialises it. */
 export interface DoseWindowEntryInput {
@@ -122,9 +123,6 @@ export interface NextDueGate {
   /** True when that instant is an OPEN overdue slot (`nextDueOverdue`). */
   overdue: boolean;
 }
-
-/** Fallback timezone until every call site threads the user's own. */
-const DEFAULT_TZ = "Europe/Berlin";
 
 /**
  * Minute-of-day an observer in the target zone reads off the wall clock.
@@ -516,7 +514,7 @@ export function reduceCurrentWindowStatus<
     active,
     lastTakenAt,
     todayEventCount,
-    tz = DEFAULT_TZ,
+    tz = DEFAULT_TIMEZONE,
     nextDue,
   } = options;
   const nowParts = wallClockInTz(now, tz);

@@ -10,6 +10,7 @@
 import type { DoctorReportData } from "@/lib/doctor-report-data";
 import { ILLNESS_TYPE_SNOMED } from "@/lib/fhir/illness-snomed";
 import type {
+  FhirBodyStructure,
   FhirCodeableConcept,
   FhirCondition,
   FhirEncounter,
@@ -18,6 +19,94 @@ import { SNOMED_SYSTEM, patientRef } from "@/lib/fhir/resources/common";
 
 /** SNOMED CT "Disease (disorder)" — the generic, non-diagnostic root concept. */
 const DISEASE_SNOMED = { code: "64572001", display: "Disease" } as const;
+
+/**
+ * The side of a body site, as active SNOMED CT laterality qualifier values:
+ * 7771000 Left, 24028007 Right, 51440002 Right and left. These are the codes
+ * of the HL7 mCODE Laterality Qualifier value set
+ * (https://build.fhir.org/ig/HL7/fhir-mCODE-ig/ValueSet-mcode-laterality-qualifier-vs.html).
+ * The R4 core `bodysite-laterality` value set lists 419161000 / 419465000 for
+ * left / right, but the HL7 validator reports both as inactive in current
+ * SNOMED CT, so they are not used. R4 binds `BodyStructure.locationQualifier`
+ * with example strength, so any SNOMED CT qualifier is conformant there.
+ * Keyed on the `Laterality` enum.
+ */
+const LATERALITY_SNOMED: Record<
+  string,
+  { code: string; display: string; text: string }
+> = {
+  LEFT: { code: "7771000", display: "Left", text: "left" },
+  RIGHT: { code: "24028007", display: "Right", text: "right" },
+  BOTH: { code: "51440002", display: "Right and left", text: "both sides" },
+};
+
+/**
+ * Core extension `http://hl7.org/fhir/StructureDefinition/bodySite`
+ * (https://hl7.org/fhir/extensions/StructureDefinition-bodySite.html): a
+ * Reference(BodyStructure) on `Condition.bodySite`, unchanged in R4.
+ */
+const BODY_SITE_EXTENSION_URL =
+  "http://hl7.org/fhir/StructureDefinition/bodySite";
+
+const BODY_STRUCTURE_ID = "bodysite-1";
+
+/**
+ * `Condition.bodySite` plus the contained `BodyStructure` that carries its
+ * side, or nothing when no site was recorded.
+ *
+ * The site is the user's free text, so it rides `text` only; no SNOMED body
+ * structure is guessed from it. R4 `Condition.bodySite` has no laterality
+ * element, and a laterality concept is not a body site, so putting "Left" in
+ * `bodySite.coding` would claim the condition sits on "left". The standard R4
+ * route is the core `bodySite` extension pointing at a `BodyStructure` whose
+ * `locationQualifier` holds the SNOMED CT side. The side is also written into
+ * `bodySite.text`, because a receiver that ignores extensions must still read
+ * "Knee (left)" rather than a bare "Knee".
+ *
+ * The side word is English on purpose. The builder takes no locale
+ * (`FhirBuildOptions` carries none, unlike the PDF path), and every other
+ * generated text in the Bundle is English: section titles, the Condition note,
+ * the narratives. The site stays in the words the user wrote, so a German
+ * record reads "Knie (left)", the same mix as a German label beside the
+ * English "Self-recorded … condition journal entry" note.
+ */
+function bodySiteOf(
+  bodySite: string | null | undefined,
+  laterality: string | null | undefined,
+): Pick<FhirCondition, "bodySite" | "contained"> {
+  const site = bodySite?.trim();
+  if (!site) return {};
+  const side = laterality ? LATERALITY_SNOMED[laterality] : undefined;
+  if (!side) return { bodySite: [{ text: site }] };
+  const structure: FhirBodyStructure = {
+    resourceType: "BodyStructure",
+    id: BODY_STRUCTURE_ID,
+    location: { text: site },
+    locationQualifier: [
+      {
+        coding: [
+          { system: SNOMED_SYSTEM, code: side.code, display: side.display },
+        ],
+        text: side.text,
+      },
+    ],
+    patient: patientRef,
+  };
+  return {
+    contained: [structure],
+    bodySite: [
+      {
+        extension: [
+          {
+            url: BODY_SITE_EXTENSION_URL,
+            valueReference: { reference: `#${BODY_STRUCTURE_ID}` },
+          },
+        ],
+        text: `${site} (${side.text})`,
+      },
+    ],
+  };
+}
 
 /** R4 `Condition.clinicalStatus` concept for the given resolution state. */
 function conditionClinicalStatus(resolved: boolean): FhirCodeableConcept {
@@ -53,9 +142,11 @@ export function conditionsFromReportData(data: DoctorReportData): {
     seq += 1;
     const conditionId = `condition-${seq}`;
     const resolved = ep.resolvedAt !== null;
+    const site = bodySiteOf(ep.bodySite, ep.laterality);
     conditions.push({
       resourceType: "Condition",
       id: conditionId,
+      ...(site.contained ? { contained: site.contained } : {}),
       clinicalStatus: conditionClinicalStatus(resolved),
       verificationStatus: {
         coding: [
@@ -94,6 +185,7 @@ export function conditionsFromReportData(data: DoctorReportData): {
         ],
         text: ep.label,
       },
+      ...(site.bodySite ? { bodySite: site.bodySite } : {}),
       subject: patientRef,
       onsetDateTime: ep.onsetAt,
       ...(ep.resolvedAt ? { abatementDateTime: ep.resolvedAt } : {}),

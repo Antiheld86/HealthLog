@@ -37,6 +37,7 @@ import { ConnectionsPanel } from "@/components/settings/integrations/connections
 import { SectionHeading } from "@/components/ui/section-heading";
 import { NotificationChannelsPanel } from "@/components/settings/integrations/notification-channels-panel";
 import { NutrientIntakeCard } from "@/components/settings/nutrient-intake-card";
+import { DocumentSourcesCard } from "@/components/settings/integrations/document-sources-card";
 import { Button } from "@/components/ui/button";
 
 export {
@@ -77,6 +78,11 @@ export function IntegrationsSection({
             under the same Connections group rather than a new labelled
             section that could paint an orphaned heading over nothing. */}
         <NutrientIntakeCard />
+
+        {/* v1.39.3 (#1038) — Paperless-ngx / Papra for the document picker.
+            Renders nothing unless the operator listed an origin in
+            DOCUMENT_SOURCE_ORIGINS and the person is in their own record. */}
+        <DocumentSourcesCard />
       </section>
 
       {/* Delivery channels ("where it's delivered"). The existing channels

@@ -15,8 +15,19 @@ export interface FhirCoding {
 }
 
 export interface FhirCodeableConcept {
+  /**
+   * Element extensions. Only `Condition.bodySite` carries one today (the core
+   * `bodySite` extension pointing at a contained `BodyStructure`).
+   */
+  extension?: FhirExtension[];
   coding?: FhirCoding[];
   text?: string;
+}
+
+/** R4 `Extension`, narrowed to the one value type HealthLog emits. */
+export interface FhirExtension {
+  url: string;
+  valueReference: FhirReference;
 }
 
 export interface FhirReference {
@@ -250,15 +261,36 @@ export interface FhirComposition {
 export interface FhirCondition {
   resourceType: "Condition";
   id: string;
+  /**
+   * v1.39.3 — the `BodyStructure` that carries the side of the body site,
+   * referenced from `bodySite[].extension` by a local `#`-ref.
+   */
+  contained?: FhirBodyStructure[];
   clinicalStatus?: FhirCodeableConcept;
   verificationStatus?: FhirCodeableConcept;
   category?: FhirCodeableConcept[];
   code: FhirCodeableConcept;
+  /** v1.39.3 — where on the body, as the user wrote it (`text` only). */
+  bodySite?: FhirCodeableConcept[];
   subject: FhirReference;
   onsetDateTime?: string;
   abatementDateTime?: string;
   recordedDate?: string;
   note?: FhirAnnotation[];
+}
+
+/**
+ * v1.39.3 — R4 `BodyStructure`, emitted only as a resource contained in a
+ * `Condition`. `location` repeats the free-text site; `locationQualifier`
+ * carries the side as a SNOMED CT laterality concept. `patient` is `1..1` in
+ * R4.
+ */
+export interface FhirBodyStructure {
+  resourceType: "BodyStructure";
+  id: string;
+  location?: FhirCodeableConcept;
+  locationQualifier?: FhirCodeableConcept[];
+  patient: FhirReference;
 }
 
 /**

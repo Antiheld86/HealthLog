@@ -23,6 +23,7 @@ const {
       update: vi.fn<(...a: unknown[]) => Promise<unknown>>(async () => ({})),
     },
     measurement: {
+      findMany: vi.fn<(...a: unknown[]) => Promise<unknown[]>>(async () => []),
       deleteMany: vi.fn<(...a: unknown[]) => Promise<unknown>>(async () => ({
         count: 0,
       })),
@@ -44,6 +45,10 @@ const {
 }));
 
 vi.mock("@/lib/db", () => ({ prisma: prismaMock }));
+
+vi.mock("@/lib/rollups/after-measurement-mutation", () => ({
+  afterMeasurementMutation: vi.fn(async () => {}),
+}));
 
 vi.mock("@/lib/logging/context", () => ({
   getEvent: () => null,
@@ -73,6 +78,7 @@ vi.mock("../sync-core", async (orig) => {
 
 import { mapBody } from "../client";
 import { syncUserBody, WHOOP_BODY_WEIGHT_EXTERNAL_ID } from "../sync-body";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 
 const TOKEN = {
   accessToken: "acc",
@@ -129,12 +135,22 @@ describe("syncUserBody — profile weight is not ingested (v1.16.11)", () => {
     expect(upsertWhoopMeasurementsMock).not.toHaveBeenCalled();
   });
 
-  it("clears the legacy overwrite row on every pass (idempotent no-op after the first)", async () => {
+  it("clears the legacy overwrite row and refolds the day it sat on", async () => {
     fetchBodyMeasurementMock.mockResolvedValue({ weight_kilogram: 80 });
     prismaMock.user.findUnique.mockResolvedValue({ heightCm: 170 });
+    const legacyRow = {
+      type: "WEIGHT",
+      measuredAt: new Date("2026-01-02T08:00:00.000Z"),
+    };
+    prismaMock.measurement.findMany.mockResolvedValueOnce([legacyRow]);
 
     await syncUserBody("user1");
 
+    expect(afterMeasurementMutation).toHaveBeenCalledWith(
+      "user1",
+      [legacyRow],
+      "whoop-body",
+    );
     expect(prismaMock.measurement.deleteMany).toHaveBeenCalledWith({
       where: {
         userId: "user1",
@@ -247,5 +263,18 @@ describe("syncUserBody — tier degradation", () => {
 
     expect(imported).toBe(0);
     expect(fetchBodyMeasurementMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("syncUserBody — legacy row already gone", () => {
+  it("is a no-op once the legacy row has been removed", async () => {
+    fetchBodyMeasurementMock.mockResolvedValue({ weight_kilogram: 80 });
+    prismaMock.user.findUnique.mockResolvedValue({ heightCm: 170 });
+    prismaMock.measurement.findMany.mockResolvedValueOnce([]);
+    prismaMock.measurement.deleteMany.mockClear();
+
+    await syncUserBody("user1");
+
+    expect(prismaMock.measurement.deleteMany).not.toHaveBeenCalled();
   });
 });

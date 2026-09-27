@@ -31,6 +31,7 @@ vi.mock("@/lib/auth/login-response", () => ({
 }));
 vi.mock("@/lib/auth/mfa/challenge", () => ({
   loadActiveChallenge: vi.fn(),
+  reserveChallengeAttempt: vi.fn().mockResolvedValue(true),
   recordChallengeFailure: vi
     .fn()
     .mockResolvedValue({ exhausted: false, attempts: 1 }),
@@ -53,6 +54,7 @@ import { prisma } from "@/lib/db";
 import { finishLogin } from "@/lib/auth/login-response";
 import {
   loadActiveChallenge,
+  reserveChallengeAttempt,
   recordChallengeFailure,
   claimChallenge,
 } from "@/lib/auth/mfa/challenge";
@@ -103,6 +105,16 @@ describe("POST /api/auth/mfa/verify", () => {
     const arg = vi.mocked(finishLogin).mock.calls[0][0];
     expect(arg.mfaVerified).toBe(true);
     expect(arg.source).toBe("mfa.verify");
+  });
+
+  it("no attempt left to reserve → 401 before the factor is evaluated", async () => {
+    vi.mocked(loadActiveChallenge).mockResolvedValue(ACTIVE_CHALLENGE as never);
+    vi.mocked(reserveChallengeAttempt).mockResolvedValueOnce(false);
+
+    const res = await POST(verifyRequest(GOOD_BODY));
+    expect(res.status).toBe(401);
+    expect(verifyMfaFactor).not.toHaveBeenCalled();
+    expect(finishLogin).not.toHaveBeenCalled();
   });
 
   it("invalid ticket → 401, no session", async () => {

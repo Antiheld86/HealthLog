@@ -26,7 +26,7 @@
  */
 import { unlinkSync } from "node:fs";
 import { getHeapStatistics } from "node:v8";
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { MeasurementType, PrismaClient } from "@/generated/prisma/client";
 import { prisma, toJson } from "@/lib/db";
 import type { Job } from "pg-boss";
 
@@ -35,6 +35,8 @@ import { parseAppleHealthEcgCsv } from "@/lib/apple-health/ecg-csv";
 import { importAppleHealthEcg } from "@/lib/apple-health/ecg-import";
 import { extractExportXml } from "@/lib/import/unzip-export-xml";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
+import { invalidateStatusInsightsForTypes } from "@/lib/insights/status-invalidation";
+import { trackBackgroundTask } from "@/lib/logging/background-tasks";
 import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import {
   streamParseExportXml,
@@ -46,6 +48,12 @@ import {
   ROLLUP_FOLD_WINDOW_MS,
 } from "@/lib/rollups/measurement-rollups";
 import { withBackgroundEvent } from "@/lib/logging/background";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
+import {
+  ACTIVE_IMPORT_STATUSES,
+  sweepStaleImportStaging,
+  type StagingInUse,
+} from "@/lib/import/apple-health-staging";
 
 /**
  * Queue + cron for the periodic orphan-ImportJob sweep. v1.32.1
@@ -87,13 +95,25 @@ export async function handleImportJobReconcileTick(
   return withBackgroundEvent(
     "job.apple_health_import_reconcile",
     async (evt) => {
+      // Staged uploads and extracted XML that no running import can still
+      // own: whatever exit left them (a crash, a restart mid-import, a
+      // deploy), the person's export does not stay in /tmp past this.
+      // A queued or running import keeps its files whatever their age;
+      // when that cannot be read, nothing is swept this tick.
+      const inUse = await stagedImportFilesInUse().catch(() => null);
+      const swept = inUse
+        ? await sweepStaleImportStaging(undefined, undefined, inUse).catch(
+            () => 0,
+          )
+        : 0;
+      evt.addMeta("import_staging_swept", swept);
       try {
         await reconcileOrphanImportJobs();
       } catch (err) {
         evt.addWarning(`apple-health-import-reconcile failed: ${err}`);
         return jobFailed("apple health import reconcile failed", err);
       }
-      return jobDone();
+      return jobDone({ import_staging_swept: swept });
     },
   );
 }
@@ -324,16 +344,31 @@ export async function handleAppleHealthImport(
       `[apple-health-import] No ImportJob row for pgBossJobId=${job.id};` +
         " creating a stand-in",
     );
-    importJob = await prisma.importJob.create({
-      data: {
-        userId,
-        triggeredByAdminId: triggeredByAdminId ?? null,
-        pgBossJobId: job.id,
-        status: "queued",
-        uploadBytes,
-        parserRevision: APPLE_HEALTH_IMPORT_PARSER_REVISION,
-      },
-    });
+    // The row is gone when the account is: an account deleted between the
+    // upload and this run takes its ImportJob with it by cascade. Then there
+    // is nobody to import for, and the staged export is removed rather than
+    // left in /tmp by a stand-in create that fails on the missing account.
+    const accountExists =
+      (await prisma.user.count({ where: { id: userId } })) > 0;
+    if (!accountExists) {
+      safeUnlink(uploadPath);
+      return jobDone({ skipped: "account_gone" });
+    }
+    try {
+      importJob = await prisma.importJob.create({
+        data: {
+          userId,
+          triggeredByAdminId: triggeredByAdminId ?? null,
+          pgBossJobId: job.id,
+          status: "queued",
+          uploadBytes,
+          parserRevision: APPLE_HEALTH_IMPORT_PARSER_REVISION,
+        },
+      });
+    } catch (err) {
+      safeUnlink(uploadPath);
+      throw err;
+    }
   }
   const importJobId = importJob.id;
 
@@ -371,7 +406,7 @@ export async function handleAppleHealthImport(
     const userTimezone =
       userRow?.timezone && userRow.timezone.length > 0
         ? userRow.timezone
-        : "Europe/Berlin";
+        : DEFAULT_TIMEZONE;
 
     // Phase 1: unpacking
     await writeProgress(prisma, importJobId, "unpacking", {
@@ -533,6 +568,25 @@ export async function handleAppleHealthImport(
       );
     }
 
+    // The imported types' cached status assessments describe data that just
+    // changed; re-warm them, the second leg every other measurement write
+    // runs (`afterMeasurementMutation`). The rollups above are refolded over
+    // the import's span rather than per day, so the leg is called directly.
+    const importedTypes = Object.entries(result.perType)
+      .filter(([, stat]) => stat.inserted + stat.updated > 0)
+      .map(([type]) => type as MeasurementType);
+    if (importedTypes.length > 0) {
+      // Registered so the test suite can await the detached handle.
+      trackBackgroundTask(
+        invalidateStatusInsightsForTypes(userId, importedTypes).catch((err) => {
+          console.warn(
+            `[apple-health-import] status-insight invalidate failed for user ${userId}`,
+            err,
+          );
+        }),
+      );
+    }
+
     // Best-effort cleanup. A failed unlink is not fatal — `/tmp` is
     // periodically swept on the host.
     safeUnlink(unzip.xmlPath);
@@ -566,16 +620,26 @@ export async function handleAppleHealthImport(
       : err instanceof Error
         ? err.message
         : String(err);
-    await prisma.importJob.update({
-      where: { id: importJobId },
-      data: {
-        status: "failed",
-        failureReason: reason.slice(0, 1000),
-        completedAt: new Date(),
-      },
-    });
+    // The files first: the row update below throws when the account was
+    // deleted mid-import (the row went with it), and the export must not be
+    // left behind in that case either.
     if (extractedXmlPath) safeUnlink(extractedXmlPath);
     safeUnlink(uploadPath);
+    try {
+      await prisma.importJob.update({
+        where: { id: importJobId },
+        data: {
+          status: "failed",
+          failureReason: reason.slice(0, 1000),
+          completedAt: new Date(),
+        },
+      });
+    } catch (updateErr) {
+      console.warn(
+        `[apple-health-import] Could not record the failure on ImportJob=${importJobId}`,
+        updateErr,
+      );
+    }
     throw err;
   }
 }
@@ -601,6 +665,43 @@ const IMPORT_HEARTBEAT_STALE_MS = 30 * 60 * 1000;
 
 /** pg-boss job states from which a mid-run import can still make progress. */
 const LIVE_PG_BOSS_STATES = new Set(["active", "created", "retry"]);
+
+/**
+ * The staged files a queued or running import still owns: the upload each
+ * live pg-boss job names, and whether any import is past the queue (it has
+ * an extracted XML open). `null` when that cannot be read, so the caller
+ * sweeps nothing rather than guess.
+ */
+export async function stagedImportFilesInUse(): Promise<StagingInUse | null> {
+  const prisma = getWorkerPrisma();
+  const rows = await prisma.importJob.findMany({
+    where: { status: { in: [...ACTIVE_IMPORT_STATUSES] } },
+    select: { status: true, pgBossJobId: true },
+  });
+  const paths = new Set<string>();
+  if (rows.length === 0) return { paths, xmlInUse: false };
+  const boss = getGlobalBoss();
+  if (!boss) return null;
+  for (const row of rows) {
+    if (!row.pgBossJobId) continue;
+    let job: { state: string; data: unknown } | null = null;
+    for (const queue of [
+      APPLE_HEALTH_IMPORT_V2_QUEUE,
+      APPLE_HEALTH_IMPORT_LEGACY_QUEUE,
+    ]) {
+      job = await boss.getJobById(queue, row.pgBossJobId);
+      if (job) break;
+    }
+    if (!job || !LIVE_PG_BOSS_STATES.has(job.state)) continue;
+    const uploadPath = (job.data as { uploadPath?: unknown } | null)
+      ?.uploadPath;
+    if (typeof uploadPath === "string") paths.add(uploadPath);
+  }
+  return {
+    paths,
+    xmlInUse: rows.some((row) => row.status !== "queued"),
+  };
+}
 
 /**
  * Reconcile orphan `ImportJob` rows on worker startup. A row stuck in

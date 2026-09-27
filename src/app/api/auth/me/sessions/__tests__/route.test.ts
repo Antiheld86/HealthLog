@@ -12,6 +12,7 @@ vi.mock("@/lib/db", () => ({
       update: vi.fn(() => ({ catch: () => undefined })),
     },
     user: { findUnique: vi.fn() },
+    accountGrant: { findMany: vi.fn(async () => []) },
   },
 }));
 
@@ -163,16 +164,22 @@ describe("DELETE /api/auth/me/sessions (sign out everywhere)", () => {
     vi.mocked(destroyOtherSessions).mockResolvedValue({
       sessionsRevoked: 3,
       accessTokensRevoked: 0,
+      connectorsRevoked: 0,
+      shareLinksRevoked: 0,
+      pendingInvitesRevoked: 0,
     });
 
     const res = await DELETE(del());
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.sessionsRevoked).toBe(3);
-    expect(destroyOtherSessions).toHaveBeenCalledWith("user-1", {
-      kind: "session",
-      sessionId: "sess-current",
-    });
+    expect(destroyOtherSessions).toHaveBeenCalledWith(
+      "user-1",
+      { kind: "session", sessionId: "sess-current" },
+      // Everything, share links included, when the client says nothing: the
+      // shipped app sends no parameter and gets the safe default.
+      { reach: "everything", keepShareLinks: false },
+    );
   });
 
   it("names a Bearer caller by its access token so its own device login is spared", async () => {
@@ -198,16 +205,67 @@ describe("DELETE /api/auth/me/sessions (sign out everywhere)", () => {
     vi.mocked(destroyOtherSessions).mockResolvedValue({
       sessionsRevoked: 1,
       accessTokensRevoked: 1,
+      connectorsRevoked: 0,
+      shareLinksRevoked: 0,
+      pendingInvitesRevoked: 0,
     });
 
     const res = await DELETE(del());
 
     expect(res.status).toBe(200);
-    expect(destroyOtherSessions).toHaveBeenCalledWith("user-1", {
-      kind: "accessToken",
-      accessTokenHash: hashToken(raw),
-    });
+    expect(destroyOtherSessions).toHaveBeenCalledWith(
+      "user-1",
+      { kind: "accessToken", accessTokenHash: hashToken(raw) },
+      { reach: "everything", keepShareLinks: false },
+    );
     vi.mocked(headers).mockResolvedValue({ get: () => null } as never);
+  });
+});
+
+describe("sign out everywhere and record sharing", () => {
+  it("reports withdrawn invitations and lists the accepted grants it kept", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(destroyOtherSessions).mockResolvedValue({
+      sessionsRevoked: 1,
+      accessTokensRevoked: 0,
+      connectorsRevoked: 0,
+      shareLinksRevoked: 0,
+      pendingInvitesRevoked: 2,
+    });
+    const party = { id: "user-2", username: "carer", displayName: null };
+    const live = {
+      id: "grant-live",
+      access: "READ",
+      acceptedAt: new Date("2026-01-01"),
+      revokedAt: null,
+      expiresAt: null,
+      grantee: party,
+    };
+    const lapsed = {
+      ...live,
+      id: "grant-lapsed",
+      expiresAt: new Date("2026-02-01"),
+    };
+    vi.mocked(prisma.accountGrant.findMany).mockResolvedValue([
+      live,
+      lapsed,
+    ] as never);
+
+    const res = await DELETE(del());
+    const body = await res.json();
+    expect(body.data.pendingInvitesRevoked).toBe(2);
+    // The lapsed one confers nothing any more and is not listed.
+    expect(body.data.grantsKept).toEqual([
+      { id: "grant-live", account: party, access: "READ" },
+    ]);
+    expect(prisma.accountGrant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          grantorId: "user-1",
+          revokedAt: null,
+        }),
+      }),
+    );
   });
 });
 

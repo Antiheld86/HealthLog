@@ -1,5 +1,3 @@
-const BERLIN_TIMEZONE = "Europe/Berlin";
-
 export const GAMIFICATION_ROLLOUT_AT = new Date("2026-02-20T00:00:00.000Z");
 
 export type AchievementMetricKey =
@@ -232,13 +230,6 @@ export interface AchievementSummary {
   completionPercent: number;
   nextAchievement: AchievementProgress | null;
 }
-
-const DAY_KEY_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  timeZone: BERLIN_TIMEZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
 
 const STREAK_TARGETS = [1, 7, 30, 180, 360] as const;
 
@@ -721,23 +712,6 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
 function dayKeyToNumber(dayKey: string): number {
   const [year, month, day] = dayKey.split("-").map(Number);
   return Date.UTC(year, month - 1, day) / 86_400_000;
-}
-
-export function toBerlinDayKey(date: Date): string {
-  const parts = DAY_KEY_FORMATTER.formatToParts(date);
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  if (!year || !month || !day) {
-    throw new Error("Could not format date");
-  }
-
-  return `${year}-${month}-${day}`;
-}
-
-export function getUniqueBerlinDays(dates: Date[]): string[] {
-  return Array.from(new Set(dates.map((date) => toBerlinDayKey(date)))).sort();
 }
 
 export function calculateLongestStreak(dayKeys: string[]): number {

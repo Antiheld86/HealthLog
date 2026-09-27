@@ -32,6 +32,17 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
     cycleProfile: { findUnique: vi.fn() },
+    // The whole-record gate reads the session's own stamps: a sign-in a
+    // moment ago is the proof, on an account without a second factor.
+    session: {
+      findUnique: vi.fn(async () => ({
+        createdAt: new Date(),
+        mfaVerifiedAt: null,
+        reproofAt: null,
+      })),
+    },
+    webauthnMfaCredential: { count: vi.fn(async () => 0) },
+    passkey: { count: vi.fn(async () => 0) },
   },
 }));
 vi.mock("@/lib/modules/operator-availability", async (importOriginal) => {

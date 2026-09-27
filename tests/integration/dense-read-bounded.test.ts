@@ -113,7 +113,7 @@ afterAll(async () => {
 describe("pulse status over a dense stream (#1023)", () => {
   it("builds the graded series without materialising the stream", async () => {
     const graded = await measure(() =>
-      buildGradedSeriesWithRollups(DENSE_USER, "PULSE", NOW),
+      buildGradedSeriesWithRollups(DENSE_USER, "PULSE", NOW, "Europe/Berlin"),
     );
     const series = graded.result;
     // Every reading in the 91-day window is accounted for, one bucket per day

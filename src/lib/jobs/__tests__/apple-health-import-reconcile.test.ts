@@ -24,6 +24,11 @@ const mocks = vi.hoisted(() => ({
   getJobById: vi.fn(),
 }));
 
+vi.mock("@/lib/import/apple-health-staging", () => ({
+  ACTIVE_IMPORT_STATUSES: ["queued", "unpacking", "parsing", "upserting"],
+  sweepStaleImportStaging: vi.fn(async () => 2),
+}));
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     importJob: {
@@ -45,7 +50,9 @@ import {
   IMPORT_JOB_RECONCILE_QUEUE,
   handleImportJobReconcileTick,
   reconcileOrphanImportJobs,
+  stagedImportFilesInUse,
 } from "../apple-health-import-worker";
+import { sweepStaleImportStaging } from "@/lib/import/apple-health-staging";
 
 const maintenanceSource = readFileSync(
   join(process.cwd(), "src/lib/jobs/reminder/register-maintenance.ts"),
@@ -172,9 +179,10 @@ describe("handleImportJobReconcileTick", () => {
 
     await expect(handleImportJobReconcileTick([] as never)).resolves.toEqual({
       ok: true,
-      did: {},
+      did: { import_staging_swept: 2 },
     });
-    expect(mocks.findMany).toHaveBeenCalledTimes(1);
+    // Once for what the sweep must keep, once for the reconcile.
+    expect(mocks.findMany).toHaveBeenCalledTimes(2);
   });
 
   it("reports a failed outcome when the reconcile pass throws", async () => {
@@ -192,5 +200,66 @@ describe("handleImportJobReconcileTick", () => {
       reason: "apple health import reconcile failed",
       cause,
     });
+  });
+});
+
+describe("stagedImportFilesInUse", () => {
+  beforeEach(() => {
+    vi.mocked(sweepStaleImportStaging).mockResolvedValue(0);
+  });
+
+  it("keeps the upload of an import still waiting in the queue", async () => {
+    // An upload can wait behind another account's import for longer than
+    // the sweep's age limit; removing it failed the import on its turn.
+    const rows = [
+      { status: "queued", pgBossJobId: "boss-1" },
+      { status: "parsing", pgBossJobId: "boss-2" },
+      { status: "queued", pgBossJobId: "boss-3" },
+    ];
+    // The sweep's read, then (in the tick) the reconcile's.
+    mocks.findMany
+      .mockResolvedValueOnce(rows)
+      .mockResolvedValueOnce(rows)
+      .mockResolvedValueOnce([]);
+    mocks.getGlobalBoss.mockReturnValue({ getJobById: mocks.getJobById });
+    mocks.getJobById.mockImplementation(async (queue: string, id: string) => {
+      if (queue !== APPLE_HEALTH_IMPORT_V2_QUEUE) return null;
+      if (id === "boss-1") {
+        return { state: "created", data: { uploadPath: "/tmp/a.bin" } };
+      }
+      if (id === "boss-2") {
+        return { state: "active", data: { uploadPath: "/tmp/b.bin" } };
+      }
+      // A job pg-boss already finished holds nothing.
+      return { state: "failed", data: { uploadPath: "/tmp/c.bin" } };
+    });
+
+    const inUse = await stagedImportFilesInUse();
+    expect(inUse).not.toBeNull();
+    expect([...(inUse?.paths ?? [])].sort()).toEqual([
+      "/tmp/a.bin",
+      "/tmp/b.bin",
+    ]);
+    expect(inUse?.xmlInUse).toBe(true);
+
+    await handleImportJobReconcileTick([] as never);
+    expect(sweepStaleImportStaging).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      expect.objectContaining({ xmlInUse: true }),
+    );
+  });
+
+  it("sweeps nothing when the queue cannot be read", async () => {
+    const rows = [{ status: "queued", pgBossJobId: "boss-1" }];
+    mocks.findMany
+      .mockResolvedValueOnce(rows)
+      .mockResolvedValueOnce(rows)
+      .mockResolvedValueOnce([]);
+    mocks.getGlobalBoss.mockReturnValue(null);
+    expect(await stagedImportFilesInUse()).toBeNull();
+
+    await handleImportJobReconcileTick([] as never);
+    expect(sweepStaleImportStaging).not.toHaveBeenCalled();
   });
 });

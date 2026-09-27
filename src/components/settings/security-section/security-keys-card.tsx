@@ -33,6 +33,13 @@ import { queryKeys } from "@/lib/query-keys";
 import { ApiError, apiDelete, apiPatch, apiPost } from "@/lib/api/api-fetch";
 import { describePasskeyError } from "@/lib/passkey-errors";
 import { formatDate } from "@/lib/format";
+import {
+  ExistingFactorReauthDialog,
+  isReproofRequired,
+  offeredReauthMethods,
+  type ExistingFactorProof,
+  type ReauthMethod,
+} from "./existing-factor-reauth-dialog";
 
 export interface WebauthnKeyInfo {
   id: string;
@@ -74,20 +81,44 @@ export function describeStepUp(
   return fallback;
 }
 
-export function SecurityKeysCard({ keys }: { keys: WebauthnKeyInfo[] }) {
+export function SecurityKeysCard({
+  keys,
+  totpEnabled = false,
+}: {
+  keys: WebauthnKeyInfo[];
+  totpEnabled?: boolean;
+}) {
   const { t } = useTranslations();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
+  // Adding a key right after signing in goes straight through; later, the
+  // server asks for a fresh proof first (401 `auth.reproof.required`) and the
+  // options call is retried with it from the dialog.
+  const [reauthOpen, setReauthOpen] = useState(false);
+  const [reauthError, setReauthError] = useState<string | null>(null);
+  // An account with a second factor confirms with that factor or a passkey;
+  // the server refuses a password there and names what it will take.
+  const hasSecondFactor = totpEnabled || keys.length > 0;
+  const [offeredMethods, setOfferedMethods] = useState<ReauthMethod[] | null>(
+    null,
+  );
+  const reauthMethods: ReauthMethod[] = offeredMethods ?? [
+    ...(hasSecondFactor ? [] : (["password"] as const)),
+    ...(totpEnabled ? (["totp"] as const) : []),
+    "passkey",
+    ...(keys.length > 0 ? (["webauthn"] as const) : []),
+  ];
+
   const add = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (proof?: ExistingFactorProof) => {
       const { startRegistration } = await import("@simplewebauthn/browser");
       const { options, challengeId } = await apiPost<{
         options: Parameters<typeof startRegistration>[0]["optionsJSON"];
         challengeId: string;
-      }>("/api/auth/me/mfa/webauthn/register/options");
+      }>("/api/auth/me/mfa/webauthn/register/options", proof);
       const credential = await startRegistration({ optionsJSON: options });
       await apiPost("/api/auth/me/mfa/webauthn/register/verify", {
         challengeId,
@@ -96,14 +127,29 @@ export function SecurityKeysCard({ keys }: { keys: WebauthnKeyInfo[] }) {
     },
     onSuccess: () => {
       setError(null);
+      setReauthOpen(false);
+      setReauthError(null);
       queryClient.invalidateQueries({ queryKey: queryKeys.mfaStatus() });
     },
-    onError: (err) => {
+    onError: (err, proof) => {
+      if (isReproofRequired(err)) {
+        setOfferedMethods(offeredReauthMethods(err));
+        setError(null);
+        setReauthError(null);
+        setReauthOpen(true);
+        return;
+      }
+      let message: string;
       if (err instanceof ApiError) {
-        setError(err.message || t("settings.security.keys.addFailed"));
+        message = err.message || t("settings.security.keys.addFailed");
       } else {
         const { key, params } = describePasskeyError(err);
-        setError(t(key, params));
+        message = t(key, params);
+      }
+      if (proof) {
+        setReauthError(message);
+      } else {
+        setError(message);
       }
     },
   });
@@ -294,7 +340,7 @@ export function SecurityKeysCard({ keys }: { keys: WebauthnKeyInfo[] }) {
             type="button"
             variant="outline"
             className="min-h-11 sm:min-h-9"
-            onClick={() => add.mutate()}
+            onClick={() => add.mutate(undefined)}
             disabled={add.isPending}
           >
             {add.isPending ? (
@@ -305,6 +351,17 @@ export function SecurityKeysCard({ keys }: { keys: WebauthnKeyInfo[] }) {
             {t("settings.security.keys.add")}
           </Button>
         </div>
+        <ExistingFactorReauthDialog
+          open={reauthOpen}
+          onOpenChange={(open) => {
+            setReauthOpen(open);
+            if (!open) setReauthError(null);
+          }}
+          methods={reauthMethods}
+          pending={add.isPending}
+          error={reauthError}
+          onProof={(proof) => add.mutate(proof)}
+        />
 
         {error && (
           <div

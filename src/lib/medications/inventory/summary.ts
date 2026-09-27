@@ -30,6 +30,8 @@
  * the client detail surfaces that also render from it.
  */
 
+import { floorWhole } from "@/lib/medications/units-per-dose";
+
 export type SupplyItemState = "ACTIVE" | "IN_USE" | "EXPIRED" | "USED_UP";
 
 export interface SupplyItem {
@@ -102,8 +104,8 @@ export function summariseSupply(
   return {
     unitsRemaining,
     unitsTotal,
-    dosesRemaining: Math.floor(unitsRemaining / perDose),
-    dosesTotal: Math.floor(unitsTotal / perDose),
+    dosesRemaining: floorWhole(unitsRemaining / perDose),
+    dosesTotal: floorWhole(unitsTotal / perDose),
     expiredUnits,
   };
 }

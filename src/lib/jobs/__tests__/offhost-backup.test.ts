@@ -32,6 +32,14 @@ import {
 const ENC_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
+/** The purge ledger and key-use rows the run touches after each upload. */
+function purgeLedgerMocks() {
+  return {
+    offhostPurgeRequest: { count: vi.fn().mockResolvedValue(0) },
+    offhostBackupKeyUse: { upsert: vi.fn() },
+  };
+}
+
 describe("offhost-backup envelope", () => {
   it("encrypts and decrypts JSON round-trip", () => {
     const key = Buffer.from(ENC_KEY, "hex");
@@ -184,8 +192,10 @@ describe("runOffhostBackup", () => {
     s3.store.set("2020-01-01/user-old.json.enc", Buffer.from([0]));
 
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: { upsert: vi.fn() },
       user: {
+        count: vi.fn().mockResolvedValue(1),
         findMany: vi.fn().mockResolvedValue([{ id: "u1" }, { id: "u2" }]),
       },
       measurement: { findMany: vi.fn().mockResolvedValue([]) },
@@ -214,7 +224,11 @@ describe("runOffhostBackup", () => {
     expect(s3.deleteObject).not.toHaveBeenCalled();
 
     const ct = s3.store.get("2026-05-08/user-u1.json.enc")!;
-    const decoded = decryptBackup(ct, Buffer.from(ENC_KEY, "hex"));
+    const decoded = decryptBackup(
+      ct,
+      Buffer.from(ENC_KEY, "hex"),
+      "2026-05-08/user-u1.json.enc",
+    );
     const parsed = JSON.parse(decoded);
     expect(parsed.userId).toBe("u1");
     expect(() => backupPayloadSchema.parse(parsed)).not.toThrow();
@@ -248,11 +262,43 @@ describe("runOffhostBackup", () => {
     expect(first.create.lastSuccessAt).toBeInstanceOf(Date);
   });
 
+  it("takes back the copy of an account deleted while it was written", async () => {
+    const s3 = makeS3Mock();
+    const ledger = purgeLedgerMocks();
+    const prisma = {
+      ...ledger,
+      offhostBackupState: { upsert: vi.fn() },
+      user: {
+        // u1 is gone by the time its upload lands; u2 is not.
+        count: vi.fn(async ({ where }: { where: { id: string } }) =>
+          where.id === "u1" ? 0 : 1,
+        ),
+        findMany: vi.fn().mockResolvedValue([{ id: "u1" }, { id: "u2" }]),
+      },
+    };
+    const report = await runOffhostBackup(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      prisma as any,
+      s3,
+      new Date("2026-05-08T03:00:00Z"),
+    );
+    expect(s3.store.has("2026-05-08/user-u1.json.enc")).toBe(false);
+    expect(s3.store.has("2026-05-08/user-u2.json.enc")).toBe(true);
+    expect(s3.deleteObject).toHaveBeenCalledWith("2026-05-08/user-u1.json.enc");
+    expect(report.uploaded).toBe(1);
+    // No ledger row for an account that no longer exists.
+    expect(prisma.offhostBackupState.upsert).toHaveBeenCalledTimes(1);
+  });
+
   it("uploads the canonical builder output without reshaping it", async () => {
     const s3 = makeS3Mock();
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: { upsert: vi.fn() },
-      user: { findMany: vi.fn().mockResolvedValue([{ id: "u1" }]) },
+      user: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([{ id: "u1" }]),
+      },
     };
     const canonicalPayload = {
       schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -301,7 +347,13 @@ describe("runOffhostBackup", () => {
     expect(report.uploaded).toBe(1);
     const ciphertext = s3.store.get("2026-05-08/user-u1.json.enc")!;
     expect(
-      JSON.parse(decryptBackup(ciphertext, Buffer.from(ENC_KEY, "hex"))),
+      JSON.parse(
+        decryptBackup(
+          ciphertext,
+          Buffer.from(ENC_KEY, "hex"),
+          "2026-05-08/user-u1.json.enc",
+        ),
+      ),
     ).toEqual(canonicalPayload);
     expect(() => backupPayloadSchema.parse(canonicalPayload)).not.toThrow();
   });
@@ -310,8 +362,10 @@ describe("runOffhostBackup", () => {
     const s3 = makeS3Mock();
     const upsert = vi.fn();
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: { upsert },
       user: {
+        count: vi.fn().mockResolvedValue(1),
         findMany: vi.fn().mockResolvedValue([{ id: "u1" }, { id: "u2" }]),
       },
     };
@@ -357,10 +411,14 @@ describe("runOffhostBackup", () => {
   it("still reports a landed object as uploaded when the ledger write fails", async () => {
     const s3 = makeS3Mock();
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: {
         upsert: vi.fn().mockRejectedValue(new Error("pool timeout")),
       },
-      user: { findMany: vi.fn().mockResolvedValue([{ id: "u1" }]) },
+      user: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([{ id: "u1" }]),
+      },
     };
 
     const report = await runOffhostBackup(
@@ -382,8 +440,12 @@ describe("runOffhostBackup", () => {
   it("refuses an account whose object outgrows one multipart upload", async () => {
     const s3 = makeS3Mock();
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: { upsert: vi.fn() },
-      user: { findMany: vi.fn().mockResolvedValue([{ id: "u1" }]) },
+      user: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([{ id: "u1" }]),
+      },
     };
     mocks.buildFullBackupPayload.mockResolvedValue({
       payload: {
@@ -419,8 +481,12 @@ describe("runOffhostBackup", () => {
   it("reports the largest object it wrote", async () => {
     const s3 = makeS3Mock();
     const prisma = {
+      ...purgeLedgerMocks(),
       offhostBackupState: { upsert: vi.fn() },
-      user: { findMany: vi.fn().mockResolvedValue([{ id: "u1" }]) },
+      user: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([{ id: "u1" }]),
+      },
     };
     const report = await runOffhostBackup(
       prisma as never,
@@ -453,8 +519,8 @@ describe("uploadEncryptedBackup", () => {
 
     const stored = s3.store.get("k")!;
     expect(stored.byteLength).toBe(bytes);
-    expect(stored.subarray(0, 5).toString("binary")).toBe("HLBK\x03");
-    expect(decryptBackup(stored, key)).toBe(document);
+    expect(stored.subarray(0, 5).toString("binary")).toBe("HLBK\x04");
+    expect(decryptBackup(stored, key, "k")).toBe(document);
   });
 
   it("restores an object of the old shape and one of the new one alike", async () => {
@@ -470,10 +536,53 @@ describe("uploadEncryptedBackup", () => {
     const oldBytes = s3.store.get("old")!;
     const newBytes = s3.store.get("new")!;
     expect(oldBytes.subarray(0, 5).toString("binary")).toBe("HLBK\x02");
-    expect(newBytes.subarray(0, 5).toString("binary")).toBe("HLBK\x03");
+    expect(newBytes.subarray(0, 5).toString("binary")).toBe("HLBK\x04");
     // Different framing, same record, one reader.
     expect(decryptBackup(oldBytes, key)).toBe(document);
-    expect(decryptBackup(newBytes, key)).toBe(document);
+    expect(decryptBackup(newBytes, key, "new")).toBe(document);
+  });
+
+  it("binds a new object to its key in the bucket", async () => {
+    const s3 = makeS3Mock();
+    const document = JSON.stringify({ userId: "u1" });
+    await uploadEncryptedBackup(
+      s3,
+      "2026-09-01/user-u1.json.enc",
+      key,
+      (write) => write(document),
+    );
+    const stored = s3.store.get("2026-09-01/user-u1.json.enc")!;
+    expect(decryptBackup(stored, key, "2026-09-01/user-u1.json.enc")).toBe(
+      document,
+    );
+    // The same bytes presented as another account's copy, or another night's,
+    // do not open.
+    expect(() =>
+      decryptBackup(stored, key, "2026-09-01/user-u2.json.enc"),
+    ).toThrow();
+    expect(() =>
+      decryptBackup(stored, key, "2026-09-02/user-u1.json.enc"),
+    ).toThrow();
+  });
+
+  it("reads objects under a retired key through the previous-keys ring", async () => {
+    const s3 = makeS3Mock();
+    const document = JSON.stringify({ userId: "u1" });
+    const oldKey = Buffer.alloc(32, 7);
+    const newKey = Buffer.alloc(32, 9);
+    await uploadEncryptedBackup(s3, "k4", oldKey, (write) => write(document));
+    await s3.putObject("k2", encryptBackup(document, oldKey));
+    const ring = { active: newKey, previous: [oldKey] };
+    expect(decryptBackup(s3.store.get("k4")!, ring, "k4")).toBe(document);
+    expect(decryptBackup(s3.store.get("k2")!, ring)).toBe(document);
+    // Without the retired key the new-format object names the key it needs.
+    expect(() =>
+      decryptBackup(
+        s3.store.get("k4")!,
+        { active: newKey, previous: [] },
+        "k4",
+      ),
+    ).toThrow(/BACKUP_ENCRYPTION_PREVIOUS_KEYS/);
   });
 
   it("rejects a tampered version-3 object rather than returning a partial one", async () => {

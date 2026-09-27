@@ -23,8 +23,14 @@ import {
   STORED_BACKUP_SELECT,
 } from "@/lib/export/stored-backup";
 import {
+  assessBackupKeys,
+  BACKUP_KEY_MISSING_CODE,
+  describeBackupKeyProblem,
+} from "@/lib/export/backup-key-ids";
+import {
   readStreamedBackup,
   type BackupSource,
+  type StreamedBackup,
 } from "@/lib/export/streamed-backup";
 import { annotate } from "@/lib/logging/context";
 import {
@@ -72,8 +78,9 @@ export const GET = apiHandler(
 
     let payload;
     let measurementCount: number;
+    let streamed: StreamedBackup;
     try {
-      const streamed = await readStreamedBackup(source);
+      streamed = await readStreamedBackup(source);
       measurementCount = streamed.measurementCount;
       payload = parseBackupPayload(streamed.raw);
     } catch (err) {
@@ -91,6 +98,22 @@ export const GET = apiHandler(
         `Backup schema version ${payload.schemaVersion} is not restorable by this release`,
         422,
       );
+    }
+
+    // The preview is where the operator decides, so it says what the restore
+    // would refuse: a key the file's inner ciphertext needs and this host
+    // does not have. The instance settings are left out here, as the restore
+    // leaves them out unless asked; the restore itself checks them when they
+    // are asked for.
+    const keyVerdict = assessBackupKeys(streamed.keys, {
+      ignoreSections: new Set(["appSettings"]),
+    });
+    const keyProblem = describeBackupKeyProblem(keyVerdict);
+    if (keyProblem) {
+      return apiError(keyProblem, 422, {
+        errorCode: BACKUP_KEY_MISSING_CODE,
+        keyIds: [...keyVerdict.missing, ...keyVerdict.unreadable],
+      });
     }
 
     const summary = {

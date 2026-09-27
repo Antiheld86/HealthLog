@@ -1,7 +1,7 @@
 /**
  * Authorize endpoint — consent gate + audience + PKCE + redirect-URI binding.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 process.env.API_TOKEN_HMAC_KEY = "x".repeat(48);
 process.env.APP_URL = "https://health.example";
@@ -21,6 +21,22 @@ vi.mock("@/lib/rate-limit", () => ({
   })),
   rateLimitHeaders: vi.fn(() => ({})),
 }));
+// The consent reads the session's own proof stamps. By default the session
+// signed in a moment ago, which is a recent proof on an account without a
+// second factor; the cases below age it.
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    session: {
+      findUnique: vi.fn(async () => ({
+        createdAt: new Date(),
+        mfaVerifiedAt: null,
+        reproofAt: null,
+      })),
+    },
+    webauthnMfaCredential: { count: vi.fn(async () => 0) },
+    passkey: { count: vi.fn(async () => 0) },
+  },
+}));
 vi.mock("@/lib/app-settings", () => ({
   isApiGloballyEnabled: vi.fn(async () => true),
 }));
@@ -30,6 +46,7 @@ import { getSession } from "@/lib/auth/session";
 import { isApiGloballyEnabled } from "@/lib/app-settings";
 import { registerDcrClient } from "@/lib/mcp/oauth/clients";
 import { s256Challenge } from "@/lib/mcp/oauth/pkce";
+import { prisma } from "@/lib/db";
 
 const REDIRECT = "https://claude.ai/api/mcp/auth_callback";
 const VERIFIER = "a".repeat(64);
@@ -104,6 +121,16 @@ describe("GET /authorize — consent gate", () => {
     expect(body).toMatch(/decision/); // the Allow/Deny form
     // A GET never mints a code.
     expect(body).not.toMatch(/hlac_/);
+  });
+
+  it("names what the connection can read, document text included", async () => {
+    signedIn();
+    const body = await (await GET(getReq(authorizeUrl()) as never)).text();
+    // v1.39.3: search and fetch reach visits, conditions and the indexed
+    // text of stored documents, so the consent says so before Allow.
+    expect(body).toMatch(/visits/);
+    expect(body).toMatch(/text of your stored documents/);
+    expect(body).toMatch(/held back from AI reading/);
   });
 
   it("prompts sign-in (with a return link) when there is no session", async () => {
@@ -314,6 +341,82 @@ describe("POST /authorize — decision", () => {
     expect(new URL(loc).searchParams.get("error")).toBe("access_denied");
     // RFC 9207 — the issuer is echoed on the error redirect too.
     expect(new URL(loc).searchParams.get("iss")).toBe("https://health.example");
+  });
+});
+
+describe("authorize — allowing a connection needs a recent proof", () => {
+  // A queued stale stamp a case did not read must not leak into the next one.
+  afterEach(() => {
+    vi.mocked(prisma.session.findUnique).mockReset();
+  });
+
+  function staleSession() {
+    vi.mocked(prisma.session.findUnique).mockResolvedValueOnce({
+      createdAt: new Date(Date.now() - 60 * 60 * 1000),
+      mfaVerifiedAt: null,
+      reproofAt: null,
+    } as never);
+  }
+  const allow = {
+    response_type: "code",
+    client_id: CLIENT.clientId,
+    redirect_uri: REDIRECT,
+    code_challenge: CHALLENGE,
+    code_challenge_method: "S256",
+    scope: "health:read",
+    state: "xyz",
+    resource: RESOURCE,
+    decision: "allow",
+  };
+
+  it("GET shows a confirm link instead of the form when the session is an hour old", async () => {
+    signedIn();
+    staleSession();
+    const res = await GET(getReq(authorizeUrl()) as never);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toMatch(/Confirm it is you/);
+    expect(body).not.toMatch(/name="decision"/);
+    const href = body.match(/href="([^"]+)"/)?.[1] ?? "";
+    const next =
+      new URL(href.replace(/&amp;/g, "&"), "https://x").searchParams.get(
+        "next",
+      ) ?? "";
+    expect(href.startsWith("/confirm-access?next=")).toBe(true);
+    // Back to this exact consent request.
+    expect(next).toBe(
+      new URL(authorizeUrl()).pathname + new URL(authorizeUrl()).search,
+    );
+  });
+
+  it("POST allow on an hour-old session mints nothing", async () => {
+    signedIn();
+    staleSession();
+    const res = await POST(postReq(allow) as never);
+    expect(res.status).toBe(401);
+    expect(res.headers.get("location")).toBeNull();
+    expect(await res.text()).toMatch(/confirm-access\?next=/);
+  });
+
+  it("an account with a second factor needs the factor, not a young session", async () => {
+    vi.mocked(getSession).mockResolvedValue({
+      session: {
+        id: "s1",
+        expiresAt: new Date(Date.now() + 1e6),
+        actingAsUserId: null,
+        recordEpoch: 0,
+      },
+      user: { id: "user-1", totpConfirmedAt: new Date("2026-01-01") } as never,
+    });
+    const res = await POST(postReq(allow) as never);
+    expect(res.status).toBe(401);
+  });
+
+  it("deny needs no proof", async () => {
+    signedIn();
+    staleSession();
+    const res = await POST(postReq({ ...allow, decision: "deny" }) as never);
+    expect(res.status).toBe(303);
   });
 });
 

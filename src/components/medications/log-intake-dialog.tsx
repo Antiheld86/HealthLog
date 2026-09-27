@@ -44,6 +44,7 @@ import {
   runLogIntake,
   runUndoIntake,
 } from "@/components/medications/use-medication-intake";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 interface LogIntakeSchedule extends ScheduleWindowInput {
   label: string | null;
@@ -120,7 +121,7 @@ export function LogIntakeDialog({
   const recordName = useActiveRecordName();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const userTz = user?.timezone || "Europe/Berlin";
+  const userTz = user?.timezone || DEFAULT_TIMEZONE;
   const formId = useId();
 
   const [medicationOverride, setMedicationOverride] = useState<string | null>(

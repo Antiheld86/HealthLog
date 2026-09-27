@@ -19,6 +19,15 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(),
     },
     auditLog: { create: vi.fn() },
+    session: {
+      findUnique: vi.fn(async () => ({
+        createdAt: new Date(),
+        mfaVerifiedAt: null,
+        reproofAt: null,
+      })),
+    },
+    webauthnMfaCredential: { count: vi.fn(async () => 0) },
+    passkey: { count: vi.fn(async () => 0) },
   },
 }));
 
@@ -99,6 +108,22 @@ beforeEach(() => {
     count: 1,
     resetAt: new Date(),
   } as never);
+});
+
+describe("POST /api/share-links — fresh proof", () => {
+  it("refuses a browser session with no recent sign-in or re-proof", async () => {
+    vi.mocked(prisma.session.findUnique).mockResolvedValueOnce({
+      createdAt: new Date(Date.now() - 60 * 60 * 1000),
+      mfaVerifiedAt: null,
+      reproofAt: null,
+    } as never);
+    const res = await POST(postReq(validBody()));
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.meta.errorCode).toBe("auth.reproof.required");
+    expect(body.meta.methods).toEqual([]);
+    expect(prisma.clinicianShareLink.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/share-links — create", () => {

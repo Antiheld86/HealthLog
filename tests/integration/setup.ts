@@ -63,6 +63,11 @@ export async function truncateAllTables(client: PrismaClient): Promise<void> {
     "mood_entries",
     "notification_channels",
     "notification_preferences",
+    // Host-wide off-host backup state: not keyed to a user, so the users
+    // cascade does not reach it, and a file that reads it whole (the purge
+    // job, the encryption view) saw what earlier files left behind.
+    "offhost_backup_key_use",
+    "offhost_purge_requests",
     "passkeys",
     "personal_records",
     "push_subscriptions",

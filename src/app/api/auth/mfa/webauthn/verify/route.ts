@@ -30,6 +30,7 @@ import { checkAuthSurfaceRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { finishLogin } from "@/lib/auth/login-response";
 import {
   loadActiveChallenge,
+  reserveChallengeAttempt,
   recordChallengeFailure,
   claimChallenge,
 } from "@/lib/auth/mfa/challenge";
@@ -83,6 +84,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // this endpoint, so reject anything but "login" with the same generic 401.
   if (challenge.kind !== "login") {
     annotate({ action: { name: "auth.mfa.verify.invalid_ticket" } });
+    return apiError("Invalid or expired challenge", 401);
+  }
+
+  // Count this attempt before anything is verified. The reservation is one
+  // guarded UPDATE, so concurrent guesses cannot all slip under the cap the
+  // way a read-then-increment let them.
+  if (!(await reserveChallengeAttempt(challenge.id))) {
+    annotate({ action: { name: "auth.mfa.verify.attempts_exhausted" } });
     return apiError("Invalid or expired challenge", 401);
   }
 

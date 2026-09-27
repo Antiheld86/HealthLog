@@ -2,6 +2,7 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess, apiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { buildMedicationEfficacy } from "@/lib/medications/efficacy/build-efficacy";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -31,7 +32,7 @@ export const GET = apiHandler(
       return apiError("Too many efficacy requests. Please retry later.", 429);
     }
 
-    const userTz = user.timezone || "Europe/Berlin";
+    const userTz = user.timezone || DEFAULT_TIMEZONE;
     const dto = await buildMedicationEfficacy(user.id, id, userTz);
     if (!dto) {
       return apiError("Medication not found", 404);

@@ -14,10 +14,12 @@ import {
   canonicalDailyTimestamp,
   dayKeyForUserTz,
   drainPerSampleCumulative,
-  localDayWindow,
-  localStartOfDay,
   sumBucketValues,
 } from "../drain-per-sample-cumulative";
+import {
+  localDayWindow,
+  startOfLocalDayKey as localStartOfDay,
+} from "@/lib/tz/local-day";
 import type { PrismaClient } from "@/generated/prisma/client";
 
 describe("dayKeyForUserTz", () => {

@@ -63,7 +63,12 @@ describe("MFA login flow (real Postgres)", () => {
     const code = codeAt(secret, Date.now());
 
     const first = await verifyMfaFactor(
-      { id: user.id, totpSecretEncrypted: encrypt(secret), totpLastStep: null },
+      {
+        id: user.id,
+        totpSecretEncrypted: encrypt(secret),
+        totpLastStep: null,
+        totpConfirmedAt: user.totpConfirmedAt,
+      },
       "totp",
       code,
     );
@@ -81,6 +86,7 @@ describe("MFA login flow (real Postgres)", () => {
         id: user.id,
         totpSecretEncrypted: encrypt(secret),
         totpLastStep: afterFirst?.totpLastStep ?? null,
+        totpConfirmedAt: user.totpConfirmedAt,
       },
       "totp",
       code,
@@ -94,6 +100,7 @@ describe("MFA login flow (real Postgres)", () => {
       createMfaChallenge,
       loadActiveChallenge,
       claimChallenge,
+      reserveChallengeAttempt,
       recordChallengeFailure,
       MFA_CHALLENGE_ATTEMPT_CAP,
     } = await import("@/lib/auth/mfa/challenge");
@@ -117,10 +124,41 @@ describe("MFA login flow (real Postgres)", () => {
     const row = await loadActiveChallenge(second.ticket);
     let exhausted = false;
     for (let i = 0; i < MFA_CHALLENGE_ATTEMPT_CAP; i++) {
+      expect(await reserveChallengeAttempt(row!.id)).toBe(true);
       ({ exhausted } = await recordChallengeFailure(row!.id));
     }
     expect(exhausted).toBe(true);
     expect(await loadActiveChallenge(second.ticket)).toBeNull();
+    expect(await reserveChallengeAttempt(row!.id)).toBe(false);
+  });
+
+  it("concurrent guesses cannot exceed the attempt cap", async () => {
+    const {
+      createMfaChallenge,
+      loadActiveChallenge,
+      reserveChallengeAttempt,
+      MFA_CHALLENGE_ATTEMPT_CAP,
+    } = await import("@/lib/auth/mfa/challenge");
+    const prisma = getPrismaClient();
+    const user = await prisma.user.create({
+      data: { username: "race-user", email: "race@example.test" },
+    });
+    const { ticket } = await createMfaChallenge(user.id, "login");
+    const active = await loadActiveChallenge(ticket);
+
+    // Every request read "0 attempts" under the old read-then-increment; fire
+    // four times the cap at once and count how many were allowed to guess.
+    const results = await Promise.all(
+      Array.from({ length: MFA_CHALLENGE_ATTEMPT_CAP * 4 }, () =>
+        reserveChallengeAttempt(active!.id),
+      ),
+    );
+    expect(results.filter(Boolean)).toHaveLength(MFA_CHALLENGE_ATTEMPT_CAP);
+    const row = await prisma.mfaChallenge.findUnique({
+      where: { id: active!.id },
+      select: { attempts: true },
+    });
+    expect(row?.attempts).toBe(MFA_CHALLENGE_ATTEMPT_CAP);
   });
 
   it("recovery code is one-time-use and regeneration invalidates the set", async () => {

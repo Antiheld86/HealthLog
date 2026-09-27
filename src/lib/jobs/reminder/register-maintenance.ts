@@ -68,6 +68,11 @@ import {
   type IntakeSlotDedupPayload,
 } from "@/lib/medications/intake-slot-dedup";
 import {
+  handleOffhostPurge,
+  OFFHOST_PURGE_CRON,
+  OFFHOST_PURGE_QUEUE,
+} from "@/lib/jobs/offhost-purge";
+import {
   handleRestoreDrill,
   RESTORE_DRILL_CRON,
   RESTORE_DRILL_QUEUE,
@@ -92,6 +97,13 @@ import {
   enqueueBootTimeMedNotesEncryptionBackfill,
   type MedNotesEncryptionBackfillPayload,
 } from "@/lib/jobs/med-notes-encryption-backfill";
+import {
+  FREE_TEXT_ENCRYPTION_BACKFILL_QUEUE,
+  FREE_TEXT_ENCRYPTION_BACKFILL_CONCURRENCY,
+  runFreeTextEncryptionBackfillForUser,
+  enqueueBootTimeFreeTextEncryptionBackfill,
+  type FreeTextEncryptionBackfillPayload,
+} from "@/lib/jobs/free-text-encryption-backfill";
 import {
   CONTENT_INDEX_BACKFILL_QUEUE,
   CONTENT_INDEX_BACKFILL_CONCURRENCY,
@@ -338,6 +350,13 @@ const MCP_TOKEN_CLEANUP_CRON = "0 4 * * *";
 // boss poll.
 
 const MED_NOTES_ENCRYPTION_BACKFILL_CRON = "5 4 * * *";
+// v1.39.3 — converging backfill that moves the Coach conversation title and the
+// custom-metric reading note to AES-256-GCM at rest. Boot discovery (staggered
+// past the startup storm) enqueues one per-user job; a daily 04:07
+// Europe/Berlin discovery tick re-fans for rows written by a previous-release
+// process after the upgrade. Two minutes after the medication-note tick so the
+// two do not share a poll.
+const FREE_TEXT_ENCRYPTION_BACKFILL_CRON = "7 4 * * *";
 
 const allQueues = [
   // v1.25 (W-ENV) — nightly environmental-context fetch. A daily discovery tick
@@ -353,6 +372,10 @@ const allQueues = [
   STEP_UP_ELEVATION_CLEANUP_QUEUE,
   OFFHOST_BACKUP_QUEUE,
   RESTORE_DRILL_QUEUE,
+  // v1.39.3 — deleting an account or wiping its data takes its off-host
+  // copies out of the bucket. Without this entry the requests would be
+  // written and never worked.
+  OFFHOST_PURGE_QUEUE,
   // v1.39.1 — an admin's restore of a stored backup, run off the request, and
   // the boot sweep that re-queues one a stopped worker left running. Without
   // this entry every restore request would queue a job nobody works.
@@ -436,6 +459,10 @@ const allQueues = [
   // plaintext medication note; without this entry pg-boss never provisions the
   // queue and both the boot enqueue and the cron silently no-op.
   MED_NOTES_ENCRYPTION_BACKFILL_QUEUE,
+  // v1.39.3 — Coach title + custom-metric note encryption backfill. Without
+  // this entry pg-boss never provisions the queue and both the boot enqueue
+  // and the cron silently no-op.
+  FREE_TEXT_ENCRYPTION_BACKFILL_QUEUE,
   // Document vault — daily physical purge for tombstones past the 30-day
   // undo grace (returns the encrypted blob's TOAST space). Without this entry
   // the daily schedule silently no-ops and "deleted" documents hold backup
@@ -505,6 +532,9 @@ const schedules: ScheduleEntry[] = [
   ],
   [OFFHOST_BACKUP_QUEUE, OFFHOST_BACKUP_CRON],
   [RESTORE_DRILL_QUEUE, RESTORE_DRILL_CRON],
+  // Nightly backstop for the purge the deletion kicks straight away: a
+  // request the bucket refused, or one written while the queue was down.
+  [OFFHOST_PURGE_QUEUE, OFFHOST_PURGE_CRON, cronIsTheRetry],
   [HOST_METRIC_QUEUE, HOST_METRIC_CRON, cronIsTheRetry],
   [FEEDBACK_AGGREGATOR_QUEUE, FEEDBACK_AGGREGATOR_CRON, cronIsTheRetry],
   // v1.4.37 — hourly geo backfill. The helper is idempotent + capped
@@ -593,6 +623,9 @@ const schedules: ScheduleEntry[] = [
   // fan out one per-user job per account still holding a plaintext medication
   // note.
   [MED_NOTES_ENCRYPTION_BACKFILL_QUEUE, MED_NOTES_ENCRYPTION_BACKFILL_CRON],
+  // v1.39.3 — daily 04:07 Europe/Berlin discovery for the Coach title +
+  // custom-metric note backfill. Empty payload = fan out per user.
+  [FREE_TEXT_ENCRYPTION_BACKFILL_QUEUE, FREE_TEXT_ENCRYPTION_BACKFILL_CRON],
   // Document vault — daily 04:10 Europe/Berlin purge for tombstoned
   // documents past the 30-day undo grace.
   [DOCUMENT_PURGE_QUEUE, DOCUMENT_PURGE_CRON, cronIsTheRetry],
@@ -650,6 +683,11 @@ const queuePolicies: QueuePolicyTable = {
     policy: "exclusive",
     reason:
       "Per-user medication-note encryption backfill; discovery drops the user once no plaintext note remains.",
+  },
+  [FREE_TEXT_ENCRYPTION_BACKFILL_QUEUE]: {
+    policy: "exclusive",
+    reason:
+      "Per-user Coach title + custom-metric note encryption backfill; discovery drops the user once no readable value remains.",
   },
   [DOCUMENT_THUMBNAIL_BACKFILL_QUEUE]: {
     policy: "exclusive",
@@ -746,6 +784,12 @@ export async function registerMaintenanceQueues(
     RESTORE_DRILL_QUEUE,
     { localConcurrency: 1 },
     handleRestoreDrill,
+  );
+  await createAndWork(
+    boss,
+    OFFHOST_PURGE_QUEUE,
+    { localConcurrency: 1 },
+    handleOffhostPurge,
   );
   // One restore at a time per worker: each holds a transaction over a whole
   // account and a batch of readings in memory, and two at once on a small host
@@ -1188,6 +1232,65 @@ export async function registerMaintenanceQueues(
     },
   );
 
+  // v1.39.3 — Coach title + custom-metric note encryption backfill worker.
+  // Same shape as the medication-note worker above: an empty-userId payload is
+  // the daily discovery tick, a userId payload migrates that account's rows.
+  await createAndWork<Partial<FreeTextEncryptionBackfillPayload>>(
+    boss,
+    FREE_TEXT_ENCRYPTION_BACKFILL_QUEUE,
+    { localConcurrency: FREE_TEXT_ENCRYPTION_BACKFILL_CONCURRENCY },
+    async (jobs) => {
+      let users = 0;
+      let discoveryEnqueued = 0;
+      let discoverySkipped = 0;
+      let discoveryFailed = 0;
+      let titles = 0;
+      let notes = 0;
+      for (const job of jobs) {
+        const { userId } = job.data;
+        if (!userId) {
+          const result = await enqueueBootTimeFreeTextEncryptionBackfill();
+          discoveryEnqueued += result.enqueued;
+          discoverySkipped += result.skipped;
+          if (result.error) discoveryFailed++;
+          workerLog(
+            "info",
+            `[free-text-encryption-backfill] daily discovery enqueued=${result.enqueued} skipped=${result.skipped}${result.error ? ` error=${result.error}` : ""}`,
+          );
+          continue;
+        }
+        try {
+          const { conversationTitlesMigrated, metricNotesMigrated } =
+            await runFreeTextEncryptionBackfillForUser(userId);
+          users++;
+          titles += conversationTitlesMigrated;
+          notes += metricNotesMigrated;
+          workerLog(
+            "info",
+            `[free-text-encryption-backfill] user=${userId} titles=${conversationTitlesMigrated} notes=${metricNotesMigrated}`,
+          );
+        } catch (err) {
+          recordError();
+          workerLog(
+            "error",
+            `[free-text-encryption-backfill] user=${userId} failed`,
+            err,
+          );
+          throw err;
+        }
+      }
+      return jobDone({
+        jobs: jobs.length,
+        users,
+        discovery_enqueued: discoveryEnqueued,
+        discovery_skipped: discoverySkipped,
+        discovery_failed: discoveryFailed,
+        conversation_titles_migrated: titles,
+        metric_notes_migrated: notes,
+      });
+    },
+  );
+
   // Document vault P2 — on-demand content-search index backfill worker. The
   // trigger endpoint sends one per-user job; this handler indexes that user's
   // not-yet-indexed documents (consent + budget gated, bounded + resumable).
@@ -1546,6 +1649,33 @@ export async function enqueueMaintenanceBootDiscovery(): Promise<void> {
     workerLog(
       "error",
       "[med-notes-encryption-backfill] boot discovery threw an unexpected error",
+      err,
+    );
+  }
+
+  // v1.39.3 — Coach title + custom-metric note encryption backfill. Staggered
+  // one step past the note-encryption backfill so it starts after the boot
+  // storm rather than on the first poll.
+  try {
+    const { enqueued, skipped, error } =
+      await enqueueBootTimeFreeTextEncryptionBackfill(
+        BOOT_BACKFILL_STAGGER_SECONDS * 6,
+      );
+    if (error) {
+      workerLog(
+        "error",
+        `[free-text-encryption-backfill] boot discovery failed: ${error}`,
+      );
+    } else {
+      workerLog(
+        "info",
+        `[free-text-encryption-backfill] boot discovery: enqueued=${enqueued} skipped=${skipped}`,
+      );
+    }
+  } catch (err) {
+    workerLog(
+      "error",
+      "[free-text-encryption-backfill] boot discovery threw an unexpected error",
       err,
     );
   }

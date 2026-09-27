@@ -60,7 +60,10 @@ import { useDateFormatPreference, useTranslations } from "@/lib/i18n/context";
 import { formatDate } from "@/lib/date-format";
 import { queryKeys } from "@/lib/query-keys";
 import { formatUnitCount } from "@/components/medications/units-per-dose";
-import { formatUnitsPerDose } from "@/lib/medications/units-per-dose";
+import {
+  floorWhole,
+  formatUnitsPerDose,
+} from "@/lib/medications/units-per-dose";
 import { apiDelete, apiGet } from "@/lib/api/api-fetch";
 import type { SupplySummary } from "@/lib/medications/inventory/summary";
 import {
@@ -382,8 +385,8 @@ export function InventorySection({
                   {item.unitsRemaining == null || item.unitsTotal == null
                     ? t("medications.detail.bestand.unknown")
                     : t("medications.detail.bestand.doses", {
-                        remaining: Math.floor(item.unitsRemaining / perDose),
-                        total: Math.floor(item.unitsTotal / perDose),
+                        remaining: floorWhole(item.unitsRemaining / perDose),
+                        total: floorWhole(item.unitsTotal / perDose),
                       })}
                   {perDose !== 1 &&
                     item.unitsRemaining != null &&

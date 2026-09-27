@@ -96,7 +96,7 @@ function utcMidnightOfUserDay(date: Date, tz: string): number {
  * `tz` defaults to Berlin only so legacy callers keep working; per-user
  * surfaces pass the resolved `User.timezone`.
  */
-export function dayOffsetToBerlinDayKey(
+export function dayOffsetToDayKey(
   now: Date,
   dayOffset: number,
   tz: string = DEFAULT_TIMEZONE,

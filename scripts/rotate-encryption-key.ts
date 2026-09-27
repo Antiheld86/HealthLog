@@ -328,6 +328,16 @@ async function main() {
     );
   }
 
+  // ───── Document picker (String) ─────
+  // Column: "tokenEncrypted" — a person's Paperless-ngx / Papra API token.
+  results.push(
+    await rotateStringColumn(
+      "DocumentSourceConnection",
+      "tokenEncrypted",
+      prisma.documentSourceConnection,
+    ),
+  );
+
   // ───── AppSettings — operator credentials (String) ─────
   // Columns: "adminAiKeyEncrypted" "webPushVapidPrivateKeyEncrypted"
   // "adminCodexAccessTokenEncrypted" "adminCodexRefreshTokenEncrypted"
@@ -408,7 +418,7 @@ async function main() {
   }
 
   // ───── Coach (Bytes columns) ─────
-  // "encryptedContent" "summaryEncrypted" "factEncrypted"
+  // "encryptedContent" "summaryEncrypted" "titleEncrypted" "factEncrypted"
   results.push(
     await rotateBytesColumn(
       "CoachMessage",
@@ -420,6 +430,16 @@ async function main() {
     await rotateBytesColumn(
       "CoachConversation",
       "summaryEncrypted",
+      prisma.coachConversation,
+    ),
+  );
+  // v1.39.3 — the conversation title. NULL on a row the free-text backfill
+  // has not reached yet (its title is still in the readable column), which
+  // `rotateBytesColumn` skips.
+  results.push(
+    await rotateBytesColumn(
+      "CoachConversation",
+      "titleEncrypted",
       prisma.coachConversation,
     ),
   );
@@ -678,6 +698,17 @@ async function main() {
       "Practitioner",
       "noteEncrypted",
       prisma.practitioner,
+    ),
+  );
+
+  // ───── v1.39.3 custom-metric reading note (Bytes column) ─────
+  // NULL on a reading without a note, and on a row the free-text backfill has
+  // not reached yet; `rotateBytesColumn` skips both.
+  results.push(
+    await rotateBytesColumn(
+      "CustomMetricEntry",
+      "noteEncrypted",
+      prisma.customMetricEntry,
     ),
   );
 

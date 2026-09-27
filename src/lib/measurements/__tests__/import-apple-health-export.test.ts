@@ -722,6 +722,32 @@ describe("streamParseExportXml — cumulative source-day estimates", () => {
       });
     },
   );
+  it("counts a device's whole day across an OS update", async () => {
+    // The phone updated mid-morning: its records carry two sourceVersion
+    // values and two software fields. They are still one source, so the day
+    // is 6,000 + 3,000, not the larger half.
+    const { prisma } = await importCumulativeFixture(`<?xml version="1.0"?>
+<HealthData locale="en_US">
+  <Record type="HKQuantityTypeIdentifierStepCount" unit="count"
+          startDate="2026-05-14 08:00:00 +0200"
+          endDate="2026-05-14 08:30:00 +0200" value="6000"
+          sourceName="iPhone" sourceVersion="17.4.1"
+          device="&lt;&lt;HKDevice: 0x283a08640&gt;, name:iPhone, hardware:iPhone14,2, software:17.4.1&gt;"/>
+  <Record type="HKQuantityTypeIdentifierStepCount" unit="count"
+          startDate="2026-05-14 15:00:00 +0200"
+          endDate="2026-05-14 15:30:00 +0200" value="3000"
+          sourceName="iPhone" sourceVersion="17.5"
+          device="&lt;&lt;HKDevice: 0x283a09999&gt;, name:iPhone, hardware:iPhone14,2, software:17.5&gt;"/>
+  <Record type="HKQuantityTypeIdentifierStepCount" unit="count"
+          startDate="2026-05-14 09:00:00 +0200"
+          endDate="2026-05-14 09:30:00 +0200" value="7000"
+          sourceName="Zepp" sourceVersion="1.0"/>
+</HealthData>`);
+
+    expect(prisma._measurements).toHaveLength(1);
+    expect(prisma._measurements[0]).toMatchObject({ value: 9_000 });
+  });
+
   it("folds unattributed cumulative records into one bounded source bucket", async () => {
     const { prisma } = await importCumulativeFixture(`<?xml version="1.0"?>
 <HealthData locale="en_US">

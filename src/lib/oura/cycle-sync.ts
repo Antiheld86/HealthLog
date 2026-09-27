@@ -75,14 +75,13 @@ function isUniqueViolation(err: unknown): boolean {
 export async function syncUserOuraCyclePhases(
   userId: string,
   accessToken: string,
-  lookbackDays: number,
+  window: { startDate: string; endDate: string },
 ): Promise<number> {
-  const now = new Date();
-  const start = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
-  const records = await fetchDailyCyclePhases(accessToken, {
-    startDate: start.toISOString().slice(0, 10),
-    endDate: now.toISOString().slice(0, 10),
-  });
+  // The window is the measurement sync's own, cut on the user's calendar days.
+  // Deriving it here from UTC dates made the two legs ask Oura for different
+  // days whenever the user's date and the UTC date differ (every evening west
+  // of UTC, every early morning east of it).
+  const records = await fetchDailyCyclePhases(accessToken, window);
   if (records.length === 0) return 0;
 
   const periodDays = derivePeriodDaysFromCyclePhases(records);

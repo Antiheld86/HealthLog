@@ -65,6 +65,7 @@
 import type { BrowserContext, Page } from "@playwright/test";
 
 import { aiBlockAvailable, serveAiBlock } from "./setup/ai-capabilities";
+import { actWithReproof, useStaleSession } from "./setup/recent-proof";
 import { expect, test } from "./setup/test";
 import {
   DELEGATE_STORAGE_STATE_PATH,
@@ -162,15 +163,21 @@ test.describe("account sharing", () => {
 
   let ownerContext: BrowserContext;
   let ownerPage: Page;
+  let endOwnerSession: (() => Promise<void>) | null = null;
 
   test.beforeAll(async ({ browser }) => {
     ownerContext = await browser.newContext({
       storageState: OWNER_STORAGE_STATE_PATH,
     });
     ownerPage = await ownerContext.newPage();
+    // An invitation asks for a recent proof. The owner acts from a session of
+    // this journey's own, made stale before the press, so the re-proof dialog
+    // is met on every run rather than only once the run is five minutes old.
+    endOwnerSession = await useStaleSession(ownerPage, E2E_OWNER.username);
   });
 
   test.afterAll(async () => {
+    await endOwnerSession?.();
     await ownerContext.close();
   });
 
@@ -248,7 +255,7 @@ test.describe("account sharing", () => {
       (req) =>
         req.method() === "POST" && req.url().endsWith("/api/account/grants"),
     );
-    await submit.click();
+    await actWithReproof(ownerPage, E2E_OWNER.password, () => submit.click());
     const posted = JSON.parse((await invitePost).postData() ?? "{}") as {
       expiresAt?: string | null;
       access?: string;

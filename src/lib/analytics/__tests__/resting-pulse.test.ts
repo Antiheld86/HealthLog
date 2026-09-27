@@ -13,6 +13,9 @@ import {
   type PulseSample,
 } from "../resting-pulse";
 import { zonedWallClockToUtc } from "@/lib/tz/wall-clock";
+import { userDayKey } from "@/lib/tz/format";
+
+const DAY_KEY = (d: Date) => userDayKey(d, "Europe/Berlin");
 
 /**
  * The zone `deriveRestingProxyFromPulse` buckets in by default
@@ -69,7 +72,7 @@ describe("deriveRestingProxyFromPulse", () => {
         ),
       );
     }
-    const proxy = deriveRestingProxyFromPulse(samples);
+    const proxy = deriveRestingProxyFromPulse(samples, DAY_KEY);
     expect(proxy).toHaveLength(1);
     // 510 samples, only 10 below ~80 — but the 20th percentile of the
     // whole day still lands in the workout band because 98 % of samples
@@ -94,7 +97,7 @@ describe("deriveRestingProxyFromPulse", () => {
     for (let i = 0; i < 10; i++) {
       samples.push(day(`2026-06-02T18:${String(i).padStart(2, "0")}:00`, 150));
     }
-    const proxy = deriveRestingProxyFromPulse(samples);
+    const proxy = deriveRestingProxyFromPulse(samples, DAY_KEY);
     expect(proxy).toHaveLength(1);
     // 20th percentile sits in the low band, well below the workout reads.
     expect(proxy[0].value).toBeLessThanOrEqual(80);
@@ -112,7 +115,7 @@ describe("deriveRestingProxyFromPulse", () => {
       day("2026-06-01T12:00:00", 64),
       day("2026-06-01T20:00:00", 68),
     ];
-    const proxy = deriveRestingProxyFromPulse(samples);
+    const proxy = deriveRestingProxyFromPulse(samples, DAY_KEY);
     expect(proxy).toHaveLength(2);
     expect(proxy[0].measuredAt.getTime()).toBeLessThan(
       proxy[1].measuredAt.getTime(),
@@ -125,7 +128,9 @@ describe("deriveRestingProxyFromPulse", () => {
     const oneSampleWorkoutDay: PulseSample[] = [
       day("2026-06-05T18:00:00", 165),
     ];
-    expect(deriveRestingProxyFromPulse(oneSampleWorkoutDay)).toEqual([]);
+    expect(deriveRestingProxyFromPulse(oneSampleWorkoutDay, DAY_KEY)).toEqual(
+      [],
+    );
 
     // A day below the min-sample floor is dropped; only the day with enough
     // samples contributes.
@@ -135,13 +140,13 @@ describe("deriveRestingProxyFromPulse", () => {
       day("2026-06-06T08:00:00", 62),
       day("2026-06-06T09:00:00", 64),
     ];
-    const proxy = deriveRestingProxyFromPulse(mixed);
+    const proxy = deriveRestingProxyFromPulse(mixed, DAY_KEY);
     expect(proxy).toHaveLength(1);
     expect(proxy[0].value).toBeLessThan(150);
   });
 
   it("returns empty for no samples", () => {
-    expect(deriveRestingProxyFromPulse([])).toEqual([]);
+    expect(deriveRestingProxyFromPulse([], DAY_KEY)).toEqual([]);
   });
 });
 
@@ -158,6 +163,7 @@ describe("resolveRestingPulseSeries", () => {
       day("2026-06-01T18:00:00", 150),
     );
     const { series, which } = resolveRestingPulseSeries({
+      dayKeyOf: DAY_KEY,
       restingSamples,
       pulseSamples,
     });
@@ -174,6 +180,7 @@ describe("resolveRestingPulseSeries", () => {
       day("2026-06-01T18:00:00", 150),
     ];
     const { series, which } = resolveRestingPulseSeries({
+      dayKeyOf: DAY_KEY,
       restingSamples: [],
       pulseSamples,
     });
@@ -184,7 +191,11 @@ describe("resolveRestingPulseSeries", () => {
 
   it("reports 'none' when neither series has data", () => {
     expect(
-      resolveRestingPulseSeries({ restingSamples: [], pulseSamples: [] }),
+      resolveRestingPulseSeries({
+        dayKeyOf: DAY_KEY,
+        restingSamples: [],
+        pulseSamples: [],
+      }),
     ).toEqual({ series: [], which: "none" });
   });
 
@@ -218,6 +229,7 @@ describe("resolveRestingPulseSeries", () => {
     }
 
     const { series, which } = resolveRestingPulseSeries({
+      dayKeyOf: DAY_KEY,
       restingSamples,
       pulseSamples,
     });
@@ -249,6 +261,7 @@ describe("resolveRestingPulseSeries", () => {
     // A native day must not be second-guessed by the proxy, and a native
     // account with no gap days keeps the honest 'resting' label.
     const { series, which } = resolveRestingPulseSeries({
+      dayKeyOf: DAY_KEY,
       restingSamples: [day("2026-06-01T04:00:00", 58)],
       pulseSamples: [
         day("2026-06-01T07:00:00", 80),
@@ -276,7 +289,7 @@ describe("deriveRestingProxyFromPulse — the day bucket is the PROFILE day", ()
       day("2026-06-02T15:00:00", 68),
       day("2026-06-02T21:00:00", 70),
     ];
-    const proxy = deriveRestingProxyFromPulse(samples);
+    const proxy = deriveRestingProxyFromPulse(samples, DAY_KEY);
     expect(proxy).toHaveLength(1);
   });
 
@@ -293,7 +306,7 @@ describe("deriveRestingProxyFromPulse — the day bucket is the PROFILE day", ()
       day("2026-06-02T00:30:00", 82),
       day("2026-06-02T00:50:00", 84),
     ];
-    const proxy = deriveRestingProxyFromPulse(samples);
+    const proxy = deriveRestingProxyFromPulse(samples, DAY_KEY);
     expect(proxy).toHaveLength(2);
   });
 

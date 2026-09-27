@@ -35,10 +35,13 @@ function medicationConcept(
   germanAtc: boolean,
 ): FhirCodeableConcept {
   const coding: NonNullable<FhirCodeableConcept["coding"]> = [];
+  // No `display` on the ATC codings: a coding's display must be the code
+  // system's own name for the code ("ramipril"), and the user's name for the
+  // medication ("Delix 5") is not that. It rides `.text`.
   if (atcCode) {
-    coding.push({ system: ATC_SYSTEM, code: atcCode, display: name });
+    coding.push({ system: ATC_SYSTEM, code: atcCode });
     if (germanAtc) {
-      coding.push({ system: ATC_BFARM_SYSTEM, code: atcCode, display: name });
+      coding.push({ system: ATC_BFARM_SYSTEM, code: atcCode });
     }
   }
   if (rxNormCode) {
@@ -117,14 +120,14 @@ function routeConcept(
  * no information is lost.
  */
 const SITE_SNOMED: Record<string, { code: string; display: string }> = {
-  ABDOMEN_LEFT: { code: "818983003", display: "Abdomen structure" },
-  ABDOMEN_RIGHT: { code: "818983003", display: "Abdomen structure" },
-  ABDOMEN_UPPER_LEFT: { code: "818983003", display: "Abdomen structure" },
-  ABDOMEN_UPPER_RIGHT: { code: "818983003", display: "Abdomen structure" },
+  ABDOMEN_LEFT: { code: "818983003", display: "Abdomen" },
+  ABDOMEN_RIGHT: { code: "818983003", display: "Abdomen" },
+  ABDOMEN_UPPER_LEFT: { code: "818983003", display: "Abdomen" },
+  ABDOMEN_UPPER_RIGHT: { code: "818983003", display: "Abdomen" },
   THIGH_LEFT: { code: "68367000", display: "Thigh structure" },
   THIGH_RIGHT: { code: "68367000", display: "Thigh structure" },
-  UPPER_ARM_LEFT: { code: "40983000", display: "Structure of upper arm" },
-  UPPER_ARM_RIGHT: { code: "40983000", display: "Structure of upper arm" },
+  UPPER_ARM_LEFT: { code: "40983000", display: "Upper arm structure" },
+  UPPER_ARM_RIGHT: { code: "40983000", display: "Upper arm structure" },
 };
 
 function siteConcept(injectionSite: string): FhirCodeableConcept {

@@ -29,6 +29,7 @@ import { issueAccessAndRefresh } from "@/lib/auth/refresh-token";
 import { recordSignInDevice } from "@/lib/auth/login-alert";
 import { detectInsecureCookieTransport } from "@/lib/auth/secure-cookie";
 import { annotate } from "@/lib/logging/context";
+import { completePendingOidcLink } from "@/lib/auth/oidc-pending-link";
 import type { User } from "@/generated/prisma/client";
 
 export interface FinishLoginParams {
@@ -128,6 +129,13 @@ export async function finishLogin(
       `[auth] session-cookie transport mismatch: ${transportWarning}`,
     );
     annotate({ meta: { session_cookie_secure_transport_mismatch: true } });
+  }
+
+  // A browser sign-in that proved the account's own credential confirms a
+  // single sign-on link the callback left pending for this very account. An
+  // SSO sign-in is not such a proof, so it never completes one.
+  if (!source.startsWith("login.oidc") && source !== "login.web_handoff") {
+    await completePendingOidcLink(user.id, ip);
   }
 
   // `createSession` anchors the onboarding cookie itself; thread the user's

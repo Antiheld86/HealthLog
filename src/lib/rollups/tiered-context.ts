@@ -154,6 +154,11 @@ export interface BuildTieredSeriesOptions {
    * `skipRecentDaily`.
    */
   coarseOnly?: boolean;
+  /**
+   * The user's source-priority blob, when the caller already holds it; the
+   * bands otherwise load it themselves.
+   */
+  userPriorityJson?: unknown;
 }
 
 interface RollupBucket {
@@ -390,6 +395,7 @@ async function readBand(
   toDaysAgo: number,
   now: number,
   tz?: string,
+  userPriorityJson?: unknown,
 ): Promise<RollupBucket[]> {
   const from = new Date(now - fromDaysAgo * DAY_MS);
   const to = new Date(now - toDaysAgo * DAY_MS);
@@ -413,7 +419,14 @@ async function readBand(
   // aggregate instead of silently handing the AI nothing (the module doc
   // promised replace-with-fallback from day one; only the "replace" half
   // existed).
-  const buckets = await readRollupBuckets(userId, type, granularity, from, to);
+  const buckets = await readRollupBuckets(
+    userId,
+    type,
+    granularity,
+    from,
+    to,
+    userPriorityJson,
+  );
   if (buckets.length > 0) return buckets;
   return readBandLive(userId, type, granularity, from, to);
 }
@@ -456,6 +469,7 @@ export async function buildTieredSeries(
             TIERED_BANDS.rawDays,
             now,
             options.tz,
+            options.userPriorityJson,
           ),
       coarseOnly
         ? emptyBand
@@ -466,6 +480,8 @@ export async function buildTieredSeries(
             TIERED_BANDS.weekUntil,
             TIERED_BANDS.dayUntil,
             now,
+            undefined,
+            options.userPriorityJson,
           ),
       readBand(
         userId,
@@ -474,6 +490,8 @@ export async function buildTieredSeries(
         TIERED_BANDS.monthUntil,
         TIERED_BANDS.weekUntil,
         now,
+        undefined,
+        options.userPriorityJson,
       ),
       readBand(
         userId,
@@ -482,6 +500,8 @@ export async function buildTieredSeries(
         TIERED_BANDS.yearUntil,
         TIERED_BANDS.monthUntil,
         now,
+        undefined,
+        options.userPriorityJson,
       ),
     ]);
 

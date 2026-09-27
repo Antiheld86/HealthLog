@@ -21,6 +21,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
+// The per-account throttle has its own suite (login-throttle.test.ts); here
+// it lets every attempt through and counts nothing.
+vi.mock("@/lib/auth/login-throttle", () => ({
+  beginAccountLoginAttempt: vi.fn(async () => ({
+    waiting: null,
+    source: null,
+    failed: async () => {},
+    succeeded: async () => {},
+  })),
+}));
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findFirst: vi.fn() },
@@ -44,6 +54,8 @@ vi.mock("@/lib/rate-limit", () => ({
     ip: "1.2.3.4",
   }),
   rateLimitHeaders: vi.fn(() => ({})),
+  checkRateLimit: vi.fn(async () => ({ allowed: true, remaining: 9 })),
+  refundRateLimit: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/db-compat", () => ({

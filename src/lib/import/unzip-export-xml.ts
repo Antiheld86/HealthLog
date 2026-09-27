@@ -74,6 +74,39 @@ const MAX_DECOMPRESSED_BYTES = 8 * 1024 * 1024 * 1024;
 const MAX_COMPRESSION_RATIO = 200;
 
 /**
+ * Floor for the output cap of a small member. The ratio cap alone would
+ * refuse a tiny, legitimately very compressible export; below this many
+ * bytes of output the ratio is not what protects the disk.
+ */
+const MIN_OUTPUT_CAP_BYTES = 64 * 1024 * 1024;
+
+/**
+ * How many bytes one member may inflate to, from what it ACTUALLY occupies
+ * in the archive rather than what its header claims. The header is the
+ * attacker's to write: a member declaring an honest-looking 10:1 ratio can
+ * still inflate at 1000:1, and with only the flat 8 GiB ceiling an 8 MB
+ * upload could fill `/tmp` with 8 GB before anything noticed. The streamed
+ * byte count is held to the ratio the preflight states, applied to the
+ * compressed bytes on disk, and never above the absolute ceiling. A stored
+ * member cannot grow at all.
+ */
+export function memberOutputCap(entry: {
+  compressionMethod: number;
+  compressedSize: number;
+}): number {
+  if (entry.compressionMethod === 0) {
+    return Math.min(entry.compressedSize, MAX_DECOMPRESSED_BYTES);
+  }
+  return Math.min(
+    MAX_DECOMPRESSED_BYTES,
+    Math.max(
+      MIN_OUTPUT_CAP_BYTES,
+      entry.compressedSize * MAX_COMPRESSION_RATIO,
+    ),
+  );
+}
+
+/**
  * Cap on the central-directory slice the extractor is willing to hold
  * in memory. A real Apple export's central directory is a few KB (one
  * XML member + optional ECG CSVs, ~100 bytes per entry); 64 MiB gives
@@ -636,7 +669,7 @@ async function streamEntryToFile(
   }
 
   const dest = createWriteStream(destPath);
-  const cap = createByteCap(MAX_DECOMPRESSED_BYTES);
+  const cap = createByteCap(memberOutputCap(entry));
 
   try {
     if (entry.compressedSize === 0) {

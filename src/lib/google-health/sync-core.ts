@@ -585,6 +585,8 @@ export async function upsertGoogleHealthMeasurements(
     r: GoogleHealthMeasurementUpsert;
     /** Set when a key-format migration re-keys the row in place (see below). */
     reKeyTo?: string;
+    /** The row's instant before this write, when the write moves it. */
+    movedFrom?: Date;
   }> = [];
   const touched: Array<{ type: MeasurementType; measuredAt: Date }> = [];
 
@@ -607,7 +609,16 @@ export async function upsertGoogleHealthMeasurements(
         existingRow.unit === r.unit &&
         existingRow.measuredAt.getTime() === r.measuredAt.getTime() &&
         (existingRow.sleepStage ?? null) === (r.sleepStage ?? null);
-      if (!unchanged) toUpdate.push({ id: existingRow.id, r });
+      if (!unchanged) {
+        toUpdate.push({
+          id: existingRow.id,
+          r,
+          movedFrom:
+            existingRow.measuredAt.getTime() !== r.measuredAt.getTime()
+              ? existingRow.measuredAt
+              : undefined,
+        });
+      }
     } else if (!plannedCreateKeys.has(key)) {
       plannedCreateKeys.add(key);
       toCreate.push({
@@ -776,7 +787,7 @@ export async function upsertGoogleHealthMeasurements(
   // `syncVersion`. `deletedAt: null` rides along unconditionally — a no-op on
   // a live row, a deliberate RESURRECTION on a tombstoned one (Google is the
   // source of truth for its own rows; see TOMBSTONES RESURRECT above).
-  for (const { id, r, reKeyTo } of toUpdate) {
+  for (const { id, r, reKeyTo, movedFrom } of toUpdate) {
     try {
       await prisma.measurement.update({
         where: { id },
@@ -796,6 +807,14 @@ export async function upsertGoogleHealthMeasurements(
         type: r.type as MeasurementType,
         measuredAt: r.measuredAt,
       });
+      // A row that moved (a daily anchor re-cut on the user's local noon)
+      // leaves its old day too; that day's rollup needs the refold.
+      if (movedFrom) {
+        touched.push({
+          type: r.type as MeasurementType,
+          measuredAt: movedFrom,
+        });
+      }
       imported++;
     } catch (err) {
       getEvent()?.addWarning(

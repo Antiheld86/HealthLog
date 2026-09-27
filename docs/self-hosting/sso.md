@@ -81,11 +81,19 @@ Client registration essentials only — the IdP's own docs cover the rest.
 ## Security model
 
 - **Identity is pinned, not guessed.** The first OIDC sign-in either
-  provisions a fresh account or links to an existing account matched by
-  **verified** email (`email_verified: true` — an IdP that does not
-  assert verification is rejected). Either way the account is stamped
-  with the provider's `(issuer, sub)` pair, and every later login
-  matches on that pair alone. An email change at the IdP updates the
+  provisions a fresh account or links to an existing account with the
+  same email, and only when the IdP asserts `email_verified: true` (an
+  IdP that does not assert verification is rejected). An existing
+  account is never linked on the email alone: HealthLog never verified
+  that address, so anyone could have registered it or typed it into a
+  profile. The browser is sent to the sign-in page instead, and the link
+  is made when the person signs in to that account once with its own
+  password (and second factor) or passkey, within ten minutes. Under
+  `OIDC_ONLY` that password sign-in is allowed for exactly that account.
+  The iOS app gets `oidc_link_required` and the person confirms once on
+  the web. Either way the account is stamped with the provider's
+  `(issuer, sub)` pair, and every later login matches on that pair
+  alone. An email change at the IdP updates the
   displayed email; it can never re-point the login at a different
   account. An email that matches an account already pinned to a
   _different_ identity is rejected and audited.
@@ -141,12 +149,13 @@ Consequences to accept before turning it on:
 
 ## Troubleshooting
 
-| Symptom                                                                                       | Cause / fix                                                                                                                                                                                                    |
-| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Login page shows "Single sign-on failed", log says `discovery issuer mismatch`                | `OIDC_ISSUER_URL` must equal the `issuer` inside the discovery document. A single trailing slash either way is tolerated; anything else (scheme, host, port, path, `//`) is a hard reject.                     |
-| `discovery request failed: 3xx`                                                               | Discovery redirects are not followed (egress policy pins `redirect: "manual"`). Point `OIDC_ISSUER_URL` at the final URL — e.g. include the realm/application path, match `http` vs `https`, add/remove `www`. |
-| IdP shows its own "invalid redirect URI" page                                                 | The mismatch happens **at the IdP**, before HealthLog is involved. Compare the registered URI against `${NEXT_PUBLIC_APP_URL}/api/auth/oidc/callback` byte for byte — scheme and port included.                |
-| Sign-in loops back with "failed" and the log shows an `exp`/`nbf` claim error                 | Clock skew beyond the 60 s tolerance. Fix NTP on the IdP or app box.                                                                                                                                           |
-| "Your identity provider did not mark your email address as verified"                          | The IdP omits `email_verified` or sends `false`. Mark the address verified at the IdP (Keycloak: user → Email verified; Authentik: verify the email stage) — HealthLog will not link or provision without it.  |
-| "That email address belongs to an account that is already linked to a different SSO identity" | Deliberate: identities never re-bind silently. See "Linking is once" above.                                                                                                                                    |
-| SSO button missing                                                                            | One of the three provider vars is empty or not whitelisted in compose. `pnpm check-env` shows which.                                                                                                           |
+| Symptom                                                                                       | Cause / fix                                                                                                                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Login page shows "Single sign-on failed", log says `discovery issuer mismatch`                | `OIDC_ISSUER_URL` must equal the `issuer` inside the discovery document. A single trailing slash either way is tolerated; anything else (scheme, host, port, path, `//`) is a hard reject.                                                                      |
+| `discovery request failed: 3xx`                                                               | Discovery redirects are not followed (egress policy pins `redirect: "manual"`). Point `OIDC_ISSUER_URL` at the final URL — e.g. include the realm/application path, match `http` vs `https`, add/remove `www`.                                                  |
+| IdP shows its own "invalid redirect URI" page                                                 | The mismatch happens **at the IdP**, before HealthLog is involved. Compare the registered URI against `${NEXT_PUBLIC_APP_URL}/api/auth/oidc/callback` byte for byte — scheme and port included.                                                                 |
+| Sign-in loops back with "failed" and the log shows an `exp`/`nbf` claim error                 | Clock skew beyond the 60 s tolerance. Fix NTP on the IdP or app box.                                                                                                                                                                                            |
+| "Your identity provider did not mark your email address as verified"                          | The IdP omits `email_verified` or sends `false`. Mark the address verified at the IdP (Keycloak: user → Email verified; Authentik: verify the email stage) — HealthLog will not link or provision without it.                                                   |
+| "An account with this email address already exists here. Sign in to it once …"                | The IdP email matches a local account that is not linked yet. Sign in to that account with its password or passkey within ten minutes and the link is made. If nobody knows that account's password, an operator decides which account the identity belongs to. |
+| "That email address belongs to an account that is already linked to a different SSO identity" | Deliberate: identities never re-bind silently. See "Linking is once" above.                                                                                                                                                                                     |
+| SSO button missing                                                                            | One of the three provider vars is empty or not whitelisted in compose. `pnpm check-env` shows which.                                                                                                                                                            |

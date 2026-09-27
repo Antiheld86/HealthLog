@@ -224,17 +224,17 @@ describe("lab-result LOINC + canonical UCUM coding (v1.18.8)", () => {
 
   it("stamps the canonical UCUM code when the unit matches", () => {
     const o = labOf("LDL", "mg/dL", 110);
-    expect(o?.code.coding?.[0].code).toBe("18262-6");
+    expect(o?.code.coding?.[0].code).toBe("2089-1");
     expect(o?.valueQuantity?.system).toBe("http://unitsofmeasure.org");
     expect(o?.valueQuantity?.code).toBe("mg/dL");
     expect(o?.valueQuantity?.unit).toBe("mg/dL");
   });
 
   it("resolves analyte aliases to the same canonical LOINC", () => {
-    // "LDL", "LDL-C", "LDL Cholesterol" all fold to 18262-6.
+    // "LDL", "LDL-C", "LDL Cholesterol" all fold to 2089-1.
     for (const name of ["LDL-C", "LDL Cholesterol", "ldl_c"]) {
       const o = labOf(name, "mg/dL", 110);
-      expect(o?.code.coding?.[0].code).toBe("18262-6");
+      expect(o?.code.coding?.[0].code).toBe("2089-1");
     }
     // German alias for total cholesterol.
     const chol = labOf("Gesamtcholesterin", "mg/dL", 180);

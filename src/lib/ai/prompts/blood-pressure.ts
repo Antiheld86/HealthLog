@@ -68,12 +68,12 @@ export function getBloodPressureUserPrompt(
       ? `\nOPENER HINT: ${openerHint}`
       : "";
   if (instructionLocale(locale) === "en") {
-    return `Date: ${todayKey} (Europe/Berlin)${openerLine}
+    return `Date: ${todayKey}${openerLine}
 Write one short assessment of this person's blood pressure. Open with what the reading MEANS in plain words — the overall read, not the number (e.g. "calm and right where you want it", "running a touch higher than your usual this week") — then bring in the systolic/diastolic figures right after as support, judged as ONE pair and placed against their own weekly/monthly baseline; never lead with the numbers. Close with one doable step only when the finding genuinely implies one; when nothing is, skip the step rather than manufacture filler. Judge confidence from the measurement count and recency.${ctxBlock}${extraBlock}
 
 ${snapshotJson}`;
   }
-  return `Datum: ${todayKey} (Europe/Berlin)${openerLine}
+  return `Datum: ${todayKey}${openerLine}
 Schreibe eine kurze Einschätzung zum Blutdruck dieser Person. Beginne mit der BEDEUTUNG in klaren Worten — dem Gesamteindruck, nicht der Zahl (z. B. "ruhig und genau da, wo du ihn haben willst", "diese Woche einen Tick höher als sonst") — und bring danach die systolischen/diastolischen Werte als Beleg, als EIN Paar beurteilt und gegen die eigene Wochen-/Monats-Baseline eingeordnet; führe nie mit den Werten. Schließe nur dann mit einem machbaren Schritt, wenn der Befund wirklich einen hergibt; ist nichts umsetzbar, lass den Schritt weg statt Fülltext zu erfinden. Konfidenz aus Messanzahl und Aktualität ableiten.${ctxBlock}${extraBlock}
 
 ${snapshotJson}`;

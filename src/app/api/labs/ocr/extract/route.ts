@@ -72,11 +72,16 @@ export const dynamic = "force-dynamic";
 /** OCR'd text is bounded in the schema; cap the JSON body proportionally. */
 const TEXT_BODY_MAX_BYTES = 512 * 1024;
 
+/**
+ * The wide-event facts of a failed provider call: the status and the model,
+ * never the upstream body. The base URL can be one a user typed, and what an
+ * arbitrary endpoint answers has no business in the event stream (v1.39.3);
+ * the response to the caller carries neither.
+ */
 function providerFailureMeta(error: unknown, mode?: "text") {
   const err = error as {
     httpStatus?: unknown;
     model?: unknown;
-    bodyExcerpt?: unknown;
   };
   return {
     reason: "provider_error",
@@ -85,9 +90,6 @@ function providerFailureMeta(error: unknown, mode?: "text") {
       ? { upstreamStatus: err.httpStatus }
       : {}),
     ...(typeof err.model === "string" ? { model: err.model } : {}),
-    ...(typeof err.bodyExcerpt === "string"
-      ? { upstreamError: err.bodyExcerpt }
-      : {}),
   };
 }
 

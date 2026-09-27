@@ -1,3 +1,4 @@
+import { envOr } from "@/lib/env";
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { apiHandler } from "@/lib/api-handler";
@@ -190,7 +191,7 @@ async function notifyAdminsOfFailure(event: NormalizedEvent): Promise<void> {
         // Optional: operators can point this at their deployment
         // dashboard (e.g. the Coolify UI). Falls back to an empty
         // string so the body template still composes cleanly.
-        logsUrl: process.env.DEPLOY_LOGS_URL ?? "",
+        logsUrl: envOr("DEPLOY_LOGS_URL", ""),
       },
       metadata: {
         source: "deploy-webhook",

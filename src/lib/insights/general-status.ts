@@ -218,7 +218,7 @@ export async function prepareGeneralStatusForUser(
 
       const series = applyPayloadBudget(records, { now, tz: userTz });
       dailyByType.set(type, series);
-      const graded = buildGradedSeriesFromPoints(records, now);
+      const graded = buildGradedSeriesFromPoints(records, now, userTz);
 
       return [
         [
@@ -298,7 +298,11 @@ export async function prepareGeneralStatusForUser(
     now,
     tz: userTz,
   });
-  const adherenceGraded = buildGradedSeriesFromPoints(adherenceRecords, now);
+  const adherenceGraded = buildGradedSeriesFromPoints(
+    adherenceRecords,
+    now,
+    userTz,
+  );
 
   // Fetch mood context (optional — for enrichment only). v1.4.28
   // FB-D2 — cap at 90 entries.
@@ -316,7 +320,7 @@ export async function prepareGeneralStatusForUser(
     value: entry.score,
   }));
   const moodSeries = applyPayloadBudget(moodRecords, { now, tz: userTz });
-  const moodGraded = buildGradedSeriesFromPoints(moodRecords, now);
+  const moodGraded = buildGradedSeriesFromPoints(moodRecords, now, userTz);
   const moodSummary = summarizeSeries(
     moodSeries.daily.map((bucket) => ({ value: bucket.value })),
   );

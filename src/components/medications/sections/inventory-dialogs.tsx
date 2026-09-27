@@ -35,6 +35,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { apiPatch, apiPost, apiPut } from "@/lib/api/api-fetch";
 import { queryKeys } from "@/lib/query-keys";
 import {
+  floorWhole,
   formatUnitsPerDose,
   parseUnitsPerDoseInput,
 } from "@/lib/medications/units-per-dose";
@@ -267,10 +268,10 @@ export function AddInventoryDialog({
                 ? t("medications.detail.bestand.quantityInUnits", { units })
                 : // A unit count below one dose must not read "≈ 0 doses" —
                   // it is simply less than one dose.
-                  Math.floor(parsed / unitsPerDose) === 0
+                  floorWhole(parsed / unitsPerDose) === 0
                   ? t("medications.detail.bestand.quantityUnderOneDose")
                   : t("medications.detail.bestand.quantityInDoses", {
-                      doses: Math.floor(parsed / unitsPerDose),
+                      doses: floorWhole(parsed / unitsPerDose),
                     })}
             </p>
           )}

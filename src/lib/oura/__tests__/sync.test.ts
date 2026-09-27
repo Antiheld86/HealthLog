@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
 const {
   getConnMock,
@@ -842,6 +850,14 @@ describe("syncUserOura — window resolution", () => {
   });
 
   it("passes the resolved window to the cycle-phases leg too", async () => {
+    // Pinned where the user's date and the UTC date differ (01:30 in Berlin,
+    // 23:30 UTC the day before), so a leg that cuts its window on UTC days
+    // asks Oura for a different range and the assertion below catches it.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-26T23:30:00Z"));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     getConnMock.mockResolvedValue(CONN);
     findFirstMock.mockResolvedValue({
       measuredAt: new Date(Date.now() - 10 * DAY_MS),

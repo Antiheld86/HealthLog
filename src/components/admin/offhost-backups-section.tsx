@@ -11,11 +11,12 @@
  * been refusing the worker's signature since March.
  *
  * Every verdict is computed server-side from the ledger the worker writes. The
- * page never lists the bucket: the worker's grant is deliberately PutObject,
- * GetObject and AbortMultipartUpload — the three the runbook documents, the
- * abort being what the multipart path needs — and putting a credentialed
- * listing call on the render path of an admin page would be a poor trade for
- * a number the database already holds.
+ * page never lists the bucket: putting a credentialed listing call on the
+ * render path of an admin page would be a poor trade for a number the database
+ * already holds. It does read the bucket's lifecycle rule (one small call,
+ * cached for ten minutes on the server), because whether old copies expire at
+ * all is something only the bucket knows, and it states deletions of deleted
+ * or wiped accounts that the bucket has not carried out yet.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -191,6 +192,35 @@ export function OffhostBackupsSection() {
               hours: offhost.periodHours,
             })}
           </p>
+          <p
+            className="text-xs"
+            data-slot="offhost-lifecycle"
+            data-lifecycle-state={offhost.lifecycle.state}
+          >
+            {offhost.lifecycle.state === "configured"
+              ? t("admin.section.backups.offhost.lifecycleConfigured", {
+                  days: offhost.lifecycle.expirationDays ?? 0,
+                })
+              : offhost.lifecycle.state === "missing"
+                ? t("admin.section.backups.offhost.lifecycleMissing")
+                : t("admin.section.backups.offhost.lifecycleUnknown")}
+          </p>
+          {offhost.pendingDeletions.count > 0 ? (
+            <p
+              role="status"
+              className="text-xs"
+              data-slot="offhost-pending-deletions"
+            >
+              {offhost.pendingDeletions.lastFailure
+                ? t("admin.section.backups.offhost.pendingDeletionsFailing", {
+                    count: offhost.pendingDeletions.count,
+                    error: offhost.pendingDeletions.lastFailure,
+                  })
+                : t("admin.section.backups.offhost.pendingDeletions", {
+                    count: offhost.pendingDeletions.count,
+                  })}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </SettingsCard>

@@ -17,9 +17,9 @@ import {
   deriveSeries,
   type SeriesInputRecord,
 } from "@/lib/vaccinations/series";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /** Matches the visits service: the fallback when an account never set one. */
-const DEFAULT_TIMEZONE = "Europe/Berlin";
 
 /** The relations every vaccination response resolves. */
 export const VACCINATION_INCLUDE = {

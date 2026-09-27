@@ -18,6 +18,7 @@ import { canonicalDailyTimestamp } from "@/lib/measurements/consolidation-tz";
 import { dayDiff } from "@/lib/cycle/day-math";
 import { safeFetch } from "@/lib/safe-fetch";
 import { OuraApiError, classifyOuraResponse } from "./response-classifier";
+import { envOr, envValue } from "@/lib/env";
 
 const OURA_API_BASE = "https://api.ouraring.com";
 const OURA_OAUTH_AUTH_URL = "https://cloud.ouraring.com/oauth/authorize";
@@ -42,9 +43,11 @@ export function getOuraCredentials(): OuraCredentials | null {
 }
 
 export function getOuraRedirectUri(): string {
-  return (
-    process.env.OURA_REDIRECT_URI ||
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/oura/callback`
+  // An empty or blank value counts as unset (the compose whitelist
+  // materialises an unset var as an empty string).
+  return envOr(
+    "OURA_REDIRECT_URI",
+    `${envValue("NEXT_PUBLIC_APP_URL")}/api/oura/callback`,
   );
 }
 
@@ -512,17 +515,20 @@ export interface MappedMeasurement {
   externalId?: string;
 }
 
-function dayAnchor(day: string, bedtimeEnd?: string): Date | null {
+function dayAnchor(
+  day: string,
+  tz: string | undefined,
+  bedtimeEnd?: string,
+): Date | null {
   // Prefer the precise wake instant when present; else anchor the date-only
-  // day at noon (canonicalDailyTimestamp), NOT UTC midnight — a midnight
-  // anchor double-shifts the calendar day for west-of-UTC users when the
-  // recovery resolver re-buckets via userDayKey(). Noon sits a full 12 h
-  // inside the day, so it round-trips to the same day for every zone ±12 h.
+  // day at local noon in the user's zone (canonicalDailyTimestamp), which
+  // reads the same calendar day there. Noon UTC, the previous anchor, is
+  // already the next day from UTC+13 on.
   if (bedtimeEnd) {
     const d = new Date(bedtimeEnd);
     return Number.isNaN(d.getTime()) ? null : d;
   }
-  const d = canonicalDailyTimestamp(day);
+  const d = canonicalDailyTimestamp(day, tz);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -539,8 +545,11 @@ function dayAnchor(day: string, bedtimeEnd?: string): Date | null {
  * `temperature_trend_deviation` is the long-term trend twin; we keep only the
  * nightly deviation as the actionable signal.
  */
-export function mapReadiness(r: OuraReadiness): MappedMeasurement[] {
-  const measuredAt = dayAnchor(r.day, r.timestamp);
+export function mapReadiness(
+  r: OuraReadiness,
+  tz?: string,
+): MappedMeasurement[] {
+  const measuredAt = dayAnchor(r.day, tz, r.timestamp);
   if (!measuredAt) return [];
   const out: MappedMeasurement[] = [];
   if (typeof r.score === "number") {
@@ -648,8 +657,8 @@ function mapSleepTimeline(s: OuraSleep): MappedMeasurement[] | null {
  * sleep END. Either way we add efficiency, HRV, RHR (`lowest_heart_rate`), and
  * respiratory rate.
  */
-export function mapSleep(s: OuraSleep): MappedMeasurement[] {
-  const measuredAt = dayAnchor(s.day, s.bedtime_end);
+export function mapSleep(s: OuraSleep, tz?: string): MappedMeasurement[] {
+  const measuredAt = dayAnchor(s.day, tz, s.bedtime_end);
   if (!measuredAt) return [];
   const out: MappedMeasurement[] = [];
 
@@ -729,9 +738,12 @@ export function mapSleep(s: OuraSleep): MappedMeasurement[] {
 }
 
 /** Map one Oura daily-sleep record: the headline Sleep Score → `SLEEP_SCORE`. */
-export function mapDailySleep(d: OuraDailySleep): MappedMeasurement[] {
+export function mapDailySleep(
+  d: OuraDailySleep,
+  tz?: string,
+): MappedMeasurement[] {
   if (typeof d.score !== "number") return [];
-  const measuredAt = dayAnchor(d.day, d.timestamp);
+  const measuredAt = dayAnchor(d.day, tz, d.timestamp);
   if (!measuredAt) return [];
   return [
     {
@@ -745,12 +757,15 @@ export function mapDailySleep(d: OuraDailySleep): MappedMeasurement[] {
 }
 
 /** Map one Oura daily-spo2 record: average overnight SpO2 → `OXYGEN_SATURATION`. */
-export function mapDailySpo2(s: OuraDailySpo2): MappedMeasurement[] {
+export function mapDailySpo2(
+  s: OuraDailySpo2,
+  tz?: string,
+): MappedMeasurement[] {
   const avg = s.spo2_percentage?.average;
   if (typeof avg !== "number" || avg <= 0) return [];
-  // Anchor SpO2 at the day's UTC midnight (no per-record instant in the
+  // Anchor SpO2 at the day's local noon (no per-record instant in the
   // daily_spo2 collection); the recovery / rollup readers key off the local day.
-  const measuredAt = dayAnchor(s.day);
+  const measuredAt = dayAnchor(s.day, tz);
   if (!measuredAt) return [];
   return [
     {
@@ -765,8 +780,11 @@ export function mapDailySpo2(s: OuraDailySpo2): MappedMeasurement[] {
 
 /** Map one Oura daily-activity record: steps, active energy, and the
  * equivalent walking distance (B5 — the OURA distance ladder slot was dead). */
-export function mapDailyActivity(a: OuraDailyActivity): MappedMeasurement[] {
-  const measuredAt = dayAnchor(a.day, a.timestamp);
+export function mapDailyActivity(
+  a: OuraDailyActivity,
+  tz?: string,
+): MappedMeasurement[] {
+  const measuredAt = dayAnchor(a.day, tz, a.timestamp);
   if (!measuredAt) return [];
   const out: MappedMeasurement[] = [];
   if (typeof a.steps === "number" && a.steps >= 0) {
@@ -809,9 +827,9 @@ export function mapDailyActivity(a: OuraDailyActivity): MappedMeasurement[] {
  * `VO2_MAX` (mL/(kg·min), the canonical DB unit — no conversion). Skips a
  * record with no positive value.
  */
-export function mapVo2Max(v: OuraVo2Max): MappedMeasurement[] {
+export function mapVo2Max(v: OuraVo2Max, tz?: string): MappedMeasurement[] {
   if (typeof v.vo2_max !== "number" || v.vo2_max <= 0) return [];
-  const measuredAt = dayAnchor(v.day, v.timestamp);
+  const measuredAt = dayAnchor(v.day, tz, v.timestamp);
   if (!measuredAt) return [];
   return [
     {
@@ -832,9 +850,10 @@ export function mapVo2Max(v: OuraVo2Max): MappedMeasurement[] {
  */
 export function mapCardiovascularAge(
   c: OuraCardiovascularAge,
+  tz?: string,
 ): MappedMeasurement[] {
   if (typeof c.vascular_age !== "number" || c.vascular_age <= 0) return [];
-  const measuredAt = dayAnchor(c.day);
+  const measuredAt = dayAnchor(c.day, tz);
   if (!measuredAt) return [];
   return [
     {
@@ -870,14 +889,17 @@ export const RESILIENCE_UNIT = "level" as const;
  * (limited=1 … exceptional=5) into the numeric `value`. An unknown / missing
  * level string mints NO row (skipped, never coerced to 0) so a future Oura band
  * we do not recognise never lands as a misleading reading. Anchored at the
- * day's UTC midnight (the collection carries no per-record instant).
+ * day's local noon (the collection carries no per-record instant).
  */
-export function mapResilience(r: OuraResilience): MappedMeasurement[] {
+export function mapResilience(
+  r: OuraResilience,
+  tz?: string,
+): MappedMeasurement[] {
   const level = typeof r.level === "string" ? r.level.toLowerCase() : null;
   if (!level) return [];
   const ordinal = RESILIENCE_LEVELS[level];
   if (typeof ordinal !== "number") return [];
-  const measuredAt = dayAnchor(r.day);
+  const measuredAt = dayAnchor(r.day, tz);
   if (!measuredAt) return [];
   return [
     {

@@ -15,6 +15,7 @@
  * (or the prefix is not a known key id), it falls back to the legacy single
  * key so that rows written before the rotation continue to decrypt.
  */
+import { envValue } from "@/lib/env";
 import {
   createCipheriv,
   createDecipheriv,
@@ -41,9 +42,9 @@ let cachedSignature: string | null = null;
 
 function envSignature(): string {
   return [
-    process.env.ENCRYPTION_KEYS ?? "",
-    process.env.ENCRYPTION_ACTIVE_KEY_ID ?? "",
-    process.env.ENCRYPTION_KEY ?? "",
+    process.env.ENCRYPTION_KEYS || "",
+    process.env.ENCRYPTION_ACTIVE_KEY_ID || "",
+    process.env.ENCRYPTION_KEY || "",
   ].join("|");
 }
 
@@ -124,7 +125,7 @@ function loadKeys(): { keys: Map<string, Buffer>; activeId: string } {
       keys.set(id, decodeKey(value, id));
     }
 
-    activeId = process.env.ENCRYPTION_ACTIVE_KEY_ID ?? null;
+    activeId = envValue("ENCRYPTION_ACTIVE_KEY_ID") ?? null;
     if (!activeId) {
       if (keys.size === 1) {
         activeId = keys.keys().next().value as string;
@@ -254,7 +255,7 @@ export function decrypt(encoded: string): string {
     throw new Error(
       "Found a legacy-format ciphertext but no v1 key is configured. " +
         "Restore the original ENCRYPTION_KEY (or add a 'v1' entry to " +
-        "ENCRYPTION_KEYS) and run scripts/rotate-encryption-key.ts before " +
+        "ENCRYPTION_KEYS) and run the key rotation (Admin > Encryption) before " +
         "removing it.",
     );
   }
@@ -464,13 +465,21 @@ export interface RawStreamEncryptor {
   final(): Buffer;
 }
 
-/** Open a byte-level streaming encryptor under an explicit 32-byte key. */
-export function createRawStreamEncryptor(key: Buffer): RawStreamEncryptor {
+/**
+ * Open a byte-level streaming encryptor under an explicit 32-byte key.
+ * `aad`, when given, is authenticated with the ciphertext and has to be given
+ * again, byte for byte, to decrypt it.
+ */
+export function createRawStreamEncryptor(
+  key: Buffer,
+  aad?: Buffer,
+): RawStreamEncryptor {
   if (key.byteLength !== 32) {
     throw new Error("Stream encryption key must be 32 bytes");
   }
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv);
+  if (aad) cipher.setAAD(aad);
   let done = false;
 
   return {
@@ -498,7 +507,11 @@ export function createRawStreamEncryptor(key: Buffer): RawStreamEncryptor {
  * unverified plaintext to save a copy would trade the authentication for
  * memory.
  */
-export function decryptRawStream(packed: Buffer, key: Buffer): Buffer {
+export function decryptRawStream(
+  packed: Buffer,
+  key: Buffer,
+  aad?: Buffer,
+): Buffer {
   if (packed.byteLength < IV_LENGTH + AUTH_TAG_LENGTH) {
     throw new Error("Streamed ciphertext is truncated");
   }
@@ -507,6 +520,7 @@ export function decryptRawStream(packed: Buffer, key: Buffer): Buffer {
   const ct = packed.subarray(IV_LENGTH, packed.byteLength - AUTH_TAG_LENGTH);
   const dec = createDecipheriv(ALGORITHM, key, iv);
   dec.setAuthTag(tag);
+  if (aad) dec.setAAD(aad);
   return Buffer.concat([dec.update(ct), dec.final()]);
 }
 

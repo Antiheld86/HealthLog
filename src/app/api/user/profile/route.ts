@@ -17,6 +17,7 @@ import {
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { applyProfileUpdate } from "@/lib/auth/profile-update";
+import { authorizeSensitiveChange } from "@/lib/auth/existing-factor-proof";
 import { prisma } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
 import { resolveModuleMap } from "@/lib/modules/gate";
@@ -97,14 +98,27 @@ export const GET = apiHandler(async () => {
 });
 
 export const PATCH = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const auth = await requireAuth();
+  const { user } = auth;
 
   const { data: body, error } = await safeJson(request, {
     maxBytes: 64 * 1024,
   });
   if (error) return error;
 
-  const result = await applyProfileUpdate(user.id, body, getClientIp(request));
+  const ip = getClientIp(request);
+  const result = await applyProfileUpdate(user.id, body, ip, {
+    // A new email address needs a fresh proof: the address is what single
+    // sign-on links an existing account by.
+    authorizeEmailChange: (currentPassword) =>
+      authorizeSensitiveChange({
+        user,
+        cookieSessionId: auth.authMethod === "cookie" ? auth.session.id : null,
+        currentPassword,
+        ipAddress: ip,
+        stage: "email_change",
+      }),
+  });
   if (!result.ok) {
     const meta = result.errorCode ? { errorCode: result.errorCode } : undefined;
     return result.issues

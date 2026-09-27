@@ -9,6 +9,11 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findFirst: vi.fn() },
     webauthnMfaCredential: { count: vi.fn().mockResolvedValue(0) },
+    // The per-account throttle's reads: no known place, no wait running.
+    trustedDevice: { findUnique: vi.fn(async () => null) },
+    refreshToken: { findFirst: vi.fn(async () => null) },
+    session: { findFirst: vi.fn(async () => null) },
+    rateLimit: { findUnique: vi.fn(async () => null), upsert: vi.fn() },
   },
 }));
 vi.mock("@/lib/auth/password", () => ({
@@ -29,6 +34,8 @@ vi.mock("@/lib/rate-limit", () => ({
     resetAt: Date.now() + 1e6,
     ip: "203.0.113.7",
   }),
+  checkRateLimit: vi.fn(),
+  refundRateLimit: vi.fn(),
   rateLimitHeaders: vi.fn(() => ({})),
 }));
 vi.mock("@/lib/auth/login-response", () => ({
@@ -61,6 +68,7 @@ import { POST } from "@/app/api/auth/login/route";
 import { prisma } from "@/lib/db";
 import { finishLogin } from "@/lib/auth/login-response";
 import { createMfaChallenge } from "@/lib/auth/mfa/challenge";
+import { checkRateLimit, refundRateLimit } from "@/lib/rate-limit";
 
 function loginRequest() {
   return new Request("http://localhost/api/auth/login", {
@@ -85,6 +93,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Default: no registered security key. Individual tests override as needed.
   vi.mocked(prisma.webauthnMfaCredential.count).mockResolvedValue(0 as never);
+  vi.mocked(checkRateLimit).mockResolvedValue({
+    allowed: true,
+    limit: 10,
+    remaining: 9,
+    resetAt: Date.now() + 1e6,
+  });
 });
 
 describe("login MFA branch", () => {
@@ -153,5 +167,53 @@ describe("login MFA branch", () => {
     expect(res.status).toBe(401);
     expect(createMfaChallenge).not.toHaveBeenCalled();
     expect(finishLogin).not.toHaveBeenCalled();
+  });
+});
+
+describe("per-account login throttle", () => {
+  it("refuses a throttled account before any password is verified", async () => {
+    const { verifyPasswordOrDummy } = await import("@/lib/auth/password");
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      ...BASE_USER,
+      totpConfirmedAt: null,
+    } as never);
+    // A wait is running for this account, set by earlier failures.
+    vi.mocked(prisma.rateLimit.findUnique).mockResolvedValueOnce({
+      resetAt: new Date(Date.now() + 60_000),
+    } as never);
+
+    const res = await POST(loginRequest());
+    expect(res.status).toBe(429);
+    expect(verifyPasswordOrDummy).not.toHaveBeenCalled();
+    expect(finishLogin).not.toHaveBeenCalled();
+    expect(vi.mocked(prisma.rateLimit.findUnique).mock.calls[0][0]).toEqual({
+      where: { key: "auth:login:account:u:user-1:wait" },
+      select: { resetAt: true },
+    });
+  });
+
+  it("keys an unknown identifier on its hash, so a lock says nothing about existence", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never);
+    const res = await POST(loginRequest());
+    expect(res.status).toBe(401);
+    expect(vi.mocked(checkRateLimit).mock.calls[0][0]).toMatch(
+      /^auth:login:account:i:/,
+    );
+  });
+
+  it("refunds a successful sign-in and keeps a failed one counted", async () => {
+    const { verifyPasswordOrDummy } = await import("@/lib/auth/password");
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      ...BASE_USER,
+      totpConfirmedAt: null,
+    } as never);
+
+    await POST(loginRequest());
+    expect(refundRateLimit).toHaveBeenCalledWith("auth:login:account:u:user-1");
+
+    vi.mocked(refundRateLimit).mockClear();
+    vi.mocked(verifyPasswordOrDummy).mockResolvedValueOnce(false);
+    await POST(loginRequest());
+    expect(refundRateLimit).not.toHaveBeenCalled();
   });
 });

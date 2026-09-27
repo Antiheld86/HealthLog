@@ -37,6 +37,8 @@ const CODE_TABLE: Record<BackupRestoreFailureCode, true> = {
   owner_not_found: true,
   "backup.section.missing": true,
   document_ciphertext_missing: true,
+  "backup.key.missing": true,
+  "backup.foreign_reference": true,
   time_budget: true,
   transaction_failed: true,
   interrupted: true,

@@ -126,7 +126,14 @@
         "nothingSaved": "Es wurde nichts gespeichert. Korrigiere das markierte Feld und versuche es erneut.",
         "invalidBody": "Die Profilaktualisierung konnte nicht gelesen werden.",
         "emailInUse": "Diese E-Mail-Adresse wird bereits verwendet.",
-        "emailRateLimited": "Zu viele Änderungen der E-Mail-Adresse. Versuche es später erneut."
+        "emailRateLimited": "Zu viele Änderungen der E-Mail-Adresse. Versuche es später erneut.",
+        "emailSecondFactorRequired": "Bestätige mit deinem zweiten Faktor oder einem Passkey, um die E-Mail-Adresse zu ändern."
+      }
+    },
+    "auth": {
+      "reproof": {
+        "required": "Bestätige dein aktuelles Passwort, um das zu ändern.",
+        "failed": "Die Bestätigung ist fehlgeschlagen. Es wurde nichts geändert."
       }
     }
   },
@@ -440,7 +447,8 @@
       "errorEmailUnverified": "Dein Identitätsanbieter hat deine E-Mail-Adresse nicht als bestätigt markiert.",
       "errorIdentityConflict": "Diese E-Mail-Adresse gehört zu einem Konto, das bereits mit einer anderen SSO-Identität verknüpft ist.",
       "errorRegistrationDisabled": "Kein Konto passt zu dieser Identität, und neue Registrierungen sind derzeit geschlossen.",
-      "errorFailed": "Single Sign-On ist fehlgeschlagen. Bitte versuche es erneut."
+      "errorFailed": "Single Sign-On ist fehlgeschlagen. Bitte versuche es erneut.",
+      "errorLinkRequired": "Hier gibt es bereits ein Konto mit dieser E-Mail-Adresse. Melde dich einmal mit seinem Passwort oder Passkey an, um es mit Single Sign-on zu verbinden."
     },
     "native": {
       "signingInToApp": "Anmeldung bei der HealthLog-App"
@@ -464,6 +472,13 @@
       "title": "Zweiten Faktor einrichten",
       "body": "Dein Administrator verlangt einen zweiten Faktor für dieses Konto. Füge eine Authenticator-App oder einen Sicherheitsschlüssel hinzu, um fortzufahren.",
       "signOut": "Abmelden"
+    },
+    "confirmAccess": {
+      "title": "Bestätige, dass du es bist",
+      "body": "Ein Assistent möchte sich mit deinen HealthLog-Daten verbinden. Bestätige, dass du es bist; danach entscheidest du, ob du es erlaubst.",
+      "action": "Bestätigen",
+      "failed": "Das hat nicht geklappt. Bitte versuche es noch einmal.",
+      "nothingToConfirm": "Hier gibt es nichts zu bestätigen. Starte die Verbindung noch einmal in deinem Assistenten."
     }
   },
   "dashboard": {
@@ -4591,7 +4606,7 @@
       "sampleBody": "Gewicht in zwei Wochen um 1,2 kg gesunken. Ruhepuls stabil bei 58 bpm. Blutdruck an 6 von 7 Tagen im Zielbereich — der einzige hohe Wert folgte auf ein spätes, salziges Abendessen.",
       "sampleCaption": "Nur ein Beispiel — nicht deine eigenen Daten. So liest sich ein Briefing, sobald Insights aktiv sind.",
       "ladderTitle": "Drei Wege, es zu aktivieren",
-      "ladderLocalTitle": "Lokales Modell — nichts verlässt dein Netzwerk",
+      "ladderLocalTitle": "Lokales Modell — KI-Anfragen bleiben in deinem Netzwerk",
       "ladderLocalBody": "Richte HealthLog auf Ollama oder LM Studio auf deinem eigenen Rechner aus. Kostenlos und vollständig privat — der ruhige Standard.",
       "ladderByokTitle": "Eigenen Schlüssel verwenden",
       "ladderByokBody": "Nutze deinen eigenen OpenAI- oder Anthropic-Schlüssel. Er läuft über dein Konto und deine Abrechnung, und die API-Stufe hält deine Daten standardmäßig aus dem Training heraus.",
@@ -5173,7 +5188,6 @@
             "passphrasePlaceholder": "Passphrase (mind. 12 Zeichen)",
             "passphraseHelp": "Leitet den Archivschlüssel per Argon2id ab und versiegelt ihn mit AES-256-GCM. Speichere die Datei mit der Endung .hlx.",
             "noRecoveryWarning": "Es gibt keine Wiederherstellung — geht diese Passphrase verloren, lässt sich das Archiv nicht mehr öffnen. Bewahre sie sicher auf.",
-            "stepUpNeeded": "Bestätige deinen zweiten Faktor und versuche es erneut.",
             "detail": "Gleiche Form wie die wöchentliche automatische Sicherung. Einige Satzarten sind noch nicht enthalten — das Manifest der Datei nennt, was drinsteht.",
             "contents": "Deine Messwerte, Medikamente, Stimmung, Zyklus, Laborwerte, Krankheitsepisoden, Allergien, Familienanamnese, Nährstoffe, Workouts, dein Gesundheitsprofil und deine eigenen Messgrößen in einer JSON-Datei."
           }
@@ -5553,7 +5567,10 @@
       "invalidFormat": "Das ist nicht in einer Form geschrieben, die dieses Feld lesen kann.",
       "invalidType": "Der Wert kam nicht in einer Form an, die dieses Feld speichern kann.",
       "rateLimited": "Zu oft geändert. Warte kurz und versuche es dann erneut.",
-      "other": "Dieser Wert wurde nicht angenommen. Bitte prüfen und erneut versuchen."
+      "other": "Dieser Wert wurde nicht angenommen. Bitte prüfen und erneut versuchen.",
+      "reproofRequired": "Gib dein aktuelles Passwort ein, um die E-Mail-Adresse zu ändern.",
+      "reproofFailed": "Das Passwort stimmt nicht, die E-Mail-Adresse wurde nicht geändert.",
+      "secondFactorRequired": "Bestätige mit deinem zweiten Faktor oder einem Passkey, um die E-Mail-Adresse zu ändern."
     },
     "avatar": {
       "title": "Profilfoto",
@@ -5594,7 +5611,9 @@
       "currentPassword": "Aktuelles Passwort",
       "authenticatorCode": "Authenticator-Code",
       "authenticatorPlaceholder": "Sechsstelliger Authenticator-Code",
-      "verifyAndAdd": "Bestätigen und hinzufügen"
+      "verifyAndAdd": "Bestätigen und hinzufügen",
+      "factorDescription": "Bestätige eine vorhandene Anmeldemethode, bevor du einen zweiten Faktor hinzufügst.",
+      "verifyAndContinue": "Bestätigen und fortfahren"
     },
     "passkeyName": "Name",
     "noPasskeys": "Keine Passkeys registriert.",
@@ -5655,10 +5674,10 @@
     "codexConnected": "ChatGPT erfolgreich verbunden! Insights sind jetzt aktiv.",
     "codexDisconnected": "ChatGPT-Verbindung getrennt.",
     "codexConnectionFailed": "ChatGPT-Verbindung fehlgeschlagen. Bitte versuche es erneut.",
-    "rawData": "Rohdaten mitsenden",
-    "rawDataOnDescription": "Es werden aggregierte Kennzahlen plus anonymisierte einzelne Messpunkte der letzten 30 Tage mit Zeitbezug gesendet — ohne Name, E-Mail oder direkte Kontodaten.",
-    "rawDataOffDescription": "Es werden nur zusammengefasste Werte gesendet (z. B. Durchschnitt, Trend, Minimum/Maximum) — ohne einzelne Messpunkte und exakte Zeitbezüge.",
-    "rawDataWarning": "Rohdaten aktiv: Der Provider erhält zusätzlich anonymisierte Messpunkte der letzten 30 Tage für eine präzisere Auswertung.",
+    "rawData": "Ausführlichen Verlauf senden",
+    "rawDataOnDescription": "Zusätzlich zu den Zusammenfassungen erhält der Anbieter Durchschnittswerte deiner Messungen: pro Tag für die letzten 90 Tage, pro Woche für das Jahr davor und pro Monat bis zu 5 Jahre zurück, jeweils mit Datum und Anzahl der Messungen. Einzelne Messwerte, dein Name und deine E-Mail werden nicht gesendet.",
+    "rawDataOffDescription": "Es werden nur Zusammenfassungen gesendet: der letzte Wert, Durchschnitte, Trends, Minimum und Maximum über feste Zeiträume. Keine Messreihen.",
+    "rawDataWarning": "Ausführlicher Verlauf ist an: Jede Auswertung sendet zusätzlich Tagesdurchschnitte der letzten 90 Tage, Wochendurchschnitte für das Jahr davor und Monatsdurchschnitte bis zu 5 Jahre zurück.",
     "regenerateInsights": "Reports neu generieren",
     "regenerateSuccess": "Reports wurden neu generiert",
     "regenerateRateLimit": "Bitte warte — du hast das stündliche Limit für Analysen erreicht.",
@@ -6545,7 +6564,12 @@
       "revokeSessionConfirmTitle": "Dieses Gerät abmelden?",
       "revokeSessionConfirmBody": "{device} muss sich neu anmelden. An den dort erfassten Daten ändert sich nichts.",
       "signOutEverywhereConfirmTitle": "Alle anderen Geräte abmelden?",
-      "signOutEverywhereConfirmBody": "Jedes Gerät außer diesem muss sich neu anmelden. Dieses Gerät bleibt angemeldet. An deinen erfassten Daten ändert sich nichts."
+      "signOutEverywhereConfirmBody": "Alle anderen Geräte, jeder verbundene KI-Assistent und jedes API-Token müssen sich neu anmelden oder neu eingerichtet werden. Dieses Gerät bleibt angemeldet. Deine Einträge bleiben unberührt.",
+      "signOutEverywhereShareLinks": "Auch die Freigabelinks für Ärztinnen und Ärzte beenden",
+      "signOutEverywhereInvites": "Einladungen zu deiner Akte, die noch niemand angenommen hat, werden zurückgezogen. Wer schon angenommen hat, behält den Zugriff; du kannst ihn gleich danach beenden.",
+      "signOutEverywhereInvitesDone": "{count} nicht angenommene Einladung(en) zurückgezogen.",
+      "grantsKeptTitle": "Diese Personen sehen deine Akte weiterhin",
+      "grantsKeptBody": "Das Abmelden beendet keinen Zugriff, den du jemandem gegeben hast. Beende ihn hier, wenn du ihn nicht gegeben hast oder nicht mehr willst."
     },
     "privacy": {
       "encryption": {
@@ -6579,7 +6603,7 @@
       "delete": {
         "title": "Löschen oder zurücksetzen",
         "description": "Lösche dein Konto vollständig oder lösche deine Gesundheitsdaten und behalte das Konto.",
-        "backupLag": "Die Löschung entfernt deine Daten sofort. Verschlüsselte Off-Host-Backups enthalten sie weiterhin, bis sie aus dem Aufbewahrungsfenster des Betreibers herausfallen.",
+        "backupLag": "Die Löschung entfernt deine Daten sofort. Wenn dieser Server verschlüsselte externe Sicherungen anlegt, werden die Kopien deiner Daten gleich danach aus diesem Speicher gelöscht, oder in der nächsten Nacht, falls der Speicher nicht erreichbar ist.",
         "openAdvanced": "Löschen oder zurücksetzen"
       },
       "posture": {
@@ -6698,6 +6722,41 @@
       "showChecklist": "Checkliste wieder anzeigen",
       "checklistShown": "Die Checkliste ist wieder auf dem Dashboard.",
       "checklistNothingHidden": "Die Checkliste war nicht ausgeblendet; sie öffnet sich auf dem Dashboard."
+    },
+    "documentSources": {
+      "title": "Dokumentarchive",
+      "description": "Paperless-ngx oder Papra aus HealthLog durchsuchen und ausgewählte Dokumente importieren.",
+      "explainer": "Ein Import-Knopf erscheint überall, wo du Dokumente verknüpfst: bei Arztbesuchen, Impfungen und Erkrankungen sowie unter Dokumente. HealthLog speichert von jedem importierten Dokument eine eigene verschlüsselte Kopie und fragt dein Archiv nur, wenn du suchst oder importierst.",
+      "systemLabel": "Archiv",
+      "statusConnected": "Verbunden",
+      "statusNotConnected": "Nicht verbunden",
+      "connectedSince": "Verbunden, zuletzt geprüft am {date}",
+      "originRemoved": "Diese Adresse steht nicht mehr auf der Liste der erlaubten Archive dieses Servers. Frag die Administration oder speichere eine andere Adresse.",
+      "baseUrl": "Adresse",
+      "allowedOrigins": "Auf diesem Server erlaubt: {origins}",
+      "organizationId": "Organisations-ID",
+      "organizationHelp": "Der Teil nach /organizations/ in der Adresszeile von Papra. Papra-Organisations-IDs sehen aus wie org_ gefolgt von 24 Buchstaben und Ziffern.",
+      "token": "API-Token",
+      "tokenSaved": "Für diese Adresse gespeichert. Leer lassen, um es zu behalten.",
+      "tokenHelpPaperless": "In Paperless-ngx: Mein Profil, API-Token.",
+      "tokenHelpPapra": "In Papra: ein API-Schlüssel mit documents:read und tags:read.",
+      "save": "Speichern und testen",
+      "saving": "Wird getestet …",
+      "saved": "Verbunden. Das Archiv hat geantwortet.",
+      "test": "Testen",
+      "testOk": "Das Archiv hat in {latency} ms geantwortet.",
+      "disconnect": "Trennen",
+      "disconnectTitle": "{name} trennen?",
+      "disconnectDescription": "HealthLog vergisst Adresse und Token. Bereits importierte Dokumente bleiben in HealthLog.",
+      "unavailableExplainer": "Dieser Server erlaubt keine Dokumentarchive mehr, die Verbindung unten ist daher nicht nutzbar. Du kannst sie weiterhin entfernen.",
+      "moduleOffExplainer": "Dokumente sind ausgeschaltet, die Verbindung unten wird daher nicht genutzt. Du kannst sie weiterhin entfernen.",
+      "tokenNewAddress": "Für eine neue Adresse wird das API-Token erneut gebraucht."
+    },
+    "emailChangePassword": "Aktuelles Passwort (nötig, um die E-Mail-Adresse zu ändern)",
+    "reproof": {
+      "description": "Damit werden deine Gesundheitsdaten weitergegeben oder exportiert. Bestätige, dass du es bist, um fortzufahren.",
+      "signInAgain": "Melde dich neu an und versuche es dann noch einmal. Dein Konto hat kein Passwort und keinen Passkey, den du hier bestätigen könntest.",
+      "failed": "Das hat nicht geklappt. Prüfe deine Eingabe und versuche es noch einmal."
     }
   },
   "admin": {
@@ -6746,7 +6805,11 @@
       "removeBody": "Konten ohne eigenen Schlüssel verlieren die KI-Funktionen sofort. Der Schlüssel wird nach dem Speichern nirgends mehr angezeigt — zum Wiederherstellen brauchst du das Original.",
       "removeConfirm": "Schlüssel entfernen",
       "saved": "KI-Server-Schlüssel gespeichert",
-      "error": "Speichern des KI-Server-Schlüssels fehlgeschlagen"
+      "error": "Speichern des KI-Server-Schlüssels fehlgeschlagen",
+      "legacyGrantTitle": "ALLOW_LOCAL_AI_PRIVATE_HOSTS=true ist veraltet",
+      "legacyGrantBody": "Die Einstellung erlaubt dem Server-Schlüssel oben und KI-Einstellungen, die in einem Admin-Konto gespeichert sind, weiterhin Zugriff auf dein Netzwerk und entfällt in einer späteren Version. Andere Konten brauchen ihren KI-Endpunkt schon jetzt in AI_PRIVATE_ORIGINS. Setze AI_PRIVATE_ORIGINS in der Server-Umgebung, starte neu und entferne dann ALLOW_LOCAL_AI_PRIVATE_HOSTS.",
+      "legacyGrantOrigins": "Diese auf dieser Instanz gespeicherten KI-Adressen zeigen in dein Netzwerk:",
+      "legacyGrantNoOrigins": "Keine auf dieser Instanz gespeicherte KI-Adresse zeigt in dein Netzwerk, du kannst ALLOW_LOCAL_AI_PRIVATE_HOSTS also jetzt entfernen."
     },
     "providerHealth": {
       "title": "Zustand der KI-Provider",
@@ -7063,6 +7126,7 @@
       "versionTileBuiltAt": "Gebaut am",
       "versionTileUpdateAvailable": "Update verfügbar: {tag}",
       "versionTileUpToDate": "Aktuell",
+      "versionTileCheckOff": "Update-Prüfung aus",
       "snapshotLoadError": "System-Snapshot konnte nicht geladen werden.",
       "snapshotLoading": "Snapshot wird geladen…",
       "auditTitle": "Letzte Aktivitäten",
@@ -7267,7 +7331,7 @@
           "description": "Wann dieser Host zuletzt die verschlüsselte Kopie jedes Kontos in deinen Bucket gelegt hat.",
           "loadError": "Der Status außer Haus konnte nicht geladen werden.",
           "notConfiguredTitle": "Sicherung außer Haus ist nicht eingerichtet",
-          "notConfiguredDescription": "Es sind weder Bucket noch Schlüssel gesetzt, also verlässt nichts diesen Host. Setze BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY und BACKUP_ENCRYPTION_KEY, um den nächtlichen Upload einzuschalten.",
+          "notConfiguredDescription": "Es sind weder Bucket noch Schlüssel gesetzt, also verlässt keine Sicherung diesen Host. Setze BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY und BACKUP_ENCRYPTION_KEY, um den nächtlichen Upload einzuschalten.",
           "stateFresh": "Frisch",
           "stateDue": "Fällig",
           "stateStale": "Veraltet",
@@ -7276,7 +7340,12 @@
           "neverDetail": "Für dieses Konto ist nichts angekommen. Zuletzt geprüft {when}.",
           "unknownDetail": "Noch kein nächtlicher Lauf hat dieses Konto erfasst.",
           "age": "vor {hours} h",
-          "scheduleNote": "Der Upload läuft alle {hours} h. Frisch heißt innerhalb eines Laufs, fällig heißt ein Lauf blieb ohne Ergebnis, veraltet heißt zwei."
+          "scheduleNote": "Der Upload läuft alle {hours} h. Frisch heißt innerhalb eines Laufs, fällig heißt ein Lauf blieb ohne Ergebnis, veraltet heißt zwei.",
+          "lifecycleConfigured": "Der Bucket löscht Kopien nach {days} Tagen über seine eigene Lifecycle-Regel.",
+          "lifecycleMissing": "Der Bucket hat keine Lifecycle-Regel, jede nächtliche Kopie bleibt also für immer liegen. Lege eine Regel an, die Objekte nach BACKUP_RETENTION_DAYS löscht.",
+          "lifecycleUnknown": "Ob der Bucket alte Kopien löscht, ließ sich nicht lesen: Die Zugangsdaten dürfen seine Lifecycle-Regel nicht lesen. Prüfe, dass eine Regel Objekte nach BACKUP_RETENTION_DAYS löscht.",
+          "pendingDeletions": "Kopien von {count} gelöschten oder geleerten Konten liegen noch im Bucket und werden entfernt.",
+          "pendingDeletionsFailing": "Kopien von {count} gelöschten oder geleerten Konten liegen noch im Bucket, weil er das Löschen verweigert hat ({error}). Gib den Zugangsdaten DeleteObject; das Löschen wird jede Nacht wiederholt."
         },
         "restoreStarted": "Wiederherstellung gestartet. Der Fortschritt steht über der Liste.",
         "restoreActive": "Für dieses Konto läuft schon eine Wiederherstellung. Warte, bis sie fertig ist.",
@@ -7309,7 +7378,10 @@
         "restoreFailureNotStarted": "Der Hintergrunddienst hat die Wiederherstellung nicht übernommen. Prüfe, ob er läuft.",
         "restoreFailureEnqueue": "Die Wiederherstellung konnte nicht an den Hintergrunddienst übergeben werden. Prüfe, ob er läuft.",
         "restoreFailureAfterCommit": "Die Daten wurden wiederhergestellt, aber ein Schritt danach ist fehlgeschlagen. Diagramme holen das womöglich erst beim nächsten nächtlichen Lauf nach.",
-        "restoreFailureUnexpected": "Die Wiederherstellung ist an einem unerwarteten Fehler gescheitert und wurde zurückgerollt. Das Server-Log nennt den Fehler."
+        "restoreFailureUnexpected": "Die Wiederherstellung ist an einem unerwarteten Fehler gescheitert und wurde zurückgerollt. Das Server-Log nennt den Fehler.",
+        "restoreFailureKeyMissing": "Die Sicherung braucht den Verschlüsselungsschlüssel {keys}, mit dem dieser Server sie nicht öffnen kann. Nimm den Schlüssel wieder in ENCRYPTION_KEYS auf, starte neu und starte die Wiederherstellung erneut.",
+        "restoreFailureForeignReference": "Die Datei verweist auf Einträge, die zu einem anderen Konto gehören. Es wurde nichts geschrieben.",
+        "previewKeyMissing": "Diese Sicherung lässt sich auf diesem Server nicht wiederherstellen: Sie braucht den Verschlüsselungsschlüssel {keys}. Nimm den Schlüssel zuerst wieder in ENCRYPTION_KEYS auf und starte neu."
       },
       "danger-zone": {
         "title": "Gefahrenzone",
@@ -7348,7 +7420,7 @@
         "rotateEnqueued": "Rotation gestartet.",
         "rotateFailed": "Rotation konnte nicht gestartet werden.",
         "stepUpNeeded": "Ein frischer zweiter Faktor ist erforderlich. Bestätige deinen zweiten Faktor oder nutze das Kommandozeilen-Werkzeug, falls kein zweiter Faktor eingerichtet ist.",
-        "cliNote": "Für diesen Knopf ist ein zweiter Faktor nötig. Betreiber ohne zweiten Faktor rotieren mit scripts/rotate-encryption-key.ts.",
+        "cliNote": "Für diesen Knopf ist ein zweiter Faktor nötig. Ohne ihn führen Betreiber scripts/rotate-encryption-key.ts aus einem Quellcode-Checkout dieser Version aus; die Schritte stehen in docs/ops/encryption-key-rotation.md.",
         "columnsTitle": "Abdeckung pro Spalte",
         "columnsDescription": "Jede verschlüsselte Spalte mit ihren Zeilenzahlen auf dem aktiven Schlüssel gegenüber älteren Schlüsseln.",
         "colColumn": "Spalte",
@@ -7361,7 +7433,17 @@
           "completed": "Abgeschlossen",
           "failed": "Fehlgeschlagen"
         },
-        "coverageDetail": "Es werden nur Schlüssel-IDs und Anzahlen gezeigt — niemals Schlüsselmaterial."
+        "coverageDetail": "Es werden nur Schlüssel-IDs und Anzahlen gezeigt — niemals Schlüsselmaterial.",
+        "backupsTitle": "Schlüssel, die die Sicherungen noch brauchen",
+        "backupsDescription": "Ein alter Schlüssel bleibt nötig, solange eine Sicherung unten ihn noch aufführt.",
+        "backupsStoredLine": "Schlüssel {key}: {count} gespeicherte Kopien, die älteste vom {when}",
+        "backupsUnrecordedLine": "{count} gespeicherte Kopien stammen aus der Zeit, bevor Sicherungen ihre Schlüssel festhielten (die älteste vom {when}). Sie können jeden damals vorhandenen Schlüssel brauchen: Behalte alle alten Schlüssel, bis sie ersetzt oder gelöscht sind.",
+        "backupsOffhostLine": "Schlüssel {key}: Die letzte externe Kopie, die ihn braucht, kam am {when} in den Bucket; dort gebraucht bis {until}",
+        "backupsOffhostLineUnknown": "Schlüssel {key}: Die letzte externe Kopie, die ihn braucht, kam am {when} in den Bucket. Wie lange der Bucket Kopien behält, ist unbekannt; behalte den Schlüssel, bis diese Kopie sicher weg ist.",
+        "backupsNone": "Noch keine Sicherung hat die Schlüssel festgehalten, die sie braucht.",
+        "backupsStillNeed": "Alle Zeilen sind rotiert, aber Sicherungen brauchen noch {keys}",
+        "backupsUnrecordedBadge": "Alle Zeilen sind rotiert, aber ältere Sicherungen können noch einen ausgemusterten Schlüssel brauchen",
+        "backupsDetail": "Die Rotation verschlüsselt jede Zeile neu, aber eine Sicherung behält den Schlüssel, unter dem ihr Inhalt geschrieben wurde, und ihre Wiederherstellung braucht ihn. Behalte einen ausgemusterten Schlüssel in ENCRYPTION_KEYS, bis er unten nicht mehr aufgeführt ist."
       }
     },
     "carrier": "Netzbetreiber",
@@ -7408,7 +7490,11 @@
       "countOther": "{count} Fehlschläge",
       "lastFailed": "Letzter Fehlschlag {when}"
     },
-    "deleteAllDetail": "Nutzerkonten bleiben bestehen."
+    "deleteAllDetail": "Nutzerkonten bleiben bestehen.",
+    "cardError": {
+      "title": "Dieser Teil der Seite konnte nicht angezeigt werden",
+      "description": "Der Rest der Seite funktioniert weiter; versuche es erneut oder lade neu, wenn es bleibt."
+    }
   },
   "achievements": {
     "title": "Erfolge",
@@ -8016,7 +8102,8 @@
     "bodyToday": "Dein Vorrat an {medName} reicht keinen ganzen Tag mehr ({units} Einheiten übrig).",
     "bodyReorder": "Dein Vorrat an {medName} ({units} Einheiten) ist um den {runsOutOn} aufgebraucht — bestelle bis zum {reorderBy} nach.",
     "bodyLastDose": "Dein Vorrat an {medName} ({units} Einheiten) reicht noch etwa für die letzte Dosis. Aufgebraucht um den {runsOutOn}.",
-    "bodyExpired": "{medName}: kein nutzbarer Bestand mehr. {units} Einheiten sind als abgelaufen markiert."
+    "bodyExpired": "{medName}: kein nutzbarer Bestand mehr. {units} Einheiten sind als abgelaufen markiert.",
+    "bodyAsNeeded": "Von {medName} sind nur noch {units} Einheiten übrig. Bestelle nach, bevor du die nächste Dosis brauchst."
   },
   "moodReminders": {
     "dailyTitle": "Stimmung erfassen",
@@ -10147,10 +10234,74 @@
       "body": "Beim Lesen mit KI geht dies an deinen KI-Dienst außerhalb dieses Servers. Darf HealthLog Dokumente, Laborbefunde und Medikamentenbeschreibungen zum Lesen senden?",
       "grant": "Lesen erlauben",
       "error": "Die Einwilligung konnte nicht gespeichert werden. Bitte versuch es erneut."
+    },
+    "sourcePicker": {
+      "open": "Aus Archiv importieren",
+      "openNamed": "Aus {name} importieren",
+      "title": "Aus {name} importieren",
+      "description": "Nach Namen suchen, dann die Dokumente anhaken, die HealthLog übernehmen soll.",
+      "sourceLabel": "Archiv",
+      "searchLabel": "Dokumentname",
+      "searchPlaceholder": "Nach Namen suchen",
+      "tagLabel": "Tag",
+      "tagAny": "Alle Tags",
+      "fromLabel": "Von",
+      "toLabel": "Bis",
+      "clearFilters": "Tag und Datum zurücksetzen",
+      "rangeInvalid": "Das Enddatum liegt vor dem Startdatum.",
+      "empty": "{name} hat keine Dokumente zum Anzeigen.",
+      "noMatch": "Keine passenden Dokumente.",
+      "loadMore": "Mehr laden",
+      "stateImported": "In HealthLog",
+      "stateDeleted": "In HealthLog gelöscht",
+      "selectedCount": "{count} von höchstens {max} ausgewählt",
+      "importAction": "{count} importieren",
+      "importing": "Import läuft, ein Dokument nach dem anderen …",
+      "done": "Fertig",
+      "summary": "Importiert: {imported}. Schon vorhanden: {present}. Nicht importiert: {failed}.",
+      "stopped": "Abgebrochen: {reason}",
+      "result": {
+        "waiting": "Wartet",
+        "working": "Wird importiert …",
+        "imported": "Importiert",
+        "importedLinked": "Importiert und verknüpft",
+        "duplicate": "Schon in HealthLog",
+        "duplicateLinked": "Schon in HealthLog, jetzt verknüpft",
+        "deleted": "In HealthLog gelöscht, bleibt gelöscht"
+      },
+      "errors": {
+        "unavailable": "Dokumentarchive sind auf diesem Server nicht freigeschaltet.",
+        "notConnected": "Dieses Archiv ist nicht verbunden. Verbinde es unter Einstellungen, Integrationen.",
+        "originNotAllowed": "Diese Adresse steht nicht auf der Liste der erlaubten Archive dieses Servers. Bitte die Administration, sie aufzunehmen.",
+        "unreachable": "Das Archiv war nicht erreichbar. Prüfe, ob es läuft und die Adresse stimmt.",
+        "redirected": "Das Archiv hat die Anfrage umgeleitet. Trage die Adresse ein, auf die es umleitet.",
+        "authRefused": "Das Archiv hat das Token abgelehnt. Prüfe das Token und seine Berechtigungen.",
+        "versionTooOld": "Das Archiv ist zu alt. Nötig ist Paperless-ngx 2.16 oder neuer.",
+        "badResponse": "Die Antwort des Archivs ließ sich nicht lesen. Prüfe, ob die Adresse auf das Archiv selbst zeigt.",
+        "notFound": "Das Archiv kennt dieses Dokument nicht, oder die Organisations-ID ist falsch oder nicht deine.",
+        "linkTargetNotFound": "Der Eintrag, mit dem verknüpft werden sollte, existiert nicht mehr.",
+        "rateLimited": "Zu viele Anfragen. Warte eine Minute und versuche es erneut.",
+        "browserOnly": "Dokumentarchive lassen sich nur im Browser verwenden.",
+        "invalidAddress": "Gib die vollständige Adresse ein, beginnend mit https:// oder http://.",
+        "organizationRequired": "Gib die Organisations-ID aus Papra ein.",
+        "tokenRequired": "Gib das API-Token ein. Eine neue Adresse braucht es erneut.",
+        "fileTooLarge": "Die Datei ist größer, als HealthLog annimmt.",
+        "quotaExceeded": "Dein Dokumentenspeicher ist voll.",
+        "fileType": "HealthLog nimmt diesen Dateityp nicht an.",
+        "uploadLimit": "Das stündliche Upload-Limit ist erreicht. Versuche es später erneut.",
+        "uploadBusy": "Andere Uploads laufen noch. Versuche es gleich noch einmal.",
+        "moduleDisabled": "Dokumente sind in den Einstellungen ausgeschaltet.",
+        "generic": "Etwas ist schiefgelaufen. Versuche es erneut.",
+        "permissionMissing": "Der Papra-Schlüssel darf keine Tags lesen. Gib ihm die Berechtigung tags:read."
+      },
+      "pickMore": "Weitere auswählen",
+      "finishedHint": "Suche erneut oder ändere einen Filter, um weitere Dokumente auszuwählen.",
+      "maxReached": "Du kannst höchstens {max} Dokumente auf einmal importieren.",
+      "noMatchHint": "Versuche einen Teil des Namens oder setze Tag und Datum zurück."
     }
   },
   "selfDescription": {
-    "dataPosture": "HealthLog wird selbst gehostet: Deine Gesundheitsdaten bleiben auf deiner eigenen Instanz und sind im Ruhezustand verschlüsselt. KI-Funktionen nutzen einen von dir mitgebrachten Anbieter-Schlüssel oder ein lokales Modell — nichts verlässt deine Instanz über den von dir konfigurierten Anbieter hinaus, und es gibt keine Drittanbieter-Analyse deiner Gesundheitsdaten."
+    "dataPosture": "HealthLog wird selbst gehostet: Deine Gesundheitsdaten liegen in der Datenbank deiner eigenen Instanz. Notizen und andere Freitexte, Dokumente, Fragebogen-Antworten, von der KI geschriebene Texte und Zugangs-Tokens sind im Ruhezustand verschlüsselt; Messwerte, Laborwerte, Medikamentennamen und Stimmungswerte werden unverschlüsselt gespeichert und sind so sicher wie dein Server. KI-Funktionen senden Daten nur an den KI-Anbieter, der für dein Konto eingerichtet ist, und es gibt keine Drittanbieter-Analyse deiner Gesundheitsdaten."
   },
   "customMetrics": {
     "sectionTitle": "Eigene Metriken",

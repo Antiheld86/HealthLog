@@ -29,12 +29,23 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     $queryRaw: (...a: unknown[]) => queryRawMock(...a),
     user: { findMany: (...a: unknown[]) => findManyMock(...a) },
+    offhostPurgeRequest: {
+      count: async () => 2,
+      findFirst: async () => ({
+        requestedAt: new Date("2026-09-20T10:00:00.000Z"),
+        lastFailure: "AccessDenied",
+      }),
+    },
   },
 }));
 
 const configuredMock = vi.fn(() => true);
 vi.mock("@/lib/jobs/offhost-backup", () => ({
   offhostBackupConfigured: () => configuredMock(),
+  probeOffhostLifecycle: async () => ({
+    state: "missing",
+    expirationDays: null,
+  }),
 }));
 
 import { GET } from "../route";
@@ -139,10 +150,12 @@ describe("GET /api/admin/backups — off-host freshness", () => {
 
     const body = await read();
 
-    expect(body.offhost).toEqual({
+    expect(body.offhost).toMatchObject({
       configured: false,
       periodHours: 24,
       rows: [],
+      // No bucket to ask on a host that is not configured.
+      lifecycle: { state: "unknown", expirationDays: null },
     });
   });
 
@@ -195,5 +208,21 @@ describe("GET /api/admin/backups — off-host freshness", () => {
       "username",
     ]);
     expect(JSON.stringify(body.offhost)).not.toMatch(/bucket|endpoint|secret/i);
+  });
+
+  it("carries the bucket's lifecycle verdict and the deletions it still owes", async () => {
+    configuredMock.mockReturnValue(true);
+    queryRawMock.mockResolvedValue([]);
+    findManyMock.mockResolvedValue([]);
+    const body = await read();
+    expect(body.offhost.lifecycle).toEqual({
+      state: "missing",
+      expirationDays: null,
+    });
+    expect(body.offhost.pendingDeletions).toEqual({
+      count: 2,
+      oldestRequestedAt: "2026-09-20T10:00:00.000Z",
+      lastFailure: "AccessDenied",
+    });
   });
 });

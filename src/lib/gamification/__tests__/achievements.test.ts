@@ -6,7 +6,6 @@ import {
   bridgeFrozenStreakGaps,
   calculateLongestStreak,
   evaluateAchievementsWithCompletionDates,
-  getUniqueBerlinDays,
   type AchievementMetrics,
   type AchievementProgress,
   type EarnabilityFlags,
@@ -68,16 +67,6 @@ const NONE_EARNABLE: EarnabilityFlags = {
 };
 
 describe("gamification achievements", () => {
-  it("deduplicates and sorts day keys", () => {
-    const days = getUniqueBerlinDays([
-      new Date("2026-02-11T12:00:00Z"),
-      new Date("2026-02-10T12:00:00Z"),
-      new Date("2026-02-11T16:00:00Z"),
-    ]);
-
-    expect(days).toEqual(["2026-02-10", "2026-02-11"]);
-  });
-
   it("calculates the longest streak", () => {
     expect(
       calculateLongestStreak([

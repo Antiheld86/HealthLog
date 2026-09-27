@@ -14,7 +14,7 @@
  * "no correlation" filler.
  */
 
-import { dayOffsetToBerlinDayKey } from "@/lib/insights/bucket-series";
+import { dayOffsetToDayKey } from "@/lib/insights/bucket-series";
 import { round } from "@/lib/insights/status-shared";
 import { MS_PER_DAY } from "@/lib/time-constants";
 import { DEFAULT_TIMEZONE, userDayKey } from "@/lib/tz/format";
@@ -120,7 +120,7 @@ function weekdayOfOffset(
   dayOffset: number,
   tz: string = DEFAULT_TIMEZONE,
 ): number {
-  const dayKey = dayOffsetToBerlinDayKey(now, dayOffset, tz);
+  const dayKey = dayOffsetToDayKey(now, dayOffset, tz);
   const d = new Date(dayKey + "T00:00:00Z");
   return (d.getUTCDay() + 6) % 7;
 }

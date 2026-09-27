@@ -29,15 +29,30 @@
  * Phase B1 / criterion 2 of the v1.4.15 backup-completeness work.
  */
 import { Readable } from "node:stream";
-import { createGunzip } from "node:zlib";
 
+import { BodyTooLargeError, readBoundedBody } from "@/lib/labs/ocr-upload";
 import { NextRequest } from "next/server";
 import { ZodError } from "zod/v4";
 import { prisma } from "@/lib/db";
-import { apiHandler, HttpError, requireAdmin } from "@/lib/api-handler";
+import {
+  apiHandler,
+  HttpError,
+  requireAdmin,
+  assertRecentCookieProof,
+} from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { BackupJsonError, scanBackupJson } from "@/lib/export/backup-json-scan";
+import {
+  BackupUploadDecodeError,
+  decodeBackupUpload,
+} from "@/lib/export/backup-upload-decode";
+import {
+  assessBackupKeys,
+  BACKUP_KEY_MISSING_CODE,
+  BackupKeyIdCollector,
+  describeBackupKeyProblem,
+} from "@/lib/export/backup-key-ids";
 import {
   BACKUP_UPLOAD_TOO_LARGE_CODE,
   BackupBlobTooLargeError,
@@ -64,11 +79,13 @@ export const dynamic = "force-dynamic";
  * is sent as the raw request body, which is read as a stream.
  */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+/** Room for the multipart boundaries and part headers around the file. */
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 
 /**
- * Cap on a file sent as the raw request body, compressed or not. The same
- * ceiling the app sets for any request body (`middlewareClientMaxBodySize` in
- * `next.config.ts`), beyond which the body would arrive truncated. A
+ * Cap on a file sent as the raw request body, compressed or not, counted
+ * while the body streams. The route is left out of the proxy matcher
+ * (`src/lib/http/proxy-bypass-routes.ts`), so this is the only ceiling. A
  * disaster-recovery file of 1.25 million measurements is 662 MB as plain
  * JSON and 64 MB compressed, so large files go up compressed.
  */
@@ -93,54 +110,29 @@ class UploadRefused extends Error {
   }
 }
 
-/** Bytes → bytes, gunzipped when the file starts with the gzip magic. */
+/** The file's bytes, gunzipped and counted on both ends. */
 async function* decodedBytes(
   source: AsyncIterable<Uint8Array>,
   limit: number,
 ): AsyncGenerator<Uint8Array> {
-  let seen = 0;
-  async function* counted() {
-    for await (const chunk of source) {
-      seen += chunk.byteLength;
-      if (seen > limit) {
-        throw new UploadRefused(
-          413,
-          `Upload exceeds ${Math.round(limit / 1024 / 1024)} MB limit`,
-          { reason: "file_size_exceeded", size: seen },
-        );
-      }
-      yield chunk;
-    }
-  }
-  const iterator = counted()[Symbol.asyncIterator]();
-  const first = await iterator.next();
-  if (first.done) return;
-  const rest = (async function* () {
-    yield first.value;
-    for (;;) {
-      const next = await iterator.next();
-      if (next.done) return;
-      yield next.value;
-    }
-  })();
-  const head = first.value;
-  if (head.byteLength >= 2 && head[0] === 0x1f && head[1] === 0x8b) {
-    const gunzip = Readable.from(rest).pipe(createGunzip());
-    try {
-      for await (const chunk of gunzip) yield chunk as Buffer;
-    } catch (err) {
-      if (err instanceof UploadRefused) throw err;
-      throw new UploadRefused(422, "Uploaded file is not valid gzip", {
-        reason: "invalid_gzip",
+  try {
+    yield* decodeBackupUpload(source, { compressedLimit: limit });
+  } catch (err) {
+    if (err instanceof BackupUploadDecodeError) {
+      throw new UploadRefused(err.status, err.message, {
+        reason: err.reason,
+        ...(err.size !== undefined ? { size: err.size } : {}),
       });
     }
-    return;
+    throw err;
   }
-  yield* rest;
 }
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { user: admin } = await requireAdmin();
+  const { user: admin, session } = await requireAdmin();
+  // A fresh proof on top of the admin session: this reaches every account's
+  // data, so a stolen admin session alone must not be enough.
+  await assertRecentCookieProof(admin, session.id);
   annotate({ action: { name: "admin.backups.upload" } });
   const ipAddress = getClientIp(request);
 
@@ -179,10 +171,23 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   let source: AsyncIterable<Uint8Array>;
   if (multipart) {
+    // The multipart parser holds the whole form and counts nothing, so the
+    // bytes are counted first and the form is parsed from what was kept. The
+    // route is outside the proxy matcher, so nothing else bounds this read.
     let formData: FormData;
     try {
-      formData = await request.formData();
+      const bytes = await readBoundedBody(
+        request.body,
+        MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES,
+      );
+      formData = await new Response(new Blob([bytes]), {
+        headers: { "content-type": contentType },
+      }).formData();
     } catch (err) {
+      if (err instanceof BodyTooLargeError) {
+        await denied("stream_size_exceeded");
+        return apiError("Upload exceeds 10 MB limit", 413);
+      }
       return apiError(
         `Invalid multipart body: ${err instanceof Error ? err.message : "unknown"}`,
         400,
@@ -235,6 +240,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
           }
         }
         let firstWithoutId: number | null = null;
+        const keys = new BackupKeyIdCollector();
         let scanned;
         try {
           scanned = await scanBackupJson(storedAsRead(), {
@@ -251,6 +257,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
               if (!parsed.data.id && firstWithoutId === null) {
                 firstWithoutId = index;
               }
+              keys.visit(element, "measurements");
             },
           });
         } catch (err) {
@@ -316,6 +323,27 @@ export const POST = apiHandler(async (request: NextRequest) => {
               reason: "incompatible_schema_version",
               schemaVersion: payload.schemaVersion,
             },
+          );
+        }
+
+        // A file whose inner ciphertext needs a key this host does not have
+        // can be stored but never restored: the restore would refuse it, or
+        // worse, a restore on a host that had lost the key would write rows
+        // nobody can open. Refused here, where the operator is looking, with
+        // the key named. The instance settings are left to the restore, which
+        // checks them only when they are asked for back.
+        keys.visit(scanned.document);
+        const keyVerdict = assessBackupKeys(keys, {
+          ignoreSections: new Set(["appSettings"]),
+        });
+        const keyProblem = describeBackupKeyProblem(keyVerdict);
+        if (keyProblem) {
+          const keyIds = [...keyVerdict.missing, ...keyVerdict.unreadable];
+          throw new UploadRefused(
+            422,
+            keyProblem,
+            { reason: "key_missing", keyIds },
+            { errorCode: BACKUP_KEY_MISSING_CODE, keyIds },
           );
         }
 

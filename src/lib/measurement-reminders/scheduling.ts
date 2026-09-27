@@ -29,6 +29,9 @@ import {
   type RecurrenceContext,
   nextOccurrenceAfter,
 } from "@/lib/medications/scheduling/recurrence";
+import { wallClockInTz } from "@/lib/tz/wall-clock";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
+import { startOfLocalDayKey } from "@/lib/tz/local-day";
 
 /**
  * The reminder fields this module reads. A subset of the Prisma row so
@@ -48,6 +51,24 @@ export interface ReminderScheduleInput {
    * Coach-suggested time-boxed protocol (ESH/AHA 7-day BP) self-expires.
    */
   endsOn?: Date | null;
+}
+
+/**
+ * A first-due date from a request: a calendar date (`YYYY-MM-DD`) is that
+ * day in the user's zone, stored as its local midnight; a date-time is the
+ * instant it names. A date sent as UTC midnight would read as the evening
+ * before west of UTC, which is why a bare date is accepted at all.
+ */
+export function parseReminderAnchor(value: string, timeZone: string): Date {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? startOfLocalDayKey(value, timeZone || DEFAULT_TIMEZONE)
+    : new Date(value);
+}
+
+/** The calendar day `instant` falls on in `tz`, as UTC midnight of that date. */
+function calendarDayInZone(instant: Date, tz: string): Date {
+  const p = wallClockInTz(instant, tz);
+  return new Date(Date.UTC(p.year, p.month - 1, p.day));
 }
 
 function hourToHhmm(hour: number): string {
@@ -120,17 +141,30 @@ export function buildReminderRecurrence(
   // First-due anchor when never satisfied: anchorDate ?? createdAt. After
   // a satisfy the rolling path re-anchors on `lastIntakeAt + N`, so we
   // feed `lastSatisfiedAt` through `lastIntakeAt`.
-  const startsOn = reminder.anchorDate ?? reminder.createdAt;
+  //
+  // The engine's `startsOn` / `endsOn` are calendar dates (the medication
+  // columns are `@db.Date`, UTC midnight of the date). A reminder's
+  // `anchorDate` / `endsOn` are instants instead (the form sends local
+  // midnight, a Coach course sends `now + days`), so hand the engine the
+  // calendar day each instant falls on in the user's zone.
+  const tz = timeZone || DEFAULT_TIMEZONE;
+  const startsOn = calendarDayInZone(
+    reminder.anchorDate ?? reminder.createdAt,
+    tz,
+  );
+  const endsOn = reminder.endsOn
+    ? calendarDayInZone(reminder.endsOn, tz)
+    : null;
 
   const ctx: RecurrenceContext = {
     medication: {
       id: "measurement-reminder",
       startsOn,
-      endsOn: reminder.endsOn ?? null,
+      endsOn,
       oneShot: false,
       createdAt: reminder.createdAt,
     },
-    timeZone: timeZone || "Europe/Berlin",
+    timeZone: tz,
     lastIntakeAt: reminder.lastSatisfiedAt,
   };
 

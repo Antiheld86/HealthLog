@@ -88,6 +88,7 @@ describe("upsertGoogleHealthMeasurements — tombstones resurrect", () => {
         id: "row-1",
         type: "ACTIVITY_STEPS",
         externalId: "stats:steps:2026-07-08",
+        measuredAt: STEPS_READING.measuredAt,
       },
     ]);
 

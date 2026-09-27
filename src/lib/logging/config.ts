@@ -1,3 +1,4 @@
+import { envOr } from "@/lib/env";
 import { hostname } from "node:os";
 import type { LoggingConfig, LogLevel, WideEvent } from "./types";
 import { LOG_LEVEL_PRIORITY } from "./types";
@@ -8,7 +9,7 @@ let cachedConfig: LoggingConfig | null = null;
 export function getLoggingConfig(): LoggingConfig {
   if (cachedConfig) return cachedConfig;
 
-  const level = (process.env.LOG_LEVEL ?? "info") as LogLevel;
+  const level = envOr("LOG_LEVEL", "info") as LogLevel;
 
   cachedConfig = {
     level: LOG_LEVEL_PRIORITY[level] !== undefined ? level : "info",

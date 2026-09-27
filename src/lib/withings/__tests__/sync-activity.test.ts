@@ -32,6 +32,10 @@ vi.mock("@/lib/db", () => {
   };
 });
 
+vi.mock("@/lib/tz/resolver", () => ({
+  resolveUserTimezone: vi.fn(),
+}));
+
 vi.mock("@/lib/integrations/status", () => ({
   isReauthRequired: vi.fn().mockResolvedValue(false),
   parkIntegrationAtReauth: vi.fn(),
@@ -78,6 +82,7 @@ import {
   recordSyncSuccess,
 } from "@/lib/integrations/status";
 import { recomputeBucketsForMeasurement } from "@/lib/rollups/measurement-rollups";
+import { resolveUserTimezone } from "@/lib/tz/resolver";
 
 import { fetchWithingsActivity, syncUserActivity } from "../sync-activity";
 
@@ -114,6 +119,7 @@ beforeEach(() => {
   vi.mocked(prisma.withingsConnection.findUnique).mockResolvedValue({
     scope: "user.metrics,user.activity",
   } as never);
+  vi.mocked(resolveUserTimezone).mockResolvedValue("UTC");
 });
 
 afterEach(() => {
@@ -253,6 +259,7 @@ describe("syncUserActivity — field mapping + idempotency", () => {
         id: "row-steps",
         type: "ACTIVITY_STEPS",
         measuredAt,
+        externalId: "withings:activity:user-1:2026-05-12:steps",
         value: 8420,
         deletedAt: null,
       },
@@ -296,38 +303,89 @@ describe("syncUserActivity — field mapping + idempotency", () => {
     expect(arg.data.deletedAt).toBeNull();
   });
 
-  it("anchors measuredAt at noon UTC so the instant lands inside the local day for every supported tz", async () => {
-    installFetchMock([{ date: "2026-05-12", steps: 1000 }]);
-    vi.mocked(prisma.measurement.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.measurement.createMany).mockResolvedValue({
-      count: 1,
-    } as never);
+  it.each([
+    ["UTC", "2026-05-12T12:00:00.000Z"],
+    ["America/New_York", "2026-05-12T16:00:00.000Z"],
+    ["Europe/Berlin", "2026-05-12T10:00:00.000Z"],
+    ["Pacific/Auckland", "2026-05-12T00:00:00.000Z"],
+    ["Pacific/Tongatapu", "2026-05-11T23:00:00.000Z"],
+  ])(
+    "anchors a %s day at local noon, which reads the same calendar day there",
+    async (tz, expected) => {
+      vi.mocked(resolveUserTimezone).mockResolvedValue(tz);
+      installFetchMock([{ date: "2026-05-12", steps: 1000 }]);
+      vi.mocked(prisma.measurement.findMany).mockResolvedValue([] as never);
+      vi.mocked(prisma.measurement.createMany).mockResolvedValue({
+        count: 1,
+      } as never);
+
+      await syncUserActivity("user-1");
+
+      const measuredAt = createManyRows()[0].measuredAt as Date;
+      expect(measuredAt.toISOString()).toBe(expected);
+      expect(
+        new Intl.DateTimeFormat("en-CA", {
+          timeZone: tz,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(measuredAt),
+      ).toBe("2026-05-12");
+    },
+  );
+
+  it("moves a row stored at the old noon-UTC anchor to local noon instead of adding a second one", async () => {
+    // Noon UTC is already 01:00 the next day in Tonga, so the old anchor
+    // counted 12 May's steps on 13 May there.
+    vi.mocked(resolveUserTimezone).mockResolvedValue("Pacific/Tongatapu");
+    installFetchMock([{ date: "2026-05-12", steps: 8420 }]);
+    const legacy = new Date("2026-05-12T12:00:00.000Z");
+    vi.mocked(prisma.measurement.findMany).mockResolvedValue([
+      {
+        id: "row-steps",
+        type: "ACTIVITY_STEPS",
+        measuredAt: legacy,
+        externalId: "withings:activity:user-1:2026-05-12:steps",
+        value: 8420,
+        deletedAt: null,
+      },
+    ] as never);
+    vi.mocked(prisma.measurement.update).mockResolvedValue({} as never);
 
     await syncUserActivity("user-1");
 
-    const measuredAt = createManyRows()[0].measuredAt as Date;
-    expect(measuredAt.toISOString()).toBe("2026-05-12T12:00:00.000Z");
+    expect(prisma.measurement.createMany).not.toHaveBeenCalled();
+    expect(prisma.measurement.update).toHaveBeenCalledTimes(1);
+    const arg = vi.mocked(prisma.measurement.update).mock.calls[0][0] as {
+      data: { measuredAt: Date };
+    };
+    expect(arg.data.measuredAt.toISOString()).toBe("2026-05-11T23:00:00.000Z");
+    // Both the day the row left and the day it joined are refolded.
+    const refolded = vi
+      .mocked(recomputeBucketsForMeasurement)
+      .mock.calls.map((c) => (c[2] as Date).toISOString().slice(0, 10));
+    expect(refolded).toEqual(
+      expect.arrayContaining(["2026-05-11", "2026-05-12"]),
+    );
+  });
 
-    // Regression: anchoring at noon UTC keeps the row inside the
-    // calendar day every user reads it in. Bucketing the same instant
-    // via `Intl.DateTimeFormat` across the canonical Withings user
-    // span — Honolulu (UTC-10), Los Angeles (UTC-7/-8), Berlin
-    // (UTC+1/+2) and Tokyo (UTC+9) — must all return "2026-05-12".
-    // Anchoring at end-of-day UTC (the v1.4.25 W17b shape) shifted
-    // Tokyo by +1 day; anchoring at midnight UTC would shift LA by -1.
-    // Noon UTC is the only choice that holds across the practical
-    // [-11, +12) range.
-    const bucket = (tz: string) =>
-      new Intl.DateTimeFormat("en-CA", {
-        timeZone: tz,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(measuredAt);
-    expect(bucket("Pacific/Honolulu")).toBe("2026-05-12");
-    expect(bucket("America/Los_Angeles")).toBe("2026-05-12");
-    expect(bucket("Europe/Berlin")).toBe("2026-05-12");
-    expect(bucket("Asia/Tokyo")).toBe("2026-05-12");
+  it("fetches through today's date in the user's zone", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-12T20:00:00.000Z"));
+    try {
+      vi.mocked(resolveUserTimezone).mockResolvedValue("Pacific/Auckland");
+      const fetchMock = installFetchMock([]);
+      await syncUserActivity("user-1");
+      const [, init] = fetchMock.mock.calls[0] as unknown as [
+        string,
+        { body: unknown },
+      ];
+      const body = String(init.body);
+      // 08:00 on 13 May in Auckland: the window ends on the 13th.
+      expect(body).toContain("enddateymd=2026-05-13");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("skips missing fields without writing zero rows or throwing", async () => {
@@ -440,10 +498,18 @@ describe("syncUserActivity — field mapping + idempotency", () => {
     // The single read is keyed by the full distinct (type, measuredAt)
     // sets the batch will write — `skipDuplicates` guards the insert.
     const readArg = vi.mocked(prisma.measurement.findMany).mock.calls[0][0] as {
-      where: { type: { in: unknown[] }; measuredAt: { in: unknown[] } };
+      where: {
+        type: { in: unknown[] };
+        OR: [
+          { externalId: { in: unknown[] } },
+          { measuredAt: { in: unknown[] } },
+        ];
+      };
     };
     expect(readArg.where.type.in).toHaveLength(3);
-    expect(readArg.where.measuredAt.in).toHaveLength(5);
+    expect(readArg.where.OR[0].externalId.in).toHaveLength(15);
+    // UTC: the local-noon and the old noon-UTC anchor coincide.
+    expect(readArg.where.OR[1].measuredAt.in).toHaveLength(5);
     const createArg = vi.mocked(prisma.measurement.createMany).mock
       .calls[0][0] as { skipDuplicates: boolean };
     expect(createArg.skipDuplicates).toBe(true);

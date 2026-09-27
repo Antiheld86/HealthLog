@@ -49,7 +49,10 @@ import { resolveUserTimezone } from "@/lib/tz/resolver";
 /** One mappable activity metric: its data-type encoding + the mapper + a verb. */
 interface ActivityResource {
   dataType: GoogleHealthDataType;
-  map: (point: Record<string, unknown>) => GoogleHealthMappedMeasurement[];
+  map: (
+    point: Record<string, unknown>,
+    tz: string,
+  ) => GoogleHealthMappedMeasurement[];
   verb: string;
 }
 
@@ -96,8 +99,8 @@ export async function syncUserActivity(
 
   // The dailyRollUp request range is civil and user-local; resolve the user's
   // stored zone so the range bounds land on the correct civil days rather than
-  // the process zone's. (The response day-key comes from each window's own
-  // `civilStartTime.date`, tz-independent.)
+  // the process zone's. The response day-key comes from each window's own
+  // `civilStartTime.date`; the row is anchored at local noon of that day.
   const tz = await resolveUserTimezone(userId);
 
   // Cycle-wide watermark snapshotted once by `syncUserGoogleHealth`; undefined
@@ -136,7 +139,7 @@ export async function syncUserActivity(
     const readings: GoogleHealthMeasurementUpsert[] = [];
     try {
       for (const point of points) {
-        for (const m of resource.map(point)) {
+        for (const m of resource.map(point, tz)) {
           readings.push({
             type: m.type,
             value: m.value,
@@ -180,7 +183,7 @@ export async function syncUserActivity(
     );
     const readings: GoogleHealthMeasurementUpsert[] = [];
     for (const point of points) {
-      for (const m of mapVo2Max(point)) {
+      for (const m of mapVo2Max(point, tz)) {
         readings.push({
           type: m.type,
           value: m.value,

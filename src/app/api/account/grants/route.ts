@@ -21,9 +21,15 @@
  * a code rather than leaving a token caller with an authentication error on a
  * request that authenticated fine.
  *
- * **Neither is delegable, and that is structural.** Both resolve through bare
- * `requireAuth()`, which refuses outright while the caller is acting on
- * another account. So a delegate cannot invite anybody into the record they
+ * v1.39.3 — offering any level also asks for a fresh proof
+ * (`requireRecentProof`), and "sign out everywhere" withdraws the invitations
+ * nobody has accepted yet. An invitation outlives the session that sent it, so
+ * one offered from a stolen session would otherwise stay live after the owner
+ * signed everything else out.
+ *
+ * **Neither is delegable, and that is structural.** Both resolve through
+ * `requireAuth()` (the invitation through `requireRecentProof`, which calls
+ * it), which refuses outright while the caller is acting on another account. So a delegate cannot invite anybody into the record they
  * were given access to, cannot widen their own grant, and cannot pass it on:
  * the route does not have a re-delegation check that somebody could soften, it
  * has no code path that runs under a switch at all. The grantor is then taken
@@ -45,6 +51,7 @@ import {
   apiHandler,
   requireAuth,
   requireFreshMfaIfEnrolled,
+  requireRecentProof,
   MFA_STEP_UP_MAX_AGE_SECONDS,
 } from "@/lib/api-handler";
 import {
@@ -122,7 +129,12 @@ export const GET = apiHandler(async () => {
 });
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const auth = await requireAuth();
+  // Offering access leaves a standing way into the record in somebody else's
+  // hands, one that outlives the session that offered it. So a live session is
+  // not enough: a sign-in or re-proof within five minutes on the browser, with
+  // the second factor on an account that has one, or a step-up elevation on a
+  // token. No shipped client offers access with a token.
+  const auth = await requireRecentProof({ bearer: "elevation" });
   const user = auth.user;
 
   const rl = await checkRateLimit(
@@ -193,6 +205,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (!invitee) {
     return apiError("No account with that name or e-mail", 404);
   }
+
+  await auth.commitElevation();
 
   try {
     // `inviteGrant` decides everything about the row except the level: the

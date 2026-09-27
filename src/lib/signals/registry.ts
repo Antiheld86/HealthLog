@@ -574,8 +574,11 @@ export const SIGNALS: Record<string, SignalDefinition> = {
       mcp: true,
     },
     fhir: {
-      loinc: "96402-2",
-      display: "Oxygen consumption maximum during exercise",
+      // 96402-2, used before, does not exist in LOINC. The watch estimate is
+      // not a measured exercise-test VO2 peak (94122-9), so the HealthKit
+      // identifier rides the custom system.
+      loinc: "HKQuantityTypeIdentifierVO2Max",
+      display: "VO2 max (estimated)",
       unit: "mL/min/kg",
       category: "vital-signs",
     },
@@ -656,8 +659,9 @@ export const SIGNALS: Record<string, SignalDefinition> = {
       mcp: true,
     },
     fhir: {
-      loinc: "73704-9",
-      display: "Body water by Bioelectrical impedance analysis",
+      // 73704-9, used before, is a nasogastric fluid output.
+      loinc: "101683-1",
+      display: "Body water mass",
       unit: "kg",
       category: "vital-signs",
     },
@@ -677,8 +681,9 @@ export const SIGNALS: Record<string, SignalDefinition> = {
       mcp: true,
     },
     fhir: {
-      loinc: "73708-0",
-      display: "Bone mineral content by DXA",
+      // 73708-0, used before, is "Body fat [Mass] Calculated".
+      loinc: "101685-6",
+      display: "Body bone mass",
       unit: "kg",
       category: "vital-signs",
     },
@@ -821,7 +826,8 @@ export const SIGNALS: Record<string, SignalDefinition> = {
       mcp: true,
     },
     fhir: {
-      loinc: "91557-1",
+      // 91557-1, used before, does not exist in LOINC.
+      loinc: "HKQuantityTypeIdentifierWalkingAsymmetryPercentage",
       display: "Walking asymmetry percentage",
       unit: "%",
       category: "vital-signs",
@@ -864,8 +870,10 @@ export const SIGNALS: Record<string, SignalDefinition> = {
       mcp: true,
     },
     fhir: {
-      loinc: "41955-6",
-      display: "Step length Measured",
+      // 41955-6, used before, is "Distance walked in 1 week"; LOINC has no
+      // step-length term, so the HealthKit identifier rides the custom system.
+      loinc: "HKQuantityTypeIdentifierWalkingStepLength",
+      display: "Walking step length",
       unit: "m",
       category: "vital-signs",
     },
@@ -886,8 +894,10 @@ export const SIGNALS: Record<string, SignalDefinition> = {
       mcp: true,
     },
     fhir: {
-      loinc: "41957-2",
-      display: "Gait speed [Velocity] Measured",
+      // 41957-2, used before, is a 24-hour mean walking speed; the value
+      // here is a HealthKit walking-speed reading.
+      loinc: "HKQuantityTypeIdentifierWalkingSpeed",
+      display: "Walking speed",
       unit: "m/s",
       category: "vital-signs",
     },

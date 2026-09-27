@@ -55,6 +55,7 @@ import { buildBaselineBand, median } from "@/lib/insights/derived/baseline";
 import { VITALS_BASELINE_TYPES } from "@/lib/insights/derived/registry";
 import { assembleDiscoveryMatrix } from "@/lib/insights/discovery-matrix";
 import { resolveModuleMap } from "@/lib/modules/gate";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -480,7 +481,7 @@ export async function buildPeriodNarrativeContext(
     where: { id: userId },
     select: { timezone: true },
   });
-  const tz = profile?.timezone ?? "Europe/Berlin";
+  const tz = profile?.timezone ?? DEFAULT_TIMEZONE;
 
   const currentFrom = tzDayKey(
     new Date(now.getTime() - periodDays * MS_PER_DAY),

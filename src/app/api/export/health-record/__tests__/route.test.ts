@@ -32,6 +32,17 @@ vi.mock("@/lib/db", () => ({
     userHealthProfile: { findUnique: vi.fn() },
     healthProfileFactRevision: { findMany: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
+    // The whole-record gate reads the session's own stamps: a sign-in a
+    // moment ago is the proof, on an account without a second factor.
+    session: {
+      findUnique: vi.fn(async () => ({
+        createdAt: new Date(),
+        mfaVerifiedAt: null,
+        reproofAt: null,
+      })),
+    },
+    webauthnMfaCredential: { count: vi.fn(async () => 0) },
+    passkey: { count: vi.fn(async () => 0) },
   },
   toJson: (value: unknown) => value,
 }));
@@ -906,5 +917,20 @@ describe("POST /api/export/health-record — the insurance leaf", () => {
     expect(decrypt).toHaveBeenCalled();
     const text = JSON.stringify(await res.json());
     expect(text).toContain("A123456789");
+  });
+});
+
+describe("POST /api/export/health-record — a fresh proof on the browser", () => {
+  it("a session that signed in an hour ago is asked to confirm first", async () => {
+    vi.mocked(prisma.session.findUnique).mockResolvedValueOnce({
+      createdAt: new Date(Date.now() - 60 * 60 * 1000),
+      mfaVerifiedAt: null,
+      reproofAt: null,
+    } as never);
+    const { POST } = await import("../route");
+    const res = await POST(mkReq({ format: "pdf", selection: allLeaves() }));
+    expect(res.status).toBe(401);
+    expect((await res.json()).meta.errorCode).toBe("auth.reproof.required");
+    expect(prisma.measurement.findMany).not.toHaveBeenCalled();
   });
 });

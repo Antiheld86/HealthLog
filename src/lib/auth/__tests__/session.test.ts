@@ -48,6 +48,9 @@ vi.mock("@/lib/db", () => ({
     apiToken: { updateMany: vi.fn() },
     refreshToken: { updateMany: vi.fn() },
     trustedDevice: { deleteMany: vi.fn() },
+    mcpOAuthConnection: { updateMany: vi.fn() },
+    clinicianShareLink: { updateMany: vi.fn() },
+    stepUpElevation: { deleteMany: vi.fn() },
     $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   },
 }));
@@ -330,6 +333,14 @@ describe("destroyAllSessions", () => {
       data: { revoked: true },
     });
     expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { userId: "user-rotated", revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(prisma.mcpOAuthConnection.updateMany).toHaveBeenCalledWith({
+      where: { userId: "user-rotated", revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(prisma.clinicianShareLink.updateMany).toHaveBeenCalledWith({
       where: { userId: "user-rotated", revokedAt: null },
       data: { revokedAt: expect.any(Date) },
     });

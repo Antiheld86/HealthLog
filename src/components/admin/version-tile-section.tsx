@@ -80,6 +80,9 @@ export function VersionTileSection() {
 
   const newer = update?.status === "newer_available";
   const upToDate = update?.status === "up_to_date";
+  // The operator turned the GitHub request off (UPDATE_CHECK_DISABLED); say
+  // so rather than leaving the slot empty like an unreachable feed.
+  const checkOff = update?.status === "unknown" && update.reason === "disabled";
   const sha = shortSha(version?.buildSha ?? null);
 
   return (
@@ -109,6 +112,10 @@ export function VersionTileSection() {
             <span className="text-success inline-flex items-center gap-1.5 text-xs font-medium">
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
               {t("admin.overview.versionTileUpToDate")}
+            </span>
+          ) : checkOff ? (
+            <span className="text-muted-foreground text-xs">
+              {t("admin.overview.versionTileCheckOff")}
             </span>
           ) : null
         }

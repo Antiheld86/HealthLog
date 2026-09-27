@@ -11,8 +11,21 @@
  *  3. `DocumentImportKey` — a key whose document the purge has removed.
  *
  * The first two resolve to a document (live → duplicate, tombstoned →
- * deleted); the third only to "deleted". The upload route and the lookup
- * route both ask here, so they cannot disagree about what a key means.
+ * deleted); the third only to "deleted". The upload route, the lookup route
+ * and the document picker all ask here, so they cannot disagree about what a
+ * key means.
+ *
+ * v1.39.3 — a key also names its instance (`sourceInstance`, the origin of
+ * the Paperless-ngx or Papra it came from): id 123 on one Paperless and id
+ * 123 on another are different documents. A null on either side is a
+ * wildcard, so nothing stored before the column existed is forgotten:
+ *
+ *   - a key stored without an instance (a v1.39.2 import, an older script, a
+ *     workflow that does not send one) matches a lookup for any instance of
+ *     its system;
+ *   - a lookup without an instance matches a key stored for any instance.
+ *
+ * Where both an exact and a wildcard match exist, the exact one wins.
  */
 import { prisma } from "@/lib/db";
 import { checkRateLimit, type RateLimitResult } from "@/lib/rate-limit";
@@ -23,22 +36,44 @@ export type SourceKeyMatch =
   | { state: "live"; document: SerialisableDocument }
   | { state: "deleted"; id: string | null };
 
+/**
+ * The instance half of a key match: the same instance or a stored key without
+ * one; any instance when the lookup has none.
+ */
+export function instanceMatch(sourceInstance: string | null): {
+  OR?: Array<{ sourceInstance: string | null }>;
+} {
+  return sourceInstance === null
+    ? {}
+    : { OR: [{ sourceInstance }, { sourceInstance: null }] };
+}
+
+/** Exact instance first, then a key stored without one (nulls sort last). */
+const EXACT_FIRST = { sourceInstance: { sort: "asc", nulls: "last" } } as const;
+
 export async function findSourceKey(
   userId: string,
   sourceSystem: DocumentSourceSystemValue,
   sourceId: string,
+  sourceInstance: string | null = null,
 ): Promise<SourceKeyMatch | null> {
+  const key = {
+    userId,
+    sourceSystem,
+    sourceId,
+    ...instanceMatch(sourceInstance),
+  };
   const own = await prisma.inboundDocument.findFirst({
-    where: { userId, sourceSystem, sourceId },
+    where: key,
     omit: { contentEncrypted: true },
+    orderBy: EXACT_FIRST,
   });
   const viaAlias = own
     ? null
-    : await prisma.documentSourceAlias.findUnique({
-        where: {
-          userId_sourceSystem_sourceId: { userId, sourceSystem, sourceId },
-        },
+    : await prisma.documentSourceAlias.findFirst({
+        where: key,
         select: { document: { omit: { contentEncrypted: true } } },
+        orderBy: EXACT_FIRST,
       });
   const document = own ?? viaAlias?.document ?? null;
   if (document) {
@@ -46,10 +81,8 @@ export async function findSourceKey(
       ? { state: "deleted", id: document.id }
       : { state: "live", document };
   }
-  const purged = await prisma.documentImportKey.findUnique({
-    where: {
-      userId_sourceSystem_sourceId: { userId, sourceSystem, sourceId },
-    },
+  const purged = await prisma.documentImportKey.findFirst({
+    where: key,
     select: { id: true },
   });
   return purged ? { state: "deleted", id: null } : null;
@@ -74,13 +107,14 @@ export async function rememberSourceAlias(
   documentId: string,
   sourceSystem: DocumentSourceSystemValue,
   sourceId: string,
+  sourceInstance: string | null = null,
 ): Promise<"remembered" | "known" | "limit"> {
   const held = await prisma.documentSourceAlias.count({
     where: { userId, documentId },
   });
   if (held >= MAX_SOURCE_ALIASES_PER_DOCUMENT) return "limit";
   const { count } = await prisma.documentSourceAlias.createMany({
-    data: [{ userId, documentId, sourceSystem, sourceId }],
+    data: [{ userId, documentId, sourceSystem, sourceInstance, sourceId }],
     skipDuplicates: true,
   });
   return count > 0 ? "remembered" : "known";
@@ -106,4 +140,88 @@ export function checkSourceLookupRateLimit(
     SOURCE_LOOKUP_LIMIT_PER_HOUR,
     SOURCE_LOOKUP_WINDOW_MS,
   );
+}
+
+/** What the vault holds for one source key, as the picker lists it. */
+export type SourceKeyState =
+  { state: "imported"; documentId: string } | { state: "deleted" };
+
+/**
+ * {@link findSourceKey} for a page of results at once: the same three places,
+ * three queries for the whole page instead of three per result. A key held by
+ * a live document answers `imported` with its id; one held by a tombstone, or
+ * kept by the purge ledger, answers `deleted`. A key the vault does not know
+ * is absent from the map.
+ */
+export async function findSourceKeyStates(
+  userId: string,
+  sourceSystem: DocumentSourceSystemValue,
+  sourceIds: string[],
+  sourceInstance: string | null = null,
+): Promise<Map<string, SourceKeyState>> {
+  const states = new Map<string, SourceKeyState>();
+  const ids = [...new Set(sourceIds)];
+  if (ids.length === 0) return states;
+
+  const where = {
+    userId,
+    sourceSystem,
+    sourceId: { in: ids },
+    ...instanceMatch(sourceInstance),
+  };
+  const [own, aliases, purged] = await Promise.all([
+    prisma.inboundDocument.findMany({
+      where,
+      select: {
+        id: true,
+        sourceId: true,
+        sourceInstance: true,
+        deletedAt: true,
+      },
+    }),
+    prisma.documentSourceAlias.findMany({
+      where,
+      select: {
+        sourceId: true,
+        sourceInstance: true,
+        document: { select: { id: true, deletedAt: true } },
+      },
+    }),
+    prisma.documentImportKey.findMany({
+      where,
+      select: { sourceId: true },
+    }),
+  ]);
+  // A wildcard (instance-less) row first, so an exact-instance row after it
+  // wins, as it does in `findSourceKey`.
+  const wildcardFirst = <T extends { sourceInstance: string | null }>(
+    rows: T[],
+  ) =>
+    [...rows].sort(
+      (a, b) =>
+        Number(a.sourceInstance === sourceInstance) -
+        Number(b.sourceInstance === sourceInstance),
+    );
+
+  // Lowest precedence first, so the document's own key wins, as it does in
+  // `findSourceKey`.
+  for (const row of purged) states.set(row.sourceId, { state: "deleted" });
+  for (const row of wildcardFirst(aliases)) {
+    states.set(
+      row.sourceId,
+      row.document.deletedAt
+        ? { state: "deleted" }
+        : { state: "imported", documentId: row.document.id },
+    );
+  }
+  for (const row of wildcardFirst(own)) {
+    if (!row.sourceId) continue;
+    states.set(
+      row.sourceId,
+      row.deletedAt
+        ? { state: "deleted" }
+        : { state: "imported", documentId: row.id },
+    );
+  }
+  return states;
 }

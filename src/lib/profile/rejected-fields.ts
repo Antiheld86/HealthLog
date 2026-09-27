@@ -78,6 +78,11 @@ const REJECTION_REASON_KEYS: Record<string, string> = {
   // still lands. Without an entry it would fall back to "check it and try
   // again", which is wrong — the value was fine, the timing was not.
   rate_limited: "settings.profileRejection.rateLimited",
+  // Not Zod codes either: a new email address asks for a fresh proof, and
+  // these say whether none was given or the one given was wrong.
+  reproof_required: "settings.profileRejection.reproofRequired",
+  reproof_failed: "settings.profileRejection.reproofFailed",
+  second_factor_required: "settings.profileRejection.secondFactorRequired",
   too_big: "settings.profileRejection.tooBig",
   too_small: "settings.profileRejection.tooSmall",
   invalid_value: "settings.profileRejection.invalidValue",

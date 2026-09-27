@@ -155,6 +155,10 @@ export const WIPE_MODELS = [
   // Further import keys that resolved to a document by content; a child of
   // the document, removed before it so the counts are truthful.
   "DocumentSourceAlias",
+  // The person's own connections to Paperless-ngx / Papra (#1038), with their
+  // encrypted API tokens. A wipe that left them would leave a working
+  // credential to another system behind an account that erased everything.
+  "DocumentSourceConnection",
   "ExtractedFact",
   "ImportJob",
 
@@ -223,9 +227,9 @@ export const WIPE_MODELS = [
   // ended. About this account's record, so they go with it.
   "BackupRestoreJob",
   // What this host last put in the operator's bucket for this account. The
-  // objects themselves stay — the worker holds no DeleteObject grant and the
-  // bucket's lifecycle rule owns their retirement — but the row saying when
-  // they were written is about this account and goes with it.
+  // objects themselves are deleted by the purge request the wipe writes
+  // (`requestOffhostPurge`); this row, saying when they were written, is about
+  // this account and goes with it.
   "OffhostBackupState",
   "AuditLog",
   "ConsentReceipt",
@@ -293,6 +297,10 @@ export const INSTANCE_SCOPED: Readonly<Record<string, string>> = {
   AppSettings: "instance-wide configuration singleton",
   RateLimit: "instance-wide rate-limit buckets, keyed by string, self-expiring",
   HostMetric: "instance-wide host telemetry, not attributable to an account",
+  OffhostBackupKeyUse:
+    "per encryption key, when the nightly off-host run last wrote an object needing it; says nothing about any account",
+  OffhostPurgeRequest:
+    "the deletions an account deletion or wipe asked of the off-host bucket; written by the wipe itself and removed once the bucket holds nothing of the account",
   CycleSymptomCategory:
     "seeded catalogue shared by every account; a user's custom symptoms live on CycleSymptom",
   IllnessSymptom: "seeded symptom catalogue shared by every account",

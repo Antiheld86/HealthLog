@@ -19,6 +19,7 @@
  *     host current. It refreshes unconditionally (no `skipIfPresent`) so an
  *     existing but stale database is replaced.
  */
+import { envFlag } from "@/lib/env";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { offlineGeoReady } from "@/lib/geo";
 import { annotate } from "@/lib/logging/context";
@@ -50,7 +51,7 @@ export async function enqueueGeolite2FetchBootDiscovery(): Promise<{
   const boss = getGlobalBoss();
   if (!boss) return { enqueued: 0 };
   if (!process.env.MAXMIND_LICENSE_KEY?.trim()) return { enqueued: 0 };
-  if (process.env.IP_GEO_LOOKUP_DISABLED === "1") return { enqueued: 0 };
+  if (envFlag("IP_GEO_LOOKUP_DISABLED")) return { enqueued: 0 };
   if (offlineGeoReady()) return { enqueued: 0 };
 
   try {

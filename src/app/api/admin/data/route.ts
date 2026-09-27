@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAdmin } from "@/lib/api-handler";
+import {
+  apiHandler,
+  requireAdmin,
+  assertRecentCookieProof,
+} from "@/lib/api-handler";
 import { auditLog } from "@/lib/auth/audit";
 import { apiSuccess, apiError, getClientIp } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
@@ -47,7 +51,10 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     );
   }
 
-  const { user } = await requireAdmin();
+  const { user, session } = await requireAdmin();
+  // A fresh proof on top of the admin session: this reaches every account's
+  // data, so a stolen admin session alone must not be enough.
+  await assertRecentCookieProof(user, session.id);
   annotate({ action: { name: "admin.data.delete" } });
 
   // v1.18.1 — the documented convention buckets authenticated admin

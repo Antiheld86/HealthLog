@@ -48,7 +48,7 @@ import {
   subscribeToMeaningfulVisibilityRefresh,
 } from "@/lib/pwa/query-client-options";
 
-const SHELL_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "";
+const SHELL_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "";
 
 // ── Theme Context ────────────────────────────────────
 

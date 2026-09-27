@@ -288,20 +288,65 @@ export function apiError(message: string, status = 400, meta?: ErrorMeta) {
 }
 
 /**
+ * Read a request body as text, counting BYTES as they arrive and stopping at
+ * `maxBytes`. A body that declares a larger `Content-Length` is refused before
+ * a byte is read; one that does not (chunked) is cancelled the moment it
+ * passes the cap. `request.text()` has no such bound — it holds whatever the
+ * client sends — which mattered little while the proxy's body clone truncated
+ * everything at a fixed ceiling, and matters for the upload routes that no
+ * longer pass through the proxy.
+ */
+export async function readBodyText(
+  request: Request,
+  maxBytes: number,
+): Promise<{ text: string; tooLarge?: never } | { tooLarge: true }> {
+  const declared = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    return { tooLarge: true };
+  }
+  const body = request.body;
+  if (!body) return { text: "" };
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        void reader.cancel().catch(() => {});
+        return { tooLarge: true };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Already released by the cancel above.
+    }
+  }
+  const joined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { text: new TextDecoder().decode(joined) };
+}
+
+/**
  * Safely parse JSON body from a request.
  * Returns the parsed body or a 400 error response if parsing fails.
  *
- * `opts.maxBytes` opts a route into a hard body-size cap. The check
- * runs against the raw text length rather than the parsed object, so an
- * over-limit payload returns 413 before reaching `JSON.parse` and never
- * builds an object graph. (`request.text()` still buffers the raw body
- * into a string, so the cap bounds the parse/object cost, not the
- * initial read — keep caps comfortably above the largest legitimate
- * payload.) Single-record routes can pass a tight cap; batch routes
- * that legitimately accept large payloads pass a larger one. When
- * `maxBytes` is omitted the route inherits the Next.js runtime default —
- * pre-existing behaviour, no regression risk for callers that haven't
- * adopted the parameter.
+ * `opts.maxBytes` opts a route into a hard body-size cap, enforced WHILE the
+ * body is read (`readBodyText`): an over-limit payload returns 413 without the
+ * whole body ever being held, and never reaches `JSON.parse`. Single-record
+ * routes can pass a tight cap; batch routes that legitimately accept large
+ * payloads pass a larger one. When `maxBytes` is omitted the body is bounded
+ * only by the proxy's 1 MB clone ceiling (`proxyClientMaxBodySize`), so a
+ * route left out of the proxy matcher must pass one.
  */
 export async function safeJson<T = unknown>(
   request: Request,
@@ -312,19 +357,19 @@ export async function safeJson<T = unknown>(
     return { error: apiError("Content-Type must be application/json", 415) };
   }
   if (opts?.maxBytes !== undefined) {
-    let raw: string;
+    let read: Awaited<ReturnType<typeof readBodyText>>;
     try {
-      raw = await request.text();
+      read = await readBodyText(request, opts.maxBytes);
     } catch {
       return { error: apiError("Invalid request body", 400) };
     }
-    if (raw.length > opts.maxBytes) {
+    if (read.tooLarge) {
       return {
         error: apiError(`Request body exceeds ${opts.maxBytes} bytes`, 413),
       };
     }
     try {
-      const data = JSON.parse(raw) as T;
+      const data = JSON.parse(read.text) as T;
       return { data };
     } catch {
       return { error: apiError("Invalid JSON body", 400) };
@@ -345,9 +390,9 @@ export async function safeJson<T = unknown>(
  * IP-based rate-limits.
  *
  * Trust model (`TRUST_PROXY_HOPS` env):
- *   - "0"          → ignore XFF entirely, fall back to x-real-ip / null
+ *   - "0"          → trust no forwarding header at all, XFF or x-real-ip
  *                    (use this if HealthLog is internet-facing without a
- *                    reverse proxy you control)
+ *                    reverse proxy you control); the IP resolves to null
  *   - "1" (default)→ trust exactly one hop (typical Coolify / Caddy /
  *                    Cloudflare-Tunnel single-proxy deployment); read the
  *                    rightmost XFF entry which is the IP your proxy
@@ -400,8 +445,12 @@ function readCfConnectingIp(request: Request): string | null {
 }
 
 function parseTrustProxyHops(raw: string | undefined): number {
-  if (raw === undefined) return 1;
-  const trimmed = raw.trim();
+  // Empty is unset. The shipped docker-compose.yml passes
+  // `TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-}"`, which is an empty string for
+  // every operator who never set it; reading that as invalid threw on every
+  // request that asked for the client IP.
+  const trimmed = raw?.trim() ?? "";
+  if (trimmed === "") return 1;
   if (!/^\d+$/.test(trimmed)) {
     // Reject explicitly-invalid values so an operator typo doesn't silently
     // switch a real-proxy deployment to "no XFF trust" mode (review
@@ -438,6 +487,33 @@ function warnTrustViolationOnce(hops: number, chainLength: number): void {
   console.warn(
     `[getClientIp] TRUST_PROXY_HOPS=${hops} but X-Forwarded-For carried ${chainLength} entr${chainLength === 1 ? "y" : "ies"}; ` +
       `refusing to read XFF for this request. Every anonymous caller will now share the same "unknown" rate-limit bucket — fix TRUST_PROXY_HOPS or the proxy chain.`,
+  );
+}
+
+/**
+ * Once per process: forwarding headers arrived that the configured trust
+ * does not let us read, so the client address resolves to nothing. The
+ * common cause is `TRUST_PROXY_HOPS=0` behind a proxy that sends only
+ * `X-Real-IP` (nginx's usual setup), or `TRUST_PROXY_HOPS` of 2 or more with
+ * no `X-Forwarded-For`. Every anonymous caller then shares one rate-limit
+ * bucket, so one person mistyping a password can hold the sign-in back for
+ * everybody, and the operator had no way to see why.
+ */
+let unreadProxyHeadersWarned = false;
+
+/** Test-only reset for {@link warnUnreadProxyHeadersOnce}. */
+export function _resetUnreadProxyHeadersWarningForTests(): void {
+  unreadProxyHeadersWarned = false;
+}
+
+function warnUnreadProxyHeadersOnce(hops: number, header: string): void {
+  if (unreadProxyHeadersWarned) return;
+  unreadProxyHeadersWarned = true;
+  console.warn(
+    `[getClientIp] requests carry ${header} but TRUST_PROXY_HOPS=${hops} does not allow reading it, so client addresses resolve to nothing and every anonymous caller shares one rate-limit bucket. ` +
+      (hops === 0
+        ? "If a proxy you control sits in front of HealthLog, set TRUST_PROXY_HOPS=1."
+        : "X-Real-IP is only read with TRUST_PROXY_HOPS=1; with more hops, have the proxies send X-Forwarded-For."),
   );
 }
 
@@ -491,18 +567,39 @@ export function getClientIpOrTrustWarning(request: Request): {
       // configured trust. Without this warning the silent degrade was
       // invisible until rate-limits visibly misfired in production.
       warnTrustViolationOnce(hops, chain.length);
-      const realIp = request.headers.get("x-real-ip");
+      // Not x-real-ip either. A chain shorter than the configured hops means
+      // the request did not come through the proxies the operator declared,
+      // so whatever x-real-ip it carries was set by the caller.
+      return { ip: null, trustViolation: true };
+    }
+    // x-real-ip is a forwarding header like XFF and gets the same trust: only
+    // when the operator declares a proxy in front, and only as the
+    // single-proxy stand-in for a missing XFF. It used to be read on every
+    // path, including `TRUST_PROXY_HOPS=0` ("no proxy, trust no header") and
+    // the broken-chain path above, so a caller sending a fresh x-real-ip per
+    // request got a fresh per-IP rate-limit bucket each time.
+    //
+    // Exactly one hop, not "one or more". X-Real-IP holds a single address,
+    // set by whichever proxy wrote it last; with two or more hops declared,
+    // the outer proxy may pass through whatever the caller put there, and
+    // the chain the hop count describes is the XFF chain, which is absent.
+    const realIp = request.headers.get("x-real-ip")?.trim();
+    if (hops === 1) {
       return {
         ip: realIp && looksLikeIp(realIp) ? realIp : null,
-        trustViolation: true,
+        trustViolation: false,
       };
     }
+    if (realIp) warnUnreadProxyHeadersOnce(hops, "X-Real-IP");
+    return { ip: null, trustViolation: false };
   }
-  const realIp = request.headers.get("x-real-ip");
-  return {
-    ip: realIp && looksLikeIp(realIp) ? realIp : null,
-    trustViolation: false,
-  };
+  const unread = request.headers.has("x-forwarded-for")
+    ? "X-Forwarded-For"
+    : request.headers.has("x-real-ip")
+      ? "X-Real-IP"
+      : null;
+  if (unread) warnUnreadProxyHeadersOnce(hops, unread);
+  return { ip: null, trustViolation: false };
 }
 
 export function getClientIp(request: Request): string | null {

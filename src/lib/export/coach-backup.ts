@@ -92,7 +92,14 @@ export interface CoachConversationBackupEntry {
   /** Always carried: messages, attachments and the Coach's own facts, plans
    *  and reminders all address a conversation by it. */
   id: string;
-  title: string;
+  /**
+   * The readable title. Present on a portable payload, on every file written
+   * before v1.39.3, and on a disaster-recovery payload for a row the free-text
+   * backfill had not reached yet.
+   */
+  title?: string;
+  /** v1.39.3 — the title's ciphertext as base64. Disaster-recovery only. */
+  titleEncrypted?: string;
   /**
    * The permanent fence marker. Carried and restored verbatim; see the file
    * header for why letting this default is a security regression and not a
@@ -130,6 +137,7 @@ export interface CoachBackupCounts {
 const COACH_CONVERSATION_BACKUP_SELECT = {
   id: true,
   title: true,
+  titleEncrypted: true,
   documentScoped: true,
   summaryEncrypted: true,
   summaryUpdatedAt: true,
@@ -174,6 +182,17 @@ function decryptTurnSoft(bytes: Uint8Array | null): string | null {
   }
 }
 
+/** A title for a reader: ciphertext first, legacy readable column after. */
+function readTitleSoft(row: {
+  title: string | null;
+  titleEncrypted: Uint8Array | null;
+}): string {
+  if (row.titleEncrypted && row.titleEncrypted.byteLength > 0) {
+    return decryptTurnSoft(row.titleEncrypted) ?? "";
+  }
+  return row.title ?? "";
+}
+
 export async function buildCoachBackupSection(
   prisma: Pick<PrismaClient, "coachConversation">,
   userId: string,
@@ -190,7 +209,18 @@ export async function buildCoachBackupSection(
   return {
     coachConversations: rows.map((row) => ({
       id: row.id,
-      title: row.title,
+      // A disaster-recovery file carries the stored bytes: the ciphertext,
+      // or, for a row the free-text backfill has not reached yet, the old
+      // readable title exactly as stored (the restore seals it). Sealing it
+      // here instead would make the export non-deterministic, and the
+      // streaming writer and this builder must produce the same file.
+      ...(disasterRecovery && row.titleEncrypted
+        ? {
+            titleEncrypted: Buffer.from(row.titleEncrypted).toString("base64"),
+          }
+        : disasterRecovery
+          ? { title: row.title ?? "" }
+          : { title: readTitleSoft(row) }),
       documentScoped: row.documentScoped,
       ...(disasterRecovery
         ? {
@@ -293,12 +323,17 @@ export type RestoredCoachMessage = Pick<
 
 export type RestoredCoachConversation = Pick<
   CoachConversationBackupEntry,
-  "id" | "title" | "documentScoped" | "createdAt" | "updatedAt"
+  "id" | "documentScoped" | "createdAt" | "updatedAt"
 > &
   OptionalNullable<
     Pick<
       CoachConversationBackupEntry,
-      "summaryEncrypted" | "summary" | "summaryUpdatedAt" | "summaryTurnCount"
+      | "title"
+      | "titleEncrypted"
+      | "summaryEncrypted"
+      | "summary"
+      | "summaryUpdatedAt"
+      | "summaryTurnCount"
     >
   > & {
     messages: RestoredCoachMessage[];
@@ -343,7 +378,9 @@ export async function restoreCoachData(
       data: {
         id: conversation.id,
         userId: ownerId,
-        title: conversation.title,
+        // v1.39.3 — the title is stored encrypted; the readable column is
+        // never written on a restore.
+        titleEncrypted: resolveTitleBytes(conversation),
         // Verbatim. See the file header: this is the one field whose loss is a
         // security regression rather than a gap in the history.
         documentScoped: conversation.documentScoped,
@@ -418,6 +455,15 @@ function resolveTurnBytes(
     return decodeBase64(message.contentEncrypted);
   }
   return encryptToBytes(message.content ?? "");
+}
+
+function resolveTitleBytes(
+  conversation: RestoredCoachConversation,
+): Uint8Array<ArrayBuffer> {
+  if (conversation.titleEncrypted !== undefined) {
+    return decodeBase64(conversation.titleEncrypted);
+  }
+  return encryptToBytes(conversation.title ?? "");
 }
 
 function resolveSummaryBytes(

@@ -4,7 +4,11 @@ import type { AddressInfo } from "node:net";
 
 import { expect, test } from "./setup/test";
 
-import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { E2E_USER, STORAGE_STATE_PATH } from "./setup/global-setup";
+import {
+  completeReproofWithPassword,
+  useStaleSession,
+} from "./setup/recent-proof";
 import { SSR_PREFETCH_BASE_URL } from "./setup/ssr-prefetch-server";
 
 /**
@@ -20,6 +24,11 @@ import { SSR_PREFETCH_BASE_URL } from "./setup/ssr-prefetch-server";
  * It runs against the second server, the one started with `APP_URL`: the MCP
  * surface fails closed without a configured origin. The callback is a local
  * loopback listener, which is also what desktop MCP clients register.
+ *
+ * Allowing a connection asks for a sign-in or re-proof within five minutes, so
+ * the journey starts from a session signed in ten minutes ago: the consent
+ * page must withhold the Allow form and link to the confirm page, and the
+ * person confirms with their password there before they can allow.
  */
 test.describe("MCP OAuth consent", () => {
   test.use({
@@ -94,14 +103,34 @@ test.describe("MCP OAuth consent", () => {
       authorize.searchParams.set(key, value);
     }
 
-    await page.goto(authorize.toString());
-    const allow = page.getByRole("button", { name: "Allow" });
-    await expect(allow).toBeVisible();
-    await allow.click();
+    const endSession = await useStaleSession(page, E2E_USER.username);
+    try {
+      // Without a recent proof there is no form to allow with, only the way to
+      // give one.
+      await page.goto(authorize.toString());
+      const allow = page.getByRole("button", { name: "Allow" });
+      await expect(
+        page.getByRole("heading", { name: "Confirm it is you" }),
+      ).toBeVisible();
+      await expect(allow).toHaveCount(0);
 
-    await page.waitForURL((url) => url.toString().startsWith(callbackUrl), {
-      timeout: 15_000,
-    });
+      await page.getByRole("link", { name: "Confirm and continue" }).click();
+      await page.waitForURL((url) => url.pathname === "/confirm-access");
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
+      await completeReproofWithPassword(page, E2E_USER.password);
+
+      // The confirm page returns to the exact consent request it came from.
+      await page.waitForURL((url) => url.pathname === authorize.pathname);
+      await expect(allow).toBeVisible();
+      await allow.click();
+
+      await page.waitForURL((url) => url.toString().startsWith(callbackUrl), {
+        timeout: 15_000,
+      });
+    } finally {
+      await endSession();
+    }
+
     const hit = hits.at(-1);
     expect(hit, "the callback listener was never reached").toBeDefined();
     expect(hit!.searchParams.get("code")).toMatch(/^hlac_/);

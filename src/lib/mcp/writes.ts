@@ -36,11 +36,12 @@ import {
   invalidateUserMeasurements,
   invalidateUserMood,
 } from "@/lib/cache/invalidate";
-import { recomputeBucketsForMeasurement } from "@/lib/rollups/measurement-rollups";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
 import { MOOD_ENUM_BY_SCORE } from "@/lib/mood/labels";
 import { getScoreForMood } from "@/lib/validations/mood";
-import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { moodDateKey } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { deriveA1 } from "@/lib/mood/level-a";
 import {
   classifyExternalId,
@@ -349,15 +350,13 @@ export async function logMcpMeasurement(input: {
 
   invalidateUserMeasurements(input.userId, { evict: true });
 
-  // Best-effort rollup refresh — a cache tier, never a write-path invariant.
-  try {
-    await recomputeBucketsForMeasurement(input.userId, input.type, measuredAt);
-  } catch (rollupErr) {
-    getEvent()?.addMeta(
-      "mcp_measurement_rollup_failed",
-      rollupErr instanceof Error ? rollupErr.message : String(rollupErr),
-    );
-  }
+  // Rollup refresh plus the status re-warm, both best-effort — a cache
+  // tier, never a write-path invariant.
+  await afterMeasurementMutation(
+    input.userId,
+    [{ type: input.type, measuredAt }],
+    "mcp",
+  );
 
   await auditLog("mcp.write.measurement", {
     userId: input.userId,
@@ -522,27 +521,16 @@ export async function logMcpBloodPressure(input: {
 
   invalidateUserMeasurements(input.userId, { evict: true });
 
-  // Best-effort rollup refresh for both series — a cache tier, never a
-  // write-path invariant.
-  try {
-    await Promise.all([
-      recomputeBucketsForMeasurement(
-        input.userId,
-        "BLOOD_PRESSURE_SYS",
-        measuredAt,
-      ),
-      recomputeBucketsForMeasurement(
-        input.userId,
-        "BLOOD_PRESSURE_DIA",
-        measuredAt,
-      ),
-    ]);
-  } catch (rollupErr) {
-    getEvent()?.addMeta(
-      "mcp_blood_pressure_rollup_failed",
-      rollupErr instanceof Error ? rollupErr.message : String(rollupErr),
-    );
-  }
+  // Rollup refresh plus the status re-warm for both series, best-effort —
+  // a cache tier, never a write-path invariant.
+  await afterMeasurementMutation(
+    input.userId,
+    [
+      { type: "BLOOD_PRESSURE_SYS", measuredAt },
+      { type: "BLOOD_PRESSURE_DIA", measuredAt },
+    ],
+    "mcp",
+  );
 
   await auditLog("mcp.write.blood_pressure", {
     userId: input.userId,

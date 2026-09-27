@@ -67,8 +67,8 @@ function conditionForType(type: string): FhirCondition {
 describe("illness → SNOMED category coding (v1.18.8)", () => {
   const cases: Array<[string, string, string]> = [
     ["INFECTION", "40733004", "Infectious disease"],
-    ["ALLERGY", "106190000", "Allergy"],
-    ["INJURY", "417163006", "Traumatic AND/OR non-traumatic injury"],
+    ["ALLERGY", "473011001", "Allergic condition"],
+    ["INJURY", "417163006", "Traumatic or non-traumatic injury"],
     ["MENTAL_HEALTH", "74732009", "Mental disorder"],
     ["AUTOIMMUNE", "85828009", "Autoimmune disease"],
     ["CHRONIC", "27624003", "Chronic disease"],

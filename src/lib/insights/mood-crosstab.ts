@@ -17,7 +17,7 @@ import { welchTTest } from "@/lib/insights/correlations";
 import { round } from "@/lib/insights/status-shared";
 import { metricKeyForType } from "@/lib/measurements/cumulative-day-sum";
 import { MS_PER_DAY } from "@/lib/time-constants";
-import { toBerlinYmd } from "@/lib/tz/resolver";
+import { userDayKey } from "@/lib/tz/format";
 import type {
   CrossMetricMeasurement,
   MoodAggregateEntry,
@@ -181,14 +181,9 @@ const CROSSTAB_SUM_TYPES = new Set<string>([
   "ACTIVITY_STEPS",
 ]);
 
-/** Berlin-calendar day key (`YYYY-MM-DD`) for a row's `measuredAt`. */
-function berlinDayKey(measuredAt: Date): string {
-  const { year, month, day } = toBerlinYmd(measuredAt);
-  return `${year}-${month}-${day}`;
-}
-
 /**
- * Build a Berlin-day-keyed metric map with the right aggregation. Energy
+ * Build a metric map keyed by the user's local day, the calendar mood
+ * entries are dated on, with the right aggregation. Energy
  * and step totals are SUMMED per day (HealthKit `stats:` rows are already
  * one daily-total row, so the sum is the total either way); sleep duration
  * is SUMMED across per-stage rows to get the night total; everything else
@@ -198,7 +193,7 @@ function berlinDayKey(measuredAt: Date): string {
  * Cross-source de-dup: before bucketing, the rows for this metric run
  * through the SAME canonical-source picker the analytics steps/sleep path
  * uses (`pickCanonicalSourceRows`, keyed by `metricKeyForType` + the
- * Berlin day key). Without it, the moment two sources report the same day
+ * local day key). Without it, the moment two sources report the same day
  * (Fitbit + Apple steps, Fitbit + WHOOP sleep) the SUM channels would
  * double-count and bias the Welch delta. The picker collapses each day to
  * one source (and one device-type within it), so the sum reflects one
@@ -211,7 +206,10 @@ export function metricDayMap(
   measurements: CrossMetricMeasurement[],
   type: string,
   userPriorityJson: unknown,
+  /** The user's zone: days are the user's own calendar days. */
+  timeZone: string,
 ): Map<string, number> {
+  const dayKeyOf = (d: Date) => userDayKey(d, timeZone);
   const summed = CROSSTAB_SUM_TYPES.has(type);
 
   const typeRows = measurements.filter((m) => m.type === type);
@@ -235,13 +233,13 @@ export function metricDayMap(
         })),
         metricKey,
         userPriorityJson,
-        berlinDayKey,
+        dayKeyOf,
       ).canonicalRows
     : typeRows;
 
   const byDay = new Map<string, { sum: number; count: number }>();
   for (const m of canonicalRows) {
-    const key = berlinDayKey(m.measuredAt);
+    const key = dayKeyOf(m.measuredAt);
     const cur = byDay.get(key) ?? { sum: 0, count: 0 };
     cur.sum += m.value;
     cur.count += m.count ?? 1;
@@ -297,6 +295,8 @@ export function computeTagMetricCrosstab(args: {
    * test default) resolves to the default ladders.
    */
   userPriorityJson?: unknown;
+  /** The user's zone, the calendar the metric days are cut on. */
+  timeZone: string;
 }): TagMetricCrosstabRow[] {
   const { entries, measurements, now } = args;
   const windowDays = args.windowDays ?? 365;
@@ -319,7 +319,12 @@ export function computeTagMetricCrosstab(args: {
   for (const [metricKey, cfg] of Object.entries(CROSSTAB_METRICS) as Array<
     [CrosstabMetricKey, (typeof CROSSTAB_METRICS)[CrosstabMetricKey]]
   >) {
-    const metricByDay = metricDayMap(measurements, cfg.type, userPriorityJson);
+    const metricByDay = metricDayMap(
+      measurements,
+      cfg.type,
+      userPriorityJson,
+      args.timeZone,
+    );
     if (metricByDay.size === 0) continue;
 
     for (const [tagKey, ref] of structuredMeta) {
@@ -609,6 +614,8 @@ export function computeFactorMetricCrosstab(args: {
   now: Date;
   windowDays?: number;
   userPriorityJson?: unknown;
+  /** The user's zone, the calendar the metric days are cut on. */
+  timeZone: string;
 }): FactorMetricCrosstabRow[] {
   const { entries, measurements, now } = args;
   const windowDays = args.windowDays ?? 365;
@@ -627,7 +634,12 @@ export function computeFactorMetricCrosstab(args: {
       (typeof FACTOR_CROSSTAB_METRICS)[FactorCrosstabMetricKey],
     ]
   >) {
-    const metricByDay = metricDayMap(measurements, cfg.type, userPriorityJson);
+    const metricByDay = metricDayMap(
+      measurements,
+      cfg.type,
+      userPriorityJson,
+      args.timeZone,
+    );
     if (metricByDay.size === 0) continue;
 
     for (const [factorKey, series] of factorSeries) {

@@ -1,4 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// The client's destination policy has its own suite
+// (`local-host-allowlist.test.ts`, `local-client-egress.test.ts`). Here the
+// grant is stubbed to "no policy" so the request shape can be asserted
+// against the stubbed global fetch; the pinned dispatchers drive undici's own
+// fetch, which a global stub cannot see.
+vi.mock("../local-host-allowlist", () => ({ aiEgressPolicyFor: () => ({}) }));
 import {
   LocalOpenAICompatibleClient,
   resetLocalJsonDialectCache,
@@ -8,10 +15,6 @@ import { singleUserTurn } from "../types";
 describe("LocalOpenAICompatibleClient", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    // These tests cover the operator-opt-in path (LM Studio / Ollama on
-    // an RFC1918 host). The safeFetch wrapper enforces the SSRF guard
-    // unless the operator explicitly accepts a private host.
-    vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "true");
     // v1.28.28 (#470) — the JSON dialect is cached per baseUrl for the
     // process; clear it so each test starts from the default dialect.
     resetLocalJsonDialectCache();

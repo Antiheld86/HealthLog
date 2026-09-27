@@ -5,17 +5,25 @@
  * session or a Bearer token presenting a single-use step-up elevation; a token
  * on its own can never enrol MFA. Returns the SimpleWebAuthn creation options +
  * the server-issued challenge id to present back at /register/verify.
+ *
+ * The cookie arm additionally passes `checkCookieEnrollmentProof`: a session
+ * alone cannot add a security key, for the same reason it cannot enroll TOTP —
+ * the new key would satisfy every step-up gate from then on. On an account that
+ * already has a second factor, both arms want that factor (or a passkey): a
+ * password, or a session that skipped the factor on a remembered browser, does
+ * not add a key.
  */
 import { apiHandler, requireMfaManagementAuth } from "@/lib/api-handler";
-import { apiError, apiSuccess } from "@/lib/api-response";
+import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
+import { checkCookieEnrollmentProof } from "@/lib/auth/existing-factor-proof";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { createMfaRegistrationOptions } from "@/lib/auth/mfa/webauthn";
 
 export const dynamic = "force-dynamic";
 
-export const POST = apiHandler(async () => {
-  const auth = await requireMfaManagementAuth();
+export const POST = apiHandler(async (req: Request) => {
+  const auth = await requireMfaManagementAuth({ freshFactorIfEnrolled: true });
   const { user } = auth;
 
   const rl = await checkRateLimit(
@@ -29,6 +37,17 @@ export const POST = apiHandler(async () => {
       res.headers.set(k, v);
     }
     return res;
+  }
+
+  if (auth.transport === "cookie") {
+    const refusal = await checkCookieEnrollmentProof({
+      user,
+      sessionId: auth.session.id,
+      request: req,
+      ipAddress: getClientIp(req),
+      stage: "security_key_enroll",
+    });
+    if (refusal) return refusal;
   }
 
   await auth.commitElevation();

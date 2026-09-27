@@ -11,7 +11,7 @@
  *   2. the legacy helpers in `src/lib/format.ts` (plain functions, no React
  *      context) render the same zone as hook-based call sites.
  *
- * Fallback chain: valid mirrored profile zone → `DISPLAY_TIMEZONE`
+ * Fallback chain: valid mirrored profile zone → `DEFAULT_TIMEZONE`
  * (Europe/Berlin) inside `makeFormatters`. Deliberately NO browser-timezone
  * rung — every server-rendered artifact (doctor-report PDF, exports,
  * briefing) resolves profile → Berlin, and a browser rung would let the same
@@ -36,7 +36,7 @@ const CHANGE_EVENT = "healthlog:timezone-change";
 
 /**
  * Best-effort read of the mirrored zone. "" on SSR / no mirror / invalid
- * stored value — callers treat "" as "fall back to `DISPLAY_TIMEZONE`"
+ * stored value — callers treat "" as "fall back to `DEFAULT_TIMEZONE`"
  * (which `makeFormatters` does on its own for an empty `userTz`).
  */
 export function readStoredTimezone(): string {

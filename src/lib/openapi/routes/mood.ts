@@ -60,6 +60,7 @@ import {
   stdResponses,
   updatedAtTokenField,
 } from "./shared";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 // ── Request schemas — annotated for spec emission ────────────────────
 //
@@ -458,7 +459,7 @@ const moodEntryDto = z
     date: z
       .string()
       .describe(
-        "YYYY-MM-DD, anchored to the row's `tz` (legacy rows with `tz: null` read as Europe/Berlin).",
+        `YYYY-MM-DD, anchored to the row's \`tz\` (legacy rows with \`tz: null\` read as ${DEFAULT_TIMEZONE}).`,
       ),
     mood: moodLevelEnum,
     score: z
@@ -501,7 +502,7 @@ const moodEntryDto = z
       .string()
       .nullable()
       .describe(
-        "IANA zone the `date` label is anchored to. Null on legacy rows (read as Europe/Berlin).",
+        `IANA zone the \`date\` label is anchored to. Null on legacy rows (read as ${DEFAULT_TIMEZONE}).`,
       ),
     syncedAt: z.iso.datetime({ offset: true }),
     createdAt: z.iso.datetime({ offset: true }),

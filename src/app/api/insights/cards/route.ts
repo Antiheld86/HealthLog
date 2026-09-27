@@ -34,6 +34,7 @@ import {
 } from "@/lib/analytics/compliance";
 import type { MeasurementType } from "@/generated/prisma/client";
 import { TRACKED_INTAKE_WHERE } from "@/lib/medications/intake-tracking";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type Severity = "alert" | "caution" | "info" | "good";
 
@@ -216,7 +217,7 @@ export const GET = apiHandler(async () => {
       arr.push(e);
       eventsByMed.set(e.medicationId, arr);
     }
-    const tz = user.timezone || "Europe/Berlin";
+    const tz = user.timezone || DEFAULT_TIMEZONE;
     for (const med of activeMeds) {
       const events = eventsByMed.get(med.id) ?? [];
       const mapped = events.map((e) => ({

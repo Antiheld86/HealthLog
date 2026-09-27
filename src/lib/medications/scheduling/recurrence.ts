@@ -4,10 +4,9 @@
  * Single source of truth for "what dose slots does this schedule emit
  * between A and B?" The canonical engine is introduced in this release;
  * the v1.5.0 cut wires only the reminder worker (via
- * `worker-helpers.ts`) through it. The today-projector
- * (`expandTodayIntakes`), the cadence chart (`expandScheduleSlots`),
- * and the form-level helpers continue on the legacy walker through
- * v1.5.x and migrate per the read-flip plan. The medication card's
+ * `worker-helpers.ts`) through it. The today-projector, the cadence
+ * chart (`expandScheduleSlots`), and the form-level helpers continue on
+ * the legacy walker through v1.5.x and migrate per the read-flip plan. The medication card's
  * "next intake" line reads the server-computed `nextDueAt` (this engine
  * via `computeNextDueAt`) directly as of v1.8.4.
  *
@@ -30,7 +29,7 @@
  *      are NULL and `oneShot` is false. Decodes the legacy
  *      `daysOfWeek` string via `parseScheduleRecurrence` and emits
  *      weekly slots. **Honours `intervalWeeks > 1` correctly** —
- *      the existing `expandTodayIntakes` skipped it (the legacy
+ *      the retired today-projector walker skipped it (the legacy
  *      bi-weekly worker bug R-3 finding 5 calls out); this engine
  *      anchors the week phase to `startsOn ?? createdAt` and emits
  *      on the matching weeks only.
@@ -60,6 +59,8 @@ import { annotate } from "@/lib/logging/context";
 import { parseScheduleRecurrence } from "@/lib/medication-schedule";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import { startOfLocalDayInTz } from "@/lib/tz/local-day";
+import { tzOffsetMinutes } from "@/lib/tz/format";
+import { startOfUtcDay } from "@/lib/tz/start-of-utc-day";
 import { hhmmToMinutesOrNull } from "@/lib/medications/scheduling/hhmm";
 
 /**
@@ -225,8 +226,8 @@ export function occurrencesBetween(
 
 /**
  * v1.7.0 — true when `instant` falls in an "on" week of the cyclic
- * on/off phase. The anchor is the medication's `startsOn ?? createdAt`,
- * snapped to its UTC week start. `phase = weeksFromAnchor mod
+ * on/off phase. The anchor is the local calendar day of the medication's
+ * `startsOn ?? createdAt`; a week is seven calendar days from it. `phase = weeksFromAnchor mod
  * (on + off)`; the slot survives iff `phase < on`. A non-positive or
  * missing `cyclicOnWeeks` keeps every slot (defensive — the route + Zod
  * require a positive value for CYCLIC, but the engine never throws on a
@@ -243,11 +244,13 @@ function isInCyclicOnWeek(
   const cycleLen = onWeeks + offWeeks;
   if (cycleLen <= 0) return true;
 
-  const anchor = ctx.medication.startsOn ?? ctx.medication.createdAt;
-  const anchorWeekStart = startOfUtcWeek(anchor).getTime();
-  const instantWeekStart = startOfUtcWeek(instant).getTime();
-  const weeksFromAnchor = Math.round(
-    (instantWeekStart - anchorWeekStart) / WEEK_MS,
+  // Whole weeks counted in the user's calendar from the start day itself:
+  // "three weeks on" starting on a Wednesday is 21 consecutive days, and the
+  // slot's day is its local day, not the UTC day its instant falls on.
+  const anchorDay = anchorCivilDay(ctx).getTime();
+  const slotDay = civilDayOfInstant(instant, ctx.timeZone).getTime();
+  const weeksFromAnchor = Math.floor(
+    Math.round((slotDay - anchorDay) / DAY_MS) / 7,
   );
   const phase = ((weeksFromAnchor % cycleLen) + cycleLen) % cycleLen;
   return phase < onWeeks;
@@ -272,10 +275,15 @@ export function nextOccurrenceAfter(
   // v1.7.0 — PRN never has a next due instant.
   if (schedule.scheduleType === "PRN") return null;
 
-  const endsOn = ctx.medication.endsOn;
+  const endsOnDay = endsOnCivilDay(ctx);
   const hardCap = new Date(after.getTime() + 365 * 10 * DAY_MS);
-  const limit = endsOn
-    ? new Date(Math.min(endOfUtcDay(endsOn).getTime(), hardCap.getTime()))
+  const limit = endsOnDay
+    ? new Date(
+        Math.min(
+          endOfCivilDayInstant(endsOnDay, ctx.timeZone).getTime(),
+          hardCap.getTime(),
+        ),
+      )
     : hardCap;
 
   const cyclic = schedule.scheduleType === "CYCLIC";
@@ -331,7 +339,7 @@ export function nextOccurrenceAfter(
     // day short and re-clips the very slot it meant to admit. `endsOn` stays
     // enforced inside `expandRolling`, so a course-window reminder still
     // self-expires.
-    const rollingSlotInstant = applyTimeOfDayToDate(
+    const rollingSlotInstant = applyTimeOfDayToCivilDay(
       rollingDoseAnchor(schedule, ctx),
       schedule.timesOfDay[0] ?? schedule.windowStart,
       ctx.timeZone,
@@ -403,11 +411,11 @@ function expandOneShot(
   from: Date,
   to: Date,
 ): Occurrence[] {
-  const anchor = ctx.medication.startsOn ?? ctx.medication.createdAt;
+  const anchor = anchorCivilDay(ctx);
   const times = effectiveTimesOfDay(schedule);
   const slots: Occurrence[] = [];
   for (const time of times) {
-    const at = applyTimeOfDayToDate(anchor, time, ctx.timeZone);
+    const at = applyTimeOfDayToCivilDay(anchor, time, ctx.timeZone);
     if (at.getTime() < from.getTime() || at.getTime() > to.getTime()) continue;
     slots.push(buildOccurrence(at, time, schedule));
   }
@@ -460,17 +468,25 @@ function rollingDoseAnchor(
   ctx: RecurrenceContext,
 ): Date {
   const intervalDays = schedule.rollingIntervalDays ?? 0;
+  // N calendar days after the local day of the last intake, not N × 24 h:
+  // a late-evening dose across a DST change would otherwise slide onto the
+  // wrong day.
   return ctx.lastIntakeAt !== null
-    ? new Date(ctx.lastIntakeAt.getTime() + intervalDays * DAY_MS)
-    : (ctx.medication.startsOn ?? ctx.medication.createdAt);
+    ? addCivilDays(
+        civilDayOfInstant(ctx.lastIntakeAt, ctx.timeZone),
+        intervalDays,
+      )
+    : anchorCivilDay(ctx);
 }
 
 function rollingDoseDayFloor(
   schedule: CanonicalSchedule,
   ctx: RecurrenceContext,
 ): number {
-  const anchor = rollingDoseAnchor(schedule, ctx);
-  return startOfLocalDayInTz(anchor, ctx.timeZone).getTime();
+  return startOfCivilDayInstant(
+    rollingDoseAnchor(schedule, ctx),
+    ctx.timeZone,
+  ).getTime();
 }
 
 function expandRolling(
@@ -486,16 +502,14 @@ function expandRolling(
   // FIRST dose is the start date itself (no `+ N`) — see the doc comment.
   const nextDue = rollingDoseAnchor(schedule, ctx);
 
-  // endsOn cap.
-  if (
-    ctx.medication.endsOn &&
-    nextDue.getTime() > endOfUtcDay(ctx.medication.endsOn).getTime()
-  ) {
+  // endsOn cap — both sides are calendar days.
+  const endsOnDay = endsOnCivilDay(ctx);
+  if (endsOnDay && nextDue.getTime() > endsOnDay.getTime()) {
     return [];
   }
 
   const time = schedule.timesOfDay[0] ?? schedule.windowStart;
-  const at = applyTimeOfDayToDate(nextDue, time, ctx.timeZone);
+  const at = applyTimeOfDayToCivilDay(nextDue, time, ctx.timeZone);
   if (at.getTime() < from.getTime() || at.getTime() > to.getTime()) return [];
 
   return [buildOccurrence(at, time, schedule)];
@@ -515,14 +529,15 @@ export function advanceRollingOccurrence(
   const n = schedule.rollingIntervalDays;
   if (n === null || n <= 0) return null;
   const time = schedule.timesOfDay[0] ?? schedule.windowStart;
-  const nextDay = new Date(occurrence.at.getTime() + n * DAY_MS);
-  const at = applyTimeOfDayToDate(nextDay, time, ctx.timeZone);
-  if (
-    ctx.medication.endsOn &&
-    at.getTime() > endOfUtcDay(ctx.medication.endsOn).getTime()
-  ) {
+  const nextDay = addCivilDays(
+    civilDayOfInstant(occurrence.at, ctx.timeZone),
+    n,
+  );
+  const endsOnDay = endsOnCivilDay(ctx);
+  if (endsOnDay && nextDay.getTime() > endsOnDay.getTime()) {
     return null;
   }
+  const at = applyTimeOfDayToCivilDay(nextDay, time, ctx.timeZone);
   return buildOccurrence(at, time, schedule);
 }
 
@@ -586,8 +601,9 @@ export function expandRollingRetrospective(
   // Tolerance: a gap up to 1.5·N is "on time" (a dose logged a little
   // late). Only a gap strictly beyond this synthesizes skipped cycles.
   const gapToleranceMs = 1.5 * cycleMs;
-  const endsCap = ctx.medication.endsOn
-    ? endOfUtcDay(ctx.medication.endsOn).getTime()
+  const endsOnDay = endsOnCivilDay(ctx);
+  const endsCap = endsOnDay
+    ? endOfCivilDayInstant(endsOnDay, ctx.timeZone).getTime()
     : Infinity;
 
   const inWindow = (at: Date): boolean =>
@@ -616,11 +632,21 @@ export function expandRollingRetrospective(
     const gap = next.getTime() - prev.getTime();
     if (gap <= gapToleranceMs) continue;
     // Number of whole cycles the user skipped: floor(gap/N) − 1 missed
-    // cycles sit strictly between the two intakes.
-    const cyclesInGap = Math.floor(gap / cycleMs);
+    // cycles sit strictly between the two intakes. Counted in calendar
+    // days, so a gap spanning a DST change (one hour short) still counts
+    // its last cycle.
+    const prevDay = civilDayOfInstant(prev, ctx.timeZone);
+    const gapDays = Math.round(
+      (civilDayOfInstant(next, ctx.timeZone).getTime() - prevDay.getTime()) /
+        DAY_MS,
+    );
+    const cyclesInGap = Math.floor(gapDays / n);
     for (let k = 1; k < cyclesInGap; k++) {
-      const anchor = new Date(prev.getTime() + k * cycleMs);
-      const at = applyTimeOfDayToDate(anchor, time, ctx.timeZone);
+      const at = applyTimeOfDayToCivilDay(
+        addCivilDays(prevDay, k * n),
+        time,
+        ctx.timeZone,
+      );
       if (inWindow(at)) {
         slots.push(buildOccurrence(at, time, schedule));
       }
@@ -639,12 +665,16 @@ export function expandRollingRetrospective(
   const forwardToleranceMs = cycleMs / 2;
   const lastInstant =
     sorted.length > 0 ? sorted[sorted.length - 1] : ctx.lastIntakeAt;
+  const nextDueDay =
+    lastInstant !== null
+      ? addCivilDays(civilDayOfInstant(lastInstant, ctx.timeZone), n)
+      : anchorCivilDay(ctx);
   const nextDue =
     lastInstant !== null
       ? new Date(lastInstant.getTime() + cycleMs)
-      : (ctx.medication.startsOn ?? ctx.medication.createdAt);
+      : startOfCivilDayInstant(nextDueDay, ctx.timeZone);
   if (now.getTime() - nextDue.getTime() > forwardToleranceMs) {
-    const at = applyTimeOfDayToDate(nextDue, time, ctx.timeZone);
+    const at = applyTimeOfDayToCivilDay(nextDueDay, time, ctx.timeZone);
     // Dedupe: a forward slot already represented by a logged intake (the
     // intake re-anchored exactly N days out) must not double-count.
     const alreadyPresent = slots.some(
@@ -671,16 +701,21 @@ function expandRrule(
   const rruleStr = schedule.rrule;
   if (!rruleStr) return [];
 
-  const dtstart = ctx.medication.startsOn ?? ctx.medication.createdAt;
-  const dtstartLine = `DTSTART:${formatUtcBasic(startOfUtcDay(dtstart))}`;
+  // The rrule library works in "floating" UTC: DTSTART and every emitted
+  // anchor are calendar days carried as UTC midnight. Keep them that way end
+  // to end — the anchor's day is read from its UTC fields and only then is
+  // the HH:mm materialised in the user's zone. Reading the anchor in the
+  // user's zone instead turned Monday 00:00Z into Sunday evening west of UTC.
+  const dtstartLine = `DTSTART:${formatUtcBasic(anchorCivilDay(ctx))}`;
   // Skip the engine-side UNTIL suffix when the user's RRULE already
   // bounds the recurrence with COUNT or UNTIL — RFC 5545 forbids both
   // (and any two-UNTIL collision), and RRule.fromString throws on the
   // duplicate, silently collapsing the schedule to zero slots.
   const userBoundsRecurrence = /(?:^|;)(?:COUNT|UNTIL)=/.test(rruleStr);
+  const endsOnDay = endsOnCivilDay(ctx);
   const untilSuffix =
-    ctx.medication.endsOn && !userBoundsRecurrence
-      ? `;UNTIL=${formatUtcBasic(endOfUtcDay(ctx.medication.endsOn))}`
+    endsOnDay && !userBoundsRecurrence
+      ? `;UNTIL=${formatUtcBasic(endOfUtcDay(endsOnDay))}`
       : "";
   const full = `${dtstartLine}\nRRULE:${rruleStr}${untilSuffix}`;
 
@@ -697,20 +732,25 @@ function expandRrule(
 
   // Walk a generously padded day-anchor window so a per-day timesOfDay
   // expansion still hits the requested [from, to] after the time-of-day
-  // is applied. The rrule lib's day-anchored dates land at midnight UTC
-  // of the BYDAY/BYMONTHDAY day; the time-of-day might push back across
-  // a day boundary in some timezones, so widen the window by 2 days on
-  // each side.
+  // is applied: a calendar day spans instants up to 14 h either side of
+  // its UTC midnight, so widen the window by 2 days on each side.
   const padded = 2 * DAY_MS;
   const after = new Date(from.getTime() - padded);
   const before = new Date(to.getTime() + padded);
-  const dayAnchors = rule.between(after, before, true);
+  // An RRULE with BYHOUR (the measurement-reminder protocols) emits several
+  // anchors per day; the times of day are expanded per calendar day, so
+  // collapse the anchors to their days first.
+  const dayKeys = new Set<number>();
+  for (const anchor of rule.between(after, before, true)) {
+    dayKeys.add(startOfUtcDay(anchor).getTime());
+  }
 
   const times = effectiveTimesOfDay(schedule);
   const slots: Occurrence[] = [];
-  for (const anchor of dayAnchors) {
+  for (const dayKey of dayKeys) {
+    const day = new Date(dayKey);
     for (const time of times) {
-      const at = applyTimeOfDayToDate(anchor, time, ctx.timeZone);
+      const at = applyTimeOfDayToCivilDay(day, time, ctx.timeZone);
       if (at.getTime() < from.getTime()) continue;
       if (at.getTime() > to.getTime()) continue;
       slots.push(buildOccurrence(at, time, schedule));
@@ -730,17 +770,19 @@ function expandLegacy(
   to: Date,
 ): Occurrence[] {
   const recurrence = parseScheduleRecurrence(schedule.daysOfWeek);
-  const anchor = ctx.medication.startsOn ?? ctx.medication.createdAt;
-  const anchorWeekStartUtc = startOfUtcWeek(anchor).getTime();
+  const anchorWeekStart = startOfCivilWeek(anchorCivilDay(ctx)).getTime();
   const times = effectiveTimesOfDay(schedule);
+  const endsOnDay = endsOnCivilDay(ctx);
 
   const slots: Occurrence[] = [];
-  // Iterate every UTC day in [from-1, to+1] to cover any time-of-day
-  // that might land in [from, to] after applying the local-tz HH:mm.
+  // Iterate every calendar day (carried as UTC midnight) in [from-1, to+1]
+  // to cover any time-of-day that might land in [from, to] once the HH:mm
+  // is materialised in the user's zone. Every comparison below is between
+  // calendar days; only `applyTimeOfDayToCivilDay` touches the zone.
   const start = startOfUtcDay(new Date(from.getTime() - DAY_MS));
   const end = startOfUtcDay(new Date(to.getTime() + DAY_MS));
   const startsOnFloor = ctx.medication.startsOn
-    ? startOfUtcDay(ctx.medication.startsOn).getTime()
+    ? civilDayOfDate(ctx.medication.startsOn).getTime()
     : null;
   for (
     let day = start;
@@ -754,13 +796,12 @@ function expandLegacy(
     if (startsOnFloor !== null && day.getTime() < startsOnFloor) {
       continue;
     }
-    // Day-of-week filter (empty = every day). Use the user's
-    // timezone weekday so the legacy "Mon = 1" encoding aligns with
-    // the user's local-Mon, not UTC-Mon.
-    const localWeekday = wallClockInTz(day, ctx.timeZone).weekday;
+    // Day-of-week filter (empty = every day). `day` IS the user's
+    // calendar day, so its UTC weekday is the local weekday.
+    const weekday = day.getUTCDay();
     if (
       recurrence.daysOfWeek.length > 0 &&
-      !recurrence.daysOfWeek.includes(localWeekday)
+      !recurrence.daysOfWeek.includes(weekday)
     ) {
       continue;
     }
@@ -768,9 +809,9 @@ function expandLegacy(
     // Multi-week interval — the fix vs the legacy worker, which
     // silently ignored intervalWeeks.
     if (recurrence.intervalWeeks > 1) {
-      const dayWeekStart = startOfUtcWeek(day).getTime();
+      const dayWeekStart = startOfCivilWeek(day).getTime();
       const weeksFromAnchor = Math.round(
-        (dayWeekStart - anchorWeekStartUtc) / WEEK_MS,
+        (dayWeekStart - anchorWeekStart) / WEEK_MS,
       );
       const phase =
         ((weeksFromAnchor % recurrence.intervalWeeks) +
@@ -780,15 +821,12 @@ function expandLegacy(
     }
 
     // endsOn cap.
-    if (
-      ctx.medication.endsOn &&
-      day.getTime() > endOfUtcDay(ctx.medication.endsOn).getTime()
-    ) {
+    if (endsOnDay && day.getTime() > endsOnDay.getTime()) {
       continue;
     }
 
     for (const time of times) {
-      const at = applyTimeOfDayToDate(day, time, ctx.timeZone);
+      const at = applyTimeOfDayToCivilDay(day, time, ctx.timeZone);
       if (at.getTime() < from.getTime()) continue;
       if (at.getTime() > to.getTime()) continue;
       slots.push(buildOccurrence(at, time, schedule));
@@ -807,50 +845,114 @@ function effectiveTimesOfDay(schedule: CanonicalSchedule): string[] {
     : [schedule.windowStart];
 }
 
+// ────────────────────────────────────────────────────────────────────
+// Calendar days
+//
+// A "civil day" is a calendar date carried as UTC midnight of its
+// Y/M/D, the same shape Prisma returns for a `@db.Date` column and the
+// rrule library works in. Its UTC fields ARE the calendar date; it is
+// never read in the user's zone. Instants (createdAt, intake times,
+// slot instants) become civil days through `civilDayOfInstant`, which
+// reads them on the user's wall clock. Only `applyTimeOfDayToCivilDay`
+// turns a civil day back into an instant.
+// ────────────────────────────────────────────────────────────────────
+
+/** A `@db.Date` value (UTC midnight of the calendar date) as a civil day. */
+function civilDayOfDate(d: Date): Date {
+  return startOfUtcDay(d);
+}
+
+/** The calendar day an instant falls on in `tz`, as a civil day. */
+function civilDayOfInstant(instant: Date, tz: string): Date {
+  const p = wallClockInTz(instant, tz);
+  return new Date(Date.UTC(p.year, p.month - 1, p.day));
+}
+
+function addCivilDays(day: Date, n: number): Date {
+  return new Date(
+    Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() + n),
+  );
+}
+
 /**
- * Apply an "HH:mm" time-of-day to `day` in the user's IANA timezone,
- * returning the corresponding UTC instant. DST-aware via the two-pass
- * solver pattern from `medication-schedule.ts`.
- *
- * `day` is interpreted as "the day in the user's timezone at which
- * the time-of-day should land" — we read its wall-clock Y/M/D in the
- * target zone, then materialise the instant for that Y/M/D + H/M in
- * that zone. So passing midnight-UTC on the spring-forward day with
- * Europe/Berlin gives the local-Berlin day, not the previous-Berlin
- * day even if the UTC midnight technically falls before the local
- * day boundary.
+ * The schedule's first calendar day: `startsOn` is a calendar date; the
+ * `createdAt` fallback is an instant and so is read on the user's clock.
  */
-function applyTimeOfDayToDate(day: Date, hhmm: string, tz: string): Date {
+function anchorCivilDay(ctx: RecurrenceContext): Date {
+  return ctx.medication.startsOn
+    ? civilDayOfDate(ctx.medication.startsOn)
+    : civilDayOfInstant(ctx.medication.createdAt, ctx.timeZone);
+}
+
+function endsOnCivilDay(ctx: RecurrenceContext): Date | null {
+  return ctx.medication.endsOn ? civilDayOfDate(ctx.medication.endsOn) : null;
+}
+
+/** Local midnight of a civil day (DST-safe, via its local noon). */
+function startOfCivilDayInstant(day: Date, tz: string): Date {
+  return startOfLocalDayInTz(applyTimeOfDayToCivilDay(day, "12:00", tz), tz);
+}
+
+/** The last millisecond of a civil day on the user's clock. */
+function endOfCivilDayInstant(day: Date, tz: string): Date {
+  return new Date(
+    startOfCivilDayInstant(addCivilDays(day, 1), tz).getTime() - 1,
+  );
+}
+
+/** The Sunday that starts the calendar week of a civil day. */
+function startOfCivilWeek(day: Date): Date {
+  return addCivilDays(day, -day.getUTCDay());
+}
+
+/**
+ * Materialise an "HH:mm" on a civil day in the user's IANA timezone,
+ * returning the corresponding UTC instant. DST-aware: a wall-clock time that
+ * does not exist on a spring-forward day resolves forward (02:30 in
+ * Europe/Berlin on 2026-03-29 becomes 03:30).
+ *
+ * The calendar date comes from the civil day's UTC fields and is never
+ * re-read in `tz` — see the section comment above.
+ */
+function applyTimeOfDayToCivilDay(day: Date, hhmm: string, tz: string): Date {
   const [hStr, mStr] = hhmm.split(":");
   const h = Number(hStr);
   const m = Number(mStr);
   if (!Number.isFinite(h) || !Number.isFinite(m)) return day;
 
-  const parts = wallClockInTz(day, tz);
-  let guess = new Date(
-    Date.UTC(parts.year, parts.month - 1, parts.day, h, m, 0, 0),
+  const wall = Date.UTC(
+    day.getUTCFullYear(),
+    day.getUTCMonth(),
+    day.getUTCDate(),
+    h,
+    m,
+    0,
+    0,
   );
-  for (let i = 0; i < 2; i++) {
-    const offsetMin = tzOffsetMinutes(guess, tz);
-    guess = new Date(
-      Date.UTC(parts.year, parts.month - 1, parts.day, h, m, 0, 0) -
-        offsetMin * 60_000,
-    );
+  // Try the zone offset in force a day before and a day after. A candidate
+  // is valid when it reads back as the requested wall clock. On a
+  // fall-back day both are valid and the earlier one wins; on a
+  // spring-forward day neither is, and the pre-transition offset moves the
+  // time forward past the gap. That also covers zones whose clocks skip
+  // midnight itself (America/Santiago), where an iterative solver settled
+  // on the previous evening.
+  const before = new Date(
+    wall - tzOffsetMinutes(new Date(wall - DAY_MS), tz) * 60_000,
+  );
+  const after = new Date(
+    wall - tzOffsetMinutes(new Date(wall + DAY_MS), tz) * 60_000,
+  );
+  const readsBack = (c: Date): boolean => {
+    const p = wallClockInTz(c, tz);
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) === wall;
+  };
+  const validBefore = readsBack(before);
+  const validAfter = readsBack(after);
+  if (validBefore && validAfter) {
+    return before.getTime() <= after.getTime() ? before : after;
   }
-  return guess;
-}
-
-function tzOffsetMinutes(date: Date, tz: string): number {
-  const parts = wallClockInTz(date, tz);
-  const asIfUtc = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-  );
-  return Math.round((asIfUtc - date.getTime()) / 60_000);
+  if (validAfter) return after;
+  return before;
 }
 
 function buildOccurrence(
@@ -896,12 +998,6 @@ function graceWindowMs(schedule: CanonicalSchedule): number {
 // UTC date helpers (RRULE day-anchor + endsOn cap arithmetic)
 // ────────────────────────────────────────────────────────────────────
 
-function startOfUtcDay(d: Date): Date {
-  return new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0),
-  );
-}
-
 function endOfUtcDay(d: Date): Date {
   return new Date(
     Date.UTC(
@@ -914,12 +1010,6 @@ function endOfUtcDay(d: Date): Date {
       999,
     ),
   );
-}
-
-function startOfUtcWeek(d: Date): Date {
-  const midnight = startOfUtcDay(d);
-  const weekday = midnight.getUTCDay(); // 0 = Sun
-  return new Date(midnight.getTime() - weekday * DAY_MS);
 }
 
 /** RFC 5545 basic-format UTC instant: `YYYYMMDDTHHMMSSZ`. */

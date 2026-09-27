@@ -18,7 +18,12 @@ import { Readable } from "node:stream";
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { apiHandler, HttpError, requireAdmin } from "@/lib/api-handler";
+import {
+  apiHandler,
+  HttpError,
+  requireAdmin,
+  assertRecentCookieProof,
+} from "@/lib/api-handler";
 import { apiError, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -42,7 +47,10 @@ export const GET = apiHandler(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const { user: admin } = await requireAdmin();
+    const { user: admin, session } = await requireAdmin();
+    // A fresh proof on top of the admin session: this reaches every account's
+    // data, so a stolen admin session alone must not be enough.
+    await assertRecentCookieProof(admin, session.id);
     const { id } = await params;
     annotate({ action: { name: "admin.backups.download" }, meta: { id } });
 

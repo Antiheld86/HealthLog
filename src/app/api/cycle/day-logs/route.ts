@@ -40,7 +40,7 @@ import {
 import { upsertCycleDayLog } from "@/lib/cycle/day-log-write";
 import { findOwningCycleId } from "@/lib/cycle/cycle-attribution";
 import { toCycleDayLogDTO, dayLogSymptomInclude } from "@/lib/cycle/dto";
-import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postDayLog));
 

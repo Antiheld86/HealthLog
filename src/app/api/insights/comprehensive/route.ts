@@ -41,7 +41,7 @@ import {
   ensureUserMoodRollupsFresh,
   readMoodDayRollups,
 } from "@/lib/rollups/mood-rollups";
-import { userDayKey } from "@/lib/tz/format";
+import { userDayKey, DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { TRACKED_INTAKE_WHERE } from "@/lib/medications/intake-tracking";
 
 export const dynamic = "force-dynamic";
@@ -125,7 +125,7 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
   // pass in this route (resting-pulse proxy, medication-continuity, BP
   // pairing). Was previously re-derived ad hoc (or hardcoded UTC) at each
   // call site.
-  const userTz = user.timezone || "Europe/Berlin";
+  const userTz = user.timezone || DEFAULT_TIMEZONE;
 
   // Fetch user profile (height + DOB drive BMI + BP targets).
   const dbUser = await prisma.user.findUnique({
@@ -445,7 +445,7 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
     const medicationContext = buildComplianceMedicationContext(
       med,
       lastNonSkippedTakenAt(mapped),
-      user.timezone || "Europe/Berlin",
+      user.timezone || DEFAULT_TIMEZONE,
     );
     const c7 = calculateCompliance(mapped, med.schedules, 7, med.createdAt, {
       medicationContext,

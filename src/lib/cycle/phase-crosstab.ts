@@ -183,6 +183,8 @@ export function computePhaseMetricCrosstab(args: {
   measurements: CrossMetricMeasurement[];
   /** The user's source-priority blob (threaded into `metricDayMap`). */
   userPriorityJson?: unknown;
+  /** The user's zone, the calendar the phase days are keyed on. */
+  timeZone: string;
 }): PhaseMetricCrosstabRow[] {
   const { phaseByDay, measurements } = args;
   const userPriorityJson = args.userPriorityJson ?? null;
@@ -198,7 +200,12 @@ export function computePhaseMetricCrosstab(args: {
       (typeof PHASE_CROSSTAB_METRICS)[PhaseCrosstabMetricKey],
     ]
   >) {
-    const metricByDay = metricDayMap(measurements, cfg.type, userPriorityJson);
+    const metricByDay = metricDayMap(
+      measurements,
+      cfg.type,
+      userPriorityJson,
+      args.timeZone,
+    );
     if (metricByDay.size === 0) continue;
 
     const lutealVals: number[] = [];
@@ -293,6 +300,8 @@ export function discoverPhaseCorrelations(args: {
   phaseByDay: Map<string, CyclePhase>;
   measurements: CrossMetricMeasurement[];
   userPriorityJson?: unknown;
+  /** The user's zone, the calendar the phase days are keyed on. */
+  timeZone: string;
   /**
    * The reader's locale. Each surviving row carries a finished `interpretation`
    * sentence that the cycle route serves straight to the client, so it has to
@@ -307,7 +316,12 @@ export function discoverPhaseCorrelations(args: {
   const phaseSeries = buildPhaseDiscoverySeries(phaseByDay);
   const outcomeSeries: NamedSeries[] = [];
   for (const [, cfg] of Object.entries(PHASE_CROSSTAB_METRICS)) {
-    const byDay = metricDayMap(measurements, cfg.type, userPriorityJson);
+    const byDay = metricDayMap(
+      measurements,
+      cfg.type,
+      userPriorityJson,
+      args.timeZone,
+    );
     if (byDay.size === 0) continue;
     const points: DailySeriesPoint[] = [];
     for (const [day, value] of byDay) points.push({ day, value });

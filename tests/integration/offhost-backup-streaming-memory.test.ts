@@ -273,7 +273,9 @@ describe("off-host backup under a memory budget", () => {
     ).toBeLessThan(STREAM_BUDGET_BYTES);
 
     // An object that writes but does not read is worse than none.
-    const restored = JSON.parse(decryptBackup(s3.kept!, BACKUP_KEY)) as {
+    const restored = JSON.parse(
+      decryptBackup(s3.kept!, BACKUP_KEY, objectKey),
+    ) as {
       measurements: Array<{ deletedAt: string | null }>;
       moodEntries: unknown[];
       intakeEvents: unknown[];

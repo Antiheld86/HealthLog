@@ -41,6 +41,7 @@ import {
 } from "@/lib/insights/correlation-patterns";
 import { assembleDiscoveryMatrix } from "@/lib/insights/discovery-matrix";
 import { fetchLabDraws } from "@/lib/insights/correlation-channel-series";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 export const dynamic = "force-dynamic";
 
@@ -115,7 +116,7 @@ async function buildCorrelationsResponse(
     where: { id: userId },
     select: { timezone: true },
   });
-  const tz = profile?.timezone ?? "Europe/Berlin";
+  const tz = profile?.timezone ?? DEFAULT_TIMEZONE;
   const now = new Date();
   const since = new Date(now.getTime() - WINDOW_DAYS * MS_PER_DAY);
 

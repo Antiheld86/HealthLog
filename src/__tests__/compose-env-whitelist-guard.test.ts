@@ -23,10 +23,11 @@
  *
  * ## Why the matchers are what they are
  *
- * A grep for `process.env.X` alone is not the read set. Four modules resolve a
- * name through a helper and index `process.env` dynamically, so their reads
- * are invisible to the direct matcher — `ALLOW_LOCAL_AI_PRIVATE_HOSTS` and
- * every `OIDC_*` among them. Each is registered below with its own call-shape
+ * A grep for `process.env.X` alone is not the read set. Three modules resolve
+ * a name through a helper and index `process.env` dynamically, so their reads
+ * are invisible to the direct matcher — every `OIDC_*` among them. (The AI
+ * private-host grants were a fourth until v1.39.3, when they became direct
+ * `process.env` reads.) Each is registered below with its own call-shape
  * matcher AND its own non-zero assertion, so a refactor that renames the
  * helper fails this file loudly instead of quietly shrinking the read set.
  *
@@ -45,6 +46,13 @@ const SRC = join(ROOT, "src");
 /** `process.env.NAME` and `process.env["NAME"]`. */
 const DIRECT_READ =
   /process\.env(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*["'`]([A-Za-z_][A-Za-z0-9_]*)["'`]\s*\])/g;
+
+/**
+ * `envValue("NAME")`, `envOr("NAME", …)` and `envFlag("NAME")` from
+ * `src/lib/env.ts` — the one helper every read with a fallback goes through,
+ * so its call shape is a read wherever it appears. Asserted non-empty in T2.
+ */
+const HELPER_READ = /\benv(?:Value|Or|Flag)\(\s*["'`]([A-Z][A-Z0-9_]*)["'`]/g;
 
 /**
  * Modules that index `process.env` through a variable rather than a literal.
@@ -71,12 +79,6 @@ const INDIRECT_READERS: ReadonlyArray<{
     pattern: /intEnv\(\s*["']([A-Z][A-Z0-9_]*)["']/g,
     minimum: 1,
     why: "the retention windows are parsed through a local intEnv() helper",
-  },
-  {
-    file: "lib/ai/local-host-allowlist.ts",
-    pattern: /ENV_VAR\s*=\s*["']([A-Z][A-Z0-9_]*)["']/g,
-    minimum: 1,
-    why: "the name is hoisted into an ENV_VAR constant, then indexed",
   },
   {
     file: "lib/boot/readiness-summary.ts",
@@ -154,6 +156,7 @@ function runtimeReads(): Set<string> {
   for (const rel of sourceFiles()) {
     const src = read(rel);
     for (const m of src.matchAll(DIRECT_READ)) names.add(m[1] ?? m[2]);
+    for (const m of src.matchAll(HELPER_READ)) names.add(m[1]);
   }
   for (const reader of INDIRECT_READERS) {
     for (const m of read(reader.file).matchAll(reader.pattern)) names.add(m[1]);
@@ -191,6 +194,13 @@ describe("compose env whitelist", () => {
   });
 
   it("T2 — every indirect reader still matches its call shape", () => {
+    const helperReads = sourceFiles().flatMap((rel) =>
+      [...read(rel).matchAll(HELPER_READ)].map((m) => m[1]),
+    );
+    // The env helper is the common path for reads with a fallback; a matcher
+    // that stopped seeing it would drop those names from the read set.
+    expect(helperReads.length).toBeGreaterThan(10);
+    expect(helperReads).toContain("IP_GEO_LOOKUP_URL");
     for (const reader of INDIRECT_READERS) {
       const found = [...read(reader.file).matchAll(reader.pattern)].map(
         (m) => m[1],

@@ -5,6 +5,7 @@ import {
   retiredRouteEnvelope,
   RETIRED_ROUTE_STATUS,
 } from "@/lib/http/retired-routes";
+import { setBaselineSecurityHeaders } from "@/lib/http/proxy-bypass-routes";
 
 /**
  * Paths that do NOT require a session cookie (public pages + external webhooks).
@@ -289,21 +290,7 @@ function generateNonce(): string {
  * routes that only make sense for a response with a body to protect.
  */
 function applyBaselineSecurityHeaders(response: NextResponse): NextResponse {
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set(
-    "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=()",
-  );
-  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
-  response.headers.set("X-Permitted-Cross-Domain-Policies", "none");
-  if (process.env.NODE_ENV !== "development") {
-    response.headers.set(
-      "Strict-Transport-Security",
-      "max-age=31536000; includeSubDomains; preload",
-    );
-  }
+  setBaselineSecurityHeaders(response.headers);
   return response;
 }
 
@@ -647,6 +634,21 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/settings/integrations/strava") ||
     pathname.startsWith("/api/strava/");
   const stravaConnectSrc = isStravaRoute ? " https://www.strava.com" : "";
+  // Local lab OCR runs tesseract's WebAssembly engine in a same-origin worker
+  // served from `/tesseract/`. A worker runs under the CSP delivered with its
+  // own script, so compiling the WebAssembly needs `'wasm-unsafe-eval'` on
+  // that response. It is also granted on the two pages that start the OCR
+  // (`/labs` for lab scans, `/documents` for document text), in case the
+  // engine compiles on the page. Nowhere else: `'wasm-unsafe-eval'` allows
+  // compiling WebAssembly, not `eval`, but a page that never runs the engine
+  // has no reason to carry it. (A client-side navigation keeps the CSP of
+  // the page first loaded, which is why the worker script's own response is
+  // the grant that matters.)
+  const isLocalOcrSurface =
+    pathname.startsWith("/tesseract/") ||
+    pathname === "/labs" ||
+    pathname === "/documents";
+  const wasmScriptSrc = isLocalOcrSurface ? " 'wasm-unsafe-eval'" : "";
   // v1.5.5 — Gravatar host removed from `img-src`. The /me payload
   // used to return `gravatarUrl: https://www.gravatar.com/avatar/<sha256(email)>`,
   // which leaked the email digest to Automattic on every authenticated
@@ -682,7 +684,7 @@ export function proxy(request: NextRequest) {
       // is barred by the record-fence guard.
       isDev
       ? `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; connect-src 'self'; font-src 'self';`
-      : `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; connect-src 'self'${aiConnectSrc}${withingsConnectSrc}${whoopConnectSrc}${stravaConnectSrc}; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self'; report-uri ${cspReportEndpoint}; report-to csp-endpoint;`;
+      : `default-src 'self'; script-src 'self' 'nonce-${nonce}'${wasmScriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; connect-src 'self'${aiConnectSrc}${withingsConnectSrc}${whoopConnectSrc}${stravaConnectSrc}; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self'; report-uri ${cspReportEndpoint}; report-to csp-endpoint;`;
   // The MCP OAuth authorization endpoint sets its own CSP. Its consent form
   // posts to this origin and the server then redirects to the connecting
   // client's `redirect_uri`; Chromium applies `form-action` to that redirect,
@@ -715,7 +717,14 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Apply to all routes except static files, Next.js internals, SW, and manifest
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|txt|xml)$).*)",
+    // Apply to all routes except static files, Next.js internals, SW, and
+    // manifest — and except the large-upload API routes listed in
+    // `src/lib/http/proxy-bypass-routes.ts`. Next reads a request body into
+    // memory for the proxy before the route runs, so a route whose body may
+    // exceed `proxyClientMaxBodySize` (1 MB, next.config.ts) is left out of
+    // the matcher and `apiHandler` performs the proxy's duties for it. The
+    // alternation must stay equal to that list; `proxy-body-limit.test.ts`
+    // compiles this exactly as Next does and checks.
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|robots\\.txt|sitemap\\.xml|api/(?:import(?:/csv|/apple-health-export)?|admin/import-apple-health-export|admin/backups/upload|documents/inbound|medications/intake/(?:dose-history-import|bulk)|labs/ocr/extract|user/avatar|measurements/batch|workouts/batch|insights/ecg|mood-entries/bulk|cycle/day-logs/bulk)/?$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|txt|xml)$).*)",
   ],
 };

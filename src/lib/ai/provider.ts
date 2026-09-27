@@ -55,7 +55,19 @@ type UserAIRow = {
   aiCompatBaseUrl: string | null;
   aiCompatKeyEncrypted: string | null;
   aiCompatModel: string | null;
+  /**
+   * v1.39.3 — the owning account's role. Provider settings saved on an admin
+   * account are the operator's own, and only those (plus the instance-wide
+   * admin provider) are still covered by the deprecated
+   * `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true`.
+   */
+  role: string;
 };
+
+/** v1.39.3 — see `UserAIRow.role`. */
+function isOperatorOwned(row: { role: string } | null | undefined): boolean {
+  return row?.role === "ADMIN";
+}
 
 /**
  * v1.33.1 (#470) — build the OpenAI-compatible gateway client from the user's
@@ -83,6 +95,7 @@ function buildCompatProvider(row: {
   aiCompatBaseUrl: string | null;
   aiCompatKeyEncrypted: string | null;
   aiCompatModel: string | null;
+  role: string;
 }): AIProvider | null {
   const model = row.aiCompatModel?.trim() || row.aiModel?.trim() || null;
   if (!row.aiCompatBaseUrl || !model) return null;
@@ -91,6 +104,7 @@ function buildCompatProvider(row: {
     model,
     baseUrl: row.aiCompatBaseUrl,
     providerType: "openai-compatible",
+    operatorTrusted: isOperatorOwned(row),
   });
 }
 
@@ -122,6 +136,7 @@ function buildUserProvider(row: UserAIRow): AIProvider | null {
           : null,
         model: row.aiModel ?? "local-model",
         baseUrl: row.aiBaseUrl,
+        operatorTrusted: isOperatorOwned(row),
       });
     }
     case "OPENAI_COMPATIBLE": {
@@ -212,6 +227,8 @@ async function resolveAdminProvider(): Promise<AIProvider> {
       apiKey: decrypt(settings.adminAiKeyEncrypted),
       model: settings.adminAiModel ?? "gpt-4o",
       baseUrl,
+      // The instance-wide provider is the operator's own configuration.
+      operatorTrusted: true,
     });
   }
 
@@ -480,6 +497,7 @@ export async function resolveProvider(userId: string): Promise<AIProvider> {
       aiCompatBaseUrl: true,
       aiCompatKeyEncrypted: true,
       aiCompatModel: true,
+      role: true,
       managedProfileAt: true,
     },
   });
@@ -548,6 +566,7 @@ export async function resolveProviderChain(
       aiCompatBaseUrl: true,
       aiCompatKeyEncrypted: true,
       aiCompatModel: true,
+      role: true,
       aiProviderChain: true,
       useCentralCodex: true,
       managedProfileAt: true,
@@ -1023,6 +1042,7 @@ async function resolveProviderForType(
       aiCompatBaseUrl: string | null;
       aiCompatKeyEncrypted: string | null;
       aiCompatModel: string | null;
+      role: string;
     } | null;
     policy: ProviderCredentialPolicy;
   },
@@ -1062,6 +1082,7 @@ async function resolveProviderForType(
           : null,
         model: ctx.userRow.aiModel ?? "local-model",
         baseUrl: ctx.userRow.aiBaseUrl,
+        operatorTrusted: isOperatorOwned(ctx.userRow),
       });
     }
     case "openai-compatible": {
@@ -1138,8 +1159,12 @@ export async function resolveProviderForTest(
       aiCompatBaseUrl: true,
       aiCompatKeyEncrypted: true,
       aiCompatModel: true,
+      role: true,
     },
   });
+  // v1.39.3 — an unsaved override is tested under the same owner rule as a
+  // saved one: it belongs to the calling account.
+  const owner = { operatorTrusted: isOperatorOwned(stored) };
 
   const provider = (override.provider ?? stored?.aiProvider ?? "")
     .toString()
@@ -1189,9 +1214,9 @@ export async function resolveProviderForTest(
       if (!baseUrl) {
         throw new AITestConfigError(422, "Local provider requires a base URL");
       }
-      // v1.18.7 (SECURITY LOW) — host allowlist (`true` = any private host;
-      // a comma-separated host list = only those) replaces the binary flag.
-      const allowPrivate = isLocalAiHostAllowed(baseUrl);
+      // A private host only when the operator granted its origin
+      // (`AI_PRIVATE_ORIGINS` or the legacy host list; v1.39.3).
+      const allowPrivate = isLocalAiHostAllowed(baseUrl, owner);
       if (!allowPrivate && !isPublicUrl(baseUrl)) {
         throw new AITestConfigError(
           422,
@@ -1207,6 +1232,7 @@ export async function resolveProviderForTest(
         apiKey,
         model: model || "local-model",
         baseUrl,
+        ...owner,
       });
     }
     case "OPENAI_COMPATIBLE": {
@@ -1227,7 +1253,10 @@ export async function resolveProviderForTest(
           "OpenAI-compatible provider requires a base URL",
         );
       }
-      if (!isLocalAiHostAllowed(compatBaseUrl) && !isPublicUrl(compatBaseUrl)) {
+      if (
+        !isLocalAiHostAllowed(compatBaseUrl, owner) &&
+        !isPublicUrl(compatBaseUrl)
+      ) {
         throw new AITestConfigError(
           422,
           "Base URL points to an internal/private host",
@@ -1253,6 +1282,7 @@ export async function resolveProviderForTest(
         model: compatModel,
         baseUrl: compatBaseUrl,
         providerType: "openai-compatible",
+        ...owner,
       });
     }
     case "CHATGPT_OAUTH": {

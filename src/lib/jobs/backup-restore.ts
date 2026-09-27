@@ -120,12 +120,15 @@ export interface BackupRestoreFailure {
   message: string;
   /** The sections a file's manifest names and it does not carry. */
   sections?: string[];
+  /** The encryption key ids a file needs and this host cannot open it with. */
+  keyIds?: string[];
 }
 
 const failureSchema = z.object({
   code: z.string(),
   message: z.string(),
   sections: z.array(z.string()).optional(),
+  keyIds: z.array(z.string()).optional(),
 });
 
 const progressSchema = z.object({
@@ -308,6 +311,7 @@ function failureJson(failure: BackupRestoreFailure) {
     code: failure.code,
     message: failure.message,
     ...(failure.sections ? { sections: failure.sections } : {}),
+    ...(failure.keyIds ? { keyIds: failure.keyIds } : {}),
   });
 }
 
@@ -632,11 +636,15 @@ export async function runBackupRestoreJob(
     const sections = Array.isArray(outcome.meta?.sections)
       ? (outcome.meta.sections as unknown[]).map(String)
       : undefined;
+    const keyIds = Array.isArray(outcome.meta?.keyIds)
+      ? (outcome.meta.keyIds as unknown[]).map(String)
+      : undefined;
     await finish("failed", {
       failure: {
         code: outcome.code,
         message: outcome.message,
         ...(sections ? { sections } : {}),
+        ...(keyIds ? { keyIds } : {}),
       },
     });
     // A file refused by its checks is the operator's to fix and fails the

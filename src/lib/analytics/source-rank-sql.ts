@@ -147,7 +147,7 @@ export function canonicalMeasurementsCte(
           WHERE "user_id" = $1
             AND "deleted_at" IS NULL
             ${sinceInner}
-          ORDER BY "type", date_trunc('day', "measured_at"), (${rankUnqualified}), "source"
+          ORDER BY "type", date_trunc('day', "measured_at"), (${rankUnqualified}), "source"::text
         ) c
           ON c.t = mm."type"
           AND c.d = date_trunc('day', mm."measured_at")

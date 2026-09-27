@@ -108,7 +108,10 @@ vi.mock("@/lib/notifications/reminder-dedup", () => ({
   REMINDER_DEDUP_LOOKBACK_MS: 48 * 60 * 60 * 1000,
 }));
 
-import { handleReminderCheck } from "@/lib/jobs/reminder/medication-reminder-check";
+import {
+  handleReminderCheck,
+  nextSlotHeldBySnooze,
+} from "@/lib/jobs/reminder/medication-reminder-check";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
 
 function medicationWithSchedule(
@@ -849,5 +852,103 @@ describe("issue #664 — exact occurrence identity survives local midnight", () 
 
     expect(prismaMock.medicationIntakeEvent.create).not.toHaveBeenCalled();
     expect(dispatchNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleReminderCheck — a snooze holds only the slot it answered", () => {
+  function snoozed(at: string): Record<string, unknown> {
+    return {
+      ...medicationWithSchedule({ timesOfDay: ["08:00", "18:00"] }),
+      // A Telegram "skip" of the morning dose snoozes to the end of the day;
+      // the snooze write stamps the row's updatedAt.
+      snoozedUntil: new Date("2026-07-28T23:59:59.000Z"),
+      updatedAt: new Date(at),
+    };
+  }
+
+  it("still reminds the evening dose after the morning one was snoozed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-28T18:40:00.000Z"));
+    prismaMock.medication.findMany.mockResolvedValue([
+      snoozed("2026-07-28T08:30:00.000Z"),
+    ] as never);
+
+    await handleReminderCheck([]);
+
+    expect(dispatchNotification).toHaveBeenCalledTimes(1);
+    expect(dispatchNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ timeOfDay: "18:00" }),
+      }),
+    );
+  });
+
+  it("holds the slot whose reminder was open when the snooze was set", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-28T08:40:00.000Z"));
+    prismaMock.medication.findMany.mockResolvedValue([
+      snoozed("2026-07-28T08:30:00.000Z"),
+    ] as never);
+
+    await handleReminderCheck([]);
+
+    expect(dispatchNotification).not.toHaveBeenCalled();
+  });
+
+  it("holds the next slot when the snooze was set before its window opened", async () => {
+    // "Remind me later" from the app at 06:00 for the 08:00 dose, until
+    // 09:30: no window was open, so the snooze answers the next one.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-28T08:40:00.000Z"));
+    prismaMock.medication.findMany.mockResolvedValue([
+      {
+        ...snoozed("2026-07-28T06:00:00.000Z"),
+        snoozedUntil: new Date("2026-07-28T09:30:00.000Z"),
+      },
+    ] as never);
+
+    await handleReminderCheck([]);
+
+    expect(dispatchNotification).not.toHaveBeenCalled();
+  });
+
+  it("holds only that next slot, not the ones after it", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-28T18:40:00.000Z"));
+    prismaMock.medication.findMany.mockResolvedValue([
+      snoozed("2026-07-28T06:00:00.000Z"),
+    ] as never);
+
+    await handleReminderCheck([]);
+
+    expect(dispatchNotification).toHaveBeenCalledTimes(1);
+    expect(dispatchNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ timeOfDay: "18:00" }),
+      }),
+    );
+  });
+});
+
+describe("nextSlotHeldBySnooze", () => {
+  const w = (start: string, end: string) => ({
+    start: new Date(`2026-07-28T${start}:00.000Z`),
+    end: new Date(`2026-07-28T${end}:00.000Z`),
+  });
+  const windows = [w("18:00", "19:00"), w("08:00", "09:00")];
+
+  it("is nothing while a window is open at the snooze", () => {
+    expect(
+      nextSlotHeldBySnooze(windows, new Date("2026-07-28T08:30:00.000Z")),
+    ).toBeNull();
+  });
+
+  it("is the next window to open when none is", () => {
+    expect(
+      nextSlotHeldBySnooze(windows, new Date("2026-07-28T06:00:00.000Z")),
+    ).toEqual(new Date("2026-07-28T08:00:00.000Z"));
+    expect(
+      nextSlotHeldBySnooze(windows, new Date("2026-07-28T12:00:00.000Z")),
+    ).toEqual(new Date("2026-07-28T18:00:00.000Z"));
   });
 });

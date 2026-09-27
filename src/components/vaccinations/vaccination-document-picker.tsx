@@ -28,6 +28,8 @@ import { FolderOpen } from "lucide-react";
 import { useTranslations } from "@/lib/i18n/context";
 import { EntityLinkPicker } from "@/components/links/entity-link-picker";
 import { useVaultDocumentOptions } from "@/components/links/vault-document-options";
+import { ImportFromSourceButton } from "@/components/documents/sources/import-from-source-button";
+import { mergeIds } from "@/components/documents/sources/merge-ids";
 
 export function VaccinationDocumentPicker({
   enabled,
@@ -73,6 +75,14 @@ export function VaccinationDocumentPicker({
         options={vault.options}
         searchPlaceholder={t("links.picker.searchPlaceholder")}
         emptyLabel={t("vaccinations.form.linkNothingToOffer")}
+        extraAction={
+          // Joins the form's selection; the dose's save writes the links.
+          <ImportFromSourceButton
+            className="min-h-9"
+            kind="VACCINATION"
+            onImported={(ids) => onChange(mergeIds(documentIds, ids))}
+          />
+        }
       />
     </div>
   );

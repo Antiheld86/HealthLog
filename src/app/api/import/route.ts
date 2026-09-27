@@ -32,15 +32,13 @@ import {
 } from "@/lib/validations/external-id";
 import { encryptNote } from "@/lib/crypto/note-cipher";
 import { recomputeUserMoodRollups } from "@/lib/rollups/mood-rollups";
-import {
-  collapseToTypeDayKeys,
-  recomputeBucketsForMeasurement,
-} from "@/lib/rollups/measurement-rollups";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 import type { MeasurementType } from "@/generated/prisma/client";
 import { emitInsertedMeasurementArrivals } from "@/lib/arrivals/measurement-emit";
 import { maybeEnqueueMorningRefresh } from "@/lib/daily/morning-refresh-trigger";
 import { isP2002, isP2025 } from "@/lib/prisma-errors";
-import { DEFAULT_TIMEZONE, moodDateKey } from "@/lib/mood/date-key";
+import { moodDateKey } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { deriveA1 } from "@/lib/mood/level-a";
 import { zonedWallClockToUtc } from "@/lib/tz/wall-clock";
 
@@ -481,27 +479,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
   }
 
-  // v1.4.39.1 — refresh the persistent measurement rollup table for
-  // every distinct (type, day) the import touched. Collapsed so a
-  // 10 000-row CSV restore pays at most ~N (type, day) recomputes
-  // rather than 10 000 per-row hooks. Best-effort: a populator hiccup
-  // never fails the importer.
-  if (touchedMeasurements.length > 0) {
-    try {
-      const keys = collapseToTypeDayKeys(touchedMeasurements);
-      for (const k of keys) {
-        await recomputeBucketsForMeasurement(userId, k.type, k.measuredAt);
-      }
-    } catch (err) {
-      annotate({
-        meta: {
-          measurement_rollup_import_failed: true,
-          measurement_rollup_import_error:
-            err instanceof Error ? err.message : String(err),
-        },
-      });
-    }
-  }
+  // Refresh the persistent measurement rollup table for every distinct
+  // (type, day) the import touched (collapsed, so a 10 000-row restore pays
+  // at most ~N recomputes) and re-warm the touched types' status
+  // assessments. Best-effort: a populator hiccup never fails the importer.
+  await afterMeasurementMutation(userId, touchedMeasurements, "import");
 
   annotate({
     meta: {

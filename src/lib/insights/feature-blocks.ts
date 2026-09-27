@@ -10,6 +10,9 @@
  * point (`extractFeatures`) stays in the hub.
  */
 import { prisma } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
+import { buildSourceRankCase } from "@/lib/analytics/source-rank-sql";
+import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
 import { classifyAgainstEffectiveRange } from "@/lib/labs/reference-range";
 import { calendarDaysUntil } from "@/lib/measurement-reminders/due-day";
 import { resolveLabFields } from "@/lib/labs/serialise";
@@ -33,10 +36,16 @@ interface AllTimeExtremes {
 
 /**
  * v1.18.11 P1 — full-history min / max / mean per measurement type via ONE
- * grouped SQL aggregation, with NO row materialisation in JS. Used to fill the
- * `allTime*` feature fields honestly when the bulk feature read is bounded to a
- * recent window: the windowed `summarize()` covers trends + recent windows, and
- * this covers the long-horizon extremes the prompt labels "allTime".
+ * grouped SQL aggregation, with NO row materialisation in JS. Fills the
+ * `allTime*` feature fields; the windowed `summarize()` covers trends + recent
+ * windows, and this covers the long-horizon figures the prompt labels
+ * "allTime".
+ *
+ * One source per (type, day): each source is folded per day first, each day
+ * keeps its ladder-canonical source, then the days fold into the figures —
+ * the same pick the dashboard's all-time figures make. Averaging every raw
+ * row let a device that samples densely (a watch's pulse) outweigh the
+ * readings the source ladder prefers on the same days.
  *
  * Only the four types that expose `allTime*` fields are aggregated (weight,
  * systolic, diastolic, pulse). Returns a map keyed by `MeasurementType`; a type
@@ -46,19 +55,52 @@ export async function readAllTimeExtremes(
   userId: string,
   types: readonly MeasurementType[],
 ): Promise<Map<MeasurementType, AllTimeExtremes>> {
-  const rows = await prisma.measurement.groupBy({
-    by: ["type"],
-    where: { userId, deletedAt: null, type: { in: [...types] } },
-    _avg: { value: true },
-    _min: { value: true },
-    _max: { value: true },
-  });
   const out = new Map<MeasurementType, AllTimeExtremes>();
+  if (types.length === 0) return out;
+  const priorityJson = await loadUserSourcePriority(userId);
+  const rank = Prisma.raw(
+    buildSourceRankCase(priorityJson, 'p."type"', 'p."source"'),
+  );
+  const typeList = Prisma.join(
+    types.map((t) => Prisma.sql`${t}::measurement_type`),
+  );
+  const rows = await prisma.$queryRaw<
+    Array<{ type: string; mean: number; min: number; max: number }>
+  >`
+    WITH per_source AS (
+      SELECT
+        m."type",
+        m."source",
+        date_trunc('day', m."measured_at") AS day,
+        COUNT(*)::int                      AS cnt,
+        SUM(m."value")::double precision   AS total,
+        MIN(m."value")::double precision   AS min_value,
+        MAX(m."value")::double precision   AS max_value
+      FROM measurements m
+      WHERE m."user_id" = ${userId}
+        AND m."deleted_at" IS NULL
+        AND m."type" IN (${typeList})
+      GROUP BY m."type", m."source", 3
+    ),
+    canon AS (
+      SELECT DISTINCT ON (p."type", p.day)
+        p."type", p.cnt, p.total, p.min_value, p.max_value
+      FROM per_source p
+      ORDER BY p."type", p.day, (${rank}), p."source"::text
+    )
+    SELECT
+      c."type"::text                                  AS type,
+      (SUM(c.total) / SUM(c.cnt))::double precision   AS mean,
+      MIN(c.min_value)::double precision              AS min,
+      MAX(c.max_value)::double precision              AS max
+    FROM canon c
+    GROUP BY c."type"
+  `;
   for (const r of rows) {
-    out.set(r.type, {
-      mean: r._avg.value ?? null,
-      min: r._min.value ?? null,
-      max: r._max.value ?? null,
+    out.set(r.type as MeasurementType, {
+      mean: r.mean === null ? null : Number(r.mean),
+      min: r.min === null ? null : Number(r.min),
+      max: r.max === null ? null : Number(r.max),
     });
   }
   return out;

@@ -482,6 +482,13 @@ export const profileUpdateRequest = z
       .describe(
         "German insurer institution number (IKNR). Optional; empty/null clears it. A non-empty value must be exactly 9 digits (no checksum enforced).",
       ),
+    currentPassword: z
+      .string()
+      .max(512)
+      .optional()
+      .describe(
+        "The account password, sent only alongside a NEW `email`. Moving the account to a new address needs a fresh proof because single sign-on links an existing account by it: a browser session that signed in or completed a second factor in the last five minutes needs nothing more, otherwise this field must carry the current password. Without an accepted proof the address is not changed and comes back in `rejectedFields` as `reproof_required` or `reproof_failed` (or, when the address was the only field sent, 401 `auth.reproof.required` / `auth.reproof.failed`). On an account with a second factor the password is not accepted and not checked: only a second factor or passkey completed in the last five minutes counts (at sign-in or at POST /api/auth/reproof), and without one the address comes back as `second_factor_required` (or 401 `profile.update.emailSecondFactorRequired` when it was the only field). A token cannot change the address of such an account. Attempts draw on the account's shared re-proof budget of five per fifteen minutes. Never stored.",
+      ),
   })
   .meta({
     id: "ProfileUpdateRequest",

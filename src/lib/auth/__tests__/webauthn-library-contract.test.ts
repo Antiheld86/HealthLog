@@ -63,6 +63,22 @@ vi.mock("@/lib/db", () => {
   ) => [...table.values()].find((r) => r.credentialId === credentialId) ?? null;
   return {
     prisma: {
+      // `claimAuthChallenge`'s guarded DELETE ... RETURNING, over the map:
+      // values are (id, type) or (id, type, userId).
+      $queryRaw: async (_sql: TemplateStringsArray, ...values: unknown[]) => {
+        const [id, type, userId] = values as [string, string, string?];
+        const row = store.authChallenge.get(id);
+        if (
+          !row ||
+          row.type !== type ||
+          (userId !== undefined && row.userId !== userId) ||
+          !((row.expiresAt as Date) > new Date())
+        ) {
+          return [];
+        }
+        store.authChallenge.delete(id);
+        return [{ challenge: row.challenge, user_id: row.userId ?? null }];
+      },
       authChallenge: {
         deleteMany: async () => ({ count: 0 }),
         create: async ({ data }: { data: Record<string, unknown> }) => {

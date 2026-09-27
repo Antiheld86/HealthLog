@@ -71,6 +71,15 @@ import { fenceUserText, scrubFenceMarkers } from "@/lib/ai/coach/data-fence";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 import { listTargetsBySource } from "@/lib/links";
 import { encounterKindEnum } from "@/lib/validations/encounters";
+import { moduleForMeasurementType } from "@/lib/modules/measurement-scope";
+import {
+  fetchRecord,
+  isRecordKind,
+  loadRecordCandidates,
+  rankCandidates,
+  WEIGHT as SEARCH_WEIGHT,
+  type SearchCandidate,
+} from "@/lib/mcp/record-search";
 import type { McpAuthContext } from "./auth";
 import { dueSchedules } from "@/lib/medications/intake-tracking";
 import { liveEraStartsByMedication } from "@/lib/medications/scheduling/live-era";
@@ -173,6 +182,33 @@ function fenceIllnessSites(result: unknown): unknown {
       },
     },
   };
+}
+
+/**
+ * The explicit-absence answer for a read whose module is switched off
+ * (v1.39.3). Distinct from `{ present: false }` alone, which means "not
+ * recorded": here the data may well exist and is simply not shared.
+ */
+const MODULE_DISABLED = { present: false, reason: "module_disabled" } as const;
+
+/**
+ * Run `read` only when `key` is on for this account; otherwise answer the
+ * explicit absence without touching the table behind it.
+ */
+async function whenModuleOn(
+  ctx: McpAuthContext,
+  key: "labs" | "medications",
+  tool: string,
+  read: () => Promise<unknown>,
+): Promise<unknown> {
+  if (!(await isModuleEnabled(ctx.userId, key))) {
+    annotate({
+      action: { name: "mcp.tool.invoked" },
+      meta: { tool, present: false, refused: "module_disabled" },
+    });
+    return MODULE_DISABLED;
+  }
+  return read();
 }
 
 /** Finite-number guard for the citation summarisers. */
@@ -357,7 +393,7 @@ function searchAndFetchTools(): McpToolDefinition[] {
       name: "search",
       title: "Search your health records",
       description:
-        "Search the user's own health record — metric domains, medications, and lab biomarkers — for items matching a free-text query. Returns { results: [{ id, title, url }], nextCursor? }; pass an id to the `fetch` tool to hydrate it. Each `url` deep-links into the HealthLog web app for citation. When more results exist, pass the opaque `nextCursor` back as `cursor` for the next page. Returns an empty list when nothing matches.",
+        "Search the user's own health record for items matching a free-text query (English or the user's language). Covers metric domains, medications, lab biomarkers, and the clinical records: doctor visits including procedures and surgeries (`visit:<id>`, matched on visit kind, reason, outcome, body site and side, practitioner name and specialty), conditions (`condition:<id>`, matched on label, type, body site and side), documents (`document:<id>`, matched on title, file name, kind such as discharge letter, and whole words of the document's own indexed text where one is stored; a document the user held back from AI reading is matched on its title and details only) and vaccinations (`vaccination:<id>`, matched on vaccine name and catalogue name). Condition and vaccination notes are never searched or returned. A kind whose module the user has switched off (conditions, documents, vaccinations, medications, labs) never appears. Results are ranked by how many query words match, then newest first; record results are capped at 50. Returns { results: [{ id, title, url }], nextCursor? }; pass an id to the `fetch` tool to hydrate it. Each `url` deep-links into the HealthLog web app for citation. When more results exist, pass the opaque `nextCursor` back as `cursor` for the next page. Returns an empty list when nothing matches.",
       inputShape: {
         query: z.string().max(200),
         cursor: z
@@ -380,68 +416,94 @@ function searchAndFetchTools(): McpToolDefinition[] {
         nextCursor: z.string().optional(),
       },
       async run(ctx, args) {
-        const query =
-          typeof args.query === "string" ? args.query.trim().toLowerCase() : "";
+        const rawQuery =
+          typeof args.query === "string" ? args.query.trim() : "";
         const origin = resolveBaseOrigin();
-        const results: Array<{ id: string; title: string; url: string }> = [];
+        // Every kind lands here as a candidate with the fields it can be
+        // matched on; one ranking (`rankCandidates`) filters and orders them
+        // all, so a visit and a medication compete on the same terms.
+        const candidates: SearchCandidate[] = [];
+        let seq = 0;
+        const legacy = (
+          id: string,
+          title: string,
+          url: string,
+          hay: string,
+        ): void => {
+          candidates.push({
+            id,
+            title,
+            url,
+            // The older kinds keep their assembly order on a tie.
+            kindOrder: seq++,
+            date: null,
+            fields: [{ text: hay, weight: SEARCH_WEIGHT.primary }],
+          });
+        };
 
         const inventory = await buildCoachDataInventory(ctx.userId, undefined);
         for (const entry of inventory.entries) {
           if (!entry.present) continue;
-          const hay = `${entry.domain} ${entry.metric ?? ""}`.toLowerCase();
-          if (query && !hay.includes(query)) continue;
           // Per-item deep-link where a metric id exists (mirrors `fetch`),
           // else the generic insights landing for a whole-domain row.
-          results.push({
-            id: entry.metric
-              ? `metric:${entry.metric}`
-              : `domain:${entry.domain}`,
-            title: entry.domain,
-            url: entry.metric
+          legacy(
+            entry.metric ? `metric:${entry.metric}` : `domain:${entry.domain}`,
+            entry.domain,
+            entry.metric
               ? `${origin}/insights?metric=${encodeURIComponent(entry.metric)}`
               : `${origin}/insights`,
-          });
+            `${entry.domain} ${entry.metric ?? ""}`,
+          );
         }
 
-        const meds = await prisma.medication.findMany({
-          where: { userId: ctx.userId },
-          select: { id: true, name: true, dose: true },
-          orderBy: { createdAt: "desc" },
-          take: SEARCH_RESULT_SCAN_CAP,
-        });
+        // v1.39.3 — a switched-off module's records never appear. The
+        // medication and lab reads below predate the rule and were ungated.
+        const [medicationsOn, labsOn] = await Promise.all([
+          isModuleEnabled(ctx.userId, "medications"),
+          isModuleEnabled(ctx.userId, "labs"),
+        ]);
+
+        const meds = medicationsOn
+          ? await prisma.medication.findMany({
+              where: { userId: ctx.userId },
+              select: { id: true, name: true, dose: true },
+              orderBy: { createdAt: "desc" },
+              take: SEARCH_RESULT_SCAN_CAP,
+            })
+          : [];
         for (const med of meds) {
-          if (query && !med.name.toLowerCase().includes(query)) continue;
-          results.push({
-            id: `med:${med.id}`,
+          legacy(
+            `med:${med.id}`,
             // A search title is a short label a host renders in a result list,
             // so it is scrubbed rather than fenced — wrapping it would leak
             // markers into the host's UI. Scrubbing still denies a hostile
             // name the ability to forge a boundary around neighbouring text.
-            title: scrubFenceMarkers(
-              med.dose ? `${med.name} ${med.dose}` : med.name,
-            ),
+            scrubFenceMarkers(med.dose ? `${med.name} ${med.dose}` : med.name),
             // Per-item deep-link to the medication detail page (mirrors `fetch`).
-            url: `${origin}/medications/${encodeURIComponent(med.id)}`,
-          });
+            `${origin}/medications/${encodeURIComponent(med.id)}`,
+            med.name,
+          );
         }
 
-        const labs = await prisma.labResult.findMany({
-          where: { userId: ctx.userId, deletedAt: null },
-          select: { analyte: true },
-          distinct: ["analyte"],
-          orderBy: { analyte: "asc" },
-          take: SEARCH_RESULT_SCAN_CAP,
-        });
+        const labs = labsOn
+          ? await prisma.labResult.findMany({
+              where: { userId: ctx.userId, deletedAt: null },
+              select: { analyte: true },
+              distinct: ["analyte"],
+              orderBy: { analyte: "asc" },
+              take: SEARCH_RESULT_SCAN_CAP,
+            })
+          : [];
         for (const lab of labs) {
-          if (query && !lab.analyte.toLowerCase().includes(query)) continue;
-          results.push({
-            id: `lab:${lab.analyte}`,
+          legacy(
+            `lab:${lab.analyte}`,
             // Document-sourced free text — scrubbed, same reasoning as the
             // medication titles above.
-            title: scrubFenceMarkers(lab.analyte),
+            scrubFenceMarkers(lab.analyte),
             // Per-item deep-link to the labs surface filtered to this analyte.
-            url: `${origin}/labs?analyte=${encodeURIComponent(lab.analyte)}`,
-          });
+            `${origin}/labs?analyte=${encodeURIComponent(lab.analyte)}`,
+            lab.analyte,
+          );
         }
 
         // v1.25 clinical signals (grip strength, pain NRS, waist / WHtR) PLUS
@@ -451,7 +513,8 @@ function searchAndFetchTools(): McpToolDefinition[] {
         // so they are surfaced here directly. One grouped presence probe over
         // the combined backing measurement types; present-only, in a stable
         // (allowlist) order. `fetch metric:<KEY>` hydrates each via the
-        // rollup-backed baseline read.
+        // rollup-backed baseline read. v1.39.3 — a signal whose owning module
+        // is off is dropped, the way `list_metrics` already drops it.
         const discoverableSignals = [
           ...MCP_CLINICAL_SIGNALS,
           ...MCP_METRIC_STATUS_DISCOVERY,
@@ -466,13 +529,14 @@ function searchAndFetchTools(): McpToolDefinition[] {
         const presentTypes = new Set(discoverablePresent.map((r) => r.type));
         for (const sig of discoverableSignals) {
           if (!presentTypes.has(sig.measurementType)) continue;
-          const hay = `${sig.label} ${sig.key}`.toLowerCase();
-          if (query && !hay.includes(query)) continue;
-          results.push({
-            id: `metric:${sig.key}`,
-            title: sig.label,
-            url: `${origin}/insights?metric=${encodeURIComponent(sig.key)}`,
-          });
+          const owner = moduleForMeasurementType(sig.measurementType);
+          if (owner && !(await isModuleEnabled(ctx.userId, owner))) continue;
+          legacy(
+            `metric:${sig.key}`,
+            sig.label,
+            `${origin}/insights?metric=${encodeURIComponent(sig.key)}`,
+            `${sig.label} ${sig.key}`,
+          );
         }
 
         // v1.30 (G1) — nutrients (water/caffeine/24 micronutrients) presence
@@ -494,19 +558,27 @@ function searchAndFetchTools(): McpToolDefinition[] {
           for (const code of NUTRIENT_CODES) {
             if (!loggedNutrients.has(code)) continue;
             const label = NUTRIENT_LABELS[code];
-            const hay = `${label} ${code} nutrient nutrients`.toLowerCase();
-            if (query && !hay.includes(query)) continue;
-            results.push({
-              id: `nutrient:${code}`,
-              title: label,
-              url: `${origin}/insights/nutrients`,
-            });
+            legacy(
+              `nutrient:${code}`,
+              label,
+              `${origin}/insights/nutrients`,
+              `${label} ${code} nutrient nutrients`,
+            );
           }
         }
 
-        // Cursor pagination over the assembled result set (was a silent
-        // slice(0,50)). The set is rebuilt deterministically each call (stable
-        // ordering: metrics → medications → labs), so an opaque offset cursor
+        // v1.39.3 — visits (procedures included), conditions, documents and
+        // vaccinations, each behind its own module switch.
+        candidates.push(
+          ...(await loadRecordCandidates(ctx.userId, rawQuery, origin)),
+        );
+
+        const results = rankCandidates(candidates, rawQuery).map(
+          ({ id, title, url }) => ({ id, title, url }),
+        );
+
+        // Cursor pagination over the ranked result set. The set is rebuilt
+        // and ranked deterministically each call, so an opaque offset cursor
         // pages it reliably and the response stays token-bounded.
         const offset = decodeOffsetCursor(args.cursor);
         const page = results.slice(offset, offset + SEARCH_PAGE_SIZE);
@@ -527,7 +599,7 @@ function searchAndFetchTools(): McpToolDefinition[] {
       name: "fetch",
       title: "Fetch one health record",
       description:
-        "Hydrate a single record returned by `search`, by its id (e.g. `metric:weight`, `med:<id>`, `lab:LDL`). Returns { id, title, text, url, metadata } where `text` is a server-authoritative, plain-text prose summary suitable for citation and `url` deep-links to the specific record in HealthLog. Returns a not-found message when the id does not resolve.",
+        'Hydrate a single record returned by `search`, by its id (e.g. `metric:weight`, `med:<id>`, `lab:LDL`, `visit:<id>`, `condition:<id>`, `document:<id>`, `vaccination:<id>`). Returns { id, title, text, url, metadata } where `text` is a server-authoritative, plain-text prose summary suitable for citation and `url` deep-links to the specific record in HealthLog. A visit, condition, document or vaccination carries its key fields and its directly linked records (metadata.links, each with an id `fetch` accepts); a document returns its metadata and at most a bounded excerpt of its own indexed text (the words of the stored document), never the file; a document held back from AI reading returns no excerpt and metadata.reason \"ai_read_deferred\". Fields that were never recorded are null. Returns a not-found message when the id does not resolve, and metadata.reason "module_disabled" when the record\'s module is switched off.',
       inputShape: { id: z.string().min(1).max(200) },
       annotations: READ_ONLY_ANNOTATIONS,
       outputShape: {
@@ -609,6 +681,28 @@ function searchAndFetchTools(): McpToolDefinition[] {
           };
         }
 
+        // v1.39.3 — a switched-off module answers as switched off, before
+        // any row is read, the way the record kinds below do.
+        const gatedModule =
+          kind === "lab" ? "labs" : kind === "med" ? "medications" : null;
+        if (
+          gatedModule &&
+          rid &&
+          !(await isModuleEnabled(ctx.userId, gatedModule))
+        ) {
+          return {
+            id,
+            title: "Not available",
+            text: `This record kind is switched off in HealthLog (module "${gatedModule}"), so nothing of it is shared.`,
+            url: `${origin}/insights`,
+            metadata: {
+              type: kind === "lab" ? "lab" : "medication",
+              present: false,
+              reason: "module_disabled",
+            },
+          };
+        }
+
         if (kind === "lab" && rid) {
           const result = await executeCoachTool({
             userId: ctx.userId,
@@ -661,6 +755,10 @@ function searchAndFetchTools(): McpToolDefinition[] {
             url: `${origin}/medications/${encodeURIComponent(rid)}`,
             metadata: { type: "medication", medicationId: rid },
           };
+        }
+
+        if (isRecordKind(kind) && rid) {
+          return fetchRecord(ctx.userId, kind, rid, origin);
         }
 
         return {
@@ -879,6 +977,7 @@ const detectChangepointsOutput: z.ZodRawShape = {
 /** Output schema for `get_medication_schedule` — per-medication next-due. */
 const getMedicationScheduleOutput: z.ZodRawShape = {
   present: z.boolean(),
+  reason: z.string().optional(),
   medications: z
     .array(
       z.object({
@@ -987,6 +1086,9 @@ const getVisitsOutput: z.ZodRawShape = {
       }),
     )
     .optional(),
+  // "module_disabled" when the illness module is off and the condition
+  // labels are withheld rather than absent (v1.39.3).
+  conditionsReason: z.string().optional(),
 };
 
 /** Default trailing window for `get_visits` when the caller names none. */
@@ -1122,6 +1224,33 @@ const getEcgRecordingsOutput: z.ZodRawShape = {
     .optional(),
 };
 
+/** `get_labs` behind its module gate: latest-per-biomarker or a history page. */
+function readLabs(
+  ctx: McpAuthContext,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  // History mode: one analyte's paginated trajectory over the labs read
+  // path. Requires an analyte — there is no whole-record history dump.
+  if (args.history === true) {
+    const analyte = typeof args.analyte === "string" ? args.analyte : "";
+    if (!analyte.trim()) {
+      return Promise.resolve({
+        present: false,
+        reason: "analyte_required_for_history",
+      });
+    }
+    return getLabHistory(ctx.userId, {
+      analyte,
+      offset: decodeOffsetCursor(args.cursor),
+      limit: LAB_HISTORY_MAX_LIMIT,
+    });
+  }
+  // Default: latest reading per biomarker via the Coach labs read.
+  return runCoachTool(ctx, "get_labs", {
+    ...(typeof args.analyte === "string" ? { analyte: args.analyte } : {}),
+  });
+}
+
 export const MCP_TOOLS: McpToolDefinition[] = [
   {
     name: "list_metrics",
@@ -1176,21 +1305,23 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: "get_medication_compliance",
     title: "Get medication compliance",
     description:
-      "Fetch the user's cadence-aware medication adherence: the dose-weighted compliance rate, expected vs taken/missed counts, current-cycle status, and any GLP-1 titration context. Returns { present: false } when no medications are tracked.",
+      'Fetch the user\'s cadence-aware medication adherence: the dose-weighted compliance rate, expected vs taken/missed counts, current-cycle status, and any GLP-1 titration context. Returns { present: false } when no medications are tracked, and { present: false, reason: "module_disabled" } when the medications module is switched off.',
     inputShape: {
       window: coachScopeWindowSchema.optional(),
     },
     annotations: READ_ONLY_ANNOTATIONS,
     outputShape: coachReadOutput,
     run(ctx, args) {
-      return runCoachTool(ctx, "get_medication_compliance", args);
+      return whenModuleOn(ctx, "medications", "get_medication_compliance", () =>
+        runCoachTool(ctx, "get_medication_compliance", args),
+      );
     },
   },
   {
     name: "get_labs",
     title: "Get lab results",
     description:
-      "Fetch the user's lab results. By default returns the latest reading per biomarker over the last 12 months, optionally filtered to one named analyte. Pass history:true with an analyte to return that analyte's reading TRAJECTORY (newest first, paginated). Each reading carries its value, unit, reference range, and in-range/below/above status. Returns { present: false } when no labs match.",
+      "Fetch the user's lab results. By default returns the latest reading per biomarker over the last 12 months, optionally filtered to one named analyte. Pass history:true with an analyte to return that analyte's reading TRAJECTORY (newest first, paginated). Each reading carries its value, unit, reference range, and in-range/below/above status. Returns { present: false } when no labs match, and { present: false, reason: \"module_disabled\" } when the labs module is switched off.",
     inputShape: {
       analyte: z.string().min(1).max(80).optional(),
       history: z
@@ -1210,26 +1341,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     annotations: READ_ONLY_ANNOTATIONS,
     outputShape: getLabsOutput,
     run(ctx, args) {
-      // History mode: one analyte's paginated trajectory over the labs read
-      // path. Requires an analyte — there is no whole-record history dump.
-      if (args.history === true) {
-        const analyte = typeof args.analyte === "string" ? args.analyte : "";
-        if (!analyte.trim()) {
-          return Promise.resolve({
-            present: false,
-            reason: "analyte_required_for_history",
-          });
-        }
-        return getLabHistory(ctx.userId, {
-          analyte,
-          offset: decodeOffsetCursor(args.cursor),
-          limit: LAB_HISTORY_MAX_LIMIT,
-        });
-      }
-      // Default: latest reading per biomarker via the Coach labs read.
-      return runCoachTool(ctx, "get_labs", {
-        ...(typeof args.analyte === "string" ? { analyte: args.analyte } : {}),
-      });
+      return whenModuleOn(ctx, "labs", "get_labs", () => readLabs(ctx, args));
     },
   },
   {
@@ -1492,11 +1604,22 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: "get_medication_schedule",
     title: "Get the medication schedule",
     description:
-      "Fetch when the user's active medications are next due, and which are overdue right now. Reuses the same server-authoritative recurrence engine the medication cards render (open overdue slots win over future ones). Returns one row per active medication: name, dose, next-due instant, an overdue flag, an as-needed (PRN) flag, and an intakeTracked flag. As-needed medications and medications whose intake tracking is off (intakeTracked: false, kept as a record only) have no due time (nextDueAt: null). Returns { present: false } when no medications are tracked.",
+      'Fetch when the user\'s active medications are next due, and which are overdue right now. Reuses the same server-authoritative recurrence engine the medication cards render (open overdue slots win over future ones). Returns one row per active medication: name, dose, next-due instant, an overdue flag, an as-needed (PRN) flag, and an intakeTracked flag. As-needed medications and medications whose intake tracking is off (intakeTracked: false, kept as a record only) have no due time (nextDueAt: null). Returns { present: false } when no medications are tracked, and { present: false, reason: "module_disabled" } when the medications module is switched off.',
     inputShape: {},
     annotations: READ_ONLY_ANNOTATIONS,
     outputShape: getMedicationScheduleOutput,
     async run(ctx) {
+      if (!(await isModuleEnabled(ctx.userId, "medications"))) {
+        annotate({
+          action: { name: "mcp.tool.invoked" },
+          meta: {
+            tool: "get_medication_schedule",
+            present: false,
+            refused: "module_disabled",
+          },
+        });
+        return MODULE_DISABLED;
+      }
       const now = new Date();
       const [user, medications] = await Promise.all([
         prisma.user.findUnique({
@@ -1518,7 +1641,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         return { present: false };
       }
 
-      const userTz = user?.timezone || "Europe/Berlin";
+      const userTz = user?.timezone || DEFAULT_TIMEZONE;
 
       // Same feeder reads + horizon the medications list route / dashboard
       // builder use, so the open-overdue detection matches the in-app cards.
@@ -1691,17 +1814,26 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         },
         orderBy: { occurredAt: "asc" },
         take: MAX_APPOINTMENTS,
-        include: { practitioner: { select: { name: true, specialty: true } } },
+        include: {
+          practitioner: {
+            select: { name: true, specialty: true, deletedAt: true },
+          },
+        },
       });
       const appointments = appointmentRows.map((r) => {
         const reason = decryptVisitText(r.reasonEncrypted);
+        // A practitioner the person deleted is no longer named.
+        const practitioner =
+          r.practitioner && r.practitioner.deletedAt === null
+            ? r.practitioner
+            : null;
         return {
           occurredAt: r.occurredAt.toISOString(),
-          practitioner: r.practitioner
-            ? scrubFenceMarkers(r.practitioner.name)
+          practitioner: practitioner
+            ? scrubFenceMarkers(practitioner.name)
             : null,
-          specialty: r.practitioner?.specialty
-            ? scrubFenceMarkers(r.practitioner.specialty)
+          specialty: practitioner?.specialty
+            ? scrubFenceMarkers(practitioner.specialty)
             : null,
           kind: r.kind,
           // A visit's reason is user- and document-derived free text, so it
@@ -1943,7 +2075,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: "get_visits",
     title: "Get past doctor visits",
     description:
-      "Fetch the user's own past doctor visits over a bounded window (default: the last 12 months) so a question like 'when did I last see a cardiologist' is answerable from the record. Each visit carries its date, lifecycle status (DONE / CANCELLED / NO_SHOW — a no-show is not a visit that happened), kind, practitioner name + specialty, the visit's own free-text reason and outcome, the body site and side (set on procedures), and the labels of any conditions it was filed against. Optionally narrow to one practitioner by a name substring, or to one kind. kind PROCEDURE is the procedure and surgery history: without a months argument it reads the whole record, because a surgery years ago is still the answer to 'what surgeries have I had'. Newest first, bounded. Returns { present: false } when the user has never recorded a visit — distinct from a filtered read that simply matched none.",
+      "Fetch the user's own past doctor visits over a bounded window (default: the last 12 months) so a question like 'when did I last see a cardiologist' is answerable from the record. Each visit carries its date, lifecycle status (DONE / CANCELLED / NO_SHOW — a no-show is not a visit that happened), kind, practitioner name + specialty, the visit's own free-text reason and outcome, the body site and side (set on procedures), and the labels of any conditions it was filed against. Optionally narrow to one practitioner by a name substring, or to one kind. kind PROCEDURE is the procedure and surgery history: without a months argument it reads the whole record, because a surgery years ago is still the answer to 'what surgeries have I had'. Newest first, bounded. Returns { present: false } when the user has never recorded a visit — distinct from a filtered read that simply matched none. With the illness module switched off the condition labels are withheld and conditionsReason is \"module_disabled\".",
     inputShape: {
       months: z
         .number()
@@ -2010,7 +2142,11 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         },
         orderBy: { occurredAt: "desc" },
         take: MAX_VISITS,
-        include: { practitioner: { select: { name: true, specialty: true } } },
+        include: {
+          practitioner: {
+            select: { name: true, specialty: true, deletedAt: true },
+          },
+        },
       });
 
       // Absence is explicit. An empty list is { present: false } — "you have
@@ -2026,26 +2162,34 @@ export const MCP_TOOLS: McpToolDefinition[] = [
 
       // The linked condition labels, one grouped read for the whole page, from
       // the same link service every other visit surface goes through.
-      const conditionsBySource = await listTargetsBySource(prisma, {
-        userId: ctx.userId,
-        sourceKind: "encounter",
-        sourceIds: rows.map((r) => r.id),
-        targetKind: "conditionEpisode",
-      });
+      // With the illness module off the condition table is not read, and
+      // the answer says why the labels are missing (v1.39.3).
+      const illnessOn = await isModuleEnabled(ctx.userId, "illness");
+      const conditionsBySource = illnessOn
+        ? await listTargetsBySource(prisma, {
+            userId: ctx.userId,
+            sourceKind: "encounter",
+            sourceIds: rows.map((r) => r.id),
+            targetKind: "conditionEpisode",
+          })
+        : new Map<string, Array<{ label: string }>>();
 
       const visits = rows.map((r) => {
         const reason = decryptVisitText(r.reasonEncrypted);
         const outcome = decryptVisitText(r.outcomeEncrypted);
         const bodySite = decryptVisitText(r.bodySiteEncrypted);
+        // A practitioner the person deleted is no longer named.
+        const seenBy =
+          r.practitioner && r.practitioner.deletedAt === null
+            ? r.practitioner
+            : null;
         return {
           occurredAt: r.occurredAt.toISOString(),
           status: r.status,
           kind: r.kind,
-          practitioner: r.practitioner
-            ? scrubFenceMarkers(r.practitioner.name)
-            : null,
-          specialty: r.practitioner?.specialty
-            ? scrubFenceMarkers(r.practitioner.specialty)
+          practitioner: seenBy ? scrubFenceMarkers(seenBy.name) : null,
+          specialty: seenBy?.specialty
+            ? scrubFenceMarkers(seenBy.specialty)
             : null,
           // Reason and outcome are user- and document-derived free text, so
           // they ride the USER_TEXT wrapping; the markers are stripped from the
@@ -2065,7 +2209,12 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         action: { name: "mcp.tool.invoked" },
         meta: { tool: "get_visits", present: true },
       });
-      return { present: true, windowMonths: months, visits };
+      return {
+        present: true,
+        windowMonths: months,
+        visits,
+        ...(illnessOn ? {} : { conditionsReason: "module_disabled" }),
+      };
     },
   },
   ...searchAndFetchTools(),

@@ -101,11 +101,6 @@ const MILESTONE_STREAK_WINDOW_DAYS = 30;
 /** How far back to scan for a just-set personal best (a couple of days is ample). */
 const MILESTONE_RECORD_LOOKBACK_MS = 2 * 24 * 60 * 60 * 1000;
 
-/** UTC-ISO day key — the space the streak series + rollup tier already emit. */
-function utcDayKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
 /**
  * S12 — gather today's single freshly-reached milestone (or null) from the
  * engines that ALREADY exist. Two cheap, fail-soft reads reused verbatim:
@@ -117,9 +112,13 @@ function utcDayKey(date: Date): string {
  */
 async function gatherFreshMilestone(
   userId: string,
+  timezone: string,
   now: Date,
 ): Promise<Milestone | null> {
-  const todayKey = utcDayKey(now);
+  // Every day key here is the user's own calendar day: today's key, the
+  // streak series (folded on local days) and each record's day. UTC keys
+  // named tomorrow "today" through a New York evening.
+  const todayKey = userDayKey(now, timezone);
   const candidates: Milestone[] = [];
 
   const coverage = await probeRollupCoverage(userId).catch(() => null);
@@ -133,6 +132,7 @@ async function gatherFreshMilestone(
             MILESTONE_STREAK_WINDOW_DAYS,
             now,
             coverage,
+            timezone,
           );
           if (points.length === 0) return [] as Milestone[];
           const series: StreakPoint[] = points.map((p) => ({
@@ -164,7 +164,10 @@ async function gatherFreshMilestone(
     });
     for (const record of records) {
       candidates.push(
-        milestoneFromRecord(record.metricType, utcDayKey(record.achievedAt)),
+        milestoneFromRecord(
+          record.metricType,
+          userDayKey(record.achievedAt, timezone),
+        ),
       );
     }
   } catch {
@@ -234,7 +237,7 @@ async function loadDailyDigestExtrasCached(
       // internally (a milestone read-hiccup or a tension-read failure leaves
       // its own field quiet rather than breaking the other).
       const [milestone, tensionWindow, sameTime] = await Promise.all([
-        gatherFreshMilestone(userId, now),
+        gatherFreshMilestone(userId, timezone, now),
         loadIntradayPulse(userId, timezone, todayLocalDate)
           .then((r) => (r.tension ? { partOfDay: r.tension.partOfDay } : null))
           .catch(() => null),

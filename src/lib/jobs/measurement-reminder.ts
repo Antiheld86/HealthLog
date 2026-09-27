@@ -50,6 +50,7 @@ import { getEvent } from "@/lib/logging/context";
 import { isModuleEnabled } from "@/lib/modules/gate";
 import type { ModuleKey } from "@/lib/modules/registry";
 import {
+  byHourTimesOfDay,
   computeReminderNextDueAt,
   type ReminderScheduleInput,
 } from "@/lib/measurement-reminders/scheduling";
@@ -58,6 +59,7 @@ import { satisfyReminder } from "@/lib/measurement-reminders/satisfy";
 import { evaluateCoachContextReminders } from "@/lib/ai/coach/context-reminders";
 import { calendarDaysUntil } from "@/lib/measurement-reminders/due-day";
 import { holdsOpenAfterReminder } from "@/lib/measurement-reminders/holds-open";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 /**
  * v1.18.0 — map a reminder's `measurementType` to the toggleable module
@@ -169,12 +171,51 @@ async function cleanupExpiredCoachReminders(
 }
 
 /**
- * Pure due-predicate: at this instant, is the reminder due AND inside its
- * local notify-hour window?
+ * The local hours a reminder fires at: every `BYHOUR` of its rule (the
+ * twice-daily BP protocol `FREQ=DAILY;BYHOUR=7,19`), else its `notifyHour`.
+ */
+function reminderFireHours(reminder: {
+  notifyHour: number;
+  rrule?: string | null;
+}): number[] {
+  const byHour = byHourTimesOfDay(reminder.rrule ?? null);
+  return byHour
+    ? byHour.map((hhmm) => Number(hhmm.slice(0, 2)))
+    : [reminder.notifyHour];
+}
+
+/**
+ * The local hour the reminder's current slot belongs to: the hour of
+ * `nextDueAt` on the user's clock when that is one of its fire hours, else
+ * `notifyHour` (a slot stamped before the hour was edited, or a test
+ * fixture with no real slot). For a single-hour reminder this is always
+ * `notifyHour`; for `BYHOUR=7,19` the evening slot reads 19, so it is sent
+ * in the evening instead of waiting for the next morning.
+ */
+export function reminderSlotHour(
+  reminder: {
+    nextDueAt: Date | null;
+    notifyHour: number;
+    rrule?: string | null;
+  },
+  timezone: string,
+): number {
+  const hours = reminderFireHours(reminder);
+  if (reminder.nextDueAt !== null && hours.length > 1) {
+    const slotHour = wallClockInTz(reminder.nextDueAt, timezone).hour;
+    if (hours.includes(slotHour)) return slotHour;
+  }
+  return reminder.notifyHour;
+}
+
+/**
+ * Pure due-predicate: at this instant, is the reminder due AND inside the
+ * local hour of its current slot?
  *
  * "Due" = `nextDueAt != null` and `now >= nextDueAt`. The hour gate keeps
  * a reminder that became overdue overnight from firing at 03:00 — it
- * waits for the user's chosen `notifyHour` to come round in their local
+ * waits for its slot's hour (`reminderSlotHour`: the `notifyHour`, or the
+ * matching `BYHOUR` of a multi-hour rule) to come round in the user's
  * timezone. Pulled out so the unit tests can pin the window boundary
  * (08:59 → no, 09:00 → yes, 09:59 → yes, 10:00 → no) without the DB.
  */
@@ -183,6 +224,7 @@ export function evaluateMeasurementReminderDue(
     enabled: boolean;
     nextDueAt: Date | null;
     notifyHour: number;
+    rrule?: string | null;
   },
   timezone: string,
   now: Date,
@@ -190,9 +232,10 @@ export function evaluateMeasurementReminderDue(
   if (!reminder.enabled || reminder.nextDueAt === null) {
     return { fire: false, inHourWindow: false, isDue: false };
   }
+  const tz = timezone || DEFAULT_TIMEZONE;
   const isDue = now.getTime() >= reminder.nextDueAt.getTime();
-  const parts = wallClockInTz(now, timezone || "Europe/Berlin");
-  const inHourWindow = parts.hour === reminder.notifyHour;
+  const parts = wallClockInTz(now, tz);
+  const inHourWindow = parts.hour === reminderSlotHour(reminder, tz);
   return { fire: isDue && inHourWindow, inHourWindow, isDue };
 }
 
@@ -284,7 +327,7 @@ export async function runMeasurementReminderTick(
   for (const reminder of reminders) {
     summary.candidatesScanned += 1;
     try {
-      const timezone = reminder.user.timezone || "Europe/Berlin";
+      const timezone = reminder.user.timezone || DEFAULT_TIMEZONE;
 
       // v1.39.2 — a reminder already sent for its current slot stays in
       // this scan every tick until it is satisfied. Outside its notify hour
@@ -298,7 +341,8 @@ export async function runMeasurementReminderTick(
         reminder.lastNotifiedAt != null &&
         reminder.nextDueAt !== null &&
         reminder.lastNotifiedAt.getTime() >= reminder.nextDueAt.getTime() &&
-        wallClockInTz(now, timezone).hour !== reminder.notifyHour
+        wallClockInTz(now, timezone).hour !==
+          reminderSlotHour(reminder, timezone)
       ) {
         summary.skippedOutsideWindow += 1;
         continue;
@@ -338,6 +382,7 @@ export async function runMeasurementReminderTick(
           enabled: reminder.enabled,
           nextDueAt: reminder.nextDueAt,
           notifyHour: reminder.notifyHour,
+          rrule: reminder.rrule,
         },
         timezone,
         now,
@@ -409,10 +454,16 @@ export async function runMeasurementReminderTick(
       const localDate = new Date(now).toLocaleDateString("sv-SE", {
         timeZone: timezone,
       });
+      // A multi-hour rule sends more than once a day, so its claim is per
+      // slot hour; a single-hour reminder keeps the per-day key.
+      const slotSuffix =
+        reminderFireHours(reminder).length > 1
+          ? `T${String(reminderSlotHour(reminder, timezone)).padStart(2, "0")}`
+          : "";
       const claimed = await claimNotificationEvent(prisma, {
         recordUserId: reminder.user.id,
         eventType: "MEASUREMENT_REMINDER",
-        dedupKey: `measurement:${reminder.id}:${localDate}`,
+        dedupKey: `measurement:${reminder.id}:${localDate}${slotSuffix}`,
         since: new Date(now.getTime() - REMINDER_DEDUP_LOOKBACK_MS),
       });
       if (!claimed) {
@@ -537,7 +588,7 @@ export async function runReminderSatisfyForUser(
     where: { id: userId },
     select: { timezone: true },
   });
-  const timezone = user?.timezone || "Europe/Berlin";
+  const timezone = user?.timezone || DEFAULT_TIMEZONE;
 
   const reminders = await prisma.measurementReminder.findMany({
     where: { userId, deletedAt: null, enabled: true },

@@ -295,18 +295,19 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     "*": ["./next.config.ts"],
   },
-  // Next 16 caps the request body that passes THROUGH middleware (our
-  // `src/proxy.ts`) at ~10MB by default, silently truncating larger bodies
-  // before the route handler sees them. The Apple Health `export.zip` importer
-  // (`/api/import/apple-health-export`) streams multi-MB archives to disk; the
-  // 10MB cap truncated them so the ZIP end-of-central-directory was lost and
-  // the parser failed (GitHub #281). Raise the ceiling so real exports pass
-  // intact. The value is a ceiling, not a buffer — only the actual upload size
-  // is held — so this is safe; very large exports also want a matching
-  // reverse-proxy body limit (see docs/self-hosting/reverse-proxy.md).
+  // Next reads the body of every non-GET request the proxy (`src/proxy.ts`)
+  // matches into memory, so both the proxy and the route can read it, and it
+  // does so BEFORE the route runs — before any authentication. Everything past
+  // this ceiling is dropped, not refused. It used to be 512 MB so the Apple
+  // Health importer could receive whole archives (GitHub #281), which let any
+  // anonymous POST make the server hold that much. It is 1 MB now: the routes
+  // whose real bodies are larger are left out of the proxy matcher and read
+  // their own body after authenticating (`src/lib/http/proxy-bypass-routes.ts`),
+  // and every other route's own cap is at or below this. Large exports still
+  // want a matching reverse-proxy body limit (docs/self-hosting/reverse-proxy.md).
   experimental: {
     optimizePackageImports: ["recharts", "lucide-react"],
-    middlewareClientMaxBodySize: "512mb",
+    proxyClientMaxBodySize: "1mb",
   },
 };
 

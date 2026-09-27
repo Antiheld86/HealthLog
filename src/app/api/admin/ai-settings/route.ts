@@ -1,3 +1,4 @@
+import { envOr } from "@/lib/env";
 import { NextRequest } from "next/server";
 import { apiHandler, requireAdmin, HttpError } from "@/lib/api-handler";
 import { prisma } from "@/lib/db";
@@ -6,6 +7,7 @@ import { apiSuccess, getClientIp, safeJson } from "@/lib/api-response";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
+import { legacyPrivateHostReport } from "@/lib/ai/legacy-private-host-report";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,11 @@ export const GET = apiHandler(async () => {
       : null,
     model,
     baseUrl,
+    // v1.39.3 — present while the deprecated ALLOW_LOCAL_AI_PRIVATE_HOSTS=true
+    // is set, naming the origins to move into AI_PRIVATE_ORIGINS.
+    legacyPrivateHostGrant: await legacyPrivateHostReport(
+      settings?.adminAiBaseUrl,
+    ),
   });
 });
 
@@ -95,7 +102,7 @@ export const PUT = apiHandler(async (request: NextRequest) => {
       "api.groq.com",
       "openrouter.ai",
     ]);
-    for (const h of (process.env.ADMIN_AI_BASE_URL_ALLOWLIST ?? "")
+    for (const h of envOr("ADMIN_AI_BASE_URL_ALLOWLIST", "")
       .split(",")
       .map((h) => h.trim())
       .filter(Boolean)) {

@@ -16,6 +16,7 @@ vi.mock("@/lib/rate-limit", () => ({
 
 vi.mock("@/lib/crypto", () => ({
   decrypt: vi.fn((s: string) => s.replace(/^enc\(/, "").replace(/\)$/, "")),
+  encrypt: vi.fn((s: string) => `enc(${s})`),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -321,26 +322,34 @@ describe("GET /api/auth/oidc/callback", () => {
     expect(res.status).toBe(307);
   });
 
-  it("links an existing email-matched account ONCE, stamping (issuer, sub)", async () => {
+  // Inverted in v1.39.3. This used to pin the auto-link: an existing account
+  // with the same (unverified) local email was bound on the spot and signed
+  // in. Whoever set that address first owned the account the SSO user landed
+  // in, so the callback now links nothing and signs nobody in; it leaves a
+  // sealed pending link and sends the browser to confirm the account with its
+  // own credential (`oidc-pending-link.test.ts` covers the completion).
+  it("does not link an email-matched account on the email alone", async () => {
     mockIdentity();
     mockUserLookups({ byIdentity: null, byEmail: userRow() });
-    vi.mocked(prisma.user.update).mockResolvedValue(
-      userRow({ oidcIssuer: METADATA.issuer, oidcSub: "sub-1" }) as never,
-    );
 
     const res = await GET(validRequest("/dashboard"));
 
     expect(prisma.user.create).not.toHaveBeenCalled();
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: "user-1" },
-      data: { oidcIssuer: METADATA.issuer, oidcSub: "sub-1" },
-    });
-    expect(auditLog).toHaveBeenCalledWith(
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(createSession).not.toHaveBeenCalled();
+    expect(auditLog).not.toHaveBeenCalledWith(
       "auth.oidc.linked",
+      expect.anything(),
+    );
+    expect(auditLog).toHaveBeenCalledWith(
+      "auth.oidc.link_pending",
       expect.objectContaining({ userId: "user-1" }),
     );
-    expect(createSession).toHaveBeenCalled();
-    expect(res.headers.get("location")).toContain("/dashboard");
+    expect(res.headers.get("location")).toContain("error=oidc_link_required");
+    const setCookie = res.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("hl_oidc_link=");
+    expect(setCookie.toLowerCase()).toContain("httponly");
+    expect(setCookie).toContain("Path=/api/auth");
   });
 
   it("rejects a login whose email matches an account bound to a DIFFERENT identity", async () => {
@@ -505,10 +514,9 @@ describe("GET /api/auth/oidc/callback", () => {
 
   it("never stamps the session step-up fresh — the 5th createSession arg is null", async () => {
     mockIdentity();
-    mockUserLookups({ byIdentity: null, byEmail: userRow() });
-    vi.mocked(prisma.user.update).mockResolvedValue(
-      userRow({ oidcIssuer: METADATA.issuer, oidcSub: "sub-1" }) as never,
-    );
+    mockUserLookups({
+      byIdentity: userRow({ oidcIssuer: METADATA.issuer, oidcSub: "sub-1" }),
+    });
 
     await GET(validRequest());
 

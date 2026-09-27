@@ -40,17 +40,29 @@ chain from the **right**, counting back `TRUST_PROXY_HOPS` entries.
 This guards against a client rotating `X-Forwarded-For` per request
 to defeat IP-based rate limits.
 
-| Topology                                                  | `TRUST_PROXY_HOPS`         |
-| --------------------------------------------------------- | -------------------------- |
-| App is internet-facing with no proxy                      | `0` (XFF ignored entirely) |
-| Single proxy in front (Caddy / Traefik / Nginx / Coolify) | `1` (default)              |
-| Cloudflare → your proxy → app                             | `2`                        |
-| Cloudflare → Coolify-Tunnel → Coolify → app               | `3`                        |
+| Topology                                                  | `TRUST_PROXY_HOPS`                    |
+| --------------------------------------------------------- | ------------------------------------- |
+| App is internet-facing with no proxy                      | `0` (no forwarding header is trusted) |
+| Single proxy in front (Caddy / Traefik / Nginx / Coolify) | `1` (default)                         |
+| Cloudflare → your proxy → app                             | `2`                                   |
+| Cloudflare → Coolify-Tunnel → Coolify → app               | `3`                                   |
 
 A misconfigured count logs a one-shot warning to stderr and collapses
 every anonymous caller into one shared rate-limit bucket. Match the
-value to the actual hop count or set it to `0` and let `x-real-ip`
-drive the IP resolution.
+value to the actual hop count.
+
+`X-Real-IP` gets the same trust as `X-Forwarded-For`. It is read only
+when `TRUST_PROXY_HOPS` is exactly `1` and the request carries no
+`X-Forwarded-For`, which covers a single proxy that sets only
+`X-Real-IP`. With `0` neither header is believed, because without a proxy
+in front both come from the caller. With `2` or more, the hop count
+describes an `X-Forwarded-For` chain, so have your proxies send one.
+
+If requests arrive with a forwarding header the setting does not let
+HealthLog read, the log shows one warning naming the header and the
+setting. Every anonymous caller then shares one rate-limit bucket, so one
+person mistyping a password can hold sign-in back for everyone. The usual
+cause is `0` behind a proxy that sends only `X-Real-IP`: set `1`.
 
 ## Caddy
 

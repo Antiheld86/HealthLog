@@ -32,6 +32,7 @@ import {
   loadOffhostConfig,
   getS3Client,
   openBackupObject,
+  offhostKeyRing,
   OffhostBackupNotConfiguredError,
 } from "@/lib/jobs/offhost-backup";
 
@@ -109,7 +110,7 @@ async function main() {
     `Downloading s3://${cfg.bucket}/${key} from ${cfg.endpoint} (region=${cfg.region})`,
   );
   const ciphertext = await s3.getObject(key);
-  const source = openBackupObject(ciphertext, cfg.encryptionKey);
+  const source = openBackupObject(ciphertext, offhostKeyRing(cfg), key);
 
   // Checked first, in one streamed pass that keeps only the small sections,
   // so nothing is written for an object that is not a backup.

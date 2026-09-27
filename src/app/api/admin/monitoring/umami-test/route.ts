@@ -1,3 +1,4 @@
+import { envValue } from "@/lib/env";
 import { NextRequest } from "next/server";
 import { apiHandler, requireAdmin } from "@/lib/api-handler";
 import { annotate, getEvent } from "@/lib/logging/context";
@@ -37,8 +38,8 @@ function resolveUmamiSendUrls(scriptUrl: string | null): string[] {
 
 function resolveAppUrl(request: NextRequest): URL {
   const configured =
-    process.env.APP_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
+    envValue("APP_URL") ??
+    envValue("NEXT_PUBLIC_APP_URL") ??
     `https://${request.headers.get("host") ?? "localhost:3000"}`;
 
   try {

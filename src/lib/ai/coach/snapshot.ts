@@ -548,6 +548,7 @@ async function buildCoachSnapshotImpl(
       "BLOOD_PRESSURE_SYS" as MeasurementType,
       now,
       userTz,
+      prefsRow?.sourcePriorityJson ?? null,
     );
   }
   if (wantsWeight) {
@@ -556,6 +557,7 @@ async function buildCoachSnapshotImpl(
       "WEIGHT" as MeasurementType,
       now,
       userTz,
+      prefsRow?.sourcePriorityJson ?? null,
     );
   }
   if (wantsPulse) {
@@ -564,6 +566,7 @@ async function buildCoachSnapshotImpl(
       "PULSE" as MeasurementType,
       now,
       userTz,
+      prefsRow?.sourcePriorityJson ?? null,
     );
   }
   const [bpCoarseTail, weightCoarseTail, pulseCoarseTail] = await Promise.all([

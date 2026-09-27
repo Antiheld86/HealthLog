@@ -63,6 +63,7 @@ import { readDashboardSnapshotCached } from "@/lib/dashboard/snapshot-read";
 import { resolveModuleMap } from "@/lib/modules/gate";
 import { probeRollupCoverage } from "@/lib/rollups/measurement-coverage";
 import { loadIntradayPulse } from "@/lib/analytics/intraday-pulse-io";
+import { readDayMeanSeries } from "@/lib/insights/derived/baseline";
 import { __resetAllCachesForTests } from "@/lib/cache/server-cache";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
@@ -116,6 +117,36 @@ beforeEach(() => {
   vi.mocked(loadIntradayPulse).mockResolvedValue({ tension: null } as never);
   vi.mocked(aiCapabilityForRecord).mockResolvedValue(AI_AVAILABLE);
   vi.mocked(aiCapabilityToServe).mockResolvedValue(AI_AVAILABLE);
+});
+
+describe("loadDailyDigest — milestone day", () => {
+  // 21:30 on 16 July in New York is already 17 July in UTC. A best set at
+  // 19:00 local that evening was reached today, on the user's calendar.
+  const NY_USER = { ...USER, timezone: "America/New_York" } as User;
+  const NY_EVENING = new Date("2026-07-17T01:30:00.000Z");
+
+  it("keys today and a new record on the user's own day", async () => {
+    vi.mocked(prisma.personalRecord.findMany).mockResolvedValueOnce([
+      {
+        metricType: "RESTING_HEART_RATE",
+        achievedAt: new Date("2026-07-16T23:00:00.000Z"),
+      },
+    ] as never);
+
+    const digest = await loadDailyDigest(NY_USER, NY_EVENING);
+
+    expect(digest.worthALook.some((i) => i.kind === "milestone")).toBe(true);
+  });
+
+  it("folds the streak series on the user's days", async () => {
+    vi.mocked(probeRollupCoverage).mockResolvedValue(
+      new Map([["RESTING_HEART_RATE", true]]) as never,
+    );
+    await loadDailyDigest(NY_USER, NY_EVENING);
+    const calls = vi.mocked(readDayMeanSeries).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) expect(call[5]).toBe("America/New_York");
+  });
 });
 
 describe("loadDailyDigest — S11/S12 extras cache", () => {

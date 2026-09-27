@@ -2,9 +2,9 @@
  * v1.23 — admin-triggered encryption-key rotation, on pg-boss.
  *
  * Re-encrypts every registered encrypted column to the configured ACTIVE key
- * id, reusing the canonical column registry via `rotateCorpus()`. This is the
- * in-app convenience the admin panel triggers; the CLI
- * (`scripts/rotate-encryption-key.ts`) remains the documented canonical path.
+ * id, reusing the canonical column registry via `rotateCorpus()`. The admin
+ * panel triggers it, and it is the documented primary path; the CLI
+ * (`scripts/rotate-encryption-key.ts`) does the same from a source checkout.
  * pg-boss is the right home because the standalone production image strips
  * `tsx`, so a button that ran the CLI inside the container would fail.
  *

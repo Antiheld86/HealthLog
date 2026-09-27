@@ -118,3 +118,19 @@ describe("measurementReminderTypeEnum (V3 — completeness)", () => {
     expect(parsed.success).toBe(true);
   });
 });
+
+describe("createMeasurementReminderSchema — first-due date", () => {
+  const base = { label: "Blood test", intervalDays: 365 };
+  it.each([
+    ["2026-10-01", true],
+    ["2026-10-01T00:00:00.000Z", true],
+    ["2026-10-01T00:00:00-07:00", true],
+    ["2026-10-01T00:00:00", false],
+    ["01.10.2026", false],
+  ])("anchorDate %s is accepted: %s", (anchorDate, ok) => {
+    expect(
+      createMeasurementReminderSchema.safeParse({ ...base, anchorDate })
+        .success,
+    ).toBe(ok);
+  });
+});

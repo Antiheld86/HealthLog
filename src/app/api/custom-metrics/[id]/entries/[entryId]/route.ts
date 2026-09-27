@@ -12,6 +12,7 @@ import {
 import { auditLog } from "@/lib/auth/audit";
 import { invalidateUserCorrelationPatterns } from "@/lib/cache/invalidate";
 import { serialiseCustomMetricEntry } from "@/lib/custom-metrics/custom-metric-store";
+import { encryptNote } from "@/lib/crypto/note-cipher";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
 import { updateCustomMetricEntrySchema } from "@/lib/validations/custom-metrics";
@@ -83,7 +84,13 @@ export const PATCH = apiHandler(
     const data: Record<string, unknown> = {};
     if (d.value !== undefined) data.value = d.value;
     if (d.measuredAt !== undefined) data.measuredAt = d.measuredAt;
-    if (d.note !== undefined) data.note = d.note;
+    // v1.39.3 — the note is stored encrypted. Any note write (a new value or
+    // an explicit clear) also nulls the legacy readable column, so an edited
+    // row never keeps its old text beside the new ciphertext.
+    if (d.note !== undefined) {
+      data.noteEncrypted = encryptNote(d.note);
+      data.note = null;
+    }
 
     const updated = await prisma.customMetricEntry.update({
       where: { id: entryId },

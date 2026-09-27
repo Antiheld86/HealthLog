@@ -73,8 +73,8 @@ export function summariseForVisit(
     };
   });
 
-  const compliance = Object.entries(data.compliance).map(([name, c]) => ({
-    medication: name,
+  const compliance = Object.values(data.compliance).map((c) => ({
+    medication: c.name,
     takenDoses: c.taken,
     expectedDoses: c.total,
     missedDoses: c.missed,

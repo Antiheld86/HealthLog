@@ -3,6 +3,7 @@ import {
   getClientIp,
   getClientIpOrTrustWarning,
   _resetTrustViolationWarningForTests,
+  _resetUnreadProxyHeadersWarningForTests,
 } from "../api-response";
 
 const ORIGINAL_HOPS = process.env.TRUST_PROXY_HOPS;
@@ -12,6 +13,7 @@ beforeEach(() => {
   delete process.env.TRUST_PROXY_HOPS;
   delete process.env.TRUST_CF_CONNECTING_IP;
   _resetTrustViolationWarningForTests();
+  _resetUnreadProxyHeadersWarningForTests();
 });
 
 afterEach(() => {
@@ -61,7 +63,18 @@ describe("getClientIp trusted-proxy semantics (V3 audit)", () => {
     ).toThrow(/TRUST_PROXY_HOPS/);
   });
 
-  it("with TRUST_PROXY_HOPS=0 ignores XFF entirely", () => {
+  it.each(["", "   "])(
+    "treats an empty TRUST_PROXY_HOPS (%j) as unset — the default compose file passes one",
+    (value) => {
+      process.env.TRUST_PROXY_HOPS = value;
+      const ip = getClientIp(
+        makeRequest({ "x-forwarded-for": "9.9.9.9, 1.2.3.4, 5.6.7.8" }),
+      );
+      expect(ip).toBe("5.6.7.8");
+    },
+  );
+
+  it("with TRUST_PROXY_HOPS=0 trusts no forwarding header, x-real-ip included", () => {
     process.env.TRUST_PROXY_HOPS = "0";
     const ip = getClientIp(
       makeRequest({
@@ -69,7 +82,17 @@ describe("getClientIp trusted-proxy semantics (V3 audit)", () => {
         "x-real-ip": "8.8.8.8",
       }),
     );
-    expect(ip).toBe("8.8.8.8");
+    expect(ip).toBeNull();
+  });
+
+  it("x-real-ip rotation — with no declared proxy a caller cannot mint a fresh bucket per request", () => {
+    process.env.TRUST_PROXY_HOPS = "0";
+    const seen = new Set(
+      ["1.1.1.1", "2.2.2.2", "3.3.3.3"].map((ip) =>
+        getClientIp(makeRequest({ "x-real-ip": ip })),
+      ),
+    );
+    expect(seen).toEqual(new Set([null]));
   });
 
   it("with TRUST_PROXY_HOPS=0 and no x-real-ip returns null", () => {
@@ -181,6 +204,49 @@ describe("getClientIp trust-violation warning (F-6, 2026-05-16)", () => {
  * without Cloudflare in front cannot be tricked by an attacker
  * setting the header directly.
  */
+describe("X-Real-IP with two or more hops, and headers the trust cannot read", () => {
+  it("does not read X-Real-IP when two hops are declared and XFF is missing", () => {
+    process.env.TRUST_PROXY_HOPS = "2";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // A caller behind the outer proxy could have written it.
+      expect(getClientIp(makeRequest({ "x-real-ip": "9.9.9.9" }))).toBeNull();
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toMatch(/X-Real-IP/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("warns once when TRUST_PROXY_HOPS=0 and a proxy sends only X-Real-IP", () => {
+    process.env.TRUST_PROXY_HOPS = "0";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (let i = 0; i < 3; i++) {
+        expect(
+          getClientIp(makeRequest({ "x-real-ip": `10.0.0.${i}` })),
+        ).toBeNull();
+      }
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toMatch(/TRUST_PROXY_HOPS=0/);
+      expect(warn.mock.calls[0][0]).toMatch(/TRUST_PROXY_HOPS=1/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("stays quiet with TRUST_PROXY_HOPS=0 and no forwarding header", () => {
+    process.env.TRUST_PROXY_HOPS = "0";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(getClientIp(makeRequest({}))).toBeNull();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
 describe("getClientIp Cloudflare cf-connecting-ip branch (v1.4.37)", () => {
   it("returns cf-connecting-ip when the env flag is on and the header is present", () => {
     process.env.TRUST_CF_CONNECTING_IP = "1";
@@ -266,7 +332,8 @@ describe("getClientIpOrTrustWarning shape (F-6, 2026-05-16)", () => {
     expect(result.ip).toBeNull();
   });
 
-  it("returns trustViolation=true and x-real-ip when chain is short but x-real-ip is set", () => {
+  it("returns trustViolation=true and ignores x-real-ip when the chain is short", () => {
+    // The declared proxies were bypassed, so x-real-ip came from the caller.
     process.env.TRUST_PROXY_HOPS = "2";
     const result = getClientIpOrTrustWarning(
       makeRequest({
@@ -274,7 +341,7 @@ describe("getClientIpOrTrustWarning shape (F-6, 2026-05-16)", () => {
         "x-real-ip": "9.9.9.9",
       }),
     );
-    expect(result).toEqual({ ip: "9.9.9.9", trustViolation: true });
+    expect(result).toEqual({ ip: null, trustViolation: true });
   });
 
   it("returns trustViolation=false when XFF is absent (no chain to validate)", () => {

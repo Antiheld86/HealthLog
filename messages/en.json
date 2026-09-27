@@ -126,7 +126,14 @@
         "nothingSaved": "Nothing was saved. Check the highlighted field and try again.",
         "invalidBody": "The profile update could not be read.",
         "emailInUse": "This email address is already in use.",
-        "emailRateLimited": "Too many email-address changes. Try again later."
+        "emailRateLimited": "Too many email-address changes. Try again later.",
+        "emailSecondFactorRequired": "Confirm with your second factor or a passkey to change the email address."
+      }
+    },
+    "auth": {
+      "reproof": {
+        "required": "Confirm your current password to change this.",
+        "failed": "That did not verify. Nothing was changed."
       }
     }
   },
@@ -440,7 +447,8 @@
       "errorEmailUnverified": "Your identity provider did not mark your email address as verified.",
       "errorIdentityConflict": "That email address belongs to an account that is already linked to a different SSO identity.",
       "errorRegistrationDisabled": "No account matches that identity, and new sign-ups are currently closed.",
-      "errorFailed": "Single sign-on failed. Please try again."
+      "errorFailed": "Single sign-on failed. Please try again.",
+      "errorLinkRequired": "An account with this email address already exists here. Sign in to it once with its password or passkey to connect it to single sign-on."
     },
     "native": {
       "signingInToApp": "Signing in to the HealthLog app"
@@ -464,6 +472,13 @@
       "title": "Set up a second factor",
       "body": "Your administrator requires a second factor on this account. Add an authenticator app or a security key to continue.",
       "signOut": "Sign out"
+    },
+    "confirmAccess": {
+      "title": "Confirm it is you",
+      "body": "An assistant is asking to connect to your HealthLog data. Confirm it is you, then you will be taken back to decide whether to allow it.",
+      "action": "Confirm",
+      "failed": "That did not work. Please try again.",
+      "nothingToConfirm": "There is nothing to confirm here. Start the connection again from your assistant."
     }
   },
   "dashboard": {
@@ -4591,7 +4606,7 @@
       "sampleBody": "Weight down 1.2 kg over two weeks. Resting pulse steady at 58 bpm. Blood pressure in range on 6 of 7 days — the one high reading followed a late, salty dinner.",
       "sampleCaption": "Example only — not your own data. This is what a briefing reads like once insights are on.",
       "ladderTitle": "Three ways to turn it on",
-      "ladderLocalTitle": "Local model — nothing leaves your network",
+      "ladderLocalTitle": "Local model — AI requests stay on your network",
       "ladderLocalBody": "Point HealthLog at Ollama or LM Studio on your own machine. Free and fully private — the calm default.",
       "ladderByokTitle": "Bring your own key",
       "ladderByokBody": "Use your own OpenAI or Anthropic key. It runs under your account and billing, and the API tier keeps your data out of training by default.",
@@ -5173,7 +5188,6 @@
             "passphrasePlaceholder": "Passphrase (min. 12 characters)",
             "passphraseHelp": "Derives the archive key with Argon2id and seals it with AES-256-GCM. Save the file with a .hlx extension.",
             "noRecoveryWarning": "There is no recovery — if you lose this passphrase, the archive cannot be opened. Keep it somewhere safe.",
-            "stepUpNeeded": "Confirm your second factor, then try again.",
             "detail": "Same shape as the weekly auto-backup. Some record types are not carried yet — the file's manifest names what is in it.",
             "contents": "Your measurements, medications, mood, cycle, labs, illness episodes, allergies, family history, nutrients, workouts, health profile and custom metrics in one JSON file."
           }
@@ -5553,7 +5567,10 @@
       "invalidFormat": "That is not written in a form this field can read.",
       "invalidType": "That value did not arrive in a form this field can store.",
       "rateLimited": "Changed too often. Wait a little and try again.",
-      "other": "This value was not accepted. Check it and try again."
+      "other": "This value was not accepted. Check it and try again.",
+      "reproofRequired": "Enter your current password to change the email address.",
+      "reproofFailed": "That password is not correct, so the email address was not changed.",
+      "secondFactorRequired": "Confirm with your second factor or a passkey to change the email address."
     },
     "avatar": {
       "title": "Profile photo",
@@ -5594,7 +5611,9 @@
       "currentPassword": "Current password",
       "authenticatorCode": "Authenticator code",
       "authenticatorPlaceholder": "6-digit authenticator code",
-      "verifyAndAdd": "Verify and add"
+      "verifyAndAdd": "Verify and add",
+      "factorDescription": "Verify an existing sign-in method before adding a second factor.",
+      "verifyAndContinue": "Verify and continue"
     },
     "passkeyName": "Name",
     "noPasskeys": "No passkeys registered.",
@@ -5655,10 +5674,10 @@
     "codexConnected": "ChatGPT connected successfully! Insights are now active.",
     "codexDisconnected": "ChatGPT connection removed.",
     "codexConnectionFailed": "ChatGPT connection failed. Please try again.",
-    "rawData": "Send raw data",
-    "rawDataOnDescription": "Aggregated metrics plus anonymized individual points from the last 30 days with time context are sent — never your name, email, or direct account identifiers.",
-    "rawDataOffDescription": "Only summarized metrics are sent (for example averages, trends, minimum/maximum) — no individual points and no exact time context.",
-    "rawDataWarning": "Raw mode enabled: the provider receives additional anonymized points from the last 30 days for higher analysis accuracy.",
+    "rawData": "Send detailed history",
+    "rawDataOnDescription": "Besides the summaries, the provider receives averages of your readings: per day for the last 90 days, per week for the year before, and per month back to 5 years, each with its date and number of readings. Single readings, your name and your email are not sent.",
+    "rawDataOffDescription": "Only summaries are sent: the latest value, averages, trends, minimum and maximum over fixed windows. No series of readings.",
+    "rawDataWarning": "Detailed history is on: every analysis also sends daily averages for the last 90 days, weekly averages for the year before, and monthly averages back to 5 years.",
     "regenerateInsights": "Regenerate reports",
     "regenerateSuccess": "Reports regenerated successfully",
     "regenerateRateLimit": "Please wait — you've hit the hourly limit for analyses.",
@@ -6545,7 +6564,12 @@
       "revokeSessionConfirmTitle": "Sign this device out?",
       "revokeSessionConfirmBody": "{device} will need to sign in again. Nothing recorded on it is affected.",
       "signOutEverywhereConfirmTitle": "Sign out every other device?",
-      "signOutEverywhereConfirmBody": "Every device except this one will need to sign in again. This device stays signed in. Nothing you have recorded is affected."
+      "signOutEverywhereConfirmBody": "Every other device, every connected AI assistant and every API token will need to sign in or be set up again. This device stays signed in. Nothing you have recorded is affected.",
+      "signOutEverywhereShareLinks": "Also end the doctor share links",
+      "signOutEverywhereInvites": "Invitations to your record that nobody has accepted yet are withdrawn. People who already accepted keep their access; you can end it next.",
+      "signOutEverywhereInvitesDone": "Withdrew {count} invitation(s) nobody had accepted.",
+      "grantsKeptTitle": "These people can still see your record",
+      "grantsKeptBody": "Signing out does not end access you gave someone. End it here if you did not give it, or no longer want them to have it."
     },
     "privacy": {
       "encryption": {
@@ -6579,7 +6603,7 @@
       "delete": {
         "title": "Delete or reset",
         "description": "Remove your account entirely, or wipe your health records while keeping the account.",
-        "backupLag": "Deletion removes your data immediately. Encrypted off-host backups still contain it until they roll off the operator's backup retention window.",
+        "backupLag": "Deletion removes your data immediately. If this server keeps encrypted off-host backups, the copies of your data are deleted from that storage right after, or on the next nightly run if the storage is unreachable.",
         "openAdvanced": "Delete or reset"
       },
       "posture": {
@@ -6698,6 +6722,41 @@
       "showChecklist": "Show the checklist again",
       "checklistShown": "The checklist is back on the dashboard.",
       "checklistNothingHidden": "The checklist was not hidden; it opens on the dashboard."
+    },
+    "documentSources": {
+      "title": "Document archives",
+      "description": "Search Paperless-ngx or Papra from HealthLog and import the documents you pick.",
+      "explainer": "An import button appears wherever you link documents: on a visit, a vaccination and a condition, and in Documents. HealthLog keeps its own encrypted copy of each document you import, and asks your archive only when you search or import.",
+      "systemLabel": "Archive",
+      "statusConnected": "Connected",
+      "statusNotConnected": "Not connected",
+      "connectedSince": "Connected, last checked {date}",
+      "originRemoved": "This address is no longer on the server's list of allowed archives. Ask the administrator, or save another address.",
+      "baseUrl": "Address",
+      "allowedOrigins": "Allowed on this server: {origins}",
+      "organizationId": "Organization id",
+      "organizationHelp": "The part after /organizations/ in the Papra address bar. Papra organization ids look like org_ followed by 24 letters and digits.",
+      "token": "API token",
+      "tokenSaved": "Saved for this address. Leave empty to keep it.",
+      "tokenHelpPaperless": "In Paperless-ngx: My Profile, API token.",
+      "tokenHelpPapra": "In Papra: an API key with documents:read and tags:read.",
+      "save": "Save and test",
+      "saving": "Testing…",
+      "saved": "Connected. The archive answered.",
+      "test": "Test",
+      "testOk": "The archive answered in {latency} ms.",
+      "disconnect": "Disconnect",
+      "disconnectTitle": "Disconnect {name}?",
+      "disconnectDescription": "HealthLog forgets the address and the token. Documents you already imported stay in HealthLog.",
+      "unavailableExplainer": "This server no longer allows document archives, so the connection below cannot be used. You can still remove it.",
+      "moduleOffExplainer": "Documents are switched off, so the connection below is not used. You can still remove it.",
+      "tokenNewAddress": "A new address needs the API token again."
+    },
+    "emailChangePassword": "Current password (needed to change the email address)",
+    "reproof": {
+      "description": "This shares or exports your health data. Confirm it's you to continue.",
+      "signInAgain": "Sign in again, then try once more. Your account has no password or passkey to confirm here.",
+      "failed": "That did not work. Check what you entered and try again."
     }
   },
   "admin": {
@@ -6746,7 +6805,11 @@
       "removeBody": "Accounts without their own key lose AI features straight away. The key is not shown anywhere after it is stored, so you will need the original to put it back.",
       "removeConfirm": "Remove key",
       "saved": "AI server key settings saved",
-      "error": "Saving the AI server key failed"
+      "error": "Saving the AI server key failed",
+      "legacyGrantTitle": "ALLOW_LOCAL_AI_PRIVATE_HOSTS=true is deprecated",
+      "legacyGrantBody": "It still lets the server key above and AI settings saved on an admin account reach your network, and will be removed in a later release. Other accounts need their AI endpoint listed in AI_PRIVATE_ORIGINS already. Set AI_PRIVATE_ORIGINS in the server environment, restart, then remove ALLOW_LOCAL_AI_PRIVATE_HOSTS.",
+      "legacyGrantOrigins": "The AI base URLs saved on this instance that point at your network:",
+      "legacyGrantNoOrigins": "No AI base URL saved on this instance points at your network, so you can remove ALLOW_LOCAL_AI_PRIVATE_HOSTS now."
     },
     "providerHealth": {
       "title": "AI provider health",
@@ -7063,6 +7126,7 @@
       "versionTileBuiltAt": "Built at",
       "versionTileUpdateAvailable": "Update available: {tag}",
       "versionTileUpToDate": "Up to date",
+      "versionTileCheckOff": "Update check off",
       "snapshotLoadError": "Failed to load system snapshot.",
       "snapshotLoading": "Loading snapshot…",
       "auditTitle": "Recent activity",
@@ -7267,7 +7331,7 @@
           "description": "When this host last put each account's encrypted copy in your bucket.",
           "loadError": "Could not load the off-host status.",
           "notConfiguredTitle": "Off-host backup is not configured",
-          "notConfiguredDescription": "No bucket and no key are set, so nothing leaves this host. Set BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY and BACKUP_ENCRYPTION_KEY to turn the nightly upload on.",
+          "notConfiguredDescription": "No bucket and no key are set, so no backup leaves this host. Set BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY and BACKUP_ENCRYPTION_KEY to turn the nightly upload on.",
           "stateFresh": "Fresh",
           "stateDue": "Due",
           "stateStale": "Stale",
@@ -7276,7 +7340,12 @@
           "neverDetail": "Nothing has landed for this account. Last checked {when}.",
           "unknownDetail": "No nightly run has recorded this account yet.",
           "age": "{hours} h ago",
-          "scheduleNote": "The upload runs every {hours} h. Fresh means inside one run, due means one run produced nothing, stale means two did not."
+          "scheduleNote": "The upload runs every {hours} h. Fresh means inside one run, due means one run produced nothing, stale means two did not.",
+          "lifecycleConfigured": "The bucket deletes copies after {days} days by its own lifecycle rule.",
+          "lifecycleMissing": "The bucket has no lifecycle rule, so every nightly copy is kept forever. Add a rule that expires objects after BACKUP_RETENTION_DAYS.",
+          "lifecycleUnknown": "Whether the bucket deletes old copies could not be read: the credential may not read its lifecycle rule. Check that a rule expires objects after BACKUP_RETENTION_DAYS.",
+          "pendingDeletions": "Copies of {count} deleted or wiped accounts are still in the bucket and are being removed.",
+          "pendingDeletionsFailing": "Copies of {count} deleted or wiped accounts are still in the bucket because it refused to delete them ({error}). Give the credential DeleteObject; the deletion is retried every night."
         },
         "restoreStarted": "Restore started. Its progress shows above the list.",
         "restoreActive": "A restore of this account is already running. Wait for it to finish.",
@@ -7309,7 +7378,10 @@
         "restoreFailureNotStarted": "The background worker did not pick the restore up. Check that the worker is running.",
         "restoreFailureEnqueue": "The restore could not be handed to the background worker. Check that the worker is running.",
         "restoreFailureAfterCommit": "The data was restored, but a step after it failed. Charts may take until the next nightly run to catch up.",
-        "restoreFailureUnexpected": "The restore stopped on an unexpected error and was rolled back. The server log names the error."
+        "restoreFailureUnexpected": "The restore stopped on an unexpected error and was rolled back. The server log names the error.",
+        "restoreFailureKeyMissing": "The backup needs encryption key {keys}, which this server cannot open it with. Add the key back to ENCRYPTION_KEYS, restart, and start the restore again.",
+        "restoreFailureForeignReference": "The file points at records that belong to another account. Nothing was written.",
+        "previewKeyMissing": "This backup cannot be restored on this server: it needs encryption key {keys}. Add the key back to ENCRYPTION_KEYS and restart first."
       },
       "danger-zone": {
         "title": "Danger Zone",
@@ -7348,7 +7420,7 @@
         "rotateEnqueued": "Rotation started.",
         "rotateFailed": "Could not start the rotation.",
         "stepUpNeeded": "A fresh second factor is required. Confirm your second factor, or use the command-line tool if you have no second factor enrolled.",
-        "cliNote": "A second factor is required to use this button. Operators without one rotate with scripts/rotate-encryption-key.ts.",
+        "cliNote": "A second factor is required to use this button. Without one, run scripts/rotate-encryption-key.ts from a source checkout of this release; the steps are in docs/ops/encryption-key-rotation.md.",
         "columnsTitle": "Per-column coverage",
         "columnsDescription": "Each encrypted column with its row counts on the active key versus older keys.",
         "colColumn": "Column",
@@ -7361,7 +7433,17 @@
           "completed": "Completed",
           "failed": "Failed"
         },
-        "coverageDetail": "Only key ids and counts are shown — never key material."
+        "coverageDetail": "Only key ids and counts are shown — never key material.",
+        "backupsTitle": "Keys the backups still need",
+        "backupsDescription": "A retired key stays needed while any backup below still lists it.",
+        "backupsStoredLine": "Key {key}: {count} stored copies, the oldest from {when}",
+        "backupsUnrecordedLine": "{count} stored copies were written before backups recorded their keys (the oldest on {when}). They may need any key that existed then: keep every old key until they are replaced or deleted.",
+        "backupsOffhostLine": "Key {key}: the last off-host copy that needs it went into the bucket on {when}; needed there until {until}",
+        "backupsOffhostLineUnknown": "Key {key}: the last off-host copy that needs it went into the bucket on {when}. The bucket's expiry is unknown, so keep the key until you know that copy is gone.",
+        "backupsNone": "No backup has recorded the keys it needs yet.",
+        "backupsStillNeed": "Every row is rotated, but backups still need {keys}",
+        "backupsUnrecordedBadge": "Every row is rotated, but older backups may still need a retired key",
+        "backupsDetail": "Rotation re-encrypts every row, but a backup keeps the key its content was written under, and restoring it needs that key. Keep a retired key in ENCRYPTION_KEYS until nothing below lists it."
       }
     },
     "carrier": "Carrier",
@@ -7408,7 +7490,11 @@
       "countOther": "{count} failures",
       "lastFailed": "Last failure {when}"
     },
-    "deleteAllDetail": "User accounts will be preserved."
+    "deleteAllDetail": "User accounts will be preserved.",
+    "cardError": {
+      "title": "This part of the page could not be shown",
+      "description": "The rest of the page still works; try again or reload if it keeps failing."
+    }
   },
   "achievements": {
     "title": "Achievements",
@@ -8016,7 +8102,8 @@
     "bodyToday": "{medName}: {units} units left — less than one day of supply.",
     "bodyReorder": "{medName}: {units} units left. Supply runs out around {runsOutOn} — reorder by {reorderBy}.",
     "bodyLastDose": "{medName}: {units} units left — about your final dose. Supply runs out around {runsOutOn}.",
-    "bodyExpired": "{medName}: no usable supply left. {units} units are marked expired."
+    "bodyExpired": "{medName}: no usable supply left. {units} units are marked expired.",
+    "bodyAsNeeded": "{medName}: only {units} units left. Reorder before you need the next dose."
   },
   "moodReminders": {
     "dailyTitle": "Log your mood",
@@ -10147,10 +10234,74 @@
       "body": "Reading with AI sends this to your AI service outside this server. Allow HealthLog to send documents, lab reports and medication descriptions for reading?",
       "grant": "Allow reading",
       "error": "The consent could not be saved. Please try again."
+    },
+    "sourcePicker": {
+      "open": "Import from archive",
+      "openNamed": "Import from {name}",
+      "title": "Import from {name}",
+      "description": "Search by name, then tick the documents HealthLog should copy.",
+      "sourceLabel": "Archive",
+      "searchLabel": "Document name",
+      "searchPlaceholder": "Search by name",
+      "tagLabel": "Tag",
+      "tagAny": "Any tag",
+      "fromLabel": "From",
+      "toLabel": "To",
+      "clearFilters": "Clear tag and dates",
+      "rangeInvalid": "The end date is before the start date.",
+      "empty": "{name} has no documents to show.",
+      "noMatch": "No documents match.",
+      "loadMore": "Load more",
+      "stateImported": "In HealthLog",
+      "stateDeleted": "Deleted in HealthLog",
+      "selectedCount": "{count} of up to {max} selected",
+      "importAction": "Import {count}",
+      "importing": "Importing, one document at a time…",
+      "done": "Done",
+      "summary": "Imported: {imported}. Already there: {present}. Not imported: {failed}.",
+      "stopped": "Stopped: {reason}",
+      "result": {
+        "waiting": "Waiting",
+        "working": "Importing…",
+        "imported": "Imported",
+        "importedLinked": "Imported and linked",
+        "duplicate": "Already in HealthLog",
+        "duplicateLinked": "Already in HealthLog, now linked",
+        "deleted": "Deleted in HealthLog, left alone"
+      },
+      "errors": {
+        "unavailable": "Document archives are not enabled on this server.",
+        "notConnected": "This archive is not connected. Connect it under Settings, Integrations.",
+        "originNotAllowed": "This address is not on the server's list of allowed archives. Ask the administrator to add it.",
+        "unreachable": "The archive could not be reached. Check that it is running and that the address is right.",
+        "redirected": "The archive redirected the request. Enter the address it redirects to.",
+        "authRefused": "The archive refused the token. Check the token and its permissions.",
+        "versionTooOld": "The archive is too old. Paperless-ngx 2.16 or later is needed.",
+        "badResponse": "The archive's answer could not be read. Check that the address points at the archive itself.",
+        "notFound": "The archive has no such document, or the organization id is wrong or not yours.",
+        "linkTargetNotFound": "The record to link to no longer exists.",
+        "rateLimited": "Too many requests. Wait a minute and try again.",
+        "browserOnly": "Document archives can only be used in the browser.",
+        "invalidAddress": "Enter the full address, starting with https:// or http://.",
+        "organizationRequired": "Enter the Papra organization id.",
+        "tokenRequired": "Enter the API token. A new address needs it again.",
+        "fileTooLarge": "The file is larger than HealthLog accepts.",
+        "quotaExceeded": "Your document storage is full.",
+        "fileType": "HealthLog does not accept this file type.",
+        "uploadLimit": "The hourly upload limit is reached. Try again later.",
+        "uploadBusy": "Other uploads are still running. Try again in a moment.",
+        "moduleDisabled": "Documents are switched off in Settings.",
+        "generic": "Something went wrong. Try again.",
+        "permissionMissing": "The Papra key cannot read tags. Give it the tags:read permission."
+      },
+      "pickMore": "Pick more",
+      "finishedHint": "Search again or change a filter to pick more documents.",
+      "maxReached": "You can import up to {max} documents at a time.",
+      "noMatchHint": "Try part of the name, or clear the tag and dates."
     }
   },
   "selfDescription": {
-    "dataPosture": "HealthLog is self-hosted: your health data stays on your own instance, encrypted at rest. AI features use a provider key you bring or a local model, so nothing leaves your instance beyond the provider you configure, and there is no third-party analytics on your health data."
+    "dataPosture": "HealthLog is self-hosted: your health data lives in your own instance's database. Notes and other free text, documents, questionnaire answers, AI-written text and access tokens are encrypted at rest; measurement values, lab values, medication names and mood scores are stored unencrypted and rely on the security of your server. AI features send data only to the AI provider set up for your account, and there is no third-party analytics on your health data."
   },
   "customMetrics": {
     "sectionTitle": "Custom metrics",

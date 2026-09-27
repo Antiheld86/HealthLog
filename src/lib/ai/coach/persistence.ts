@@ -31,9 +31,9 @@ import type {
 
 /**
  * Title-from-message — first 80 chars trimmed, ellipsis on overflow.
- * Stays plain text (the history rail needs to render without paying
- * the per-message decrypt cost), so callers should pass already-
- * sanitised input.
+ * Callers should pass already-sanitised input. The result is stored
+ * encrypted (`titleEncrypted`, v1.39.3): it is the opening words of the
+ * person's first message, which is as sensitive as the message itself.
  */
 export function summariseTitle(input: string): string {
   const collapsed = input.replace(/\s+/g, " ").trim();
@@ -301,15 +301,44 @@ export interface AppendMessageParams {
  * Create a brand-new conversation row owned by `userId`. Caller is
  * expected to immediately append the first user message.
  */
+/**
+ * v1.39.3 — the title's at-rest form. Always a ciphertext: `summariseTitle`
+ * never returns an empty string and a rename is validated non-empty, so there
+ * is no "no title" case to store as NULL.
+ */
+export function encryptConversationTitle(
+  title: string,
+): Uint8Array<ArrayBuffer> {
+  return encryptToBytes(title);
+}
+
+/**
+ * v1.39.3 — read a conversation title, ciphertext first. The readable column
+ * is consulted only when there is no ciphertext, which is a row the free-text
+ * encryption backfill has not reached yet. A present ciphertext that does not
+ * decrypt throws, the same fail-closed posture as every note reader
+ * (`readNote`); it never falls back to the readable column.
+ */
+export function readConversationTitle(row: {
+  title: string | null;
+  titleEncrypted: Uint8Array | null;
+}): string {
+  if (row.titleEncrypted && row.titleEncrypted.byteLength > 0) {
+    return decryptFromBytes(row.titleEncrypted);
+  }
+  return row.title ?? "";
+}
+
 export async function createConversation(
   params: CreateConversationParams,
 ): Promise<CoachConversationDTO> {
   const attachmentIds = params.attachmentIds ?? [];
+  const title = summariseTitle(params.title);
   const row = await prisma.$transaction(async (tx) => {
     const conversation = await tx.coachConversation.create({
       data: {
         userId: params.userId,
-        title: summariseTitle(params.title),
+        titleEncrypted: encryptConversationTitle(title),
         documentScoped: params.documentScoped ?? false,
       },
     });
@@ -327,7 +356,7 @@ export async function createConversation(
   });
   return {
     id: row.id,
-    title: row.title,
+    title,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     messageCount: 0,
@@ -439,7 +468,7 @@ export async function recordProactiveNudge(
     const conversation = await tx.coachConversation.create({
       data: {
         userId: params.userId,
-        title: summariseTitle(params.title),
+        titleEncrypted: encryptConversationTitle(summariseTitle(params.title)),
       },
     });
     const message = await tx.coachMessage.create({
@@ -559,7 +588,7 @@ export async function fetchConversationWithMessages(
   const attachments = mapAttachments(row.attachments);
   return {
     id: row.id,
-    title: row.title,
+    title: readConversationTitle(row),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     messageCount: messages.length,
@@ -586,14 +615,30 @@ export interface ListConversationsParams {
   /**
    * v1.30.2 (QoL H1) — optional server-side title search for the history
    * rail + the standalone conversations page. Case-insensitive substring
-   * match against `title` only — the only plaintext column on the row;
-   * `CoachMessage.encryptedContent` cannot be searched without decrypting
-   * every message, so message BODIES are out of scope for this pass (see
-   * the route's doc comment). Trimmed empty string is treated as "no
-   * filter", matching the pre-existing cursor/limit handling style.
+   * match against the title only; message BODIES are out of scope (see the
+   * route's doc comment). Since v1.39.3 the title is encrypted at rest, so
+   * the match runs on the decrypted titles in memory rather than in SQL (see
+   * `TITLE_SEARCH_SCAN_CAP`). Trimmed empty string is treated as "no filter",
+   * matching the pre-existing cursor/limit handling style.
    */
   q?: string;
 }
+
+/**
+ * v1.39.3 — how many of an account's conversations a title search decrypts,
+ * newest first. The title is encrypted at rest, so SQL cannot match it; the
+ * search reads id + title for the account, decrypts, and filters in memory.
+ * A title is at most 80 characters, so a scan of the whole cap is a few
+ * milliseconds of AES. An account past the cap has its oldest threads left out
+ * of search results (never out of the unfiltered rail), which no real account
+ * comes near: the rail pages 20 at a time and a person opens a few a day.
+ */
+export const TITLE_SEARCH_SCAN_CAP = 5000;
+
+const CONVERSATION_LIST_ORDER = [
+  { updatedAt: "desc" as const },
+  { id: "desc" as const },
+];
 
 /**
  * Cursor-paginated list of conversations for the rail. Default limit
@@ -608,43 +653,81 @@ export async function listConversations(
 }> {
   const limit = Math.min(Math.max(params.limit ?? 20, 1), 50);
   const q = params.q?.trim();
-  const rows = await prisma.coachConversation.findMany({
-    where: {
-      userId: params.userId,
-      ...(params.attachedDocumentId
-        ? { attachments: { some: { documentId: params.attachedDocumentId } } }
-        : {}),
-      ...(q ? { title: { contains: q, mode: "insensitive" } } : {}),
-    },
-    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    take: limit + 1,
-    ...(params.cursor
-      ? {
-          cursor: { id: params.cursor },
-          skip: 1,
-        }
+  const scope = {
+    userId: params.userId,
+    ...(params.attachedDocumentId
+      ? { attachments: { some: { documentId: params.attachedDocumentId } } }
       : {}),
-    include: {
-      _count: { select: { messages: true } },
-      // v1.29.x (S7) — the live attachment set (label columns only) so the rail
-      // can badge a fenced thread with a paperclip + the first document's title.
-      // Empty on a health thread.
-      attachments: {
-        orderBy: { addedAt: "asc" },
-        include: { document: { select: { title: true, filename: true } } },
-      },
+  };
+  const include = {
+    _count: { select: { messages: true } },
+    // v1.29.x (S7) — the live attachment set (label columns only) so the rail
+    // can badge a fenced thread with a paperclip + the first document's title.
+    // Empty on a health thread.
+    attachments: {
+      orderBy: { addedAt: "asc" as const },
+      include: { document: { select: { title: true, filename: true } } },
     },
-  });
+  };
 
-  const page = rows.slice(0, limit);
-  const nextCursor = rows.length > limit ? page[page.length - 1].id : null;
+  let page;
+  let nextCursor: string | null;
+  if (q) {
+    // Match on the decrypted titles, then page the matching ids with the same
+    // cursor contract the SQL path has: the cursor is the last id of the
+    // previous page, and an unknown cursor yields an empty page.
+    const needle = q.toLocaleLowerCase();
+    const candidates = await prisma.coachConversation.findMany({
+      where: scope,
+      orderBy: CONVERSATION_LIST_ORDER,
+      take: TITLE_SEARCH_SCAN_CAP,
+      select: { id: true, title: true, titleEncrypted: true },
+    });
+    const matching = candidates
+      .filter((c) =>
+        readConversationTitle(c).toLocaleLowerCase().includes(needle),
+      )
+      .map((c) => c.id);
+    let start = 0;
+    if (params.cursor) {
+      const at = matching.indexOf(params.cursor);
+      start = at === -1 ? matching.length : at + 1;
+    }
+    const pageIds = matching.slice(start, start + limit);
+    nextCursor =
+      matching.length > start + limit ? pageIds[pageIds.length - 1] : null;
+    const rows = await prisma.coachConversation.findMany({
+      where: { ...scope, id: { in: pageIds } },
+      include,
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    page = pageIds.flatMap((id) => {
+      const row = byId.get(id);
+      return row ? [row] : [];
+    });
+  } else {
+    const rows = await prisma.coachConversation.findMany({
+      where: scope,
+      orderBy: CONVERSATION_LIST_ORDER,
+      take: limit + 1,
+      ...(params.cursor
+        ? {
+            cursor: { id: params.cursor },
+            skip: 1,
+          }
+        : {}),
+      include,
+    });
+    page = rows.slice(0, limit);
+    nextCursor = rows.length > limit ? page[page.length - 1].id : null;
+  }
 
   return {
     conversations: page.map((r) => {
       const attachments = mapAttachments(r.attachments);
       return {
         id: r.id,
-        title: r.title,
+        title: readConversationTitle(r),
         createdAt: r.createdAt.toISOString(),
         updatedAt: r.updatedAt.toISOString(),
         messageCount: r._count.messages,
@@ -669,7 +752,9 @@ export async function renameConversation(
 ): Promise<{ id: string; title: string } | null> {
   const { count } = await prisma.coachConversation.updateMany({
     where: { id: conversationId, userId },
-    data: { title },
+    // The readable column is cleared on a rename so a legacy row never keeps
+    // its old title beside the new ciphertext.
+    data: { title: null, titleEncrypted: encryptConversationTitle(title) },
   });
   return count === 1 ? { id: conversationId, title } : null;
 }

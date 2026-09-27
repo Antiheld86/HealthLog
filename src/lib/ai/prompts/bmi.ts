@@ -55,12 +55,12 @@ export function getBmiUserPrompt(
       ? `\nOPENER HINT: ${openerHint}`
       : "";
   if (instructionLocale(locale) === "en") {
-    return `Date: ${todayKey} (Europe/Berlin)${openerLine}
+    return `Date: ${todayKey}${openerLine}
 Write one short assessment of this person's BMI. Open with what its band placement MEANS in plain words — where it sits and whether that's holding or shifting, not the number (e.g. "sitting comfortably in the healthy band", "edging toward the next band up") — then bring in the current value and WHO band right after as support, saying against their own weekly/monthly baseline whether it has crossed a band or is nearing a boundary; never lead with the value. Close with one doable step only when the finding genuinely implies one; when nothing is, skip the step rather than manufacture filler. Leave the weight pace to the weight card. Judge confidence from the measurement count and recency.${ctxBlock}${extraBlock}
 
 ${snapshotJson}`;
   }
-  return `Datum: ${todayKey} (Europe/Berlin)${openerLine}
+  return `Datum: ${todayKey}${openerLine}
 Schreibe eine kurze Einschätzung zum BMI dieser Person. Beginne mit der BEDEUTUNG der Bandlage in klaren Worten — wo er liegt und ob das hält oder sich verschiebt, nicht der Zahl (z. B. "liegt bequem im gesunden Band", "nähert sich dem nächsten Band") — und bring danach den aktuellen Wert und das WHO-Band als Beleg, samt Angabe gegen die eigene Wochen-/Monats-Baseline, ob er ein Band gewechselt hat oder sich einer Bandgrenze nähert; führe nie mit dem Wert. Schließe nur dann mit einem machbaren Schritt, wenn der Befund wirklich einen hergibt; ist nichts umsetzbar, lass den Schritt weg statt Fülltext zu erfinden. Das Gewichtstempo bleibt der Gewichts-Karte überlassen. Konfidenz aus Messanzahl und Aktualität ableiten.${ctxBlock}${extraBlock}
 
 ${snapshotJson}`;

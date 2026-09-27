@@ -428,7 +428,8 @@ export const metaPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "A server-side proxy for the project's public release feed. It exists because the production CSP allows almost nothing on `connect-src`, so a browser calling the feed directly is silently blocked — which is exactly how the first version of the “check for updates” button appeared to do nothing.\n\n" +
         "Authenticated (cookie or a wildcard Bearer token): there is no reason an anonymous caller should poll a third-party API through this instance. No credential is forwarded to the feed, so the request runs under the host's anonymous quota — roughly sixty an hour per address, shared by everyone on the instance.\n\n" +
-        'It is deliberately hard to fail. A network error, an outage, or a rate-limited feed all return 200 with `status: "unknown"` and a machine-readable `reason`, so the UI can offer a retry instead of a red banner nobody can act on. The one genuine error is a feed that answers successfully with no version tag in it. Nothing is cached server-side; the client is expected to hold the result.',
+        'It is deliberately hard to fail. A network error, an outage, or a rate-limited feed all return 200 with `status: "unknown"` and a machine-readable `reason`, so the UI can offer a retry instead of a red banner nobody can act on. The one genuine error is a feed that answers successfully with no version tag in it. Nothing is cached server-side; the client is expected to hold the result.\n\n' +
+        'An operator who sets `UPDATE_CHECK_DISABLED` turns the outbound request off: the route then answers `status: "unknown"` with `reason: "disabled"` and contacts nobody.',
       responses: {
         "200": {
           description:

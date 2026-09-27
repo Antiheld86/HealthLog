@@ -17,10 +17,13 @@ vi.mock("@/lib/db", () => {
   return {
     prisma: {
       measurement,
-      // Run the batched write callback against the same measurement mock so
-      // createManyAndReturn / updateMany calls are observable.
-      $transaction: vi.fn(async (fn: (tx: unknown) => unknown) =>
-        fn({ measurement }),
+      // Both transaction forms against the same measurement mock so
+      // createManyAndReturn / updateMany calls are observable: a callback
+      // gets the mock as `tx`, a batch array is simply awaited.
+      $transaction: vi.fn(async (arg: unknown) =>
+        typeof arg === "function"
+          ? (arg as (tx: unknown) => unknown)({ measurement })
+          : Promise.all(arg as Promise<unknown>[]),
       ),
     },
   };
@@ -37,6 +40,10 @@ vi.mock("@/lib/crypto/note-cipher", () => ({
     s === null || s === undefined || s.length === 0
       ? null
       : new Uint8Array(Buffer.from(`enc:${s}`, "utf8")),
+  readNote: (c: Uint8Array | null | undefined, p: string | null | undefined) =>
+    c && c.byteLength > 0
+      ? Buffer.from(c).toString("utf8").slice(4)
+      : (p ?? null),
 }));
 
 vi.mock("@/lib/auth/audit", () => ({
@@ -115,8 +122,10 @@ beforeEach(() => {
     prisma.$transaction as unknown as {
       mockImplementation: (f: unknown) => void;
     }
-  ).mockImplementation(async (fn: (tx: unknown) => unknown) =>
-    fn({ measurement }),
+  ).mockImplementation(async (arg: unknown) =>
+    typeof arg === "function"
+      ? (arg as (tx: unknown) => unknown)({ measurement })
+      : Promise.all(arg as Promise<unknown>[]),
   );
 });
 
@@ -218,7 +227,11 @@ describe("POST /api/import/csv — batched write + per-row envelope", () => {
 
   it("surfaces an externalId row as updated when it already existed (updateMany)", async () => {
     mMeasurement().findMany.mockResolvedValue([
-      { type: "WEIGHT", externalId: "ext-1" },
+      {
+        type: "WEIGHT",
+        externalId: "ext-1",
+        measuredAt: new Date("2026-05-01T08:00:00Z"),
+      },
     ]);
 
     const res = await POST(
@@ -239,7 +252,19 @@ describe("POST /api/import/csv — batched write + per-row envelope", () => {
     // row matches like a live one; the update must carry the resurrection
     // (IMPORT rows are re-importable by design).
     mMeasurement().findMany.mockResolvedValue([
-      { type: "WEIGHT", externalId: "ext-tomb" },
+      {
+        type: "WEIGHT",
+        externalId: "ext-tomb",
+        // Identical values: only the tombstone differs, and that alone
+        // makes the line an update rather than a duplicate.
+        value: 81.0,
+        unit: "kg",
+        measuredAt: new Date("2026-05-01T08:00:00Z"),
+        glucoseContext: null,
+        notes: null,
+        notesEncrypted: null,
+        deletedAt: new Date("2026-05-02T08:00:00Z"),
+      },
     ]);
 
     const res = await POST(
@@ -379,7 +404,11 @@ describe("POST /api/import/csv — contextless blood glucose", () => {
   it("keeps a re-upload of the same external id idempotent", async () => {
     // The key already exists under (userId, type, source=IMPORT, externalId).
     mMeasurement().findMany.mockResolvedValue([
-      { type: "BLOOD_GLUCOSE", externalId: "sensor-1" },
+      {
+        type: "BLOOD_GLUCOSE",
+        externalId: "sensor-1",
+        measuredAt: new Date("2024-04-03T02:15:00Z"),
+      },
     ]);
 
     const res = await POST(
@@ -422,5 +451,148 @@ describe("POST /api/import/csv — contextless blood glucose", () => {
       status: "skipped",
       reason: "invalid_glucose_context",
     });
+  });
+});
+
+/**
+ * v1.39.3 — re-importing the same file. A 9 000-row re-upload with an
+ * externalId column used to run one update per row inside a single
+ * interactive transaction and ended in a 500 when that outlived Prisma's 5 s
+ * timeout. An unchanged row is now a duplicate with no write, a changed one
+ * still updates, and lookups and writes run in bounded chunks.
+ */
+describe("POST /api/import/csv — re-import", () => {
+  beforeEach(() => {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: true,
+      remaining: 4,
+      resetAt: Date.now() + 3_600_000,
+    } as never);
+    mMeasurement().findMany.mockReset();
+    mMeasurement().createManyAndReturn.mockReset();
+    mMeasurement().createManyAndReturn.mockResolvedValue([]);
+    mMeasurement().updateMany.mockReset();
+    mMeasurement().updateMany.mockResolvedValue({ count: 1 });
+    vi.mocked(prisma.$transaction).mockClear();
+  });
+
+  function stored(externalId: string, overrides: Record<string, unknown> = {}) {
+    return {
+      type: "WEIGHT",
+      externalId,
+      value: 80.5,
+      unit: "kg",
+      measuredAt: new Date("2026-05-01T08:00:00Z"),
+      glucoseContext: null,
+      notes: null,
+      notesEncrypted: new Uint8Array(Buffer.from("enc:after run", "utf8")),
+      deletedAt: null,
+      ...overrides,
+    };
+  }
+
+  it("writes nothing for a row that is already stored exactly so", async () => {
+    mMeasurement().findMany.mockResolvedValue([stored("ext-1")]);
+    const res = await POST(
+      csvRequest(
+        [HEADER, "WEIGHT,80.5,kg,2026-05-01T08:00:00Z,,after run,ext-1"].join(
+          "\n",
+        ),
+      ),
+    );
+    const body = (await res.json()) as CsvEnvelope;
+    expect(body.data).toMatchObject({ inserted: 0, updated: 0, skipped: 1 });
+    expect(body.data?.rows).toEqual([
+      { line: 2, status: "skipped", reason: "duplicate" },
+    ]);
+    expect(mMeasurement().updateMany).not.toHaveBeenCalled();
+    expect(mMeasurement().createManyAndReturn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["value", "WEIGHT,81,kg,2026-05-01T08:00:00Z,,after run,ext-1"],
+    ["note", "WEIGHT,80.5,kg,2026-05-01T08:00:00Z,,before run,ext-1"],
+    ["instant", "WEIGHT,80.5,kg,2026-05-01T09:00:00Z,,after run,ext-1"],
+  ])("still updates a row whose %s changed", async (_what, line) => {
+    mMeasurement().findMany.mockResolvedValue([stored("ext-1")]);
+    const res = await POST(csvRequest([HEADER, line].join("\n")));
+    const body = (await res.json()) as CsvEnvelope;
+    expect(body.data).toMatchObject({ updated: 1, skipped: 0 });
+    expect(mMeasurement().updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-folds the day a moved reading left as well as the day it moved to", async () => {
+    mMeasurement().findMany.mockResolvedValue([stored("ext-1")]);
+    await POST(
+      csvRequest(
+        [HEADER, "WEIGHT,80.5,kg,2026-05-03T08:00:00Z,,after run,ext-1"].join(
+          "\n",
+        ),
+      ),
+    );
+    const days = vi
+      .mocked(recomputeBucketsForMeasurement)
+      .mock.calls.map(
+        ([, type, at]) => `${type}@${at.toISOString().slice(0, 10)}`,
+      )
+      .sort();
+    expect(days).toEqual(["WEIGHT@2026-05-01", "WEIGHT@2026-05-03"]);
+  });
+
+  it("re-folds what it touched when a write chunk fails part-way", async () => {
+    mMeasurement().findMany.mockResolvedValue([]);
+    mMeasurement().createManyAndReturn.mockRejectedValue(
+      new Error("connection reset"),
+    );
+    await expect(
+      POST(
+        csvRequest(
+          [
+            HEADER,
+            "WEIGHT,80.5,kg,2026-05-01T08:00:00Z,,,",
+            "WEIGHT,80.7,kg,2026-05-02T08:00:00Z,,,",
+          ].join("\n"),
+        ),
+      ),
+    ).rejects.toThrow("connection reset");
+    const days = vi
+      .mocked(recomputeBucketsForMeasurement)
+      .mock.calls.map(([, , at]) => at.toISOString().slice(0, 10))
+      .sort();
+    expect(days).toEqual(["2026-05-01", "2026-05-02"]);
+  });
+
+  it("probes per type in bounded chunks and writes updates in bounded batches", async () => {
+    const lines = Array.from({ length: 2500 }, (_, i) => {
+      const at = new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString();
+      return `WEIGHT,${70 + (i % 10)},kg,${at},,,ext-${i}`;
+    });
+    // Every key exists, with a different value, so every line updates.
+    mMeasurement().findMany.mockImplementation((async (args: {
+      where: { externalId: { in: string[] } };
+    }) =>
+      args.where.externalId.in.map((externalId) =>
+        stored(externalId, { value: 1 }),
+      )) as never);
+
+    const res = await POST(csvRequest([HEADER, ...lines].join("\n")));
+    const body = (await res.json()) as CsvEnvelope;
+    expect(body.data?.updated).toBe(2500);
+
+    const probes = mMeasurement().findMany.mock.calls.map(
+      (c) => (c[0] as { where: { externalId: { in: string[] } } }).where,
+    );
+    expect(probes).toHaveLength(3);
+    expect(probes.every((w) => w.externalId.in.length <= 1000)).toBe(true);
+    // 2 500 updates in batches of at most 200, each its own transaction:
+    // no single transaction carries the whole file.
+    const batches = vi
+      .mocked(prisma.$transaction)
+      .mock.calls.map((c) => c[0] as unknown as unknown[]);
+    expect(batches).toHaveLength(13);
+    expect(batches.every((b) => Array.isArray(b) && b.length <= 200)).toBe(
+      true,
+    );
+    expect(mMeasurement().updateMany).toHaveBeenCalledTimes(2500);
   });
 });

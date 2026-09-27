@@ -90,6 +90,7 @@ beforeEach(() => {
   // Cold rollup tier: the pulse graded series folds monthly/yearly from
   // the full-history `measurement.findMany` fallback on a tier miss.
   vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
 });
 
 describe("generatePulseStatusForUser — graded payload", () => {
@@ -111,11 +112,17 @@ describe("generatePulseStatusForUser — graded payload", () => {
     // v1.28.25 — PULSE is a dense type, so the cold-tier fallback reads
     // a SQL day-bucket aggregate instead of the raw findMany walk. Feed
     // the same 1000 days as day buckets.
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(
-      records
-        .map((r) => ({ bucket_start: r.measuredAt, mean: r.value }))
-        .reverse() as never,
-    );
+    // The rollup tier is empty (the coarse fold over it returns nothing),
+    // so the monthly / yearly slices come from that fallback.
+    const dayBuckets = records
+      .map((r) => ({ bucket_start: r.measuredAt, mean: r.value }))
+      .reverse();
+    vi.mocked(prisma.$queryRaw).mockImplementation(((
+      strings: TemplateStringsArray,
+    ) =>
+      Promise.resolve(
+        strings.join("").includes("measurement_rollups") ? [] : dayBuckets,
+      )) as never);
     vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
 
     const captured: { userPrompt: string | null } = { userPrompt: null };

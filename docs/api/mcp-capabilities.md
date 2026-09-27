@@ -66,37 +66,77 @@ optional so a `{ present: false }` miss and a full hit both validate.
 argument. Every read is a thin wrapper over an existing
 server-authoritative path; no new analytics is computed at the wire.
 
-| Tool                        | What it returns                                                                                                                                                                                                                                                                  |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_metrics`              | One row per domain: whether data is present, an approximate sample count, and the tool that retrieves it. **Call this first.**                                                                                                                                                   |
-| `get_metric_series`         | One metric's aggregate (count, min, max, mean, slope) plus recent-daily and weekly timelines, with units and population reference bands.                                                                                                                                         |
-| `get_metrics`               | Several metric series in one call — a paginated fan-out over `get_metric_series`, one grounded result per metric.                                                                                                                                                                |
-| `get_glucose_panel`         | Per-context daily means plus the trailing-30-day clinical panel (time-in-range, GMI, CV%, estimated A1c).                                                                                                                                                                        |
-| `get_sleep`                 | Per-night asleep + stage minutes plus the sleep-rhythm summary (sleep debt + chronotype).                                                                                                                                                                                        |
-| `get_workouts`              | Most recent sessions (sport, duration, energy, distance, avg/max HR) plus a per-sport rollup over the window.                                                                                                                                                                    |
-| `get_medication_compliance` | Cadence-aware adherence: dose-weighted compliance rate, expected vs taken/missed, current-cycle status, any GLP-1 titration context.                                                                                                                                             |
-| `get_labs`                  | Latest reading per biomarker over the last 12 months (optionally one analyte). With `history:true` + an analyte, that analyte's paginated reading trajectory.                                                                                                                    |
-| `get_illness_recovery`      | Rest mode, active and recently-resolved illnesses, recovery / strain composites, and the illness retrospective (recovery-gap, nadir, red flags).                                                                                                                                 |
-| `get_cycle`                 | Menstrual-cycle context: phase + day-of-cycle, next predicted event, headline phase-correlation. Gated on cycle tracking; descriptive only.                                                                                                                                      |
-| `get_correlations`          | FDR-controlled day-to-next-day driver pairs between behaviours and outcomes, each with direction, lag, sample size, and a descriptive (never causal) note.                                                                                                                       |
-| `get_correlation`           | The vetted, lag-aware association between **two named metrics**: direction, lag, sample size, Pearson r, and a descriptive note.                                                                                                                                                 |
-| `compare_metric`            | One metric vs another over the same horizon, **or** one metric across two horizons (fixed windows or `{from,to}` ranges), with per-side stats + a delta.                                                                                                                         |
-| `get_metric_baseline`       | Where the latest reading sits against the user's own usual range (median ± robust deviation), plus the strongest lagged driver. Needs ≥ 7 days of history.                                                                                                                       |
-| `detect_changepoints`       | Points where a metric's level shifted over a window or `{from,to}` range — date, direction, before/after means. High firing bar.                                                                                                                                                 |
-| `get_medication_schedule`   | When each active medication is next due and which are overdue right now — name, dose, next-due, overdue flag, as-needed flag. Reuses the recurrence engine.                                                                                                                      |
-| `get_integration_status`    | Sync health of connected devices/services — connected, last sync, reauth-required/failing — to answer "why is my data stale?". No secrets or tokens.                                                                                                                             |
-| `get_preventive_care`       | What preventive care is coming up: the user's own configured Vorsorge reminders (upcoming/overdue checkups with next-due dates) plus the appointments booked as future visits. Surfaces configured items, invents nothing.                                                       |
-| `get_visits`                | The user's own past doctor visits over a bounded window (default 12 months, optional practitioner-name filter): date, status, kind, practitioner + specialty, the visit's own reason/outcome, and any linked condition labels. `{ present: false }` when none was ever recorded. |
-| `get_intraday_pulse`        | The 10-minute heart-rate shape for one local day (hourly grain outside the dense-retention window), with at most one cautious descriptive elevated-at-rest window. Gated on the `insights` module.                                                                               |
-| `get_ecg_recordings`        | Metadata for the user's ECG recordings (time, duration, sampling rate, lead, the device's own rhythm classification). Never the waveform, never a re-classification. Gated on the `insights` module.                                                                             |
-| `get_nutrients`             | Without an argument, the presence overview per logged nutrient code; with one, that code's per-day summed series plus its EFSA reference. Gated on the opt-in `nutrients` module.                                                                                                |
-| `search`                    | Free-text search over the user's record (metric domains, medications, lab analytes). Returns `{ results: [{ id, title, url }], nextCursor? }`.                                                                                                                                   |
-| `fetch`                     | Hydrate one record by the id `search` returned (`metric:weight`, `med:<id>`, `lab:LDL`). Returns `{ id, title, text, url, metadata }` with a citation deep-link.                                                                                                                 |
+| Tool                        | What it returns                                                                                                                                                                                                                                                                                |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_metrics`              | One row per domain: whether data is present, an approximate sample count, and the tool that retrieves it. **Call this first.**                                                                                                                                                                 |
+| `get_metric_series`         | One metric's aggregate (count, min, max, mean, slope) plus recent-daily and weekly timelines, with units and population reference bands.                                                                                                                                                       |
+| `get_metrics`               | Several metric series in one call — a paginated fan-out over `get_metric_series`, one grounded result per metric.                                                                                                                                                                              |
+| `get_glucose_panel`         | Per-context daily means plus the trailing-30-day clinical panel (time-in-range, GMI, CV%, estimated A1c).                                                                                                                                                                                      |
+| `get_sleep`                 | Per-night asleep + stage minutes plus the sleep-rhythm summary (sleep debt + chronotype).                                                                                                                                                                                                      |
+| `get_workouts`              | Most recent sessions (sport, duration, energy, distance, avg/max HR) plus a per-sport rollup over the window.                                                                                                                                                                                  |
+| `get_medication_compliance` | Cadence-aware adherence: dose-weighted compliance rate, expected vs taken/missed, current-cycle status, any GLP-1 titration context.                                                                                                                                                           |
+| `get_labs`                  | Latest reading per biomarker over the last 12 months (optionally one analyte). With `history:true` + an analyte, that analyte's paginated reading trajectory.                                                                                                                                  |
+| `get_illness_recovery`      | Rest mode, active and recently-resolved illnesses, recovery / strain composites, and the illness retrospective (recovery-gap, nadir, red flags).                                                                                                                                               |
+| `get_cycle`                 | Menstrual-cycle context: phase + day-of-cycle, next predicted event, headline phase-correlation. Gated on cycle tracking; descriptive only.                                                                                                                                                    |
+| `get_correlations`          | FDR-controlled day-to-next-day driver pairs between behaviours and outcomes, each with direction, lag, sample size, and a descriptive (never causal) note.                                                                                                                                     |
+| `get_correlation`           | The vetted, lag-aware association between **two named metrics**: direction, lag, sample size, Pearson r, and a descriptive note.                                                                                                                                                               |
+| `compare_metric`            | One metric vs another over the same horizon, **or** one metric across two horizons (fixed windows or `{from,to}` ranges), with per-side stats + a delta.                                                                                                                                       |
+| `get_metric_baseline`       | Where the latest reading sits against the user's own usual range (median ± robust deviation), plus the strongest lagged driver. Needs ≥ 7 days of history.                                                                                                                                     |
+| `detect_changepoints`       | Points where a metric's level shifted over a window or `{from,to}` range — date, direction, before/after means. High firing bar.                                                                                                                                                               |
+| `get_medication_schedule`   | When each active medication is next due and which are overdue right now — name, dose, next-due, overdue flag, as-needed flag. Reuses the recurrence engine.                                                                                                                                    |
+| `get_integration_status`    | Sync health of connected devices/services — connected, last sync, reauth-required/failing — to answer "why is my data stale?". No secrets or tokens.                                                                                                                                           |
+| `get_preventive_care`       | What preventive care is coming up: the user's own configured Vorsorge reminders (upcoming/overdue checkups with next-due dates) plus the appointments booked as future visits. Surfaces configured items, invents nothing.                                                                     |
+| `get_visits`                | The user's own past doctor visits over a bounded window (default 12 months, optional practitioner-name filter): date, status, kind, practitioner + specialty, the visit's own reason/outcome, and any linked condition labels. `{ present: false }` when none was ever recorded.               |
+| `get_intraday_pulse`        | The 10-minute heart-rate shape for one local day (hourly grain outside the dense-retention window), with at most one cautious descriptive elevated-at-rest window. Gated on the `insights` module.                                                                                             |
+| `get_ecg_recordings`        | Metadata for the user's ECG recordings (time, duration, sampling rate, lead, the device's own rhythm classification). Never the waveform, never a re-classification. Gated on the `insights` module.                                                                                           |
+| `get_nutrients`             | Without an argument, the presence overview per logged nutrient code; with one, that code's per-day summed series plus its EFSA reference. Gated on the opt-in `nutrients` module.                                                                                                              |
+| `search`                    | Free-text search over the user's record: metric domains, medications, lab analytes, and the clinical records (visits including procedures, conditions, documents, vaccinations). Ranked, deterministic, record results capped at 50. Returns `{ results: [{ id, title, url }], nextCursor? }`. |
+| `fetch`                     | Hydrate one record by the id `search` returned (`metric:weight`, `med:<id>`, `lab:LDL`, `visit:<id>`, `condition:<id>`, `document:<id>`, `vaccination:<id>`). Returns `{ id, title, text, url, metadata }` with a citation deep-link; clinical records carry their one-hop links.              |
 
 `search` + `fetch` are the de-facto two-tool retrieval convention and the
 **only** tools ChatGPT calls in its default (non-Developer) mode. Each
 result carries a real, user-openable HTTPS deep link into the HealthLog
 web app so the assistant can cite it.
+
+What `search` matches for the clinical records:
+
+- `visit:<id>`: visit kind (a procedure also answers to "surgery" and
+  "operation"), reason, outcome, body site and side, practitioner name and
+  specialty.
+- `condition:<id>`: label, type, body site and side.
+- `document:<id>`: title, file name, document kind ("discharge letter"),
+  and whole words of the document's indexed text when one is stored. The
+  document itself is never read for a search. A document uploaded with AI
+  reading deferred is matched on its title and details only.
+- `vaccination:<id>`: vaccine name, catalogue name, practitioner.
+
+Condition and vaccination notes are never searched or returned, the same
+rule the Coach and the doctor report follow. A deleted practitioner is not
+named or matched. Query words shorter than four letters match whole words or
+word starts only. Titles and file names are also looked up in the database,
+so an older document is found by them even outside the newest 500.
+
+Body sites are matched after decryption, folded the way the body-sites view
+folds them, with German and English body-part names treated as one ("knee"
+finds "Knie"). Results are ordered by how many query words they match, then
+by field weight, then newest first, so the same query always returns the
+same list. A kind whose module is switched off (`illness`,
+`inboundDocuments`, `vaccinations`, and for the older kinds `medications`
+and `labs`) is neither searched nor fetched; `fetch` answers such an id with
+`metadata.reason: "module_disabled"`. The same switches apply to every other
+MCP read: `get_labs`, `get_medication_schedule`, `get_medication_compliance`
+and the lab and medication resources answer
+`{ present: false, reason: "module_disabled" }`, and `get_visits` withholds
+condition labels (`conditionsReason: "module_disabled"`) when the illness
+module is off.
+
+`fetch` on a clinical record returns its key fields, with never-recorded
+fields as `null`, and `metadata.links`: the records it is directly linked to,
+each with an id `fetch` accepts. A document returns its metadata and at most
+a 1,500-character excerpt of its indexed text, never the file, a download
+URL, or its stored summary. A document held back from AI reading returns no
+excerpt and `metadata.reason: "ai_read_deferred"`. All user-written text is wrapped in the
+`<<<USER_TEXT_START>>>` / `<<<USER_TEXT_END>>>` fence.
 
 Every read tool is annotated read-only / non-destructive / idempotent /
 closed-world — the read-only guarantee is structural (only read tools are

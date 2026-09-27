@@ -28,6 +28,7 @@ import {
 } from "./sync-core";
 import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 
 /**
  * Stable externalId the retired profile-weight ingestion wrote under —
@@ -63,14 +64,22 @@ export async function syncUserBody(
   // legacy overwrite row once; deleteMany is a no-op after the first
   // pass, keeping the sync idempotent.
   try {
-    await prisma.measurement.deleteMany({
-      where: {
-        userId,
-        type: "WEIGHT",
-        source: "WHOOP",
-        externalId: WHOOP_BODY_WEIGHT_EXTERNAL_ID,
-      },
+    const legacyWhere = {
+      userId,
+      type: "WEIGHT" as const,
+      source: "WHOOP" as const,
+      externalId: WHOOP_BODY_WEIGHT_EXTERNAL_ID,
+    };
+    // Read the day it sat on before removing it, so that day's rollup is
+    // refolded without it.
+    const legacy = await prisma.measurement.findMany({
+      where: legacyWhere,
+      select: { type: true, measuredAt: true },
     });
+    if (legacy.length > 0) {
+      await prisma.measurement.deleteMany({ where: legacyWhere });
+      await afterMeasurementMutation(userId, legacy, "whoop-body");
+    }
   } catch (err) {
     getEvent()?.addWarning(
       `whoop: failed to clear the legacy profile-weight row for ${userId}: ${err}`,

@@ -22,7 +22,7 @@
  */
 import { prisma } from "@/lib/db";
 import { decodeKeyList } from "@/lib/mood/context-vocabulary";
-import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { resolveLinkedDayFigures } from "@/lib/mood/linked-context";
 
 import type { PrognosisDayInput } from "./features";

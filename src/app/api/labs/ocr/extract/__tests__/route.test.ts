@@ -66,6 +66,7 @@ import { rasterizePdf } from "@/lib/documents/rasterize-pdf";
 import { reserveBudget, reconcileSpend } from "@/lib/ai/coach/budget";
 import { checkRateLimit, refundRateLimit } from "@/lib/rate-limit";
 import { OcrExtractError, runOcrExtraction } from "@/lib/labs/ocr-extract";
+import { annotate } from "@/lib/logging/context";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -163,6 +164,29 @@ describe("POST /api/labs/ocr/extract — text mode budget", () => {
 
     expect(res.status).toBe(502);
     expect(body.error).toContain("configured AI provider");
+  });
+
+  it("never passes the upstream body on, to the caller or to the event", async () => {
+    const upstreamBody = "ami-id instance-id iam/security-credentials/admin";
+    vi.mocked(runOcrExtraction).mockRejectedValue(
+      Object.assign(new Error("Local AI request failed (403)"), {
+        httpStatus: 403,
+        model: "llama3",
+        bodyExcerpt: upstreamBody,
+      }),
+    );
+
+    const res = await POST(textReq());
+    expect(res.status).toBe(502);
+    expect(await res.text()).not.toContain("iam/security-credentials");
+    const events = JSON.stringify(vi.mocked(annotate).mock.calls);
+    expect(events).not.toContain("iam/security-credentials");
+    // The status and the model stay, so an operator can still tell why.
+    expect(annotate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({ upstreamStatus: 403, model: "llama3" }),
+      }),
+    );
   });
 });
 

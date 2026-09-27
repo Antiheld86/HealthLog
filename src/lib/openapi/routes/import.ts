@@ -183,7 +183,7 @@ export const importPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Import"],
       summary: "Import measurements from CSV",
       description:
-        "Bulk-import measurements from a CSV file (web cold-start escape hatch). Body is raw `text/csv` (≤ 16 MB, ≤ 10 000 valid rows). Header (order-independent): `type,value,unit,measuredAt[,glucoseContext,notes,externalId]`. `measuredAt` must carry an explicit ISO-8601 offset and is bounded (no future beyond a 5-min skew, no instant before 1900). Glucose accepts `mmol/L` (converted to canonical `mg/dL`); weight accepts `lb` (converted to `kg`). `glucoseContext` is optional on a `BLOOD_GLUCOSE` row — a blank cell stores no context, which is the normal shape of a continuous-sensor export; a non-empty value is still checked against the enum, and the column is refused on any other type. An `externalId` column makes re-upload idempotent (upsert on `(userId, type, source=IMPORT, externalId)`); without it a re-upload duplicates. `?dryRun=1` validates + previews without writing. Shares the 5/hour `import:` rate bucket.",
+        "Bulk-import measurements from a CSV file (web cold-start escape hatch). Body is raw `text/csv` (≤ 16 MB, ≤ 10 000 valid rows). Header (order-independent): `type,value,unit,measuredAt[,glucoseContext,notes,externalId]`. `measuredAt` must carry an explicit ISO-8601 offset and is bounded (no future beyond a 5-min skew, no instant before 1900). Glucose accepts `mmol/L` (converted to canonical `mg/dL`); weight accepts `lb` (converted to `kg`). `glucoseContext` is optional on a `BLOOD_GLUCOSE` row — a blank cell stores no context, which is the normal shape of a continuous-sensor export; a non-empty value is still checked against the enum, and the column is refused on any other type. Re-uploading a file is idempotent. With an `externalId` column a row upserts on `(userId, type, source=IMPORT, externalId)`: a changed row is `updated`, an unchanged one is `skipped` with reason `duplicate` and not written. Without it a row is deduplicated on `(type, measuredAt)` and a repeat is `skipped` / `duplicate`. Writes commit in chunks rather than as one transaction; a failure part-way leaves earlier chunks written, and re-uploading the same file completes the rest. `?dryRun=1` validates + previews without writing. Shares the 5/hour `import:` rate bucket.",
       parameters: [
         {
           name: "dryRun",
@@ -324,6 +324,11 @@ export const importPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+        "409": {
+          description:
+            "An import for this account is already queued or running, and these bytes are not the ones it carries (the same bytes resolve to that job as a 202). `meta.errorCode` is `import.apple_health.busy` and `meta.jobId` names the running job; poll it, then upload again. The upload was discarded.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "422": {
           description:
             "The multipart body could not be streamed to disk — no `file` part, a malformed boundary, or the size cap tripped mid-stream. The message names the failure.",
@@ -335,7 +340,7 @@ export const importPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "503": {
           description:
-            "No background worker is bound to this process, so the job cannot be queued. The upload was staged and is discarded; retry once a worker is running.",
+            "No background worker is bound to this process, or the queue did not accept the job, so nothing will run it. The staged upload is discarded (and a created job is marked failed); retry once a worker is running.",
           content: { "application/json": { schema: errorEnvelope } },
         },
       },

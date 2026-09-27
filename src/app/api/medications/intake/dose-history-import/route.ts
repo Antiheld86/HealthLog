@@ -30,7 +30,12 @@
 import { NextRequest } from "next/server";
 
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
-import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
+import {
+  apiError,
+  apiSuccess,
+  getClientIp,
+  readBodyText,
+} from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import {
@@ -133,14 +138,15 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BYTES) {
     return apiError("File exceeds the 16 MB limit", 413);
   }
+  // Counted while it is read, so a body without a Content-Length cannot run
+  // past the cap before the check.
   let text: string;
   try {
-    text = await request.text();
+    const read = await readBodyText(request, MAX_BYTES);
+    if (read.tooLarge) return apiError("File exceeds the 16 MB limit", 413);
+    text = read.text;
   } catch {
     return apiError("Could not read the request body", 400);
-  }
-  if (Buffer.byteLength(text, "utf8") > MAX_BYTES) {
-    return apiError("File exceeds the 16 MB limit", 413);
   }
 
   const parsed = isJson ? parseAutoExportJson(text) : parseAutoExportCsv(text);

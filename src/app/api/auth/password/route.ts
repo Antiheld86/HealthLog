@@ -14,7 +14,11 @@ import {
   returnAllZodIssues,
   safeJson,
 } from "@/lib/api-response";
-import { checkRateLimit } from "@/lib/rate-limit";
+import {
+  recordReproofFailure,
+  refundReproof,
+  throttleReproof,
+} from "@/lib/auth/existing-factor-proof";
 import {
   apiHandler,
   requireFreshMfaIfEnrolled,
@@ -24,7 +28,7 @@ import { annotate } from "@/lib/logging/context";
 import { destroyAllSessions, createSession } from "@/lib/auth/session";
 import { revokeStepUpElevations } from "@/lib/auth/step-up";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
-import { checkPasswordBreach } from "@/lib/auth/hibp";
+import { checkPasswordBreachIfEnabled } from "@/lib/password-breach-check";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 
 export const POST = apiHandler(async (request: NextRequest) => {
@@ -35,14 +39,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // contract. Mirrors the step-up on MFA-disable + recovery-code regen.
   const { user } = await requireFreshMfaIfEnrolled(MFA_STEP_UP_MAX_AGE_SECONDS);
 
-  const rl = await checkRateLimit(
-    `auth:password:${user.id}`,
-    5,
-    15 * 60 * 1000,
-  );
-  if (!rl.allowed) {
-    return apiError("Too many attempts. Please wait 15 minutes.", 429);
-  }
+  // The current-password check below is a guessing oracle, so it draws on the
+  // account's shared re-proof budget: a guess spent here is one the step-up
+  // mint and the enrollment proofs cannot spend again.
+  const ip = getClientIp(request);
+  const limited = await throttleReproof(user.id, ip, "password_change");
+  if (limited) return limited;
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,
@@ -62,8 +64,19 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   const currentValid = await verifyPassword(user.passwordHash, currentPassword);
   if (!currentValid) {
+    await recordReproofFailure(
+      user.id,
+      ip,
+      "password_change",
+      "password",
+      "bad_password",
+    );
     return apiError("Current password is incorrect", 401);
   }
+  // The current password was right, so this attempt was not a guess. Give the
+  // shared re-proof budget its slot back; otherwise a password change followed
+  // by a few confirmations elsewhere runs the owner out of attempts.
+  await refundReproof(user.id);
 
   if (currentPassword === newPassword) {
     return apiError("New password must differ from current password", 422);
@@ -89,7 +102,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // corpus (HIBP k-anonymity). Fail-open: a null result (HIBP unreachable)
   // never blocks the change. Only the user's chosen NEW password is checked —
   // existing credentials are never retroactively blocked at login.
-  const breach = await checkPasswordBreach(newPassword);
+  const breach = await checkPasswordBreachIfEnabled(newPassword);
   if (breach?.breached) {
     return apiError(
       getServerTranslator(locale).t("auth.passwordBreached"),

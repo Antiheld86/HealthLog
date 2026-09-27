@@ -1286,7 +1286,10 @@ describe("buildFullBackupPayload — profile and custom metrics", () => {
             value: 44.5,
             unit: "kg",
             measuredAt: "2026-07-19T06:30:00.000Z",
+            // v1.39.3 — the fixture row predates the encryption backfill:
+            // a DR file carries it as stored, and the restore seals it.
             note: "felt strong",
+            noteEncrypted: null,
           }),
         ],
       }),

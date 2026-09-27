@@ -67,6 +67,11 @@ export const AI_ROUTES: Readonly<Record<string, AiRouteEntry>> = {
     capabilities: ["documentAi"],
     why: "The upload is data and always accepted; only the AI work queued after it follows the capability.",
   },
+  "src/app/api/documents/sources/[system]/import/route.ts": {
+    kind: "mixed",
+    capabilities: ["documentAi"],
+    why: "A picked document is stored whatever AI says; only the summary queued after a fresh insert follows the capability.",
+  },
   "src/app/api/auth/me/documents-auto-ai-read/route.ts": {
     kind: "mixed",
     capabilities: ["documentAi"],

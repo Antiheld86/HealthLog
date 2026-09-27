@@ -563,40 +563,26 @@ describe("what an invitation opens, over the real route", () => {
     expect(await getPrismaClient().accountGrant.count()).toBe(0);
   });
 
-  it("refuses MANAGE over Bearer with a code the client can act on", async () => {
-    // The decided consequence of a cookie-only step-up. Not a bug to work
-    // around: the native client cannot offer management of a health record,
-    // and it is told so in a code rather than by an authentication error on a
-    // request that authenticated fine.
+  it("refuses a Bearer invitation that presents no step-up elevation", async () => {
+    // v1.39.3: every invitation takes the recent-proof gate, and a token
+    // presents its proof as an `X-Step-Up` elevation. No shipped client
+    // offers access with a token. (MANAGE over Bearer still ends in 403
+    // `sharing.invite.manage_browser_only` once an elevation is presented;
+    // the unit suite covers that arm.)
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
     const token = await mintToken(owner.id);
     cookieJar.clear();
     headerJar.set("authorization", `Bearer ${token}`);
 
-    const response = await invite(delegate.username, undefined, {
-      access: "MANAGE",
-    });
-    expect(response.status).toBe(403);
-    expect((await response.json()).meta.errorCode).toBe(
-      "sharing.invite.manage_browser_only",
-    );
+    for (const access of ["READ", "WRITE", "MANAGE"]) {
+      const response = await invite(delegate.username, undefined, { access });
+      expect(response.status).toBe(401);
+      expect((await response.json()).meta.errorCode).toBe(
+        "auth.stepup.required",
+      );
+    }
     expect(await getPrismaClient().accountGrant.count()).toBe(0);
-  });
-
-  it("lets the same Bearer caller keep minting the two levels it always could", async () => {
-    const owner = await makeUser("owner");
-    const delegate = await makeUser("delegate");
-    const token = await mintToken(owner.id);
-    cookieJar.clear();
-    headerJar.set("authorization", `Bearer ${token}`);
-
-    const response = await invite(delegate.username, undefined, {
-      access: "WRITE",
-      scope: ["measurements"],
-    });
-    expect(response.status).toBe(201);
-    expect((await response.json()).data.access).toBe("WRITE");
   });
 
   it("mints MANAGE from a browser session that carries no second factor", async () => {
@@ -640,7 +626,11 @@ describe("what an invitation opens, over the real route", () => {
       access: "MANAGE",
     });
     expect(response.status).toBe(401);
-    expect((await response.json()).meta.errorCode).toBe("auth.stepup.required");
+    // The recent-proof gate answers first; on an enrolled account it wants
+    // the same fresh second factor the MANAGE step-up does.
+    expect((await response.json()).meta.errorCode).toBe(
+      "auth.reproof.required",
+    );
     expect(await getPrismaClient().accountGrant.count()).toBe(0);
   });
 
@@ -666,9 +656,10 @@ describe("what an invitation opens, over the real route", () => {
     expect(await getPrismaClient().accountGrant.count()).toBe(1);
   });
 
-  it("does not ask a read invitation for a factor at all", async () => {
-    // Same stale-factor account. Reducing the friction to the level that
-    // needs it is the point; an owner sharing a reading re-proves nothing.
+  it("asks a read invitation for a recent proof too (v1.39.3)", async () => {
+    // Same stale-factor account. An invitation at any level outlives the
+    // session that sent it, so every level now takes the recent-proof gate;
+    // on an enrolled account that is a fresh second factor.
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
     await getPrismaClient().user.update({
@@ -681,7 +672,12 @@ describe("what an invitation opens, over the real route", () => {
       data: { mfaVerifiedAt: new Date(Date.now() - 60 * 60 * 1000) },
     });
 
-    expect((await invite(delegate.username)).status).toBe(201);
+    const response = await invite(delegate.username);
+    expect(response.status).toBe(401);
+    expect((await response.json()).meta.errorCode).toBe(
+      "auth.reproof.required",
+    );
+    expect(await getPrismaClient().accountGrant.count()).toBe(0);
   });
 });
 

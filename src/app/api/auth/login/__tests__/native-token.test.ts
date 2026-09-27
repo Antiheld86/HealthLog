@@ -3,6 +3,16 @@ import { NextRequest } from "next/server";
 
 // --- Mocks must come before importing the route. ---
 
+// The per-account throttle has its own suite (login-throttle.test.ts); here
+// it lets every attempt through and counts nothing.
+vi.mock("@/lib/auth/login-throttle", () => ({
+  beginAccountLoginAttempt: vi.fn(async () => ({
+    waiting: null,
+    source: null,
+    failed: async () => {},
+    succeeded: async () => {},
+  })),
+}));
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findFirst: vi.fn() },
@@ -48,6 +58,7 @@ vi.mock("@/lib/rate-limit", () => ({
     ip: "203.0.113.1",
   }),
   rateLimitHeaders: vi.fn(() => ({})),
+  refundRateLimit: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/db-compat", () => ({

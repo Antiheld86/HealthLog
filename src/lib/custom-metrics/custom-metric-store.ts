@@ -1,14 +1,18 @@
 /**
  * v1.25.5 — server-side serialisers for the user-defined custom-metric store.
  *
- * Custom metrics are PLAINTEXT (name / unit / description), so — unlike the
- * Biomarker catalog with its AES-256-GCM `contextEncrypted` codec — there is no
- * encrypt/decrypt layer here. These helpers just map a Prisma row into the
- * stable wire DTO the web + iOS clients render.
+ * The catalog columns (name / unit / description) are plaintext: they are the
+ * definition of a series and are listed and sorted by. The one free-text field
+ * on a reading, its note, is AES-256-GCM at rest since v1.39.3
+ * (`noteEncrypted`), read here through the shared note boundary. These
+ * helpers map a Prisma row into the stable wire DTO the web + iOS clients
+ * render.
  *
  * The store is deliberately ISOLATED from the closed `MeasurementType` system:
  * no rollup, no sync, no FHIR, no insights. Charts read entries LIVE.
  */
+
+import { readNote } from "@/lib/crypto/note-cipher";
 
 /** A custom-metric catalog row as the API serialises it. */
 export interface CustomMetricRow {
@@ -37,7 +41,9 @@ export interface CustomMetricEntryRow {
   value: number;
   unit: string;
   measuredAt: Date;
+  /** Legacy readable note, set only on rows the backfill has not reached. */
   note: string | null;
+  noteEncrypted: Uint8Array | null;
   createdAt: Date;
 }
 
@@ -79,7 +85,7 @@ export function serialiseCustomMetricEntry(row: CustomMetricEntryRow) {
     value: row.value,
     unit: row.unit,
     measuredAt: row.measuredAt.toISOString(),
-    note: row.note,
+    note: readNote(row.noteEncrypted, row.note),
     createdAt: row.createdAt.toISOString(),
   };
 }

@@ -67,7 +67,7 @@ export function buildMedicationMoodWellnessSection(
     doc.text(t("doctorReport.complianceTitle"), margin, y);
     y += 6;
 
-    const compRows = complianceEntries.map(([name, c]) => {
+    const compRows = complianceEntries.map(([, c]) => {
       // v1.17 W1a — `total` is the ledger rate denominator (taken + missed,
       // deliberate skips excluded), so `taken / total` matches the app's
       // detail-page adherence %. The column is labelled "Expected" rather
@@ -77,7 +77,7 @@ export function buildMedicationMoodWellnessSection(
       const ratePct = adherenceRatePercent(c.taken, c.total);
       const rate = ratePct !== null ? `${num(ratePct, 0)}%` : "—";
       return [
-        name,
+        c.name,
         String(c.taken),
         String(c.skipped),
         String(c.missed),

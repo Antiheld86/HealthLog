@@ -178,7 +178,7 @@ export type FormatInUserTzShape =
  *   - "datetime" — `2026-05-11 11:05` (24h, locale-independent for
  *     audit/PDF tables). Equivalent to the `formatters.dateTime`
  *     helper but with a per-call timezone instead of the global
- *     `DISPLAY_TIMEZONE`.
+ *     `DEFAULT_TIMEZONE`.
  *
  *   - "date" — `2026-05-11` (ISO date in the user's zone). Used as a
  *     stable day-bucket key for per-user aggregation.

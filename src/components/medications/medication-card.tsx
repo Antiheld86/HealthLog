@@ -34,6 +34,7 @@ import { LogInjectionSiteDialog } from "@/components/medications/log-injection-s
 import { useGlobalExcludedInjectionSites } from "@/lib/medications/use-injection-site-prefs";
 import { useAuth } from "@/hooks/use-auth";
 import type { InjectionSiteKey } from "@/lib/medications/injection-sites";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 interface Schedule {
   id: string;
@@ -149,7 +150,7 @@ export function MedicationCard({
   // session carries); Berlin stays the last-resort fallback so logged-out
   // mounts and legacy fixtures behave unchanged.
   const { user } = useAuth();
-  const userTz = user?.timezone || "Europe/Berlin";
+  const userTz = user?.timezone || DEFAULT_TIMEZONE;
   const fmt = useFormatters();
   const weekdayLabel = useWeekdayLabel();
   // v1.8.5 — post-dose injection-site prompt state. Holds the intake

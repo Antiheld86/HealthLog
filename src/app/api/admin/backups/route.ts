@@ -27,7 +27,10 @@ import { annotate } from "@/lib/logging/context";
 import { DATA_BACKUP_QUEUE } from "@/lib/jobs/data-backup-policy";
 import { readLastQueueRun } from "@/lib/jobs/job-failures";
 import { summariseBackupSchedule } from "@/lib/jobs/backup-schedule-status";
-import { offhostBackupConfigured } from "@/lib/jobs/offhost-backup";
+import {
+  offhostBackupConfigured,
+  probeOffhostLifecycle,
+} from "@/lib/jobs/offhost-backup";
 import {
   classifyOffhostBackup,
   OFFHOST_BACKUP_PERIOD_HOURS,
@@ -164,6 +167,28 @@ export const GET = apiHandler(async () => {
       a.username.localeCompare(b.username),
   );
 
+  // A wipe whose copies are already gone waits for the next nightly run
+  // before its request is removed (see `offhost-purge.ts`); nothing of it is
+  // left in the bucket, so it is not counted as a pending deletion.
+  const stillInBucket = {
+    NOT: {
+      reason: "data_wiped",
+      lastFailure: null,
+      lastAttemptAt: { not: null },
+    },
+  };
+  const [purgeCount, oldestPurge, lifecycle] = await Promise.all([
+    prisma.offhostPurgeRequest.count({ where: stillInBucket }),
+    prisma.offhostPurgeRequest.findFirst({
+      where: stillInBucket,
+      orderBy: { requestedAt: "asc" },
+      select: { requestedAt: true, lastFailure: true },
+    }),
+    configured
+      ? probeOffhostLifecycle()
+      : Promise.resolve({ state: "unknown" as const, expirationDays: null }),
+  ]);
+
   const payload: BackupsList = {
     rows: list,
     // Matches the retention window the backup-prune job enforces so the
@@ -182,6 +207,12 @@ export const GET = apiHandler(async () => {
       // An unconfigured host has nothing to list, and the card says so rather
       // than painting an empty table that reads as "no problems".
       rows: configured ? offhostRows : [],
+      pendingDeletions: {
+        count: purgeCount,
+        oldestRequestedAt: oldestPurge?.requestedAt.toISOString() ?? null,
+        lastFailure: oldestPurge?.lastFailure ?? null,
+      },
+      lifecycle,
     },
   };
 

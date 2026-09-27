@@ -214,6 +214,30 @@ describe("POST /api/auth/password (real Postgres)", () => {
     );
   });
 
+  it("audits a wrong current password and shares the re-proof ceiling", async () => {
+    const { userId } = await seedUserWithSession();
+    const prisma = getPrismaClient();
+    const { POST } = await import("@/app/api/auth/password/route");
+
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await POST(
+        makeRequest({
+          currentPassword: `WrongPasswordValue!${i}`,
+          newPassword: STRONG_NEW,
+          confirmPassword: STRONG_NEW,
+        }),
+      );
+      statuses.push(res.status);
+    }
+    expect(statuses).toEqual([401, 401, 401, 401, 401, 429]);
+    expect(
+      await prisma.auditLog.count({
+        where: { userId, action: "auth.mfa.failed" },
+      }),
+    ).toBe(5);
+  });
+
   it("returns 422 when the new password matches the current password", async () => {
     await seedUserWithSession();
 
