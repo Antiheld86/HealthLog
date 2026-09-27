@@ -259,17 +259,22 @@ export const GET = apiHandler(
         null,
       )?.id ?? null;
 
-    const route = row.route
-      ? {
-          geometry: routeGeometry,
-          // `compact=1` drops the (up to 20k-entry) timestamp array; the
-          // SVG needs geometry, not the per-sample timestamps, and the
-          // splits above are already derived from them server-side.
-          sampleTimestamps: compact
-            ? null
-            : (row.route.sampleTimestamps ?? null),
-        }
-      : null;
+    // A route whose track cannot be read (a sealed value that no longer
+    // opens, or an old row stored as a JSON null) is reported as no route at
+    // all: clients decode `route.geometry` as required, so a route object
+    // with a null geometry would fail the whole workout detail for them.
+    const route =
+      row.route && routeGeometry
+        ? {
+            geometry: routeGeometry,
+            // `compact=1` drops the (up to 20k-entry) timestamp array; the
+            // SVG needs geometry, not the per-sample timestamps, and the
+            // splits above are already derived from them server-side.
+            sampleTimestamps: compact
+              ? null
+              : (row.route.sampleTimestamps ?? null),
+          }
+        : null;
 
     // v1.10.0 — route-independent per-workout HR series. Present for
     // both indoor (no route) and outdoor workouts that shipped a
