@@ -114,6 +114,7 @@ export const m = {
   userFindUnique: vi.fn(),
   userUpdate: vi.fn(),
   conversationFindFirst: vi.fn(),
+  coachMessageFindMany: vi.fn(),
   checkRateLimit: vi.fn(),
   resolveServerLocale: vi.fn(),
   runStreamingRawCompletionWithFallback: vi.fn(),
@@ -192,6 +193,7 @@ export function resetGolden(): void {
     return {};
   });
   m.conversationFindFirst.mockResolvedValue({ id: "c-existing" });
+  m.coachMessageFindMany.mockResolvedValue([]);
   m.checkRateLimit.mockResolvedValue({ allowed: true, resetAt: 0 });
   m.resolveServerLocale.mockResolvedValue("en");
   m.resolveProviderChain.mockResolvedValue([

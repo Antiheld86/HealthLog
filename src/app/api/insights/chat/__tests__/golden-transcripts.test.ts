@@ -62,6 +62,7 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: h.m.userFindUnique, update: h.m.userUpdate },
     coachConversation: { findFirst: h.m.conversationFindFirst },
+    coachMessage: { findMany: h.m.coachMessageFindMany },
   },
 }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: h.m.checkRateLimit }));
@@ -573,6 +574,110 @@ describe("coach chat golden transcripts", () => {
     expect(types.lastIndexOf("step")).toBeLessThan(firstToken);
     expect(types.filter((t) => t === "step")).toHaveLength(6);
     expect(JSON.stringify(transcript)).not.toContain("Ferritin");
+  });
+  // 23 ── an answered clarification ──────────────────────────────────────
+  describe("an answered clarification reaches the prompt on both paths", () => {
+    const QUESTION_ID = "msg-question";
+    const CLARIFIED =
+      "CLARIFIED: the person answered your clarifying question by choosing metric=pulse window=last30days.";
+
+    beforeEach(() => {
+      m.fetchConversationWithMessages.mockResolvedValue({
+        id: "c-existing",
+        summary: null,
+        attachmentCount: 0,
+        messages: [
+          {
+            role: "user",
+            content: "How is my pulse?",
+            providerType: null,
+            metricSource: null,
+          },
+          {
+            role: "assistant",
+            content: "Which pulse do you mean?",
+            providerType: "anthropic",
+            metricSource: null,
+          },
+        ],
+      });
+      m.coachMessageFindMany.mockResolvedValue([
+        {
+          id: QUESTION_ID,
+          role: "assistant",
+          providerType: "anthropic",
+          metricSourceJson: JSON.stringify({
+            windows: [],
+            metrics: [],
+            clarification: {
+              kind: "metric",
+              choices: [
+                {
+                  id: "c1",
+                  labelKey: "coach.step.domain.snapshot",
+                  label: "Resting pulse",
+                  value: { metric: "pulse", window: "last30days" },
+                },
+                {
+                  id: "c2",
+                  labelKey: "coach.step.domain.snapshot",
+                  label: "Heart rate variability",
+                  value: { metric: "hrv" },
+                },
+              ],
+              freeText: true,
+            },
+          }),
+        },
+      ]);
+    });
+
+    const body = {
+      conversationId: "c-existing",
+      message: "Resting pulse",
+      clarification: { messageId: QUESTION_ID, choiceId: "c1" },
+    };
+
+    it("the no-tools (local) prompt carries the resolved line", async () => {
+      m.resolveProviderChain.mockResolvedValue(NO_TOOLS_CHAIN);
+      m.runStreamingRawCompletionWithFallback.mockImplementation(
+        streamingResult("Your resting pulse averaged 62 bpm."),
+      );
+      const transcript = await runTurn(post, body, {});
+      expect(transcript.thrown).toBeNull();
+      expect(m.runStreamingRawCompletionWithFallback).toHaveBeenCalledTimes(1);
+      const { params } = m.runStreamingRawCompletionWithFallback.mock
+        .calls[0][0] as { params: { system: string } };
+      expect(params.system).toContain(CLARIFIED);
+      // Server-authored: the request's choice id picks the stored value,
+      // the label the model once wrote never rides along.
+      expect(params.system).not.toContain("Resting pulse");
+    });
+
+    it("the tool-mode prompt carries the same line", async () => {
+      reply("Your resting pulse averaged 62 bpm.");
+      const transcript = await runTurn(post, body, {});
+      expect(transcript.thrown).toBeNull();
+      const { system } = m.runCoachToolLoop.mock.calls[0][0] as {
+        system: string;
+      };
+      expect(system).toContain(CLARIFIED);
+    });
+
+    it("an unanswered turn sends neither prompt the line", async () => {
+      m.resolveProviderChain.mockResolvedValue(NO_TOOLS_CHAIN);
+      m.runStreamingRawCompletionWithFallback.mockImplementation(
+        streamingResult("Your resting pulse averaged 62 bpm."),
+      );
+      await runTurn(
+        post,
+        { conversationId: "c-existing", message: "Resting pulse" },
+        {},
+      );
+      const { params } = m.runStreamingRawCompletionWithFallback.mock
+        .calls[0][0] as { params: { system: string } };
+      expect(params.system).not.toContain("CLARIFIED:");
+    });
   });
 });
 

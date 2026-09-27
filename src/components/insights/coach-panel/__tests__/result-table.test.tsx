@@ -73,7 +73,7 @@ describe("CoachResultTable", () => {
       <CoachResultTable result={table(3)} method="30 readings, daily means" />,
     );
     expect(html).toMatch(
-      /<caption[^>]*>.*Blood pressure by day.*30 readings, daily means.*<\/caption>/s,
+      /<caption[^>]*>[\s\S]*Blood pressure by day[\s\S]*30 readings, daily means[\s\S]*<\/caption>/,
     );
   });
 
