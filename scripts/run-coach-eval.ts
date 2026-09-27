@@ -10,7 +10,10 @@
  *      summary for the nightly log.
  *   2. The LIVE JUDGE runs ONLY when `COACH_EVAL_API_KEY` is present. With the
  *      secret absent it no-ops with a clear line and exits 0 — the nightly
- *      workflow stays green and non-blocking.
+ *      workflow stays green and non-blocking. The same key runs the dialog
+ *      scenarios live: each is put to the model a few times and the tool
+ *      calls (with their arguments) are graded, reported as a pass rate per
+ *      scenario.
  *
  * Usage (nightly workflow / manual):
  *   COACH_EVAL_API_KEY=... pnpm dlx tsx scripts/run-coach-eval.ts
@@ -22,7 +25,7 @@ import {
 } from "@/lib/ai/coach/eval/golden-cases";
 import { captureDeterministic } from "@/lib/ai/coach/eval/run-case";
 import { gradeSet } from "@/lib/ai/coach/eval/grade-groundedness";
-import { runJudge } from "@/lib/ai/coach/eval/judge";
+import { runJudge, runScenarioJudge } from "@/lib/ai/coach/eval/judge";
 
 async function main() {
   // Deterministic summary (the gate itself is the Vitest suite).
@@ -56,6 +59,26 @@ async function main() {
         `  FAIL ${c.id} [${c.taxonomy}] warmth=${c.warmth} safety=${c.safety} ${c.earned}/${c.total}`,
       );
     }
+  }
+  await reportScenarios();
+}
+
+/** The dialog scenarios, live: a pass rate per scenario, misses listed. */
+async function reportScenarios() {
+  const run = await runScenarioJudge();
+  console.log(run.note);
+  for (const scenario of run.scenarios) {
+    console.log(
+      `  ${scenario.passRate === 1 ? "PASS" : "MISS"} ${scenario.id} ${scenario.passed}/${scenario.runs}`,
+    );
+    scenario.misses.forEach((missed, i) => {
+      console.log(`    run ${i + 1}: ${missed.join("; ")}`);
+    });
+    scenario.toolCalls.forEach((calls, i) => {
+      console.log(
+        `    calls ${i + 1}: ${calls.map((c) => `${c.name}(${JSON.stringify(c.args)})`).join(", ") || "none"}`,
+      );
+    });
   }
 }
 

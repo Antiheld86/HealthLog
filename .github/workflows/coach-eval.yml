@@ -3,12 +3,14 @@ name: Coach eval
 # B0 (v1.21.3) — the Coach evaluation harness, two layers.
 #
 #   1. The DETERMINISTIC suite (golden set + red-team battery + the grounding
-#      grader) runs ALWAYS. It is free, offline, and the per-change floor — the
+#      grader + the dialog scenarios) runs ALWAYS. It is free, offline, and the per-change floor — the
 #      same suite `pnpm test` runs, pinned here as a standing nightly check.
 #   2. The LIVE JUDGE step runs ONLY when the `COACH_EVAL_API_KEY` repository
 #      secret is present, and is NON-BLOCKING (`continue-on-error: true`). With
 #      the secret absent it no-ops with a clear log line — the workflow stays
-#      green. The operator flips the secret on later; no rebuild needed.
+#      green. The operator flips the secret on later; no rebuild needed. The
+#      same step puts the dialog scenarios to the model and logs a pass rate
+#      per scenario, with the tool calls and their arguments.
 #
 # Schedule + manual only. This is NOT a required check.
 
@@ -51,7 +53,7 @@ jobs:
       # Layer 1 — the deterministic floor. Free, offline, ALWAYS runs. A
       # failure here reds the workflow: a regression in the golden set or the
       # red-team battery is a real find.
-      - name: Deterministic floor (golden set + red team)
+      - name: Deterministic floor (golden set + red team + dialog scenarios)
         run: pnpm exec vitest run src/lib/ai/coach/eval/__tests__/
 
       # Layer 2 — the live judge. Runs ONLY when the secret is present, and is
