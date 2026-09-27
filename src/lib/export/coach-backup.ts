@@ -79,6 +79,17 @@ export interface CoachMessageBackupEntry {
   promptVersion: string | null;
   tokensUsed: number | null;
   model: string | null;
+  /**
+   * v1.39.4 — the tables of values the turn read, as ciphertext in base64.
+   * Present on a disaster-recovery payload only; null on a turn without one.
+   */
+  resultsEncrypted?: string | null;
+  /**
+   * v1.39.4 — the same tables as readable JSON (a `CoachResultTable[]`
+   * array), on a portable payload only; null on a turn without one. The
+   * unreadable-row marker stands in for tables that did not decrypt.
+   */
+  resultsJson?: string | null;
   createdAt: string;
 }
 
@@ -155,6 +166,7 @@ const COACH_CONVERSATION_BACKUP_SELECT = {
       promptVersion: true,
       tokensUsed: true,
       model: true,
+      resultsEncrypted: true,
       createdAt: true,
     },
   },
@@ -248,6 +260,14 @@ export async function buildCoachBackupSection(
         promptVersion: message.promptVersion,
         tokensUsed: message.tokensUsed,
         model: message.model,
+        // v1.39.4 — the tables follow the same contract as the prose.
+        ...(disasterRecovery
+          ? {
+              resultsEncrypted: message.resultsEncrypted
+                ? Buffer.from(message.resultsEncrypted).toString("base64")
+                : null,
+            }
+          : { resultsJson: decryptTurnSoft(message.resultsEncrypted) }),
         createdAt: message.createdAt.toISOString(),
       })),
       attachments: row.attachments.map((attachment) => ({
@@ -318,6 +338,8 @@ export type RestoredCoachMessage = Pick<
       | "promptVersion"
       | "tokensUsed"
       | "model"
+      | "resultsEncrypted"
+      | "resultsJson"
     >
   >;
 
@@ -401,6 +423,7 @@ export async function restoreCoachData(
             promptVersion: message.promptVersion ?? null,
             tokensUsed: message.tokensUsed ?? null,
             model: message.model ?? null,
+            resultsEncrypted: resolveResultsBytes(message),
             createdAt: new Date(message.createdAt),
           })),
         },
@@ -455,6 +478,23 @@ function resolveTurnBytes(
     return decodeBase64(message.contentEncrypted);
   }
   return encryptToBytes(message.content ?? "");
+}
+
+/**
+ * v1.39.4 — a turn's stored tables, from either end of the contract. A
+ * disaster-recovery file carries the ciphertext; a portable file carries the
+ * JSON, sealed here under the target instance's key. Neither end writes a
+ * zero-byte ciphertext for a turn without tables.
+ */
+function resolveResultsBytes(
+  message: RestoredCoachMessage,
+): Uint8Array<ArrayBuffer> | null {
+  if (message.resultsEncrypted !== undefined) {
+    return message.resultsEncrypted === null
+      ? null
+      : decodeBase64(message.resultsEncrypted);
+  }
+  return message.resultsJson ? encryptToBytes(message.resultsJson) : null;
 }
 
 function resolveTitleBytes(

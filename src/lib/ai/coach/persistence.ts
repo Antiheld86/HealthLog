@@ -10,8 +10,18 @@
  * provenance (window names, metric tags, sample counts) and never raw
  * values, so it can be queried without decryption for analytics.
  */
+import type { z } from "zod/v4";
+
 import { prisma } from "@/lib/db";
 import { decryptFromBytes, encryptToBytes } from "./bytes-codec";
+import {
+  coachClarificationSchema,
+  coachFollowUpSchema,
+  coachMethodSchema,
+  coachResultMetaSchema,
+  coachResultTableSchema,
+  coachStepSchema,
+} from "./stream-events";
 import { COACH_CONVERSATION_TITLE_MAX } from "./types";
 import {
   isCheckupIntervalId,
@@ -20,12 +30,20 @@ import {
 } from "./suggest-action";
 
 import type {
+  CoachClarification,
   CoachConversationAttachmentDTO,
   CoachConversationDTO,
   CoachConversationDetailDTO,
+  CoachFollowUp,
   CoachMessageDTO,
   CoachMessageRole,
+  CoachMethod,
   CoachProvenance,
+  CoachResultEntry,
+  CoachResultMeta,
+  CoachResultTable,
+  CoachStep,
+  CoachStepDomain,
   CoachSuggestion,
 } from "./types";
 
@@ -55,6 +73,9 @@ export function summariseTitle(input: string): string {
       : sliced;
   return `${cut.trimEnd()}…`;
 }
+
+/** v1.39.4 — at most this many tables per message (`r1`..`r6`). */
+const MAX_RESULTS_PER_MESSAGE = 6;
 
 function provenanceToJson(provenance: CoachProvenance | null): string | null {
   if (!provenance) return null;
@@ -162,6 +183,53 @@ function restoreToolCalls(raw: unknown): CoachProvenance["toolCalls"] {
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
+/**
+ * v1.39.4 — restore an array field of the provenance entry by entry against
+ * the wire schema. A malformed entry is dropped, not the whole field; an
+ * empty or absent array restores to undefined. The schemas strip keys they do
+ * not know, so a stored blob can never widen what a reader sees.
+ */
+function restoreEach<T>(
+  raw: unknown,
+  schema: z.ZodType<T>,
+  cap: number,
+): T[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const cleaned: T[] = [];
+  for (const item of raw.slice(0, cap)) {
+    const parsed = schema.safeParse(item);
+    if (parsed.success) cleaned.push(parsed.data);
+  }
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+/** The live steps a turn persisted (at most 12 per turn). */
+function restoreSteps(raw: unknown): CoachStep[] | undefined {
+  return restoreEach(raw, coachStepSchema, 12);
+}
+
+/** The method line; dropped whole when it does not parse. */
+function restoreMethod(raw: unknown): CoachMethod | undefined {
+  const parsed = coachMethodSchema.safeParse(raw);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/** The tables' metadata (at most 6 per message). No values live here. */
+function restoreResultMetas(raw: unknown): CoachResultMeta[] | undefined {
+  return restoreEach(raw, coachResultMetaSchema, MAX_RESULTS_PER_MESSAGE);
+}
+
+/** The chips offered under the reply (at most 3). */
+function restoreFollowUps(raw: unknown): CoachFollowUp[] | undefined {
+  return restoreEach(raw, coachFollowUpSchema, 3);
+}
+
+/** The clarification choices; dropped whole when they do not parse. */
+function restoreClarification(raw: unknown): CoachClarification | undefined {
+  const parsed = coachClarificationSchema.safeParse(raw);
+  return parsed.success ? parsed.data : undefined;
+}
+
 function provenanceFromJson(raw: string | null): CoachProvenance | null {
   if (!raw) return null;
   try {
@@ -249,6 +317,14 @@ function provenanceFromJson(raw: string | null): CoachProvenance | null {
     const suggestion = restoreSuggestion(parsed.suggestion);
     const suggestedAction = restoreSuggestedAction(parsed.suggestedAction);
     const toolCalls = restoreToolCalls(parsed.toolCalls);
+    // v1.39.4 — the dialog fields: steps, method, table metadata, chips, the
+    // clarification choices, and the forced-answer marker.
+    const steps = restoreSteps(parsed.steps);
+    const method = restoreMethod(parsed.method);
+    const results = restoreResultMetas(parsed.results);
+    const followUps = restoreFollowUps(parsed.followUps);
+    const clarification = restoreClarification(parsed.clarification);
+    const forcedFinal = parsed.forcedFinal === true;
     return {
       windows,
       metrics,
@@ -259,6 +335,12 @@ function provenanceFromJson(raw: string | null): CoachProvenance | null {
       ...(suggestedAction ? { suggestedAction } : {}),
       ...(toolCalls ? { toolCalls } : {}),
       ...(unverifiedFigures !== undefined ? { unverifiedFigures } : {}),
+      ...(steps ? { steps } : {}),
+      ...(method ? { method } : {}),
+      ...(results ? { results } : {}),
+      ...(followUps ? { followUps } : {}),
+      ...(clarification ? { clarification } : {}),
+      ...(forcedFinal ? { forcedFinal: true as const } : {}),
     };
   } catch {
     return null;
@@ -295,6 +377,39 @@ export interface AppendMessageParams {
    */
   tokensUsed?: number | null;
   model?: string | null;
+  /**
+   * v1.39.4 — the tables of values this turn read. Encrypted into
+   * `resultsEncrypted`; their metadata rides `metricSource.results`. Omitted
+   * or empty on every turn without a table.
+   */
+  results?: CoachResultTable[];
+}
+
+/**
+ * v1.39.4 — the at-rest ceiling for one message's tables, as JSON before
+ * encryption. Tables arrive trimmed to 400 rows; a message whose tables still
+ * exceed this keeps the leading tables that fit, and a reader is told the
+ * rest are unavailable rather than handed a partial table.
+ */
+export const RESULTS_MAX_BYTES = 128 * 1024;
+
+/**
+ * Serialise a turn's tables for the ciphertext column, or null when there are
+ * none. Drops whole tables from the end until the JSON fits the ceiling.
+ */
+function resultsToBytes(
+  results: CoachResultTable[] | undefined,
+): Uint8Array<ArrayBuffer> | null {
+  if (!results || results.length === 0) return null;
+  const kept = results.slice(0, MAX_RESULTS_PER_MESSAGE);
+  while (kept.length > 0) {
+    const json = JSON.stringify(kept);
+    if (Buffer.byteLength(json, "utf8") <= RESULTS_MAX_BYTES) {
+      return encryptToBytes(json);
+    }
+    kept.pop();
+  }
+  return null;
 }
 
 /**
@@ -417,6 +532,7 @@ export async function appendMessage(
         promptVersion: params.promptVersion ?? null,
         tokensUsed: params.tokensUsed ?? null,
         model: params.model ?? null,
+        resultsEncrypted: resultsToBytes(params.results),
       },
     });
     await tx.coachConversation.update({
@@ -547,6 +663,9 @@ export async function fetchConversationWithMessages(
         // changing the oldest->newest contract the client renders.
         orderBy: { createdAt: "desc" },
         take: CONVERSATION_MESSAGE_DETAIL_CAP,
+        // v1.39.4 — the tables are read lazily, one message at a time, through
+        // `readMessageResults`; the detail read never loads their ciphertext.
+        omit: { resultsEncrypted: true },
       },
       // v1.29.x (S7) — the LIVE attachment set (join → document label columns
       // only; the encrypted body is untouched), ordered by attach time. Always
@@ -599,6 +718,72 @@ export async function fetchConversationWithMessages(
     attachmentCount: attachments.length,
     documentTitle: attachments[0]?.title ?? null,
   };
+}
+
+/**
+ * v1.39.4 — the stored tables of one assistant message, for its owner.
+ *
+ * Narrowed like the conversation read: the message must sit in a
+ * conversation `userId` owns, and a foreign or missing id is null (the route
+ * answers 404 for both, so existence never leaks across accounts).
+ *
+ * One entry per table the message's provenance lists, in that order. A
+ * table is served whole or withheld with a reason, never partially:
+ *   - `module_disabled` — `withhold(domain)` said the table's domain is
+ *     switched off for the record now. Such a table is not even decrypted.
+ *   - `unavailable` — the ciphertext did not decrypt, did not parse, or did
+ *     not carry that ref (a table dropped at the size ceiling). Fail closed
+ *     and say so, rather than serve nothing silently.
+ */
+export async function readMessageResults(
+  userId: string,
+  conversationId: string,
+  messageId: string,
+  withhold: (domain: CoachStepDomain) => boolean = () => false,
+): Promise<CoachResultEntry[] | null> {
+  const row = await prisma.coachMessage.findFirst({
+    where: {
+      id: messageId,
+      conversationId,
+      conversation: { userId },
+    },
+    select: { metricSourceJson: true, resultsEncrypted: true },
+  });
+  if (!row) return null;
+
+  const metas = provenanceFromJson(row.metricSourceJson)?.results ?? [];
+  if (metas.length === 0) return [];
+
+  const served = metas.filter((meta) => !withhold(meta.source.domain));
+  const tables =
+    served.length > 0 ? decryptResultTables(row.resultsEncrypted) : null;
+
+  return metas.map((meta): CoachResultEntry => {
+    if (withhold(meta.source.domain)) {
+      return { ref: meta.ref, withheld: "module_disabled" };
+    }
+    const table = tables?.get(meta.ref);
+    return table ?? { ref: meta.ref, withheld: "unavailable" };
+  });
+}
+
+/** Decrypt and parse a message's tables by ref; null when unreadable. */
+function decryptResultTables(
+  bytes: Uint8Array | null,
+): Map<string, CoachResultTable> | null {
+  if (!bytes || bytes.byteLength === 0) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decryptFromBytes(bytes));
+  } catch {
+    return null;
+  }
+  const tables = restoreEach(
+    parsed,
+    coachResultTableSchema,
+    MAX_RESULTS_PER_MESSAGE,
+  );
+  return new Map((tables ?? []).map((table) => [table.ref, table]));
 }
 
 export interface ListConversationsParams {

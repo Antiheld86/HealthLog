@@ -418,11 +418,21 @@ async function main() {
   }
 
   // ───── Coach (Bytes columns) ─────
-  // "encryptedContent" "summaryEncrypted" "titleEncrypted" "factEncrypted"
+  // "encryptedContent" "resultsEncrypted" "summaryEncrypted" "titleEncrypted"
+  // "factEncrypted"
   results.push(
     await rotateBytesColumn(
       "CoachMessage",
       "encryptedContent",
+      prisma.coachMessage,
+    ),
+  );
+  // v1.39.4 — the tables of values a turn read. NULL on every turn without a
+  // table, which `rotateBytesColumn` skips.
+  results.push(
+    await rotateBytesColumn(
+      "CoachMessage",
+      "resultsEncrypted",
       prisma.coachMessage,
     ),
   );
