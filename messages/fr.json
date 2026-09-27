@@ -9602,6 +9602,7 @@
       "label": "Comment cela a été calculé",
       "entry": "{domain}, {window} : {detail}",
       "entryNoWindow": "{domain} : {detail}",
+      "reused": "d'une réponse précédente",
       "readingsOne": "1 mesure",
       "readingsFew": "{count} mesures",
       "readingsOther": "{count} mesures",

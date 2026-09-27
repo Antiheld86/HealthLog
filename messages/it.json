@@ -9602,6 +9602,7 @@
       "label": "Come è stato ricavato",
       "entry": "{domain}, {window}: {detail}",
       "entryNoWindow": "{domain}: {detail}",
+      "reused": "da una risposta precedente",
       "readingsOne": "1 misurazione",
       "readingsFew": "{count} misurazioni",
       "readingsOther": "{count} misurazioni",

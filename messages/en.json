@@ -9602,6 +9602,7 @@
       "label": "How this was worked out",
       "entry": "{domain}, {window}: {detail}",
       "entryNoWindow": "{domain}: {detail}",
+      "reused": "from an earlier answer",
       "readingsOne": "1 reading",
       "readingsFew": "{count} readings",
       "readingsOther": "{count} readings",

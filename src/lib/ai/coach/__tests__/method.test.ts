@@ -210,6 +210,100 @@ describe("buildMethod", () => {
     ]);
   });
 
+  describe("a table shown again (show_result)", () => {
+    const reusedStep = (id: string, ref: string, count: number) =>
+      step({
+        id,
+        tool: "show_result",
+        labelKey: "coach.step.showResult",
+        domain: "bp",
+        window: "last90days",
+        period: "current",
+        granularity: "week",
+        count,
+        resultRef: ref,
+      });
+    const reusedTable = (ref: string) =>
+      table(ref, "bp", {
+        source: {
+          tool: "get_metric_table",
+          domain: "bp",
+          window: "last90days",
+          period: "current",
+          granularity: "week",
+        },
+        reusedFrom: { messageId: "msg-1", ref: "r1" },
+      });
+
+    it("says the figures come from an earlier answer", () => {
+      const method = buildMethod({
+        steps: [reusedStep("s1", "r1", 142)],
+        results: [reusedTable("r1")],
+        locale: "en",
+      });
+      expect(method?.text).toBe(
+        "Blood pressure, last 90 days: 142 readings, weekly averages, from an earlier answer",
+      );
+      expect(method?.entries).toEqual([
+        {
+          domain: "bp",
+          window: "last90days",
+          period: "current",
+          granularity: "week",
+          count: 142,
+          aggregation: "mean",
+        },
+      ]);
+    });
+
+    it("a re-read of the same source is one entry with the fresh count, never a sum and never marked as earlier", () => {
+      for (const order of ["reuse-first", "read-first"] as const) {
+        const read = step({
+          id: "s2",
+          tool: "get_metric_table",
+          domain: "bp",
+          window: "last90days",
+          period: "current",
+          granularity: "week",
+          count: 150,
+          resultRef: "r2",
+        });
+        const reuse = reusedStep("s1", "r1", 142);
+        const method = buildMethod({
+          steps: order === "reuse-first" ? [reuse, read] : [read, reuse],
+          results: [
+            reusedTable("r1"),
+            table("r2", "bp", {
+              source: {
+                tool: "get_metric_table",
+                domain: "bp",
+                window: "last90days",
+                period: "current",
+                granularity: "week",
+              },
+            }),
+          ],
+          locale: "en",
+        });
+        expect(method?.text, order).toBe(
+          "Blood pressure, last 90 days: 150 readings, weekly averages",
+        );
+        expect(method?.entries, order).toHaveLength(1);
+      }
+    });
+
+    it("a reused table no step accounts for is marked as well", () => {
+      const method = buildMethod({
+        steps: [],
+        results: [reusedTable("r1")],
+        locale: "de",
+      });
+      expect(method?.text).toBe(
+        "Blutdruck, letzte 90 Tage: Wochendurchschnitte, aus einer früheren Antwort",
+      );
+    });
+  });
+
   it("describes a table no step accounts for", () => {
     const method = buildMethod({
       steps: [],

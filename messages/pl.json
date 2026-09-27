@@ -9602,6 +9602,7 @@
       "label": "Jak to ustalono",
       "entry": "{domain}, {window}: {detail}",
       "entryNoWindow": "{domain}: {detail}",
+      "reused": "z wcześniejszej odpowiedzi",
       "readingsOne": "1 pomiar",
       "readingsFew": "{count} pomiary",
       "readingsOther": "{count} pomiarów",

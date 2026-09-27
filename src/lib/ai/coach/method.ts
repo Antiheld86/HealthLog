@@ -81,40 +81,66 @@ function entryKey(e: CoachMethodEntry): string {
   );
 }
 
-/** The entries, in the order the turn read them, one per read. */
-export function methodEntries(
+/**
+ * The entries, in the order the turn read them, one per read, and which of
+ * them rest only on a table an earlier answer read (`show_result`): those
+ * figures were not read again this turn, and the line says so.
+ */
+function collectEntries(
   steps: readonly CoachStep[],
   results: readonly CoachResultMeta[],
-): CoachMethodEntry[] {
+): { entries: CoachMethodEntry[]; reused: ReadonlySet<CoachMethodEntry> } {
   const byRef = new Map(results.map((r) => [r.ref, r]));
   const usedRefs = new Set<string>();
   const entries = new Map<string, CoachMethodEntry>();
+  const reusedKeys = new Set<string>();
 
-  const add = (entry: CoachMethodEntry) => {
+  const add = (entry: CoachMethodEntry, reuse = false) => {
     const key = entryKey(entry);
     const existing = entries.get(key);
     if (!existing) {
       entries.set(key, entry);
+      if (reuse) reusedKeys.add(key);
       return;
     }
-    // The same read twice (a retry, a show_result of this turn's table):
-    // one entry, the fullest one. A found read outranks an absent one.
-    if (existing.absent && !entry.absent) {
-      entries.set(key, entry);
-      return;
-    }
-    if (!entry.absent) {
+    if (entry.absent) return;
+    // A read of this turn and an earlier table of the same source, window
+    // and period: one entry. The fresh read is what the answer rests on,
+    // so its count stands and the earlier one is never added to it.
+    const existingReused = reusedKeys.has(key);
+    if (existingReused && !reuse) {
+      reusedKeys.delete(key);
       entries.set(key, {
-        ...existing,
-        ...(entry.count !== undefined &&
-        (existing.count === undefined || entry.count > existing.count)
-          ? { count: entry.count }
-          : {}),
-        ...(existing.aggregation === undefined && entry.aggregation
-          ? { aggregation: entry.aggregation }
+        ...entry,
+        ...(entry.aggregation === undefined && existing.aggregation
+          ? { aggregation: existing.aggregation }
           : {}),
       });
+      return;
     }
+    if (reuse && !existingReused && !existing.absent) {
+      if (existing.aggregation === undefined && entry.aggregation) {
+        entries.set(key, { ...existing, aggregation: entry.aggregation });
+      }
+      return;
+    }
+    // The same read twice (a retry): one entry, the fullest one. A found
+    // read outranks an absent one.
+    if (existing.absent) {
+      entries.set(key, entry);
+      if (reuse) reusedKeys.add(key);
+      return;
+    }
+    entries.set(key, {
+      ...existing,
+      ...(entry.count !== undefined &&
+      (existing.count === undefined || entry.count > existing.count)
+        ? { count: entry.count }
+        : {}),
+      ...(existing.aggregation === undefined && entry.aggregation
+        ? { aggregation: entry.aggregation }
+        : {}),
+    });
   };
 
   for (const step of steps) {
@@ -140,35 +166,47 @@ export function methodEntries(
     // not the same as nothing being there. The step list says which.
     if (step.status !== "done") continue;
     const aggregation = result ? aggregationFor(result) : undefined;
-    add({
-      ...base,
-      ...(typeof step.count === "number" && step.count >= 0
-        ? { count: Math.floor(step.count) }
-        : {}),
-      ...(aggregation ? { aggregation } : {}),
-    });
+    add(
+      {
+        ...base,
+        ...(typeof step.count === "number" && step.count >= 0
+          ? { count: Math.floor(step.count) }
+          : {}),
+        ...(aggregation ? { aggregation } : {}),
+      },
+      step.tool === "show_result",
+    );
   }
 
   // A table no step accounts for still says how it was built.
   for (const result of results) {
     if (usedRefs.has(result.ref)) continue;
     const aggregation = aggregationFor(result);
-    add({
-      domain: result.source.domain,
-      window: result.source.window,
-      period: result.source.period,
-      ...(result.source.granularity
-        ? { granularity: result.source.granularity }
-        : {}),
-      ...(aggregation ? { aggregation } : {}),
-    });
+    add(
+      {
+        domain: result.source.domain,
+        window: result.source.window,
+        period: result.source.period,
+        ...(result.source.granularity
+          ? { granularity: result.source.granularity }
+          : {}),
+        ...(aggregation ? { aggregation } : {}),
+      },
+      result.reusedFrom !== undefined,
+    );
   }
 
-  return [...entries.values()];
+  const reused = new Set<CoachMethodEntry>();
+  for (const key of reusedKeys) {
+    const entry = entries.get(key);
+    if (entry) reused.add(entry);
+  }
+  return { entries: [...entries.values()], reused };
 }
 
 function renderEntry(
   entry: CoachMethodEntry,
+  reused: boolean,
   t: (key: string, params?: Record<string, string | number>) => string,
   locale: Locale,
 ): string | null {
@@ -187,6 +225,9 @@ function renderEntry(
       details.push(t(methodTotalsKey(entry.granularity)));
     } else if (entry.aggregation) {
       details.push(t(COACH_METHOD_AGGREGATION_KEYS[entry.aggregation]));
+    }
+    if (reused && details.length > 0) {
+      details.push(t(COACH_METHOD_KEYS.reused));
     }
   }
   // Nothing to say about how it was worked out: the step list already
@@ -214,8 +255,9 @@ export function buildMethod(args: {
   const { locale } = args;
   const { t } = getServerTranslator(locale);
   const rendered: Array<{ entry: CoachMethodEntry; text: string }> = [];
-  for (const entry of methodEntries(args.steps, args.results)) {
-    const text = renderEntry(entry, t, locale);
+  const { entries, reused } = collectEntries(args.steps, args.results);
+  for (const entry of entries) {
+    const text = renderEntry(entry, reused.has(entry), t, locale);
     if (text) rendered.push({ entry, text });
     if (rendered.length === METHOD_MAX_ENTRIES) break;
   }

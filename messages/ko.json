@@ -9602,6 +9602,7 @@
       "label": "산출 방법",
       "entry": "{domain}, {window}: {detail}",
       "entryNoWindow": "{domain}: {detail}",
+      "reused": "이전 답변에서",
       "readingsOne": "측정값 1개",
       "readingsFew": "측정값 {count}개",
       "readingsOther": "측정값 {count}개",

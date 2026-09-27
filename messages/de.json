@@ -9602,6 +9602,7 @@
       "label": "Wie das ermittelt wurde",
       "entry": "{domain}, {window}: {detail}",
       "entryNoWindow": "{domain}: {detail}",
+      "reused": "aus einer früheren Antwort",
       "readingsOne": "1 Messwert",
       "readingsFew": "{count} Messwerte",
       "readingsOther": "{count} Messwerte",

@@ -180,6 +180,7 @@ export const COACH_METHOD_KEYS = {
   label: "coach.method.label",
   entry: "coach.method.entry",
   entryNoWindow: "coach.method.entryNoWindow",
+  reused: "coach.method.reused",
 } as const;
 
 /** "N readings" in the method line, by plural tier. */
