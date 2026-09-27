@@ -26,9 +26,15 @@
 import { annotate } from "@/lib/logging/context";
 import { runRawCompletionWithFallback } from "@/lib/ai/provider-runner";
 import type { ProviderChainResolved } from "@/lib/ai/provider-runner";
-import type { AiMessage, AiToolDef, CompletionResult } from "@/lib/ai/types";
+import type {
+  AiMessage,
+  AiToolCall,
+  AiToolDef,
+  CompletionResult,
+} from "@/lib/ai/types";
 import type { ProviderHealthLedger } from "@/lib/ai/provider-health-ledger";
 import type { CoachScope, CoachScopeWindow } from "@/lib/ai/coach/types";
+import { parseCoachToolArgs, type CoachToolName } from "./definitions";
 import {
   executeCoachTool,
   type CoachToolResult,
@@ -81,6 +87,18 @@ export interface CoachToolLoopResult {
    * one honest sentence the fix exists to make sayable.
    */
   toolResults: CoachToolResult[];
+  /**
+   * v1.39.4 — true when the loop reached `HARD_CAP`: the model asked for
+   * tools in every round it was offered them, so the final answer was forced
+   * with `toolChoice: "none"` rather than given freely.
+   */
+  forcedFinal: boolean;
+}
+
+/** v1.39.4 — a tool call to run before the first model round. */
+interface CoachSeedCall {
+  name: CoachToolName;
+  args: Record<string, unknown>;
 }
 
 export async function runCoachToolLoop(args: {
@@ -108,6 +126,26 @@ export async function runCoachToolLoop(args: {
    * shared default holds.
    */
   timeoutMs?: number;
+  /**
+   * v1.39.4 — fired as each tool call starts. `index` counts calls across
+   * the whole turn from 0, so it is stable for a step id. A throwing callback
+   * is swallowed: progress reporting never breaks the loop.
+   */
+  onCallStart?: (call: AiToolCall, index: number) => void;
+  /**
+   * v1.39.4 — fired once for every call that started, when its result is in:
+   * found, missed, invalid or failed alike (`executeCoachTool` never throws).
+   */
+  onCallSettled?: (
+    call: AiToolCall,
+    result: CoachToolResult,
+    index: number,
+  ) => void;
+  /**
+   * v1.39.4 — calls to run before round one, reusing the loop's own
+   * assistant-call and tool-result serialisation. Accepted, not read yet.
+   */
+  seedCalls?: ReadonlyArray<CoachSeedCall>;
 }): Promise<CoachToolLoopResult> {
   const {
     userId,
@@ -121,6 +159,8 @@ export async function runCoachToolLoop(args: {
     ledger,
     signal,
     timeoutMs,
+    onCallStart,
+    onCallSettled,
   } = args;
 
   const messages: AiMessage[] = [...args.messages];
@@ -130,6 +170,7 @@ export async function runCoachToolLoop(args: {
   let workingProviderType = "";
   const toolTrace: CoachToolTrace[] = [];
   const toolResults: CoachToolResult[] = [];
+  let callCount = 0;
 
   // Round budget: rounds 1..HARD_CAP. On the last allowed round we forbid tool
   // calls so the model must answer.
@@ -184,6 +225,7 @@ export async function runCoachToolLoop(args: {
         rounds,
         toolTrace,
         toolResults,
+        forcedFinal: isForcedFinal,
       };
     }
 
@@ -197,6 +239,9 @@ export async function runCoachToolLoop(args: {
 
     const results = await Promise.all(
       calls.map(async (call) => {
+        const index = callCount;
+        callCount += 1;
+        notify(() => onCallStart?.(call, index));
         const toolResult = await executeCoachTool({
           userId,
           name: call.name,
@@ -204,7 +249,13 @@ export async function runCoachToolLoop(args: {
           fallbackWindow,
           sharedScope,
         });
-        toolTrace.push({ name: call.name, present: toolResult.present });
+        notify(() => onCallSettled?.(call, toolResult, index));
+        const validArgs = parseCoachToolArgs(call.name, call.arguments);
+        toolTrace.push({
+          name: call.name,
+          present: toolResult.present,
+          ...(validArgs ? { args: validArgs } : {}),
+        });
         // v1.21.0 (P6) — retain the payloads that carried figures for the
         // post-hoc prose number-verifier (the union of numeric leaves grounds
         // the figures the model may cite): a present result's `data`, or the
@@ -229,4 +280,13 @@ export async function runCoachToolLoop(args: {
   // above because `offerTools` is false, so `wantsTools` is false. Kept as a
   // defensive guard.
   throw new Error("coach tool loop exceeded hard cap without a final answer");
+}
+
+/** Run a progress callback; a throw from it never reaches the loop. */
+function notify(callback: () => void): void {
+  try {
+    callback();
+  } catch {
+    // Progress is best-effort; the answer is not.
+  }
 }

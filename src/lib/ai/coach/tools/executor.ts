@@ -99,6 +99,12 @@ export interface CoachToolResult {
 export interface CoachToolTrace {
   name: string;
   present: boolean;
+  /**
+   * v1.39.4 — the call's arguments as their schema validated them; absent
+   * when they did not validate. Turn-internal (steps, method, chips): never
+   * persisted, the provenance keeps `{ name, present }` only.
+   */
+  args?: Record<string, unknown>;
 }
 
 function pickSection(
