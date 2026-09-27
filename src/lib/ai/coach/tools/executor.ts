@@ -45,11 +45,8 @@ import { annotate } from "@/lib/logging/context";
 import type { Locale } from "@/lib/i18n/config";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { resolveModuleMap } from "@/lib/modules/gate";
-import {
-  admitCoachSources,
-  buildCoachSnapshot,
-  coachExclusions,
-} from "@/lib/ai/coach/snapshot";
+import { buildCoachSnapshot } from "@/lib/ai/coach/snapshot";
+import { admitCoachSources, coachExclusions } from "@/lib/ai/coach/scope-gate";
 import type { CoachPrefs } from "@/lib/validations/coach-prefs";
 import { readMessageResults } from "@/lib/ai/coach/persistence";
 import type {
