@@ -14,6 +14,11 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/api-fetch";
 import { isReproofRequired } from "../existing-factor-reauth-dialog";
 
+/** Escapes every regular-expression metacharacter, not only the ones the endpoints use today. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+}
+
 const read = (file: string) =>
   readFileSync(resolve(__dirname, "..", file), "utf8");
 
@@ -51,7 +56,7 @@ describe.each([
   it("sends the collected proof on the enrollment call itself", () => {
     expect(source).toContain(endpoint);
     expect(source).toMatch(
-      new RegExp(`${endpoint.replace(/[/.]/g, "\\$&")},\\s*proof\\)`),
+      new RegExp(`${escapeRegExp(endpoint)},\\s*proof\\)`),
     );
   });
 
