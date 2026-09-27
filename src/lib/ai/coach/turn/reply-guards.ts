@@ -29,7 +29,10 @@ import {
   captureReminderFromSentinel,
 } from "@/lib/ai/coach/reminders";
 import { parseSuggestAction } from "@/lib/ai/coach/suggest-action";
-import { parseClarifySentinel } from "@/lib/ai/coach/clarify";
+import {
+  dropRepeatClarification,
+  parseClarifySentinel,
+} from "@/lib/ai/coach/clarify";
 import { parseFollowUpsSentinel } from "@/lib/ai/coach/follow-ups/parse-sentinel";
 import { stripResultRefs } from "@/lib/ai/coach/results/refs";
 import type { CoachClarification } from "@/lib/ai/coach/types";
@@ -155,7 +158,15 @@ export async function guardReply(args: {
     inventory: model.inventory,
     locale,
   });
-  replyText = clarifyParse.prose.trim() || replyText;
+  // A block with no question before it leaves nothing to show; the raw
+  // marker must never reach the person, so that reply is unusable.
+  replyText = clarifyParse.prose.trim();
+  if (!replyText) return { ok: false, code: "coach.provider.empty" };
+  const clarification = await dropRepeatClarification({
+    userId,
+    conversationId: workingConversationId,
+    clarification: clarifyParse.clarification,
+  });
   const resultRefs = stripResultRefs(replyText);
   replyText = resultRefs.prose.trim() || replyText;
 
@@ -365,7 +376,7 @@ export async function guardReply(args: {
       followUpProposals: followUpsParse.proposals,
       // A blocked turn carries the fallback prose, so a question it asked is
       // gone and its choices must not ride along.
-      clarification: outbound.block ? null : clarifyParse.clarification,
+      clarification: outbound.block ? null : clarification,
     },
   };
 }
