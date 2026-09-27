@@ -70,8 +70,18 @@ import {
   type ResultRefAllocator,
 } from "@/lib/ai/coach/results/refs";
 import { isCoachDomainWithheld } from "@/lib/ai/coach/results/domain-module";
-import { COACH_RESULT_TITLE_KEYS } from "@/lib/ai/coach/dialog-keys";
+import {
+  COACH_RESULT_COLUMN_KEYS,
+  COACH_RESULT_TITLE_KEYS,
+  COACH_RESULT_UI_KEYS,
+  coachDomainLabelKey,
+} from "@/lib/ai/coach/dialog-keys";
+import {
+  buildDistributionTable,
+  deriveChartSpec,
+} from "@/lib/ai/coach/results/chart-spec";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
+import { resolveIntlLocale } from "@/lib/format-locale";
 import { DEFAULT_WINDOW } from "@/lib/ai/coach/snapshot-cache";
 import {
   getMetricSeriesArgsSchema,
@@ -806,6 +816,37 @@ async function getMetricTable(
 }
 
 /**
+ * A table shown again, with the chart its `view` asks for. No view: the chart
+ * the server picks for any table. `table`: no chart. `chart`: a day table
+ * becomes how often each range came up (a histogram); any other table, or a
+ * day table with too few values, keeps the chart the server picks. The model
+ * then reads the summary of what is shown.
+ */
+function withResultView(
+  table: CoachResultTable,
+  view: "table" | "chart" | undefined,
+  locale: Locale,
+): CoachResultTable {
+  if (view === "table") return { ...table, chart: null, chartKind: null };
+  if (view === "chart") {
+    const { t } = getServerTranslator(locale);
+    const distribution = buildDistributionTable(table, {
+      localeTag: resolveIntlLocale(locale),
+      title: t(COACH_RESULT_TITLE_KEYS.distribution, {
+        metric: t(coachDomainLabelKey(table.source.domain)),
+      }),
+      range: t(COACH_RESULT_COLUMN_KEYS.range),
+      count: t(COACH_RESULT_COLUMN_KEYS.count),
+      bin: (from, to, unit) =>
+        t(COACH_RESULT_UI_KEYS.histogramBin, { from, to, unit }),
+    });
+    if (distribution) return distribution;
+  }
+  const chart = deriveChartSpec(table);
+  return { ...table, chart, chartKind: chart?.kind ?? null };
+}
+
+/**
  * `show_result` — an earlier table of THIS conversation, shown again. The
  * name resolves only against the tables the turn's own conversation holds
  * (`turn.priorResults`), and the values come through the owner- and
@@ -850,14 +891,16 @@ async function showResult(
   }
   const ref = turn.refs.next();
   if (!ref) return { present: false, reason: "result_limit" };
-  const table: CoachResultTable = {
-    ...entry,
-    ref,
-    displayed: false,
-    chart: null,
-    chartKind: null,
-    reusedFrom: { messageId: target.messageId, ref: target.ref },
-  };
+  const table = withResultView(
+    {
+      ...entry,
+      ref,
+      displayed: false,
+      reusedFrom: { messageId: target.messageId, ref: target.ref },
+    },
+    parsed.data.view,
+    turn.locale,
+  );
   return {
     present: true,
     resultRef: ref,

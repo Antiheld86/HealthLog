@@ -43,6 +43,8 @@ export interface CoachResultTableProps {
   result: CoachResultTableData;
   /** The method line for this table, shown under the title. */
   method?: ReactNode;
+  /** Controls shown beside the copy button (the chart/table toggle). */
+  toolbar?: ReactNode;
 }
 
 type CellFormatter = (
@@ -98,7 +100,11 @@ function headingText(column: CoachResultColumn): string {
   return column.unit ? `${column.label} (${column.unit})` : column.label;
 }
 
-export function CoachResultTable({ result, method }: CoachResultTableProps) {
+export function CoachResultTable({
+  result,
+  method,
+  toolbar,
+}: CoachResultTableProps) {
   const { t } = useTranslations();
   const formatter = useCellFormatter();
   const [expanded, setExpanded] = useState(false);
@@ -159,8 +165,9 @@ export function CoachResultTable({ result, method }: CoachResultTableProps) {
                   </span>
                 ) : null}
               </span>
-              <span className="shrink-0">
+              <span className="flex shrink-0 items-center gap-1.5">
                 <CopyTableButton grid={grid} caption={result.title} />
+                {toolbar}
               </span>
             </span>
           </caption>

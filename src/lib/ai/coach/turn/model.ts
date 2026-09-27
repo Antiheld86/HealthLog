@@ -141,8 +141,13 @@ function stepRecorder(emitter: TurnEmitter): {
   };
 }
 
-/** v1.39.4 — a projected table with the chart the server chose for it. */
+/**
+ * v1.39.4 — a projected table with the chart the server chose for it. A
+ * table shown again already carries the chart its `show_result` view asked
+ * for, and keeps it.
+ */
 function withChart(table: CoachResultTable): CoachResultTable {
+  if (table.reusedFrom) return table;
   const chart = deriveChartSpec(table);
   return { ...table, chart, chartKind: chart?.kind ?? null };
 }

@@ -275,6 +275,70 @@ describe("show_result", () => {
     expect(readDailySeries).not.toHaveBeenCalled();
   });
 
+  it("keeps the server's chart when no view is asked for", async () => {
+    readMessageResults.mockResolvedValue([STORED]);
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "show_result",
+      rawArguments: JSON.stringify({ ref: "m2.r1" }),
+      turn: turn(),
+    });
+    expect(result.table).toMatchObject({
+      shape: "timeSeries",
+      chart: { kind: "line", x: "day", series: ["value"] },
+      chartKind: "line",
+    });
+  });
+
+  it("shows the table without a chart for view table", async () => {
+    readMessageResults.mockResolvedValue([STORED]);
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "show_result",
+      rawArguments: JSON.stringify({ ref: "m2.r1", view: "table" }),
+      turn: turn(),
+    });
+    expect(result.table).toMatchObject({
+      rows: STORED.rows,
+      chart: null,
+      chartKind: null,
+    });
+  });
+
+  it("shows a day table as counts per range for view chart", async () => {
+    const days = [58, 61, 62, 64, 66, 66, 67, 70, 71, 74, 63, 65];
+    readMessageResults.mockResolvedValue([
+      {
+        ...STORED,
+        rowCount: days.length,
+        rows: days.map((value, index) => [
+          `2026-09-${String(10 + index).padStart(2, "0")}`,
+          value,
+        ]),
+      },
+    ]);
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "show_result",
+      rawArguments: JSON.stringify({ ref: "m2.r1", view: "chart" }),
+      turn: turn(),
+    });
+    expect(result.table).toMatchObject({
+      ref: "r1",
+      shape: "distribution",
+      titleKey: "coach.result.title.distribution",
+      chartKind: "histogram",
+      chart: { kind: "histogram", column: "value", unit: "bpm" },
+      reusedFrom: { messageId: "m-a2", ref: "r1" },
+    });
+    expect(result.table?.rows[0]).toEqual(["55–60 bpm", 1]);
+    // The model reads the counts it can talk about, not the days.
+    expect(result.data).toMatchObject({
+      shape: "distribution",
+      stats: { count: { total: days.length } },
+    });
+  });
+
   it("answers unknown_result for a name this conversation does not hold", async () => {
     // A name that another conversation of the same account might hold.
     const result = await executeCoachTool({
