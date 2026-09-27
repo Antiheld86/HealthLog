@@ -65,6 +65,12 @@ import {
   storedMeasurements,
   storeTamperedCopy,
 } from "./setup/backup-journey-fixture";
+import {
+  actWithReproof,
+  completeReproofWithPassword,
+  expireRecentProof,
+  useStaleSession,
+} from "./setup/recent-proof";
 import { expect, test } from "./setup/test";
 
 test.describe.configure({ mode: "serial" });
@@ -256,12 +262,20 @@ function snapshotRow(page: Page, id: string) {
   return page.locator(`[data-backup-id="${id}"]:visible`);
 }
 
-/** Drive the typed-confirmation dialog on one row and hand back the answer. */
+/**
+ * Drive the typed-confirmation dialog on one row and hand back the answer.
+ *
+ * A restore asks for a recent proof, and the session is made stale first, so
+ * the first POST is always refused and the answer waited for is the one to
+ * the retry the page sends after the re-proof dialog.
+ */
 async function restoreThroughDialog(page: Page, id: string) {
+  await expireRecentProof(page);
   const answered = page.waitForResponse(
     (response) =>
       response.url().includes(`/api/admin/backups/${id}/restore`) &&
-      response.request().method() === "POST",
+      response.request().method() === "POST" &&
+      response.status() !== 401,
   );
   await snapshotRow(page, id).getByTestId("backup-restore-trigger").click();
   // The instance-wide opt-in, left exactly where the dialog puts it. Asserted
@@ -273,11 +287,25 @@ async function restoreThroughDialog(page: Page, id: string) {
   ).not.toBeChecked();
   await page.getByTestId("backup-restore-prompt").fill("RESTORE");
   await page.getByTestId("backup-restore-confirm").click();
+  await completeReproofWithPassword(page, E2E_BACKUP_ADMIN.password);
   return answered;
 }
 
 test.describe("Backup and restore, through the settings surfaces", () => {
   test.use({ storageState: BACKUP_STORAGE_STATE_PATH });
+
+  // The archive, the snapshot download and every restore ask for a recent
+  // proof. Each test acts from a session of its own that is made stale before
+  // each of those presses, so the re-proof dialog is met every time, whatever
+  // minute of the run the journey lands in.
+  let endStaleSession: (() => Promise<void>) | null = null;
+  test.beforeEach(async ({ page }) => {
+    endStaleSession = await useStaleSession(page, E2E_BACKUP_ADMIN.username);
+  });
+  test.afterEach(async () => {
+    await endStaleSession?.();
+    endStaleSession = null;
+  });
 
   test.beforeAll(async () => {
     seeded = null;
@@ -327,7 +355,9 @@ test.describe("Backup and restore, through the settings surfaces", () => {
       .getByTestId("export-full-backup-passphrase")
       .fill(ARCHIVE_PASSPHRASE);
     const archiveDownload = page.waitForEvent("download");
-    await page.getByTestId("export-action-full-backup").click();
+    await actWithReproof(page, E2E_BACKUP_ADMIN.password, () =>
+      page.getByTestId("export-action-full-backup").click(),
+    );
     const bytes = await readFile(await (await archiveDownload).path());
 
     // The header `passphrase-archive.ts` documents, field by field: magic,
@@ -420,7 +450,9 @@ test.describe("Backup and restore, through the settings surfaces", () => {
 
     // ── what the stored copy actually carries ────────────────────────────
     const snapshotDownload = page.waitForEvent("download");
-    await snapshotRow(page, row.id).getByTestId("backup-download").click();
+    await actWithReproof(page, E2E_BACKUP_ADMIN.password, () =>
+      snapshotRow(page, row.id).getByTestId("backup-download").click(),
+    );
     const payload = JSON.parse(
       await readFile(await (await snapshotDownload).path(), "utf8"),
     ) as {

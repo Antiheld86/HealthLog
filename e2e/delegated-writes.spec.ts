@@ -36,9 +36,11 @@
  */
 import type { BrowserContext, Page } from "@playwright/test";
 
+import { actWithReproof, useStaleSession } from "./setup/recent-proof";
 import { expect, test } from "./setup/test";
 import {
   DELEGATE_STORAGE_STATE_PATH,
+  E2E_OWNER,
   E2E_OWNER_FULL_NAME,
   E2E_USER,
   OWNER_STORAGE_STATE_PATH,
@@ -76,12 +78,15 @@ test.describe("delegated writes", () => {
   let ownerContext: BrowserContext;
   let ownerPage: Page;
   let levelControlPresent = false;
+  let endOwnerSession: (() => Promise<void>) | null = null;
 
   test.beforeAll(async ({ browser }) => {
     ownerContext = await browser.newContext({
       storageState: OWNER_STORAGE_STATE_PATH,
     });
     ownerPage = await ownerContext.newPage();
+    // The invitation asks for a recent proof; see `useStaleSession`.
+    endOwnerSession = await useStaleSession(ownerPage, E2E_OWNER.username);
     await ownerPage.goto("/settings/access");
     levelControlPresent =
       (await ownerPage.locator(`[data-slot="${GRANT_LEVEL_SLOT}"]`).count()) >
@@ -89,6 +94,7 @@ test.describe("delegated writes", () => {
   });
 
   test.afterAll(async () => {
+    await endOwnerSession?.();
     await ownerContext.close();
   });
 
@@ -134,7 +140,7 @@ test.describe("delegated writes", () => {
       (req) =>
         req.method() === "POST" && req.url().endsWith("/api/account/grants"),
     );
-    await submit.click();
+    await actWithReproof(ownerPage, E2E_OWNER.password, () => submit.click());
     const posted = JSON.parse((await invitePost).postData() ?? "{}") as {
       access?: string;
     };

@@ -40,9 +40,11 @@
  */
 import type { Page } from "@playwright/test";
 
+import { reproveWithPassword, useStaleSession } from "./setup/recent-proof";
 import { expect, test } from "./setup/test";
 import {
   E2E_LEVEL_RECORDS,
+  E2E_SCOPE_DELEGATE,
   REPORT_DELEGATE_STORAGE_STATE_PATH,
 } from "./setup/test-helpers";
 
@@ -223,6 +225,15 @@ test.describe.serial("a read-level delegate and the doctor report", () => {
     throw new Error("the MANAGE-level record fixture is missing");
   }
 
+  // Generating the report exports a whole record, which asks the actor for a
+  // recent proof. The test runs on a session of its own, signed in ten minutes
+  // ago, so the gate is met on every run and proved explicitly below rather
+  // than passed or failed by where in the run this file lands.
+  let endStaleSession: (() => Promise<void>) | null = null;
+  test.beforeEach(async ({ page }) => {
+    endStaleSession = await useStaleSession(page, E2E_SCOPE_DELEGATE.username);
+  });
+
   test.afterEach(async ({ page }) => {
     // Hand the session back to its own record even when an assertion above
     // failed: this jar is this spec's, but a switched row left behind would
@@ -230,6 +241,8 @@ test.describe.serial("a read-level delegate and the doctor report", () => {
     await page.request
       .post("/api/account/switch", { data: { accountId: null } })
       .catch(() => {});
+    await endStaleSession?.();
+    endStaleSession = null;
   });
 
   test("cannot generate on a record it may only read, and is not offered the control", async ({
@@ -245,6 +258,11 @@ test.describe.serial("a read-level delegate and the doctor report", () => {
     await expect(
       page.locator('[data-slot="shared-record-banner"]'),
     ).toHaveAttribute("data-access-level", "manage");
+    // Without a recent proof the manager is asked for one, not refused.
+    const unproven = await attemptReport(page, SELECTION);
+    expect(unproven.status).toBe(401);
+    expect(unproven.errorCode).toBe("auth.reproof.required");
+    await reproveWithPassword(page, E2E_SCOPE_DELEGATE.password);
     const managed = await attemptReport(page, SELECTION);
     expect(managed.status).toBe(200);
     expect(managed.contentType).toContain("application/pdf");
