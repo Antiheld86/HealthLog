@@ -28,6 +28,7 @@ import {
 import { numberFollowUps } from "@/lib/ai/coach/follow-ups/catalog";
 import { buildContinueFollowUp } from "@/lib/ai/coach/follow-ups/continue";
 import type { CoachPrefs } from "@/lib/validations/coach-prefs";
+import { fitResultsToStorage } from "@/lib/ai/coach/results/project";
 
 import type { ModelOutcome } from "./model";
 import type { GuardedReply } from "./reply-guards";
@@ -76,10 +77,15 @@ export function assembleTurnDialog(args: {
   const { model, reply, prefs, locale } = args;
   const blocked = reply.outboundBlocked;
   const referenced = new Set(reply.referencedResults);
+  // Fitted to the at-rest ceiling here, before anything streams, so the
+  // tables shown live, the metadata and the ciphertext name the same set: a
+  // table trimmed only at write time showed live and read back withheld.
   const results = blocked
     ? []
-    : model.results.map((table) =>
-        referenced.has(table.ref) ? { ...table, displayed: true } : table,
+    : fitResultsToStorage(
+        model.results.map((table) =>
+          referenced.has(table.ref) ? { ...table, displayed: true } : table,
+        ),
       );
   const metas = results.map(toResultMeta);
   const method = buildMethod({ steps: model.steps, results: metas, locale });

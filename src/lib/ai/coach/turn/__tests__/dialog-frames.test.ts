@@ -21,6 +21,7 @@ import { DEFAULT_COACH_PREFS } from "@/lib/validations/coach-prefs";
 
 import { emitReply } from "../sse";
 import { assembleTurnDialog, buildTurnProvenance } from "../provenance";
+import { RESULTS_MAX_BYTES } from "@/lib/ai/coach/results/project";
 import type { ModelOutcome } from "../model";
 import type { GuardedReply } from "../reply-guards";
 
@@ -168,6 +169,40 @@ describe("assembleTurnDialog", () => {
     expect(provenance.clarification).toEqual(CLARIFY);
     expect(provenance.forcedFinal).toBe(true);
     expect(JSON.stringify(provenance)).not.toContain("128");
+  });
+
+  it("streams only the tables the message can keep, so a reload shows the same ones", () => {
+    // A year of days with long period keys: two such tables exceed the
+    // at-rest ceiling together, one fits.
+    const big = (ref: string): CoachResultTable => ({
+      ...TABLE,
+      ref,
+      rowCount: 400,
+      rows: Array.from({ length: 400 }, (_, i) => [
+        `2026-01-01-${"x".repeat(160)}-${i}`,
+        120 + (i % 30),
+      ]),
+    });
+    const tables = [big("r1"), big("r2")];
+    expect(JSON.stringify(tables).length).toBeGreaterThan(RESULTS_MAX_BYTES);
+    const dialog = assembleTurnDialog({
+      model: { ...model, results: tables },
+      reply: reply(false),
+      prefs: DEFAULT_COACH_PREFS,
+      locale: "en",
+    });
+    expect(dialog.results.map((t) => t.ref)).toEqual(["r1"]);
+    const provenance = buildTurnProvenance({
+      snapshotProvenance: { windows: [], metrics: [] },
+      reply: reply(false),
+      suggestion: null,
+      action: null,
+      toolTrace: [],
+      steps: [],
+      dialog,
+      forcedFinal: false,
+    });
+    expect(provenance.results?.map((r) => r.ref)).toEqual(["r1"]);
   });
 
   it("drops tables, chips and clarification on a blocked turn", () => {

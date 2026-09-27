@@ -23,6 +23,7 @@ import {
   coachStepSchema,
 } from "./stream-events";
 import { COACH_CONVERSATION_TITLE_MAX } from "./types";
+import { RESULTS_MAX_BYTES, fitResultsToStorage } from "./results/project";
 import {
   isCheckupIntervalId,
   isSuggestedActionType,
@@ -392,31 +393,19 @@ export interface AppendMessageParams {
   results?: CoachResultTable[];
 }
 
-/**
- * v1.39.4 — the at-rest ceiling for one message's tables, as JSON before
- * encryption. Tables arrive trimmed to 400 rows; a message whose tables still
- * exceed this keeps the leading tables that fit, and a reader is told the
- * rest are unavailable rather than handed a partial table.
- */
-export const RESULTS_MAX_BYTES = 128 * 1024;
+export { RESULTS_MAX_BYTES };
 
 /**
  * Serialise a turn's tables for the ciphertext column, or null when there are
- * none. Drops whole tables from the end until the JSON fits the ceiling.
+ * none. The turn already fitted them (`fitResultsToStorage`, before it
+ * streamed them); fitting again here only guards a caller that did not.
  */
 function resultsToBytes(
   results: CoachResultTable[] | undefined,
 ): Uint8Array<ArrayBuffer> | null {
   if (!results || results.length === 0) return null;
-  const kept = results.slice(0, MAX_RESULTS_PER_MESSAGE);
-  while (kept.length > 0) {
-    const json = JSON.stringify(kept);
-    if (Buffer.byteLength(json, "utf8") <= RESULTS_MAX_BYTES) {
-      return encryptToBytes(json);
-    }
-    kept.pop();
-  }
-  return null;
+  const kept = fitResultsToStorage(results.slice(0, MAX_RESULTS_PER_MESSAGE));
+  return kept.length > 0 ? encryptToBytes(JSON.stringify(kept)) : null;
 }
 
 /**

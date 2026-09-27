@@ -152,6 +152,30 @@ function withChart(table: CoachResultTable): CoachResultTable {
   return { ...table, chart, chartKind: chart?.kind ?? null };
 }
 
+/**
+ * The tables a settled turn shows. Built outside the provider's failure
+ * path: the model has already answered and its tokens are billed, so a
+ * projection defect must not refund them or drop the reply. It costs the
+ * turn its tables, which the annotation records, and nothing else.
+ */
+export function buildTurnResults(
+  calls: Parameters<typeof projectResults>[0]["calls"],
+  locale: Locale,
+): CoachResultTable[] {
+  try {
+    return projectResults({ calls, locale }).map(withChart);
+  } catch (err) {
+    annotate({
+      action: { name: "coach.results.project_failed" },
+      meta: {
+        error: err instanceof Error ? err.name : "unknown",
+        calls: calls.length,
+      },
+    });
+    return [];
+  }
+}
+
 /** v1.39.4 — server-authored lines appended to the system prompt. */
 function appendBlocks(base: string, blocks: string[]): string {
   const extra = blocks.filter((block) => block.length > 0);
@@ -305,10 +329,10 @@ export async function runTurnModel(args: {
         totalTokens: loop.totalTokens,
         cachedTokens: loop.cachedTokens,
         steps: steps.list(),
-        results: projectResults({
-          calls: settled.filter((call) => call !== undefined),
+        results: buildTurnResults(
+          settled.filter((call) => call !== undefined),
           locale,
-        }).map(withChart),
+        ),
         forcedFinal: loop.forcedFinal === true,
         inventory: inventory.entries,
         correlations: correlationPartners(
