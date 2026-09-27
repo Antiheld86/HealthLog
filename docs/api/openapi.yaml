@@ -36886,6 +36886,16 @@ components:
                 anyOf:
                   - type: string
                   - type: "null"
+              locationEncrypted:
+                anyOf:
+                  - type: string
+                    minLength: 1
+                  - type: "null"
+              phoneEncrypted:
+                anyOf:
+                  - type: string
+                    minLength: 1
+                  - type: "null"
               noteEncrypted:
                 anyOf:
                   - type: string

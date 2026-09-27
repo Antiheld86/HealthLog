@@ -703,7 +703,6 @@ async function main() {
   // v1.39.4 — the practice's phone number and address. NULL on a field the
   // person left empty and on a row the free-text backfill has not reached
   // yet; `rotateBytesColumn` skips both.
-  // "phoneEncrypted" "locationEncrypted"
   results.push(
     await rotateBytesColumn(
       "Practitioner",
