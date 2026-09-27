@@ -109,6 +109,8 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
     scope,
     guidedQuestion,
     workoutId,
+    followUp,
+    clarification,
   } = parsed.data;
 
   // Per-user request-rate ceiling layered in front of the daily budget
@@ -171,6 +173,8 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
     scope,
     guidedQuestion,
     workoutId,
+    followUp,
+    clarification,
     recheckCapability: coachCapabilityRefusal,
   });
 }

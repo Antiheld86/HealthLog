@@ -15,7 +15,10 @@ import type { Locale } from "@/lib/i18n/config";
 import type { CoachTurn } from "@/lib/ai/coach/chat-request-builder";
 import type { CoachSuggestedAction } from "@/lib/ai/coach/suggest-action";
 import type {
+  CoachClarification,
+  CoachFollowUp,
   CoachProvenance,
+  CoachResultTable,
   CoachScope,
   CoachStreamEvent,
   CoachSuggestion,
@@ -32,6 +35,10 @@ export interface TurnInput {
   scope: CoachScope | undefined;
   guidedQuestion: string | undefined;
   workoutId: string | undefined;
+  /** v1.39.4 — the follow-up chip this message came from, if any. */
+  followUp: { messageId: string; id: string } | undefined;
+  /** v1.39.4 — the clarifying question this message answers, if any. */
+  clarification: { messageId: string; choiceId?: string } | undefined;
   /**
    * The `coach` capability gate, re-run at the egress site. Owned by the
    * route (the capability inventory reads it there); returns the refusal
@@ -80,6 +87,12 @@ export type ReplyOutcome =
       provenance: CoachProvenance;
       suggestion: CoachSuggestion | null;
       action: CoachSuggestedAction | null;
+      /** v1.39.4 — tables streamed after the provenance, owner only. */
+      results: CoachResultTable[];
+      /** v1.39.4 — the chips under the reply. */
+      followUps: CoachFollowUp[];
+      /** v1.39.4 — the choices, when the reply is a question. */
+      clarification: CoachClarification | null;
       messageId: string;
       totalTokens: number;
       model: string | null;

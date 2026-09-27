@@ -2778,7 +2778,10 @@ describe("every model the plan claims two-ended survives a real restore", () => 
     const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
       purpose: "portable-export",
     });
-    const [turn] = payload.coachConversations[0].messages;
+    const { coachConversations } = payload as {
+      coachConversations: Array<{ messages: Array<Record<string, unknown>> }>;
+    };
+    const [turn] = coachConversations[0].messages;
     expect(turn).toMatchObject({ resultsJson: COACH_RESULTS_JSON });
     expect(turn).not.toHaveProperty("resultsEncrypted");
 

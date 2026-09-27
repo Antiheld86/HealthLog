@@ -87,9 +87,10 @@ function flushTick(): Promise<void> {
 
 /**
  * Emit a finished turn. A failed outcome is one `error` frame. A guarded
- * reply goes out as `token* → provenance → suggestion? → suggestedAction? →
- * done`; the token frames carry the FULLY-GUARDED text, and every guard ran
- * before the first one leaves.
+ * reply goes out as `token* → provenance → result* → suggestion? →
+ * suggestedAction? → clarification? → followUps? → done`; the token frames
+ * carry the FULLY-GUARDED text, and every guard ran before the first one
+ * leaves. The live `step` frames went out earlier, while the model ran.
  */
 export async function emitReply(
   emitter: TurnEmitter,
@@ -115,6 +116,11 @@ export async function emitReply(
   }
   if (emitter.aborted()) return;
   emitter.emit({ type: "provenance", metricSource: outcome.provenance });
+  // v1.39.4 — additive `result` frames: the tables this turn read, after
+  // every guard and only on the owner's own stream.
+  for (const result of outcome.results) {
+    emitter.emit({ type: "result", result });
+  }
   // v1.18.1 (Workstream C) — additive `suggestion` frame.
   if (outcome.suggestion) {
     emitter.emit({ type: "suggestion", suggestion: outcome.suggestion });
@@ -125,6 +131,16 @@ export async function emitReply(
       type: "suggestedAction",
       suggestedAction: outcome.action,
     });
+  }
+  // v1.39.4 — additive `clarification` and `followUps` frames.
+  if (outcome.clarification) {
+    emitter.emit({
+      type: "clarification",
+      clarification: outcome.clarification,
+    });
+  }
+  if (outcome.followUps.length > 0) {
+    emitter.emit({ type: "followUps", followUps: outcome.followUps });
   }
   // v1.18.9 — additive `usage` envelope on the `done` frame.
   emitter.emit({
