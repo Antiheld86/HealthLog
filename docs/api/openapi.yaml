@@ -40744,7 +40744,9 @@ components:
                   $ref: "#/components/schemas/MeasurementType"
                 value:
                   type: number
-                  description: Daily mean (spot metrics) or SUM (cumulative).
+                  description: "The day's mean (spot metrics) or total (cumulative). A row of a coarser tier (a window longer than the
+                    daily cap) carries the average day of its bucket, the same quantity: a spot metric's mean of its
+                    daily means, a cumulative metric's total over the days of the bucket that hold a reading."
                 measuredAt:
                   type: string
                   format: date-time
