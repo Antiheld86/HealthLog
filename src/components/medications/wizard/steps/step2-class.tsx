@@ -3,6 +3,7 @@
 import {
   Activity,
   Apple,
+  Brain,
   Droplet,
   Flame,
   Leaf,
@@ -35,6 +36,7 @@ const ROW_ICONS: Record<WizardTreatmentRow, ComponentType<LucideProps>> = {
   vitamin: Apple,
   supplement: Leaf,
   antibiotic: ShieldCheck,
+  mentalHealth: Brain,
   other: Tag as unknown as LucideIcon,
 };
 

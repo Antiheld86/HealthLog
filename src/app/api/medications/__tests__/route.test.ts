@@ -364,6 +364,18 @@ describe("POST /api/medications — v1.5.4 clinical category extension", () => {
     expect(res.status).toBe(201);
   });
 
+  it("accepts MENTAL_HEALTH as a valid clinical category (v1.39.4, #1041)", async () => {
+    const res = await POST(
+      postReq({
+        name: "Sertraline",
+        dose: "50 mg",
+        category: "MENTAL_HEALTH",
+        schedules: [{ windowStart: "08:00", windowEnd: "09:00" }],
+      }),
+    );
+    expect(res.status).toBe(201);
+  });
+
   it("still 422s on an unknown category string", async () => {
     const res = await POST(
       postReq({

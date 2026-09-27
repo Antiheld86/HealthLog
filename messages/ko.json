@@ -1212,6 +1212,7 @@
     "categorySleepAid": "수면 보조",
     "categoryDiabetes": "당뇨",
     "categoryAntibiotic": "항생제",
+    "categoryMentalHealth": "정신 건강",
     "categoryOther": "기타",
     "daysSun": "일",
     "daysMon": "월",
@@ -1567,6 +1568,7 @@
         "vitamin": "비타민",
         "supplement": "보충제",
         "antibiotic": "항생제",
+        "mentalHealth": "정신 건강",
         "other": "기타"
       },
       "cadence": {

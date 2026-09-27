@@ -310,6 +310,13 @@ describe("WIZARD_TREATMENT_MAPPING — Step 2 row → request body", () => {
     });
   });
 
+  it("maps Psychische Gesundheit → (GENERIC, MENTAL_HEALTH) — new in v1.39.4", () => {
+    expect(WIZARD_TREATMENT_MAPPING.mentalHealth).toEqual({
+      treatmentClass: "GENERIC",
+      category: "MENTAL_HEALTH",
+    });
+  });
+
   it("maps GLP-1-Injektion → (GLP1, OTHER) — only row with GLP1", () => {
     expect(WIZARD_TREATMENT_MAPPING.glp1).toEqual({
       treatmentClass: "GLP1",
@@ -327,6 +334,7 @@ describe("WIZARD_TREATMENT_MAPPING — Step 2 row → request body", () => {
       "vitamin",
       "supplement",
       "antibiotic",
+      "mentalHealth",
       "other",
     ];
     for (const row of rows) {
@@ -347,6 +355,7 @@ describe("rowFromTreatment — reverse mapping for edit-hydration", () => {
 
   it("ANTIBIOTIC category maps to the antibiotic row", () => {
     expect(rowFromTreatment("GENERIC", "ANTIBIOTIC")).toBe("antibiotic");
+    expect(rowFromTreatment("GENERIC", "MENTAL_HEALTH")).toBe("mentalHealth");
   });
 
   it("unknown category falls back to 'other'", () => {

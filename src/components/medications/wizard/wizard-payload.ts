@@ -86,12 +86,13 @@ export type WizardTreatmentRow =
   | "vitamin"
   | "supplement"
   | "antibiotic"
+  | "mentalHealth"
   | "other";
 
 /**
- * The ten taxonomy rows in their visible order. maintainer-confirmed (D-1
- * §3 Step 2): Blutdruck · Diabetes · Hormone · GLP-1-Injektion ·
- * Schmerz · Allergie · Vitamine · Nahrungsergänzung · Antibiotikum ·
+ * The taxonomy rows in their visible order (D-1 §3 Step 2): Blutdruck ·
+ * Diabetes · Hormone · GLP-1-Injektion · Schmerz · Allergie · Vitamine ·
+ * Nahrungsergänzung · Antibiotikum · Psychische Gesundheit (v1.39.4) ·
  * Sonstiges.
  */
 export const WIZARD_TREATMENT_ROWS: readonly WizardTreatmentRow[] = [
@@ -104,6 +105,7 @@ export const WIZARD_TREATMENT_ROWS: readonly WizardTreatmentRow[] = [
   "vitamin",
   "supplement",
   "antibiotic",
+  "mentalHealth",
   "other",
 ];
 
@@ -128,6 +130,7 @@ export const WIZARD_TREATMENT_MAPPING: Record<
   vitamin: { treatmentClass: "GENERIC", category: "VITAMIN" },
   supplement: { treatmentClass: "GENERIC", category: "SUPPLEMENT" },
   antibiotic: { treatmentClass: "GENERIC", category: "ANTIBIOTIC" },
+  mentalHealth: { treatmentClass: "GENERIC", category: "MENTAL_HEALTH" },
   other: { treatmentClass: "GENERIC", category: "OTHER" },
 };
 
@@ -159,6 +162,8 @@ export function rowFromTreatment(
       return "supplement";
     case "ANTIBIOTIC":
       return "antibiotic";
+    case "MENTAL_HEALTH":
+      return "mentalHealth";
     default:
       return "other";
   }

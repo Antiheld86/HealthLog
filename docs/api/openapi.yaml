@@ -23985,6 +23985,7 @@ components:
             - SLEEP_AID
             - DIABETES
             - ANTIBIOTIC
+            - MENTAL_HEALTH
             - OTHER
         treatmentClass:
           type: string
@@ -24321,6 +24322,7 @@ components:
             - SLEEP_AID
             - DIABETES
             - ANTIBIOTIC
+            - MENTAL_HEALTH
             - OTHER
         treatmentClass:
           type: string
@@ -44086,6 +44088,7 @@ components:
         - SLEEP_AID
         - DIABETES
         - ANTIBIOTIC
+        - MENTAL_HEALTH
         - OTHER
       description: Clinical taxonomy stored in the `medication_categories` side-table. Orthogonal to `MedicationTreatmentClass`.
     CreateMedicationResponse:

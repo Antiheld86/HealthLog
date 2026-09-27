@@ -1212,6 +1212,7 @@
     "categorySleepAid": "Sleep Aid",
     "categoryDiabetes": "Diabetes",
     "categoryAntibiotic": "Antibiotic",
+    "categoryMentalHealth": "Mental health",
     "categoryOther": "Other",
     "daysSun": "Sun",
     "daysMon": "Mon",
@@ -1567,6 +1568,7 @@
         "vitamin": "Vitamins",
         "supplement": "Supplement",
         "antibiotic": "Antibiotic",
+        "mentalHealth": "Mental health",
         "other": "Other"
       },
       "cadence": {
