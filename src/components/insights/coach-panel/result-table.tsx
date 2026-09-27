@@ -173,13 +173,14 @@ export function CoachResultTable({
       <div
         id={regionId}
         data-slot="coach-result-table-scroll"
-        {...(expanded
-          ? { role: "region", tabIndex: 0, "aria-labelledby": titleId }
-          : {})}
+        // The region scrolls sideways on a narrow screen even when collapsed,
+        // so it is always reachable from the keyboard.
+        role="region"
+        tabIndex={0}
+        aria-labelledby={titleId}
         className={cn(
-          "overflow-x-auto rounded-b-lg",
-          expanded &&
-            "focus-visible:ring-ring/50 max-h-96 overflow-y-auto overscroll-contain outline-none focus-visible:ring-2",
+          "focus-visible:ring-ring/50 overflow-x-auto rounded-b-lg outline-none focus-visible:ring-2",
+          expanded && "max-h-96 overflow-y-auto overscroll-contain",
         )}
       >
         <table className="w-full text-sm">
