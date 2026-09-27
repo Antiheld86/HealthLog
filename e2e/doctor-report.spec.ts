@@ -51,7 +51,14 @@ import { readFile } from "node:fs/promises";
 import type { Page, Response } from "@playwright/test";
 import { PDFParse } from "pdf-parse";
 
-import { REPORT_OWNER_STORAGE_STATE_PATH } from "./setup/global-setup";
+import {
+  E2E_REPORT_OWNER,
+  REPORT_OWNER_STORAGE_STATE_PATH,
+} from "./setup/global-setup";
+import {
+  completeReproofWithPassword,
+  useStaleSession,
+} from "./setup/recent-proof";
 import { expect, test } from "./setup/test";
 
 /** The allergy and the drug the report has to name. Both plain ASCII: the
@@ -82,6 +89,17 @@ const BP_SECTION = "ESH classification";
  *  the report being taken on trust. */
 const EMPTY_WINDOW_START_DAYS_BACK = 400;
 const EMPTY_WINDOW_DAYS = 20;
+
+/** Where the drug's course starts: before the empty control's window opens,
+ *  so the drug is ongoing across every window this file asks for. */
+const MEDICATION_COURSE_START_DAYS_BACK = EMPTY_WINDOW_START_DAYS_BACK + 30;
+
+/** The UTC calendar day `offset` days back, as `YYYY-MM-DD`. */
+function isoDayBack(offset: number): string {
+  const day = new Date();
+  day.setUTCDate(day.getUTCDate() - offset);
+  return day.toISOString().slice(0, 10);
+}
 
 /** Byte floor for "a real document". A cover page with charts is far above
  *  this; a truncated stream or an error body is far below it. */
@@ -189,6 +207,12 @@ async function seedReportFixture(page: Page): Promise<SeedOutcome> {
             // No schedule: an as-needed drug is active indefinitely and needs
             // no dose ledger, which keeps the fixture about the drug LIST.
             asNeeded: true,
+            // The report lists a medication only for a window its course had
+            // begun by, so a drug entered today is rightly absent from a report
+            // for last year. The course therefore starts before the empty
+            // control's window: an ongoing drug the patient was already taking
+            // then belongs in both reports.
+            startsOn: fixture.medicationStartsOn,
           });
 
       const emergency = await send("PATCH", "/api/anamnesis/emergency", {
@@ -202,6 +226,7 @@ async function seedReportFixture(page: Page): Promise<SeedOutcome> {
       allergySubstance: ALLERGY_SUBSTANCE,
       medicationName: MEDICATION_NAME,
       medicationDose: MEDICATION_DOSE,
+      medicationStartsOn: isoDayBack(MEDICATION_COURSE_START_DAYS_BACK),
     },
   );
 }
@@ -276,16 +301,21 @@ interface GeneratedReport {
  * PDF and never handed it to the browser.
  */
 async function generateReport(page: Page): Promise<GeneratedReport> {
+  // The first press is refused for a recent proof (the session is a stale one,
+  // see the `beforeEach`); the report is the answer to the retry that follows
+  // the re-proof, so the refusal is not the response waited for.
   const responseArrived = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
-      new URL(response.url()).pathname === "/api/export/health-record",
+      new URL(response.url()).pathname === "/api/export/health-record" &&
+      response.status() !== 401,
     { timeout: 60_000 },
   );
   const downloadStarted = page.waitForEvent("download", { timeout: 60_000 });
 
   const generate = page.getByTestId("health-record-generate");
   await generate.click();
+  await completeReproofWithPassword(page, E2E_REPORT_OWNER.password);
 
   const response = await responseArrived;
   const download = await downloadStarted;
@@ -424,6 +454,19 @@ test.describe.serial("the doctor report", () => {
   // the page's own `fetch` writes them under its session.
   test.use({ storageState: REPORT_OWNER_STORAGE_STATE_PATH });
 
+  // Generating the report exports the whole record, which asks for a sign-in
+  // or re-proof within five minutes. The shared jar is fresh only early in a
+  // run, so each test starts from a session signed in ten minutes ago and
+  // answers the re-proof dialog the way the owner would.
+  let endStaleSession: (() => Promise<void>) | null = null;
+  test.beforeEach(async ({ page }) => {
+    endStaleSession = await useStaleSession(page, E2E_REPORT_OWNER.username);
+  });
+  test.afterEach(async () => {
+    await endStaleSession?.();
+    endStaleSession = null;
+  });
+
   test("generates a PDF that names the period, the vitals and the medication", async ({
     page,
   }) => {
@@ -484,17 +527,12 @@ test.describe.serial("the doctor report", () => {
     );
     await expect(dateFields).toHaveCount(2);
 
-    const dayBack = (offset: number): string => {
-      const day = new Date();
-      day.setUTCDate(day.getUTCDate() - offset);
-      return day.toISOString().slice(0, 10);
-    };
     // The field commits a clean ISO string whatever the locale's field order is.
-    await dateFields.first().fill(dayBack(EMPTY_WINDOW_START_DAYS_BACK));
+    await dateFields.first().fill(isoDayBack(EMPTY_WINDOW_START_DAYS_BACK));
     await dateFields.first().press("Enter");
     await dateFields
       .nth(1)
-      .fill(dayBack(EMPTY_WINDOW_START_DAYS_BACK - EMPTY_WINDOW_DAYS));
+      .fill(isoDayBack(EMPTY_WINDOW_START_DAYS_BACK - EMPTY_WINDOW_DAYS));
     await dateFields.nth(1).press("Enter");
 
     const report = await generateReport(page);
@@ -515,9 +553,11 @@ test.describe.serial("the doctor report", () => {
     // Nothing was measured in it, so the section that needs readings is gone.
     expect(report.text).not.toContain(BP_SECTION);
 
-    // The positive control for that absence: the reference data that is NOT
-    // window-scoped is still in the document. Without this, a renderer that
-    // produced a blank page would pass the line above.
+    // The positive control for that absence: what the window does not empty
+    // is still in the document. The allergy is not window-scoped at all, and
+    // the drug's course began before the window and never ended, so it was
+    // being taken then. Without this, a renderer that produced a blank page
+    // would pass the line above.
     expect(report.text).toContain(MEDICATION_NAME);
     expect(report.text).toContain(ALLERGY_SUBSTANCE);
   });
