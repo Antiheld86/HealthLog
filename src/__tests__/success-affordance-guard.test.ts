@@ -174,6 +174,12 @@ const PINNED_AFFORDANCES: Record<
     "toast.success": 1,
   },
   "src/components/insights/coach-panel/chat-bubble.tsx": { "text-success": 4 },
+  // The copy tick on a result table: shown only after the clipboard write
+  // resolved, so it reports a copy that happened; nothing is written to the
+  // record.
+  "src/components/insights/coach-panel/copy-table-button.tsx": {
+    "text-success": 1,
+  },
   "src/components/insights/coach-panel/history-rail.tsx": {
     "toast.success": 1,
   },
