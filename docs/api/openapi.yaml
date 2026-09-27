@@ -34173,6 +34173,9 @@ components:
                 type: boolean
               trackIntake:
                 type: boolean
+              category:
+                type: string
+                maxLength: 64
               deliveryForm:
                 type: string
                 enum:

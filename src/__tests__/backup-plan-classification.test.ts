@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -8,6 +8,7 @@ import {
   BACKED_UP_MODELS,
   DERIVED_MODELS,
   NOT_IN_BACKUP_MODELS,
+  RAW_SQL_TABLES,
   backupVerdict,
 } from "@/lib/export/backup-plan";
 
@@ -489,5 +490,64 @@ describe("every backed-up model travels both ways, or is named as debt", () => {
       expect(TWO_ENDED_MODELS).toContain(model);
       expect(COVERAGE_PENDING).not.toHaveProperty(model);
     }
+  });
+});
+
+describe("tables outside the schema have a backup verdict too", () => {
+  const SRC = resolve(__dirname, "..");
+
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        return entry.name === "generated" || entry.name === "__tests__"
+          ? []
+          : sourceFiles(full);
+      }
+      return /\.tsx?$/.test(entry.name) ? [full] : [];
+    });
+  }
+
+  function rawTables(): string[] {
+    const names = new Set<string>();
+    for (const file of sourceFiles(SRC)) {
+      const text = readFileSync(file, "utf8");
+      for (const m of text.matchAll(
+        /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+"?(\w+)"?/gi,
+      )) {
+        names.add(m[1]);
+      }
+    }
+    return [...names];
+  }
+
+  const mappedTables = new Set(
+    [...readFileSync(SCHEMA_PATH, "utf8").matchAll(/@@map\("(\w+)"\)/g)].map(
+      (m) => m[1],
+    ),
+  );
+
+  it("finds the raw tables it is meant to judge (no vacuous pass)", () => {
+    expect(rawTables()).toContain("medication_categories");
+  });
+
+  it("gives every raw table that is not a schema model a verdict", () => {
+    const unjudged = rawTables().filter(
+      (name) => !mappedTables.has(name) && !(name in RAW_SQL_TABLES),
+    );
+    expect(unjudged).toEqual([]);
+  });
+
+  it("carries the medication category through both ends", () => {
+    const writer = readFileSync(
+      join(SRC, "lib/export/full-backup-payload.ts"),
+      "utf8",
+    );
+    const restore = readFileSync(
+      join(SRC, "lib/export/restore-backup.ts"),
+      "utf8",
+    );
+    expect(writer).toMatch(/getMedicationCategories\(/);
+    expect(restore).toMatch(/setMedicationCategory\(/);
   });
 });

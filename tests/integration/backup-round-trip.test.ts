@@ -63,6 +63,10 @@ import {
   encryptWaveformToBytes,
 } from "@/lib/withings/ecg-waveform-codec";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
+import {
+  getMedicationCategories,
+  setMedicationCategory,
+} from "@/lib/medication-category";
 import { UNREADABLE_EXPORT_MARKER } from "@/lib/export/unreadable-marker";
 import { decryptNoteFromBytes } from "@/lib/labs/store";
 import { decryptContextFromBytes } from "@/lib/labs/biomarker-store";
@@ -2755,6 +2759,74 @@ describe("every model the plan claims two-ended survives a real restore", () => 
    * the target's key. A restore that dropped the readable JSON would bring
    * the thread back with every answer's table missing and nothing to say so.
    */
+  it.each(["disaster-recovery", "portable-export"] as const)(
+    "carries each medication's category through a %s round trip",
+    async (purpose) => {
+      const prisma = getPrismaClient();
+      await seedAdminSession(prisma);
+      await createOwner(prisma);
+      const thyroid = await prisma.medication.create({
+        data: { userId: OWNER_ID, name: "Levothyroxine", dose: "50 µg" },
+      });
+      const mood = await prisma.medication.create({
+        data: { userId: OWNER_ID, name: "Sertraline", dose: "50 mg" },
+      });
+      await prisma.medication.create({
+        data: { userId: OWNER_ID, name: "Unfiled", dose: "1 tab" },
+      });
+      await setMedicationCategory(thyroid.id, "THYROID");
+      await setMedicationCategory(mood.id, "MENTAL_HEALTH");
+
+      const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
+        purpose,
+      });
+      const exported = Object.fromEntries(
+        (payload.medications as Array<{ name: string; category?: string }>).map(
+          (m) => [m.name, m.category],
+        ),
+      );
+      expect(exported).toEqual({
+        Levothyroxine: "THYROID",
+        Sertraline: "MENTAL_HEALTH",
+        Unfiled: "OTHER",
+      });
+
+      await prisma.user.delete({ where: { id: OWNER_ID } });
+      await createOwner(prisma);
+      const backup = await prisma.dataBackup.create({
+        data: {
+          userId: OWNER_ID,
+          type: "TWO_ENDED_ROUND_TRIP",
+          data: encrypt(JSON.stringify(payload)),
+        },
+      });
+      const response = await POST(
+        new Request(`http://localhost/api/admin/backups/${backup.id}/restore`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ confirm: "RESTORE" }),
+        }) as never,
+        { params: Promise.resolve({ id: backup.id }) },
+      );
+      expect(response.status, JSON.stringify(await response.json())).toBe(200);
+
+      const restored = await prisma.medication.findMany({
+        where: { userId: OWNER_ID },
+        select: { id: true, name: true },
+      });
+      const categories = await getMedicationCategories(
+        restored.map((m) => m.id),
+      );
+      expect(
+        Object.fromEntries(restored.map((m) => [m.name, categories[m.id]])),
+      ).toEqual({
+        Levothyroxine: "THYROID",
+        Sertraline: "MENTAL_HEALTH",
+        Unfiled: "OTHER",
+      });
+    },
+  );
+
   it("carries a turn's tables readable in a portable file and seals them again on restore", async () => {
     const prisma = getPrismaClient();
     await seedAdminSession(prisma);

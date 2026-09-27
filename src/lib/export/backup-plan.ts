@@ -706,6 +706,24 @@ export const NOT_IN_BACKUP_MODELS: Readonly<Record<string, string>> = {
     "Feedback on generated recommendations that are themselves DERIVED. Restoring the feedback without the item it judged leaves an orphan.",
 };
 
+/**
+ * Tables created with raw SQL at runtime rather than declared in the schema.
+ * Every check above walks `schema.prisma`, so a table outside it is invisible
+ * to all of them — which is how the medication category went missing from
+ * every backup until v1.39.4. The guard beside this file finds each
+ * `CREATE TABLE IF NOT EXISTS` in the source and demands a verdict here, or a
+ * schema model mapped to the same name.
+ */
+export const RAW_SQL_TABLES: Readonly<
+  Record<string, { verdict: "BACKED_UP" | "NOT_IN_BACKUP"; reason: string }>
+> = {
+  medication_categories: {
+    verdict: "BACKED_UP",
+    reason:
+      "The clinical category the person chose for each medication. Carried inside its medication in both backup formats and written back in the restore transaction; without it every restored medication reads as Other.",
+  },
+};
+
 /** Auth material: not user data, and excluded from the wipe for the same reason. */
 export const AUTH_MODELS_OUT_OF_SCOPE: readonly string[] = [
   "Session",
