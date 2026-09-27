@@ -102,6 +102,10 @@ import { restoreEnvironmentData } from "@/lib/export/environment-backup";
 import { restoreEcgData } from "@/lib/export/ecg-backup";
 import { restoredMedicationCreatedAt } from "@/lib/export/medication-created-at";
 import { invalidateUserData } from "@/lib/cache/invalidate";
+import {
+  classifyRestoreFailure,
+  RESTORE_FAILURE_CAUSE_MESSAGES,
+} from "@/lib/export/restore-failure-cause";
 import { foldLegacyCoachAvailability } from "@/lib/modules/operator-availability";
 
 export interface RestoreResponse {
@@ -167,16 +171,23 @@ export interface RestoreResponse {
 }
 
 /**
- * How long the restore transaction may run. Two minutes was the whole budget
- * when a record was a few hundred thousand rows; deleting and rewriting 1.25
- * million measurements in one transaction takes longer than that (#1031). On
- * the test host the whole restore of that account, reading the file twice
- * included, took 94 s. The budget grows by a second per 5 000 measurements,
- * which gives that account six minutes, about four times what it needed, and
- * never drops below the old two minutes.
+ * How long the restore transaction may run, and with it every statement
+ * inside it (`SET LOCAL statement_timeout`, see the transaction below).
+ *
+ * The work is deleting the readings the account holds now and writing the
+ * ones the file carries. Both count: an account whose readings were folded
+ * into hourly averages still holds the originals as deleted rows until the
+ * nightly purge removes them, and the restore deletes those too (#1031). The
+ * budget is two minutes plus a second per 2 000 of those rows together. A
+ * seeded account of 1.89 million readings restored in 196 s on a fast host
+ * and in 9 min on a database held to half a CPU and 40 MB/s of writes; the
+ * budget gives it 33 min.
  */
-function restoreTransactionTimeoutMs(measurementCount: number): number {
-  return 120_000 + Math.ceil(measurementCount / 5);
+function restoreTransactionTimeoutMs(
+  fileMeasurements: number,
+  currentMeasurements: number,
+): number {
+  return 120_000 + Math.ceil((fileMeasurements + currentMeasurements) / 2);
 }
 
 function decodeEncryptedBytes(encoded: string): Uint8Array<ArrayBuffer> {
@@ -612,8 +623,14 @@ export async function restoreBackup(
   // has a deadline of its own (the background job's time budget) and that
   // limit would run past it, the restore is refused here, above the first
   // delete, rather than started and cut off by the queue.
+  // Counted here, before the transaction, because the delete costs time in
+  // proportion to what the account holds, deleted rows included.
+  const currentMeasurements = await prisma.measurement.count({
+    where: { userId: ownerId },
+  });
   const transactionTimeoutMs = restoreTransactionTimeoutMs(
     streamed.measurementCount,
+    currentMeasurements,
   );
   if (
     input.deadline !== undefined &&
@@ -651,6 +668,14 @@ export async function restoreBackup(
         // still writing. A second transaction waits here for the first to
         // commit or roll back, then replaces the account again from its own
         // file, which is what it was asked to do.
+        // Every connection carries the request limits from `src/lib/db.ts`
+        // (60 s per statement, 60 s idle inside a transaction). A restore is
+        // not a request: deleting two million readings is one statement, and
+        // on a slow disk it ran past 60 s, was cancelled, and the whole
+        // restore rolled back in its clearing step (#1031). The transaction
+        // has its own limit; SET LOCAL gives each statement the same one, and
+        // ends with the transaction.
+        await tx.$executeRaw`SELECT set_config('statement_timeout', ${String(transactionTimeoutMs)}, true), set_config('idle_in_transaction_session_timeout', ${String(transactionTimeoutMs)}, true)`;
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`backup-restore:${ownerId}`}))`;
         // Every reference this restore writes stays inside the account: the
         // references that leave it are counted now and again after the last
@@ -2367,6 +2392,7 @@ export async function restoreBackup(
     // lands in the audit row (admin-readable) and the Wide Event
     // (operator-readable), so root-cause investigation is unaffected.
     const verbose = err instanceof Error ? err.message : String(err);
+    const classified = classifyRestoreFailure(err);
     await auditLog("admin.backups.restore.failed", {
       userId: input.actorUserId,
       ipAddress: input.ipAddress,
@@ -2374,10 +2400,19 @@ export async function restoreBackup(
         backupId: backup.id,
         ownerId,
         reason: "transaction_failed",
+        cause: classified.cause,
+        code: classified.code,
         message: verbose,
       },
     });
-    annotate({ meta: { restoreFailReason: verbose } });
+    annotate({
+      meta: {
+        restoreFailReason: verbose,
+        restoreFailCause: classified.cause,
+        restoreFailCode: classified.code,
+        restoreTransactionTimeoutMs: transactionTimeoutMs,
+      },
+    });
     if (err instanceof ForeignReferenceError) {
       return refused(422, "backup.foreign_reference", err.message, {
         errorCode: "backup.foreign_reference",
@@ -2392,10 +2427,14 @@ export async function restoreBackup(
         errorCode: refusal.code,
       });
     }
+    // The wide event and the audit row carry the whole error. The job's row
+    // is read by whoever started the restore, so it names the cause, never
+    // the database's message, which can quote the rows involved.
     return refused(
       500,
       "transaction_failed",
-      "The restore could not be written and was rolled back. Nothing was changed.",
+      RESTORE_FAILURE_CAUSE_MESSAGES[classified.cause],
+      { cause: classified.cause },
     );
   }
 

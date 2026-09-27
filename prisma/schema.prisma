@@ -2046,6 +2046,9 @@ model EcgRecording {
   // makes the convergence a guarantee instead of a convention.
   @@unique([userId, source, recordedAt, samplingFrequency], map: "ecg_recordings_user_source_recorded_at_freq_key")
   @@index([userId, recordedAt(sort: Desc)])
+  // The foreign key's own lookup: deleting a reading checks this column once
+  // per deleted row (migration 0362).
+  @@index([measurementId])
   @@map("ecg_recordings")
 }
 
@@ -2492,6 +2495,9 @@ model PersonalRecord {
   /// ORDER BY value DESC LIMIT 1 (MAX direction) /
   /// ASC LIMIT 1 (MIN direction). Index covers both.
   @@index([userId, metricType, value])
+  // The foreign key's own lookup: deleting a reading checks this column once
+  // per deleted row (migration 0362).
+  @@index([sourceMeasurementId])
   @@map("personal_records")
 }
 
