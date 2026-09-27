@@ -2525,7 +2525,7 @@ export async function restoreBackup(
   if (measurementsRestored > 0) {
     try {
       await recomputeUserRollups(ownerId, {
-        statementTimeoutMs: AFTER_TRANSACTION_ALLOWANCE_MS,
+        statementTimeoutMs: RESTORE_AFTER_TRANSACTION_ALLOWANCE_MS,
       });
     } catch (err) {
       annotate({
