@@ -66,7 +66,9 @@ vi.mock("@/lib/ai/provider", () => ({
 }));
 vi.mock("@/lib/ai/consent-guard", () => ({ assertConsentForChain: vi.fn() }));
 vi.mock("@/lib/ai/prompts/insight-generator", () => ({ PROMPT_VERSION: "x" }));
-vi.mock("@/lib/ai/coach/types", () => ({
+// The rest of the module stays real: the step labels read its enums at load.
+vi.mock("@/lib/ai/coach/types", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/coach/types")>()),
   coachChatRequestSchema: {
     safeParse: () => ({ success: false, error: { issues: [] } }),
   },

@@ -211,6 +211,7 @@ export async function runTurnModel(args: {
               index,
               parsedArgs: parseCoachToolArgs(call.name, call.arguments),
               locale,
+              fallbackWindow: effectiveScope?.window,
             }),
           ),
         onCallSettled: (call, result, index) => {
@@ -220,7 +221,16 @@ export async function runTurnModel(args: {
             ...(parsedArgs ? { args: parsedArgs } : {}),
             result,
           };
-          steps.record(toStep({ call, index, parsedArgs, result, locale }));
+          steps.record(
+            toStep({
+              call,
+              index,
+              parsedArgs,
+              result,
+              locale,
+              fallbackWindow: effectiveScope?.window,
+            }),
+          );
         },
       });
       // v1.32.1 — the numeric verifier ACTIVATES only when this turn actually
