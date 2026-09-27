@@ -131,6 +131,8 @@ const NOT_OPERATOR_CONFIGURABLE: Readonly<Record<string, string>> = {
     "repository secret for the nightly model-graded Coach eval; that workflow runs in CI, never in the app image",
   COACH_EVAL_GENERATOR_MODEL: "CI-only knob for the same nightly eval workflow",
   COACH_EVAL_JUDGE_MODEL: "CI-only knob for the same nightly eval workflow",
+  COACH_EVAL_SCENARIO_REPEATS:
+    "CI-only knob for the same nightly eval workflow",
   HEALTHLOG_MCP_TOKEN:
     "read by the local stdio MCP bridge the operator runs on their own machine; the production image strips tsx so it cannot run there",
 

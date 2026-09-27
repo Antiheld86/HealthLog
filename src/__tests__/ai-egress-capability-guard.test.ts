@@ -147,6 +147,11 @@ const EGRESS_SITES: Record<string, EgressSite> = {
     recheck: false,
     reason: "The offline evaluation harness; never on a request or job path.",
   },
+  "lib/ai/coach/eval/run-case.ts": {
+    recheck: false,
+    reason:
+      "The offline evaluation harness's live scenario run, called only by judge.ts; never on a request or job path.",
+  },
 };
 
 describe("AI egress call sites", () => {
