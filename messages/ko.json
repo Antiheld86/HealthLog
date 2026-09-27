@@ -9480,7 +9480,180 @@
       "promptInjection": "제 지침을 무시하게 만들려는 표현이 보였어요. 저는 HealthLog 코치이고 본인의 건강 데이터만 정리해 드려요 — 그 범위에 맞게 다시 질문해 주세요.",
       "conversationPoisoned": "이 대화의 앞선 메시지에 제 지침을 무시하게 만드는 표현이 있어요. 새 대화를 시작해 주세요."
     },
-    "noRecordedData": "물어보신 내용에 대해 기록된 측정값이 없어서 수치를 알려드릴 수 없어요. 기록을 남기신 뒤에 다시 물어보시면 본인 수치로 답해 드릴게요."
+    "noRecordedData": "물어보신 내용에 대해 기록된 측정값이 없어서 수치를 알려드릴 수 없어요. 기록을 남기신 뒤에 다시 물어보시면 본인 수치로 답해 드릴게요.",
+    "step": {
+      "read": "{domain} 확인 중",
+      "readWindow": "{domain}, {window} 확인 중",
+      "snapshot": "기록 요약 확인 중",
+      "showResult": "이전 표 여는 중",
+      "reuse": "앞서 만든 표 사용 중",
+      "headerActive": "{label}…",
+      "headerDoneOne": "출처 1개 확인함",
+      "headerDoneFew": "출처 {count}개 확인함",
+      "headerDoneOther": "출처 {count}개 확인함",
+      "listLabel": "코치가 확인한 내용",
+      "toggleShow": "코치가 확인한 내용 보기",
+      "toggleHide": "코치가 확인한 내용 숨기기",
+      "announceDone": "완료: {label}",
+      "readingsOne": "측정값 1개",
+      "readingsFew": "측정값 {count}개",
+      "readingsOther": "측정값 {count}개",
+      "rowsOne": "1행",
+      "rowsFew": "{count}행",
+      "rowsOther": "{count}행",
+      "metricsOne": "지표 1개",
+      "metricsFew": "지표 {count}개",
+      "metricsOther": "지표 {count}개",
+      "reason": {
+        "noData": "측정값 없음",
+        "outsideWindow": "이 기간에는 측정값 없음",
+        "moduleDisabled": "꺼져 있음",
+        "retrievalFailed": "읽지 못함",
+        "invalidArguments": "요청을 이해하지 못함"
+      },
+      "domain": {
+        "labs": "검사 결과",
+        "illness": "질병과 회복",
+        "cycle": "생리 주기",
+        "correlations": "지표 간 연관성",
+        "snapshot": "기록 요약"
+      },
+      "window": {
+        "last7days": "최근 7일",
+        "last30days": "최근 30일",
+        "last90days": "최근 90일",
+        "lastYear": "최근 12개월",
+        "allTime": "전체 기간"
+      },
+      "period": {
+        "current": "이번 기간",
+        "previous": "이전 기간",
+        "yearAgo": "1년 전"
+      },
+      "granularity": {
+        "day": "일별",
+        "week": "주별",
+        "month": "월별"
+      }
+    },
+    "result": {
+      "title": {
+        "byDay": "일별 {metric}",
+        "byWeek": "주별 {metric}",
+        "byMonth": "월별 {metric}",
+        "previousPeriod": "{metric}, 이전 기간",
+        "yearAgo": "{metric}, 1년 전",
+        "workoutsBySport": "종목별 운동",
+        "labsLatest": "최근 검사 결과",
+        "sleepByNight": "밤별 수면",
+        "complianceByDay": "일별 복약 순응도",
+        "distribution": "{metric}: 구간별 빈도"
+      },
+      "column": {
+        "day": "날짜",
+        "week": "주",
+        "month": "월",
+        "night": "밤",
+        "sport": "종목",
+        "sessions": "횟수",
+        "analyte": "검사 항목",
+        "value": "값",
+        "unit": "단위",
+        "date": "일자",
+        "referenceRange": "참고 범위",
+        "systolic": "수축기",
+        "diastolic": "이완기",
+        "mean": "평균",
+        "min": "최저",
+        "max": "최고",
+        "readings": "측정 횟수",
+        "rate": "순응도",
+        "duration": "시간",
+        "range": "구간",
+        "count": "빈도"
+      },
+      "other": "기타",
+      "noReading": "측정값 없음",
+      "showAll": "모두 보기 ({count})",
+      "showFewer": "간단히 보기",
+      "copyMenu": "표 복사",
+      "copyForSpreadsheet": "스프레드시트용으로 복사",
+      "copyAsText": "텍스트로 복사",
+      "copied": "복사됨",
+      "copyFailed": "표를 복사하지 못했어요",
+      "viewLabel": "보기 방식",
+      "viewChart": "차트",
+      "viewTable": "표",
+      "chartSummary": "{title}을(를) 차트로 표시해요. 표 보기에서 모든 값을 확인할 수 있어요.",
+      "dataUsed": "사용한 데이터 ({count})",
+      "truncated": "전체 {total}행 중 처음 {shown}행 표시",
+      "withheld": {
+        "moduleDisabled": "해당 모듈이 꺼져 있어 이 표를 숨겼어요.",
+        "unavailable": "이 표를 불러오지 못했어요."
+      },
+      "loading": "표 불러오는 중…",
+      "loadFailed": "표를 불러오지 못했어요.",
+      "histogramBin": "{from}–{to} {unit}"
+    },
+    "method": {
+      "label": "산출 방법",
+      "entry": "{domain}, {window}: {detail}",
+      "entryNoWindow": "{domain}: {detail}",
+      "readingsOne": "측정값 1개",
+      "readingsFew": "측정값 {count}개",
+      "readingsOther": "측정값 {count}개",
+      "aggregation": {
+        "mean": "평균",
+        "median": "중앙값",
+        "latest": "최근 측정값",
+        "sum": "합계",
+        "count": "개수",
+        "rate": "비율"
+      },
+      "averages": {
+        "day": "일 평균",
+        "week": "주 평균",
+        "month": "월 평균"
+      },
+      "totals": {
+        "day": "일 합계",
+        "week": "주 합계",
+        "month": "월 합계"
+      },
+      "absent": {
+        "noData": "측정값 없음",
+        "outsideWindow": "이 기간에는 측정값 없음",
+        "moduleDisabled": "꺼져 있음"
+      }
+    },
+    "followUp": {
+      "groupLabel": "추천 후속 질문",
+      "widenWindow": "더 이전까지 보기",
+      "previousPeriod": "이전 기간과 비교",
+      "yearAgo": "1년 전과 비교",
+      "asChart": "차트로 보기",
+      "asTable": "표로 보기",
+      "relatedMetric": "{metric}도 보기",
+      "continue": "계속 찾아보기",
+      "settingLabel": "후속 질문 추천",
+      "settingHint": "코치의 가장 최근 답변 아래에 후속 질문을 최대 세 개까지 보여줘요."
+    },
+    "clarify": {
+      "cardLabel": "코치가 질문이 있어요",
+      "choicesLabel": "선택할 수 있는 답변",
+      "freeTextHint": "직접 답을 입력해도 돼요.",
+      "contextHint": "아래에 답을 입력해 주세요.",
+      "window": {
+        "last7days": "최근 7일",
+        "last30days": "최근 30일",
+        "last90days": "최근 90일",
+        "lastYear": "최근 12개월",
+        "allTime": "전체 기간"
+      }
+    },
+    "reuse": {
+      "caption": "지난 답변과 같은 수치를 그대로 보여드릴게요."
+    }
   },
   "safety": {
     "floor": {

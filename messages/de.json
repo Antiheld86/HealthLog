@@ -9480,7 +9480,180 @@
       "promptInjection": "In deiner Nachricht stehen Anweisungen, die meine Vorgaben überschreiben sollen. Ich bin der HealthLog-Coach und fasse ausschließlich deine eigenen Gesundheitsdaten zusammen — formuliere deine Frage bitte in diesem Rahmen neu.",
       "conversationPoisoned": "Eine frühere Nachricht in dieser Unterhaltung enthält Anweisungen, die meine Vorgaben überschreiben sollen. Beginne bitte eine neue Unterhaltung."
     },
-    "noRecordedData": "Zu deiner Frage sind bei dir keine Messwerte erfasst, also kann ich dir dazu keine Zahl nennen. Sobald du etwas eingetragen hast, frag mich noch einmal — dann rechne ich mit deinen eigenen Werten."
+    "noRecordedData": "Zu deiner Frage sind bei dir keine Messwerte erfasst, also kann ich dir dazu keine Zahl nennen. Sobald du etwas eingetragen hast, frag mich noch einmal — dann rechne ich mit deinen eigenen Werten.",
+    "step": {
+      "read": "Lese {domain}",
+      "readWindow": "Lese {domain}, {window}",
+      "snapshot": "Lese die Übersicht deiner Daten",
+      "showResult": "Öffne eine frühere Tabelle",
+      "reuse": "Nutze die Tabelle von vorhin",
+      "headerActive": "{label}…",
+      "headerDoneOne": "1 Quelle angesehen",
+      "headerDoneFew": "{count} Quellen angesehen",
+      "headerDoneOther": "{count} Quellen angesehen",
+      "listLabel": "Was der Coach angesehen hat",
+      "toggleShow": "Anzeigen, was der Coach angesehen hat",
+      "toggleHide": "Ausblenden, was der Coach angesehen hat",
+      "announceDone": "Fertig: {label}",
+      "readingsOne": "1 Messwert",
+      "readingsFew": "{count} Messwerte",
+      "readingsOther": "{count} Messwerte",
+      "rowsOne": "1 Zeile",
+      "rowsFew": "{count} Zeilen",
+      "rowsOther": "{count} Zeilen",
+      "metricsOne": "1 Messgröße",
+      "metricsFew": "{count} Messgrößen",
+      "metricsOther": "{count} Messgrößen",
+      "reason": {
+        "noData": "keine Messwerte",
+        "outsideWindow": "keine Messwerte in diesem Zeitraum",
+        "moduleDisabled": "ausgeschaltet",
+        "retrievalFailed": "konnte nicht gelesen werden",
+        "invalidArguments": "Anfrage nicht verstanden"
+      },
+      "domain": {
+        "labs": "Laborwerte",
+        "illness": "Krankheit und Erholung",
+        "cycle": "Zyklus",
+        "correlations": "Zusammenhänge zwischen Messgrößen",
+        "snapshot": "Datenübersicht"
+      },
+      "window": {
+        "last7days": "letzte 7 Tage",
+        "last30days": "letzte 30 Tage",
+        "last90days": "letzte 90 Tage",
+        "lastYear": "letzte 12 Monate",
+        "allTime": "gesamter Zeitraum"
+      },
+      "period": {
+        "current": "dieser Zeitraum",
+        "previous": "der Zeitraum davor",
+        "yearAgo": "ein Jahr zuvor"
+      },
+      "granularity": {
+        "day": "nach Tag",
+        "week": "nach Woche",
+        "month": "nach Monat"
+      }
+    },
+    "result": {
+      "title": {
+        "byDay": "{metric} nach Tag",
+        "byWeek": "{metric} nach Woche",
+        "byMonth": "{metric} nach Monat",
+        "previousPeriod": "{metric}, Zeitraum davor",
+        "yearAgo": "{metric}, ein Jahr zuvor",
+        "workoutsBySport": "Trainings nach Sportart",
+        "labsLatest": "Neueste Laborwerte",
+        "sleepByNight": "Schlaf nach Nacht",
+        "complianceByDay": "Medikamenten-Einnahmetreue nach Tag",
+        "distribution": "{metric}: wie oft welcher Bereich vorkam"
+      },
+      "column": {
+        "day": "Tag",
+        "week": "Woche",
+        "month": "Monat",
+        "night": "Nacht",
+        "sport": "Sportart",
+        "sessions": "Einheiten",
+        "analyte": "Laborwert",
+        "value": "Wert",
+        "unit": "Einheit",
+        "date": "Datum",
+        "referenceRange": "Referenzbereich",
+        "systolic": "Systolisch",
+        "diastolic": "Diastolisch",
+        "mean": "Durchschnitt",
+        "min": "Niedrigster",
+        "max": "Höchster",
+        "readings": "Messwerte",
+        "rate": "Einnahmetreue",
+        "duration": "Dauer",
+        "range": "Bereich",
+        "count": "Anzahl"
+      },
+      "other": "Sonstige",
+      "noReading": "kein Messwert",
+      "showAll": "Alle anzeigen ({count})",
+      "showFewer": "Weniger anzeigen",
+      "copyMenu": "Tabelle kopieren",
+      "copyForSpreadsheet": "Für Tabellenkalkulation kopieren",
+      "copyAsText": "Als Text kopieren",
+      "copied": "Kopiert",
+      "copyFailed": "Die Tabelle konnte nicht kopiert werden",
+      "viewLabel": "Ansicht",
+      "viewChart": "Diagramm",
+      "viewTable": "Tabelle",
+      "chartSummary": "{title} als Diagramm. Die Tabellenansicht listet jeden Wert auf.",
+      "dataUsed": "Verwendete Daten ({count})",
+      "truncated": "Die ersten {shown} von {total} Zeilen",
+      "withheld": {
+        "moduleDisabled": "Diese Tabelle ist ausgeblendet, weil ihr Modul ausgeschaltet ist.",
+        "unavailable": "Diese Tabelle konnte nicht geladen werden."
+      },
+      "loading": "Tabelle wird geladen…",
+      "loadFailed": "Die Tabellen konnten nicht geladen werden.",
+      "histogramBin": "{from}–{to} {unit}"
+    },
+    "method": {
+      "label": "Wie das ermittelt wurde",
+      "entry": "{domain}, {window}: {detail}",
+      "entryNoWindow": "{domain}: {detail}",
+      "readingsOne": "1 Messwert",
+      "readingsFew": "{count} Messwerte",
+      "readingsOther": "{count} Messwerte",
+      "aggregation": {
+        "mean": "Durchschnitt",
+        "median": "Median",
+        "latest": "letzter Messwert",
+        "sum": "Summe",
+        "count": "Anzahl",
+        "rate": "Quote"
+      },
+      "averages": {
+        "day": "Tagesdurchschnitte",
+        "week": "Wochendurchschnitte",
+        "month": "Monatsdurchschnitte"
+      },
+      "totals": {
+        "day": "Tagessummen",
+        "week": "Wochensummen",
+        "month": "Monatssummen"
+      },
+      "absent": {
+        "noData": "keine Messwerte",
+        "outsideWindow": "keine Messwerte in diesem Zeitraum",
+        "moduleDisabled": "ausgeschaltet"
+      }
+    },
+    "followUp": {
+      "groupLabel": "Vorgeschlagene Anschlussfragen",
+      "widenWindow": "Weiter zurückschauen",
+      "previousPeriod": "Mit dem Zeitraum davor vergleichen",
+      "yearAgo": "Mit dem Vorjahr vergleichen",
+      "asChart": "Als Diagramm zeigen",
+      "asTable": "Als Tabelle zeigen",
+      "relatedMetric": "Auch {metric} ansehen",
+      "continue": "Weitersuchen",
+      "settingLabel": "Anschlussfragen vorschlagen",
+      "settingHint": "Zeigt unter der letzten Antwort des Coaches bis zu drei Vorschläge für die nächste Frage."
+    },
+    "clarify": {
+      "cardLabel": "Der Coach hat eine Rückfrage",
+      "choicesLabel": "Mögliche Antworten",
+      "freeTextHint": "Du kannst auch selbst eine Antwort schreiben.",
+      "contextHint": "Schreib deine Antwort unten.",
+      "window": {
+        "last7days": "Letzte 7 Tage",
+        "last30days": "Letzte 30 Tage",
+        "last90days": "Letzte 90 Tage",
+        "lastYear": "Letzte 12 Monate",
+        "allTime": "Gesamter Zeitraum"
+      }
+    },
+    "reuse": {
+      "caption": "Hier sind dieselben Werte aus meiner letzten Antwort, unverändert."
+    }
   },
   "safety": {
     "floor": {
