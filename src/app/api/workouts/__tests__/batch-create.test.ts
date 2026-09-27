@@ -8,7 +8,7 @@
  * (idempotency replay, real-DB dedup, concurrent-write race) live in
  * the matching `tests/integration/workout-batch-create.test.ts`.
  */
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/lib/db", () => ({
@@ -74,6 +74,8 @@ vi.mock("next/headers", () => ({
 }));
 
 import { POST } from "../batch/route";
+import { _resetCryptoCacheForTests } from "@/lib/crypto";
+import { decryptRouteGeometry } from "@/lib/workouts/route-geometry-cipher";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -140,8 +142,20 @@ function validWorkout(
   };
 }
 
+// v1.39.4 — a route is sealed on write, so the ingest needs a configured key.
+const TEST_KEY = "b".repeat(64);
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  _resetCryptoCacheForTests();
+});
+
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv("ENCRYPTION_KEYS", "");
+  vi.stubEnv("ENCRYPTION_ACTIVE_KEY_ID", "");
+  vi.stubEnv("ENCRYPTION_KEY", TEST_KEY);
+  _resetCryptoCacheForTests();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(checkRateLimit).mockResolvedValue({
     allowed: true,
@@ -526,8 +540,29 @@ describe("POST /api/workouts/batch — nested route attachment", () => {
     expect(res.status).toBe(200);
     expect(prisma.workoutRoute.createMany).toHaveBeenCalledTimes(1);
     const call = vi.mocked(prisma.workoutRoute.createMany).mock.calls[0]?.[0];
-    const rows = (call as { data: Array<{ workoutId: string }> }).data;
+    const rows = (
+      call as {
+        data: Array<{
+          workoutId: string;
+          geometry?: unknown;
+          geometryEncrypted?: Uint8Array;
+        }>;
+      }
+    ).data;
     expect(rows[0]?.workoutId).toBe("wkt-fresh-id");
+    // v1.39.4 — the track is written sealed only: no readable geometry on the
+    // row, and the ciphertext opens to exactly what the client sent.
+    expect(rows[0]?.geometry).toBeUndefined();
+    const sealed = rows[0]?.geometryEncrypted;
+    expect(sealed).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(sealed!).toString("utf8")).not.toContain("49.452");
+    expect(decryptRouteGeometry(sealed!)).toEqual({
+      type: "LineString",
+      coordinates: [
+        [11.077, 49.452],
+        [11.078, 49.453],
+      ],
+    });
   });
 });
 

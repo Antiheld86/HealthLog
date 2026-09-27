@@ -27,7 +27,11 @@ import {
 } from "@/lib/api-response";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { practitionerUpdateSchema } from "@/lib/validations/practitioners";
-import { toPractitionerDTO } from "@/lib/practitioners/dto";
+import { encryptNote } from "@/lib/crypto/note-cipher";
+import {
+  readPractitionerContact,
+  toPractitionerDTO,
+} from "@/lib/practitioners/dto";
 import type { Prisma } from "@/generated/prisma/client";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -88,13 +92,38 @@ export const PATCH = apiHandler(
     if (entry.name !== undefined) data.name = entry.name;
     if (entry.specialty !== undefined) data.specialty = entry.specialty;
     if (entry.practice !== undefined) data.practice = entry.practice;
-    if (entry.location !== undefined) data.location = entry.location;
-    if (entry.phone !== undefined) data.phone = entry.phone;
+    // v1.39.4 — the phone number and the address are written as ciphertext
+    // only. Writing one also clears its legacy readable column, so an edit of
+    // a row the backfill has not reached never leaves the old value behind.
+    if (entry.location !== undefined) {
+      data.locationEncrypted = encryptNote(entry.location);
+      data.location = null;
+    }
+    if (entry.phone !== undefined) {
+      data.phoneEncrypted = encryptNote(entry.phone);
+      data.phone = null;
+    }
     if (entry.note !== undefined) {
       data.noteEncrypted = entry.note ? encryptToBytes(entry.note) : null;
     }
 
     const updated = await prisma.practitioner.update({ where: { id }, data });
+
+    // The phone number and the address are encrypted at rest, so the audit
+    // row names them when they changed and never carries their values.
+    const contactChanged = (
+      [
+        ["location", existing.locationEncrypted, existing.location],
+        ["phone", existing.phoneEncrypted, existing.phone],
+      ] as const
+    )
+      .filter(
+        ([field, ciphertext, legacy]) =>
+          entry[field] !== undefined &&
+          (readPractitionerContact(ciphertext, legacy, field) ?? null) !==
+            (entry[field] || null),
+      )
+      .map(([field]) => field);
 
     await auditLog("practitioner.contact.update", {
       userId: user.id,
@@ -103,23 +132,21 @@ export const PATCH = apiHandler(
         practitionerId: id,
         // A manager may edit somebody else's address book, so the owner's
         // activity feed has to say what changed rather than only that
-        // something did. The note is deliberately absent: it is encrypted PHI
+        // something did. The note is deliberately absent, and the phone
+        // number and address appear by name only: they are encrypted at rest
         // and the audit table is not a second copy of the record.
         ...overwriteDetails({
           before: {
             name: existing.name,
             specialty: existing.specialty,
             practice: existing.practice,
-            location: existing.location,
-            phone: existing.phone,
           },
           after: {
             name: updated.name,
             specialty: updated.specialty,
             practice: updated.practice,
-            location: updated.location,
-            phone: updated.phone,
           },
+          redacted: contactChanged,
         }),
       },
     });

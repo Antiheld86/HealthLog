@@ -67,6 +67,7 @@ import {
   meetsDurationFloor,
   workoutInsightInputHash,
 } from "@/lib/workouts/insight-gates";
+import { readRouteGeometry } from "@/lib/workouts/route-geometry-cipher";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
 import {
   computeZones,
@@ -245,7 +246,7 @@ export async function runWorkoutInsightGenerate(
       minHeartRate: true,
       elevationM: true,
       metadata: true,
-      route: { select: { geometry: true } },
+      route: { select: { geometry: true, geometryEncrypted: true } },
       samples: { select: { samples: true } },
     },
   });
@@ -372,7 +373,9 @@ export async function runWorkoutInsightGenerate(
       tz,
       hrSeries,
       zones,
-      routeGeometry: row.route?.geometry ?? null,
+      // Opened in memory only to derive metres climbed; the track itself
+      // never reaches the prompt.
+      routeGeometry: row.route ? readRouteGeometry(row.route) : null,
       history,
     });
     const inputHash = workoutInsightInputHash(

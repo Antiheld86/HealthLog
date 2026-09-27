@@ -24,6 +24,7 @@ import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 import { _resetCryptoCacheForTests } from "@/lib/crypto";
+import { encryptRouteGeometry } from "@/lib/workouts/route-geometry-cipher";
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -550,6 +551,92 @@ describe("GET /api/workouts/{id}", () => {
       `${SESSION_DAY}T07:00:00Z`,
       `${SESSION_DAY}T07:01:00Z`,
     ]);
+  });
+
+  describe("v1.39.4 — sealed track", () => {
+    const TEST_KEY = "c".repeat(64);
+    const routeGeometry = {
+      type: "LineString",
+      coordinates: [
+        [11.0, 49.0],
+        [11.005, 49.0],
+        [11.01, 49.0],
+      ],
+    };
+
+    beforeEach(() => {
+      vi.stubEnv("ENCRYPTION_KEYS", "");
+      vi.stubEnv("ENCRYPTION_ACTIVE_KEY_ID", "");
+      vi.stubEnv("ENCRYPTION_KEY", TEST_KEY);
+      _resetCryptoCacheForTests();
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      _resetCryptoCacheForTests();
+    });
+
+    function mockRoute(route: Record<string, unknown>) {
+      vi.mocked(prisma.workout.findUnique).mockResolvedValueOnce({
+        ...BASE_ROW,
+        route: {
+          id: "wr-1",
+          sampleTimestamps: [
+            `${SESSION_DAY}T07:00:00Z`,
+            `${SESSION_DAY}T07:02:00Z`,
+            `${SESSION_DAY}T07:04:00Z`,
+          ],
+          createdAt: BASE_ROW.createdAt,
+          ...route,
+        },
+      } as never);
+      vi.mocked(prisma.workout.findMany).mockResolvedValueOnce([
+        {
+          id: "w-1",
+          source: "APPLE_HEALTH",
+          startedAt: BASE_ROW.startedAt,
+          sportType: "RUNNING",
+        },
+      ] as never);
+    }
+
+    it("serves a sealed track in the same shape as a readable one, splits included", async () => {
+      mockRoute({ geometry: routeGeometry, geometryEncrypted: null });
+      const legacy = (
+        await (await GET(makeRequest(), makeParams("w-1"))).json()
+      ).data;
+
+      mockRoute({
+        geometry: null,
+        geometryEncrypted: encryptRouteGeometry(routeGeometry),
+      });
+      const sealed = (
+        await (await GET(makeRequest(), makeParams("w-1"))).json()
+      ).data;
+
+      expect(sealed.route).toEqual(legacy.route);
+      expect(sealed.route.geometry).toEqual(routeGeometry);
+      expect(sealed.splits).toEqual(legacy.splits);
+    });
+
+    it("prefers the ciphertext over a readable column on the same row", async () => {
+      mockRoute({
+        geometry: { type: "LineString", coordinates: [[0, 0]] },
+        geometryEncrypted: encryptRouteGeometry(routeGeometry),
+      });
+      const body = await (await GET(makeRequest(), makeParams("w-1"))).json();
+      expect(body.data.route.geometry).toEqual(routeGeometry);
+    });
+
+    it("selects the sealed column", async () => {
+      mockRoute({ geometry: routeGeometry, geometryEncrypted: null });
+      await GET(makeRequest(), makeParams("w-1"));
+      const args = vi.mocked(prisma.workout.findUnique).mock.calls.at(-1)?.[0];
+      expect(
+        (args as { include: { route: { select: Record<string, boolean> } } })
+          .include.route.select.geometryEncrypted,
+      ).toBe(true);
+    });
   });
 });
 

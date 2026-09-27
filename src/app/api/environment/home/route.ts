@@ -2,8 +2,8 @@
  * `PUT /api/environment/home` — set the account's coarse home location.
  *
  * The picked city (rounded lat/lon + label + IANA timezone) is stored on the
- * user. Coordinates are rounded to ~city granularity here as a defence-in-depth
- * floor even if a client sends finer values. Setting a home enqueues a
+ * user. Coordinates are rounded to 1 decimal (about 11 km) here as a
+ * defence-in-depth floor even if a client sends finer values. Setting a home enqueues a
  * lookback fetch so weather appears without waiting for the nightly tick.
  * Module-gated; `userId` is narrowed from auth.
  */

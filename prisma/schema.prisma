@@ -81,10 +81,13 @@ model User {
   timezone    String    @default("Europe/Berlin")
 
   // v1.25 (W-ENV) — opt-in environmental-context module home location. A coarse,
-  // user-set city (rounded lat/lon, ~city granularity — never a GPS track) the
-  // nightly weather fetch resolves against when no travel override covers the
-  // day. City-level granularity is the privacy floor: the weather model only
-  // needs ~10–25 km. All nullable — an account without the module enabled (or
+  // user-set city (never a GPS track) the nightly weather fetch resolves
+  // against when no travel override covers the day. Stored rounded to 1
+  // decimal (`roundCoarse`): about 11 km north-south and 7 km east-west at
+  // 50° N, a town or a city district. That is the privacy floor, and the
+  // weather reanalysis is gridded at 9 to 25 km, so nothing finer is needed.
+  // Up to v1.39.3 the rounding was 2 decimals (about 1 km, a neighbourhood);
+  // migration 0361 rounded the existing rows. All nullable — an account without the module enabled (or
   // without a home set) simply has no environment rows. `homeTimezone` anchors
   // the day-key an observation is stored under (it can differ from the display
   // `timezone` above for an account that tracks weather for another locale).
@@ -1055,8 +1058,8 @@ model EnvironmentContext {
   /// YYYY-MM-DD anchored to the resolved location's timezone.
   date String
 
-  /// Coarse resolved location for the day (rounded lat/lon + label + the source
-  /// that won precedence).
+  /// Coarse resolved location for the day (lat/lon rounded to 1 decimal, about
+  /// 11 km, + label + the source that won precedence).
   lat           Float
   lon           Float
   /// @internal: human-readable label of the resolved location, stored as
@@ -2272,22 +2275,35 @@ model Workout {
 }
 
 model WorkoutRoute {
-  id               String   @id @default(cuid())
-  workoutId        String   @unique @map("workout_id")
+  id                String   @id @default(cuid())
+  workoutId         String   @unique @map("workout_id")
   /// GeoJSON LineString — `{ "type": "LineString", coordinates:
   /// [[lon, lat, alt?], ...] }`. JSONB rather than PostGIS so the
   /// Coolify Postgres template stays extension-free (same decision
   /// v1.4.20 made for correlations); GPX import + Leaflet / MapLibre
   /// consume GeoJSON natively.
-  geometry         Json
+  /// @internal: legacy readable track, read only as a fallback for rows the
+  /// free-text encryption backfill has not reached yet (v1.39.4). Every write
+  /// since then goes to `geometryEncrypted` and leaves this NULL; the backfill
+  /// nulls it on the old rows. DROP this column in a later release, once the
+  /// backfill reports zero remaining rows on every instance.
+  geometry          Json?
+  /// v1.39.4 — the same GeoJSON LineString, JSON text sealed as one binary
+  /// AES-256-GCM value (`encryptBytes`, labelled per purpose). Read through
+  /// `readRouteGeometry` in `src/lib/workouts/route-geometry-cipher.ts`.
+  geometryEncrypted Bytes?   @map("geometry_encrypted")
   /// Optional per-sample timestamps (ISO strings) and speeds —
   /// parallel array to `geometry.coordinates`. NULL when the source
   /// only ships static GPX (e.g. Withings).
-  sampleTimestamps Json?    @map("sample_timestamps")
-  createdAt        DateTime @default(now()) @map("created_at")
+  sampleTimestamps  Json?    @map("sample_timestamps")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   workout Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
 
+  // `workout_routes_geometry_backfill_idx` is a partial index over
+  // `(workout_id) WHERE geometry IS NOT NULL` — see migration 0361 for the
+  // encryption backfill's discovery scan. Raw SQL only (partial predicate not
+  // expressible in Prisma).
   @@map("workout_routes")
 }
 
@@ -8637,33 +8653,49 @@ enum Laterality {
 /// instance share a namespace. There is no uniqueness across accounts of
 /// any kind here.
 model Practitioner {
-  id            String    @id @default(cuid())
-  userId        String    @map("user_id")
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
   /// "Dr. med. …" or a practice name — whichever the person thinks of
   /// first. Plaintext and bounded, so the picker can ILIKE-search and
   /// ORDER BY in SQL (the `InboundDocument.title` tradeoff).
-  name          String
+  name              String
   /// Free-text specialty, NOT an enum: German practice signage does not
   /// fit a closed list, and an enum here would force a migration per
   /// specialty for no reader that needs the closed set.
-  specialty     String?
+  specialty         String?
   /// Practice or clinic name when it differs from `name`.
-  practice      String?
-  /// Free-text address / "wo", the `MeasurementReminder.location` shape.
-  location      String?
-  phone         String?
+  practice          String?
+  /// @internal: legacy readable address, read only as a fallback for rows the
+  /// free-text encryption backfill has not reached yet (v1.39.4). Every write
+  /// since then goes to `locationEncrypted` and leaves this NULL; the backfill
+  /// nulls it on the old rows. DROP this column in a later release, once the
+  /// backfill reports zero remaining rows on every instance.
+  location          String?
+  /// @internal: legacy readable phone number, same status as `location`
+  /// above. DROP this column in a later release, once the backfill reports
+  /// zero remaining rows on every instance.
+  phone             String?
+  /// v1.39.4 — AES-256-GCM ciphertext of the free-text address / "wo". Same
+  /// Bytes codec as the note below.
+  locationEncrypted Bytes?    @map("location_encrypted")
+  /// v1.39.4 — AES-256-GCM ciphertext of the phone number.
+  phoneEncrypted    Bytes?    @map("phone_encrypted")
   /// Free-text note (encrypted): parking, which entrance, who to ask for.
-  noteEncrypted Bytes?    @map("note_encrypted")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  noteEncrypted     Bytes?    @map("note_encrypted")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
   /// Soft-delete tombstone. NULL = live; non-NULL = deleted at the instant.
-  deletedAt     DateTime? @map("deleted_at")
+  deletedAt         DateTime? @map("deleted_at")
 
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   encounters   Encounter[]
   vaccinations VaccinationRecord[]
 
   @@index([userId, deletedAt, name])
+  // `practitioners_contact_backfill_idx` is a partial index over
+  // `(user_id) WHERE phone IS NOT NULL OR location IS NOT NULL` — see
+  // migration 0361 for the encryption backfill's discovery scan. Raw SQL only
+  // (partial predicate not expressible in Prisma).
   @@map("practitioners")
 }
 

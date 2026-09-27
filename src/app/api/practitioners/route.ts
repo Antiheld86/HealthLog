@@ -9,8 +9,9 @@
  *
  * `userId` is narrowed from auth and fed to the Prisma `where`; it is never a
  * body field. The `data` object is built field-by-field, never spread from the
- * parsed body. `note` is encrypted at rest; `name` stays plaintext so the
- * picker can search and sort it in SQL.
+ * parsed body. `note`, `phone` and `location` are encrypted at rest; `name`,
+ * `practice` and `specialty` stay plaintext so the picker can search and sort
+ * them in SQL.
  */
 import { NextRequest } from "next/server";
 
@@ -26,6 +27,7 @@ import {
 } from "@/lib/api-response";
 import { withIdempotency } from "@/lib/idempotency";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { encryptNote } from "@/lib/crypto/note-cipher";
 import {
   practitionerCreateSchema,
   practitionerListQuerySchema,
@@ -125,8 +127,9 @@ async function postPractitioner(request: NextRequest): Promise<Response> {
       name: entry.name,
       specialty: entry.specialty ?? null,
       practice: entry.practice ?? null,
-      location: entry.location ?? null,
-      phone: entry.phone ?? null,
+      // v1.39.4 — ciphertext only; the readable columns stay NULL.
+      locationEncrypted: encryptNote(entry.location),
+      phoneEncrypted: encryptNote(entry.phone),
       noteEncrypted: entry.note ? encryptToBytes(entry.note) : null,
     },
   });

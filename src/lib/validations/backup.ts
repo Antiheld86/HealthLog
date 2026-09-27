@@ -1109,6 +1109,9 @@ const practitionerBackupSchema = z
     practice: z.string().nullable().optional(),
     location: z.string().nullable().optional(),
     phone: z.string().nullable().optional(),
+    /// v1.39.4 — the address and phone ciphertext, DR payloads only.
+    locationEncrypted: base64BytesSchema.nullable().optional(),
+    phoneEncrypted: base64BytesSchema.nullable().optional(),
     noteEncrypted: base64BytesSchema.nullable().optional(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,

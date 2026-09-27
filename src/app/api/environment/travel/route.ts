@@ -3,7 +3,7 @@
  *
  * For any day in [startDate, endDate] the weather fetch resolves against this
  * coarse location instead of home (a declared trip dominates the home
- * fallback). Coordinates are rounded to ~city granularity. Adding an override
+ * fallback). Coordinates are rounded to 1 decimal (about 11 km). Adding an override
  * enqueues a lookback refresh so its days re-resolve. Module-gated; `userId` is
  * narrowed from auth.
  */

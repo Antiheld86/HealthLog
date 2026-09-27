@@ -1206,14 +1206,16 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
   // coordinates and different weather, and the trip day's reading only makes
   // sense next to the period that explains it: with the period gone, the next
   // refresh re-resolves 2026-06-15 to Berlin and upserts Berlin's weather over
-  // it. The assertion after the restore reads the two back TOGETHER.
+  // it. The assertion after the restore reads the two back TOGETHER. The
+  // coordinates are at 1 decimal, the precision the app stores since v1.39.4;
+  // a restore rounds anything finer, so finer values would not round-trip.
   await prisma.environmentTravelLocation.create({
     data: {
       userId: OWNER_ID,
       startDate: "2026-06-10",
       endDate: "2026-06-20",
-      lat: 41.3874,
-      lon: 2.1686,
+      lat: 41.4,
+      lon: 2.2,
       label: "Barcelona",
     },
   });
@@ -1222,8 +1224,8 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       {
         userId: OWNER_ID,
         date: "2026-06-15",
-        lat: 41.3874,
-        lon: 2.1686,
+        lat: 41.4,
+        lon: 2.2,
         locationLabel: "Barcelona",
         source: "TRAVEL",
         tempMin: 19.4,
@@ -1243,8 +1245,8 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       {
         userId: OWNER_ID,
         date: "2026-07-01",
-        lat: 52.52,
-        lon: 13.405,
+        lat: 52.5,
+        lon: 13.4,
         locationLabel: "Berlin",
         source: "HOME",
         tempMin: 13.1,
@@ -2394,8 +2396,8 @@ describe("every model the plan claims two-ended survives a real restore", () => 
     ).toEqual([
       {
         date: "2026-06-15",
-        lat: 41.3874,
-        lon: 2.1686,
+        lat: 41.4,
+        lon: 2.2,
         locationLabel: "Barcelona",
         source: "TRAVEL",
         tempMean: 23.6,
@@ -2406,8 +2408,8 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       },
       {
         date: "2026-07-01",
-        lat: 52.52,
-        lon: 13.405,
+        lat: 52.5,
+        lon: 13.4,
         locationLabel: "Berlin",
         source: "HOME",
         tempMean: 17.9,

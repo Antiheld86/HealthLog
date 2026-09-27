@@ -24,6 +24,7 @@
 import { prisma } from "@/lib/db";
 import {
   fetchDailyEnvironment,
+  roundCoarse,
   type DailyEnvironmentObservation,
 } from "@/lib/environment/open-meteo";
 import type { EnvironmentLocationSource } from "@/generated/prisma/client";
@@ -256,8 +257,10 @@ function buildUpsert(
   obs: DailyEnvironmentObservation,
 ) {
   const data = {
-    lat: loc.lat,
-    lon: loc.lon,
+    // Already coarse at the source; rounded again so a per-day row never holds
+    // more precision than the privacy floor, whatever resolved it.
+    lat: roundCoarse(loc.lat),
+    lon: roundCoarse(loc.lon),
     locationLabel: loc.label,
     source: loc.source,
     tempMin: obs.tempMin,
