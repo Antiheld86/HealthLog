@@ -22,6 +22,14 @@ import {
 } from "@/lib/tz/local-day";
 import type { PrismaClient } from "@/generated/prisma/client";
 
+// The restore lock is a Postgres advisory lock; the mocked client has no
+// database behind it. The lock itself is pinned against a real one in
+// `tests/integration/restore-consolidation-deadlock.test.ts`.
+vi.mock("@/lib/export/restore-lock", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/export/restore-lock")>()),
+  holdAccountAgainstRestore: vi.fn(async () => {}),
+}));
+
 describe("dayKeyForUserTz", () => {
   it("anchors the calendar day to the user's IANA zone", () => {
     // 23:45 NZST on 2026-05-16 is still 11:45 UTC on the same day, but

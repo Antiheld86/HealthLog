@@ -16,6 +16,14 @@ import { canonicalDailyTimestamp } from "../consolidation-tz";
 import type { PerSampleRow } from "../drain-per-sample-cumulative";
 import type { MeasurementType, PrismaClient } from "@/generated/prisma/client";
 
+// The restore lock is a Postgres advisory lock; the mocked client has no
+// database behind it. The lock itself is pinned against a real one in
+// `tests/integration/restore-consolidation-deadlock.test.ts`.
+vi.mock("@/lib/export/restore-lock", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/export/restore-lock")>()),
+  holdAccountAgainstRestore: vi.fn(async () => {}),
+}));
+
 function row(
   id: string,
   value: number,

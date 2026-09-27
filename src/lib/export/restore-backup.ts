@@ -38,6 +38,7 @@ import {
   storedBackupRefusal,
   type StoredBackupRef,
 } from "@/lib/export/stored-backup";
+import { takeRestoreLock } from "@/lib/export/restore-lock";
 import {
   insertMeasurementRows,
   type MeasurementInsertRow,
@@ -683,12 +684,6 @@ export async function restoreBackup(
     report("clearing");
     outcome = await prisma.$transaction(
       async (tx) => {
-        // One restore of an account at a time, whatever let a second one
-        // start: the job table admits one queued or running job per account,
-        // and this lock holds even if a worker that was thought gone is
-        // still writing. A second transaction waits here for the first to
-        // commit or roll back, then replaces the account again from its own
-        // file, which is what it was asked to do.
         // Every connection carries the request limits from `src/lib/db.ts`
         // (60 s per statement, 60 s idle inside a transaction). A restore is
         // not a request: deleting two million readings is one statement, and
@@ -697,7 +692,18 @@ export async function restoreBackup(
         // has its own limit; SET LOCAL gives each statement the same one, and
         // ends with the transaction.
         await tx.$executeRaw`SELECT set_config('statement_timeout', ${String(transactionTimeoutMs)}, true), set_config('idle_in_transaction_session_timeout', ${String(transactionTimeoutMs)}, true)`;
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`backup-restore:${ownerId}`}))`;
+        // One restore of an account at a time, whatever let a second one
+        // start: the job table admits one queued or running job per account,
+        // and this lock holds even if a worker that was thought gone is
+        // still writing. A second transaction waits here for the first to
+        // commit or roll back, then replaces the account again from its own
+        // file, which is what it was asked to do.
+        //
+        // The same lock orders the restore against the background passes that
+        // rewrite readings a day at a time (`restore-lock.ts`): they hold it
+        // shared for each day, so the delete below never meets a day half
+        // folded, which is where the two used to deadlock.
+        await takeRestoreLock(tx, ownerId);
         // Every reference this restore writes stays inside the account: the
         // references that leave it are counted now and again after the last
         // write, and any that grew rolls the whole transaction back

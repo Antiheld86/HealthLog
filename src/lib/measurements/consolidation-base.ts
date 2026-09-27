@@ -26,6 +26,8 @@
  * is no value-level cycle between the two — a cycle would otherwise trip
  * a module-init TDZ in the production bundle.
  */
+import { annotate } from "@/lib/logging/context";
+import { AccountRestoreInProgressError } from "@/lib/export/restore-lock";
 import type {
   MeasurementType,
   PrismaClient,
@@ -425,6 +427,8 @@ export async function runConsolidation<TType extends MeasurementType>(
   dryRun: boolean;
   daysFailed: number;
   stoppedEarly: boolean;
+  /** Accounts left for the next run because a restore of them was running. */
+  usersDeferredForRestore: number;
 }> {
   const { prismaClient, options } = params;
   const dryRun = options.dryRun ?? false;
@@ -434,6 +438,7 @@ export async function runConsolidation<TType extends MeasurementType>(
   let daysFailed = 0;
   let daysWalked = 0;
   let stoppedEarly = false;
+  let usersDeferredForRestore = 0;
 
   const users = await loadConsolidationUsers(prismaClient, options.userId);
 
@@ -533,6 +538,20 @@ export async function runConsolidation<TType extends MeasurementType>(
             outcome,
           });
         } catch (err) {
+          // A restore of this account started while the pass was walking
+          // it. The rows scanned so far are about to be replaced, so the
+          // account is left for the next run, which reads the restored ones
+          // (`restore-lock.ts`). Not a failed day, and no reason to stop the
+          // other accounts.
+          if (err instanceof AccountRestoreInProgressError) {
+            usersDeferredForRestore += 1;
+            annotate({
+              meta: {
+                consolidation_deferred_for_restore: usersDeferredForRestore,
+              },
+            });
+            continue walk;
+          }
           // No boundary supplied → preserve the historical abort-the-run
           // behaviour for the drains that classify errors in `writeDay`.
           if (!params.onBucketError) throw err;
@@ -561,5 +580,11 @@ export async function runConsolidation<TType extends MeasurementType>(
     params.onUserComplete?.({ userId: user.id, tz, dryRun });
   }
 
-  return { usersScanned: users.length, dryRun, daysFailed, stoppedEarly };
+  return {
+    usersScanned: users.length,
+    dryRun,
+    daysFailed,
+    stoppedEarly,
+    usersDeferredForRestore,
+  };
 }

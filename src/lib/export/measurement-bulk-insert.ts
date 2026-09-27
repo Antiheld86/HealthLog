@@ -1,5 +1,5 @@
 /**
- * Insert many measurements in one statement, as column arrays.
+ * Insert many measurements a hundred rows to a statement, as column arrays.
  *
  * Why not `createMany`. Prisma compiles and caches a query plan per query
  * shape, and a `createMany` of N rows is its own shape: measured, one
@@ -7,8 +7,8 @@
  * heap behind, a 2 000-row one about 290 MB, and the smaller last batch of a
  * restore adds its own plan on top. In a 1 GB container that alone took a
  * restore of 1.25 million measurements past the heap limit (#1031). One
- * `INSERT … SELECT FROM unnest(…)` with an array per column is a single small
- * statement whatever the batch size, and about four times faster.
+ * `INSERT … SELECT FROM unnest(…)` with an array per column is one small
+ * statement shape whatever the number of rows, and about four times faster.
  *
  * The Apple Health export import writes its spot rows through the same
  * statement (`insertNewMeasurementRows`), for the same reason. There the cost
@@ -17,6 +17,19 @@
  * accumulated, so a 300 000-record import settled at about 53 MB of retained
  * heap and a run of back-to-back flushes reached well over 100 MB. Through
  * this statement the same import holds a few megabytes.
+ *
+ * Why no more than {@link MEASUREMENT_INSERT_ROWS_PER_STATEMENT} rows per
+ * statement, whatever the caller hands over. Prisma's debug logger keeps the
+ * arguments of its last hundred calls in memory whether or not logging is
+ * switched on, and both the client and the Postgres adapter log every
+ * statement together with its parameters. So the parameters of about the last
+ * hundred statements stay reachable after they ran, as a fresh copy of every
+ * value. At 1 000 rows a statement that held about 60 MB for the whole of a
+ * restore's measurement write (#1031, measured on 1.8 million Apple Health
+ * readings), next to an app whose heap limit in the default 1 GB container is
+ * 524 MB. At 100 rows it is about 7 MB. The extra statements cost time: on a
+ * fast host the same write took 94 s instead of 76 s, a price paid once per
+ * restore, where the memory was held for all of it.
  *
  * `COLUMNS` maps every field of `MeasurementInsertRow` to its column and
  * type. It is typed as a complete record over the row's keys, so a field
@@ -137,17 +150,42 @@ function cell(value: unknown, kind: Kind): unknown {
   return value;
 }
 
-/** Insert `rows` in one statement. Resolves to the number inserted. */
+/**
+ * Rows one statement carries at most. See the module comment: the parameters
+ * of roughly the last hundred statements stay in memory, so this, not the
+ * caller's batch, is what bounds that memory.
+ */
+export const MEASUREMENT_INSERT_ROWS_PER_STATEMENT = 100;
+
+/** The rows as parameter arrays, one per column, for one statement. */
+function columnArrays(rows: readonly MeasurementInsertRow[]): unknown[][] {
+  return FIELDS.map((field) => {
+    const kind = COLUMNS[field][1];
+    return rows.map((row) => cell(row[field], kind));
+  });
+}
+
+/**
+ * Insert `rows`, {@link MEASUREMENT_INSERT_ROWS_PER_STATEMENT} to a statement.
+ * Resolves to the number inserted.
+ */
 export async function insertMeasurementRows(
   tx: Prisma.TransactionClient,
   rows: readonly MeasurementInsertRow[],
 ): Promise<number> {
-  if (rows.length === 0) return 0;
-  const arrays = FIELDS.map((field) => {
-    const kind = COLUMNS[field][1];
-    return rows.map((row) => cell(row[field], kind));
-  });
-  return tx.$executeRawUnsafe(MEASUREMENT_BULK_INSERT_SQL, ...arrays);
+  let inserted = 0;
+  for (
+    let at = 0;
+    at < rows.length;
+    at += MEASUREMENT_INSERT_ROWS_PER_STATEMENT
+  ) {
+    const slice = rows.slice(at, at + MEASUREMENT_INSERT_ROWS_PER_STATEMENT);
+    inserted += await tx.$executeRawUnsafe(
+      MEASUREMENT_BULK_INSERT_SQL,
+      ...columnArrays(slice),
+    );
+  }
+  return inserted;
 }
 
 /**
@@ -203,7 +241,7 @@ export type NewMeasurementRow = Omit<
   >;
 
 /**
- * Insert brand-new rows in one statement, skipping duplicates, and return the
+ * Insert brand-new rows, skipping duplicates, and return the
  * rows that landed. The replacement for
  * `measurement.createManyAndReturn({ data, skipDuplicates: true })`.
  *
@@ -244,14 +282,21 @@ export async function insertNewMeasurementRows(
     createdAt: now,
     updatedAt: now,
   }));
-  const arrays = FIELDS.map((field) => {
-    const kind = COLUMNS[field][1];
-    return full.map((row) => cell(row[field], kind));
-  });
-  return db.$queryRawUnsafe<InsertedMeasurementRow[]>(
-    MEASUREMENT_BULK_INSERT_SKIP_DUPLICATES_SQL,
-    ...arrays,
-  );
+  const inserted: InsertedMeasurementRow[] = [];
+  for (
+    let at = 0;
+    at < full.length;
+    at += MEASUREMENT_INSERT_ROWS_PER_STATEMENT
+  ) {
+    const slice = full.slice(at, at + MEASUREMENT_INSERT_ROWS_PER_STATEMENT);
+    inserted.push(
+      ...(await db.$queryRawUnsafe<InsertedMeasurementRow[]>(
+        MEASUREMENT_BULK_INSERT_SKIP_DUPLICATES_SQL,
+        ...columnArrays(slice),
+      )),
+    );
+  }
+  return inserted;
 }
 
 // ── Ids ──────────────────────────────────────────────────────────────────

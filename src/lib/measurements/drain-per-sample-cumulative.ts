@@ -34,6 +34,7 @@
  * touching the DB so the operator can inspect what would change before
  * committing.
  */
+import { holdAccountAgainstRestore } from "@/lib/export/restore-lock";
 import { Prisma } from "@/generated/prisma/client";
 import type {
   MeasurementAggregationProvenance,
@@ -291,6 +292,8 @@ export async function drainPerSampleCumulative(
       const foldOnce = async (): Promise<number> => {
         let removed = 0;
         await pc.$transaction(async (tx) => {
+          // First, before any reading is touched: see `restore-lock.ts`.
+          await holdAccountAgainstRestore(tx, userId);
           // Single-flight the per-(user, type, day) fold. Two overlapping
           // drains — a rolling-deploy nightly overlap, or an operator's manual
           // `POST /api/admin/drain-per-sample-cumulative` racing the cron —

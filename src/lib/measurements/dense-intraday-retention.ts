@@ -47,6 +47,7 @@
  * The one-shot history rebuild that converts ALREADY-folded daily rows to
  * the hourly grain lives in `dense-intraday-hourly-rebuild.ts`.
  */
+import { holdAccountAgainstRestore } from "@/lib/export/restore-lock";
 import type {
   MeasurementType,
   Prisma,
@@ -617,6 +618,8 @@ export async function runDenseIntradayRetention(
         let removed = 0;
         let retiredDaily = false;
         await pc.$transaction(async (tx) => {
+          // First, before any reading is touched: see `restore-lock.ts`.
+          await holdAccountAgainstRestore(tx, userId);
           const canonicalRowIds = await adoptOrMintHourlyRows(tx, {
             userId,
             type,
