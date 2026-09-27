@@ -28,7 +28,7 @@ import { prisma } from "@/lib/db";
 import { redactSecrets } from "@/lib/logging/redact";
 
 /**
- * pg-boss 12.26.0 stores terminal rows until
+ * pg-boss 12.34.0 stores terminal rows until
  * `completed_on + deletion_seconds` (`dist/plans.js`). Its queue default is
  * 604800 seconds, while `retention_seconds` defaults to 1209600 seconds; job
  * insertion copies those queue values and maintenance applies the terminal-row
