@@ -512,6 +512,20 @@ export const GOOGLE_HEALTH_PAGE_SIZE = 1000;
 /** Sleep/exercise read cap — matches the Google Health 25-cap for those types. */
 export const GOOGLE_HEALTH_ACTIVITY_PAGE_SIZE = 25;
 
+/**
+ * Page ceiling for the intraday heart-rate walk.
+ *
+ * The default of 1000 pages is a million points, which a watch that records
+ * a reading a minute passes in under two years. A walk that hits the ceiling
+ * reports `truncated`, the backfill treats that as incomplete and throws, and
+ * pg-boss retries it — so an account with a longer history re-ran the whole
+ * walk on every retry and every boot and never completed. Ten thousand pages
+ * is nineteen years at that rate: still a bound on a runaway cursor, no longer
+ * a bound a real history reaches. The walk is paged (`forEachDataPointPage`),
+ * so the ceiling costs time, not memory.
+ */
+export const GOOGLE_HEALTH_DENSE_MAX_PAGES = 10_000;
+
 /** `dataPoints.list` envelope: `{ dataPoints, nextPageToken }`. */
 interface GoogleHealthDataPointPage {
   dataPoints?: GoogleHealthDataPoint[];
@@ -715,6 +729,35 @@ export async function fetchDataPoints(
   verb: string,
   query: DataPointQuery = {},
 ): Promise<GoogleHealthDataPoint[]> {
+  const points: GoogleHealthDataPoint[] = [];
+  await forEachDataPointPage(dataType, accessToken, verb, query, (page) => {
+    for (const p of page) points.push(p);
+  });
+  return points;
+}
+
+/**
+ * The same walk as `fetchDataPoints`, handing each page to `onPage` as it
+ * arrives instead of collecting the whole collection first.
+ *
+ * A dense collection has to be read this way. Intraday heart rate is one
+ * point a minute, so a full-history backfill of two years is over a million
+ * points; held as parsed JSON and then again as mapped readings, that is more
+ * than a 1 GB heap, and the process that runs the backfill also serves the
+ * app. Page by page, only one page is ever resident.
+ *
+ * `onPage` is awaited before the next page is requested, so a slow write
+ * applies back-pressure to the fetch. The date-filter fallback still works:
+ * it only fires when the first request is rejected, which is before any page
+ * reaches `onPage`.
+ */
+export async function forEachDataPointPage(
+  dataType: GoogleHealthDataType,
+  accessToken: string,
+  verb: string,
+  query: DataPointQuery,
+  onPage: (points: GoogleHealthDataPoint[]) => void | Promise<void>,
+): Promise<void> {
   const maxPages = query.maxPages ?? 1000;
   const pageSize = query.pageSize ?? GOOGLE_HEALTH_PAGE_SIZE;
 
@@ -722,8 +765,8 @@ export async function fetchDataPoints(
 
   const walk = async (
     dateStyle: GoogleHealthDateFilterStyle,
-  ): Promise<GoogleHealthDataPoint[]> => {
-    const points: GoogleHealthDataPoint[] = [];
+  ): Promise<void> => {
+    let fetched = 0;
     let pageToken: string | null | undefined;
     let pageCount = 0;
 
@@ -780,13 +823,14 @@ export async function fetchDataPoints(
         });
       }
 
-      for (const p of json?.dataPoints ?? []) points.push(p);
+      const page = json?.dataPoints ?? [];
       pageToken = json?.nextPageToken ?? null;
       pageCount += 1;
+      fetched += page.length;
+      await onPage(page);
     } while (pageToken && pageCount < maxPages);
 
-    notePagination(pageCount, points.length, Boolean(pageToken));
-    return points;
+    notePagination(pageCount, fetched, Boolean(pageToken));
   };
 
   // The fallback only exists for filtered daily-summary reads — every other
@@ -795,9 +839,8 @@ export async function fetchDataPoints(
     dataType.timeField === "date" && query.start !== undefined;
 
   let style: GoogleHealthDateFilterStyle = "camel";
-  let points: GoogleHealthDataPoint[];
   try {
-    points = await walk("camel");
+    await walk("camel");
   } catch (err) {
     const firstRequestRejected =
       canFallBack &&
@@ -806,13 +849,12 @@ export async function fetchDataPoints(
       err.httpStatus === 400;
     if (!firstRequestRejected) throw err;
     style = "snake";
-    points = await walk("snake");
+    await walk("snake");
   }
   if (canFallBack) {
     annotate({ meta: { "googleHealth.dateFilter.style": style } });
     query.onDateFilterStyle?.(style);
   }
-  return points;
 }
 
 // ─── Daily roll-up reads (`POST …/dataPoints:dailyRollUp`) ─────────────────

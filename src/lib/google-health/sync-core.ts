@@ -265,7 +265,12 @@ export async function runWithGoogleHealthHardFailLedger<T>(
  * AsyncLocalStorage so concurrent per-user jobs never cross-pollinate.
  */
 interface RollupDeferTracker {
-  keys: Array<{ type: MeasurementType; measuredAt: Date }>;
+  /**
+   * One entry per touched `(type, UTC day)`, never one per reading. A
+   * full-history heart-rate backfill touches over a million readings but only
+   * a few hundred days; a per-reading list grew with the stream.
+   */
+  keys: Map<string, { type: MeasurementType; measuredAt: Date }>;
 }
 const rollupDeferStorage = new AsyncLocalStorage<RollupDeferTracker>();
 
@@ -286,7 +291,7 @@ export async function runWithGoogleHealthSyncCycle<T>(
 ): Promise<GoogleHealthSyncCycleResult<T>> {
   const softSkips: SoftSkipTracker = { count: 0 };
   const hardFailures: HardFailTracker = { failures: [] };
-  const deferredRollups: RollupDeferTracker = { keys: [] };
+  const deferredRollups: RollupDeferTracker = { keys: new Map() };
   const result = await softSkipStorage.run(softSkips, () =>
     hardFailStorage.run(hardFailures, () =>
       rollupDeferStorage.run(deferredRollups, fn),
@@ -296,7 +301,7 @@ export async function runWithGoogleHealthSyncCycle<T>(
     result,
     softSkipCount: softSkips.count,
     hardFailures: hardFailures.failures,
-    deferredRollupKeys: deferredRollups.keys,
+    deferredRollupKeys: Array.from(deferredRollups.keys.values()),
   };
 }
 
@@ -831,14 +836,15 @@ export async function upsertGoogleHealthMeasurements(
   // of the cycle. The incremental path keeps the inline per-day hook here.
   if (opts.deferRollup) {
     const tracker = rollupDeferStorage.getStore();
-    // Plain loop, never `push(...touched)`: `touched` carries ONE entry PER
-    // READING, and a full-history batch on a sample-dense account (a
-    // multi-year heart-rate series is six figures of rows) blows the call
-    // stack when spread into a single call — the engine caps argument counts.
-    // The RangeError aborted the whole metrics collection on exactly the
-    // accounts with the most data.
+    // Collapsed to type-days on the way in: `touched` carries ONE entry PER
+    // READING, and the tracker lives for the whole cycle, so keeping the raw
+    // entries made the ledger grow with the stream (a million-reading
+    // heart-rate backfill held a million of them to describe a few hundred
+    // days).
     if (tracker) {
-      for (const t of touched) tracker.keys.push(t);
+      for (const k of collapseToTypeDayKeys(touched)) {
+        tracker.keys.set(`${k.type}|${k.measuredAt.getTime()}`, k);
+      }
     }
     noteGoogleHealthWritten(imported);
     return { imported, touched, inserted: insertedRows };

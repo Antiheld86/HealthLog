@@ -5,10 +5,7 @@ import { prisma } from "@/lib/db";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
 import { isReauthRequired, recordSyncSuccess } from "@/lib/integrations/status";
 import { annotate, getEvent } from "@/lib/logging/context";
-import {
-  collapseToTypeDayKeys,
-  recomputeUserRollups,
-} from "@/lib/rollups/measurement-rollups";
+import { recomputeUserRollups } from "@/lib/rollups/measurement-rollups";
 import { syncUserActivity } from "./sync-activity";
 import {
   hardFailStorage,
@@ -90,7 +87,7 @@ export async function syncUserFitbit(
   ];
 
   const tracker: SoftSkipTracker = { count: 0 };
-  const deferTracker: RollupDeferTracker = { keys: [] };
+  const deferTracker: RollupDeferTracker = { keys: new Map() };
   const hardFailTracker: HardFailTracker = { failures: [] };
   let total = 0;
   let anyFailed = false;
@@ -120,9 +117,9 @@ export async function syncUserFitbit(
   // touched days. One pass replaces the thousands of per-(type,day) round-trips a
   // deep backfill would otherwise pay (each = an aggregate SELECT + rollup upsert
   // + 3 queue sends). Best-effort: a populator hiccup never fails the backfill.
-  if (opts.fullSync && deferTracker.keys.length > 0) {
+  if (opts.fullSync && deferTracker.keys.size > 0) {
     try {
-      const days = collapseToTypeDayKeys(deferTracker.keys);
+      const days = Array.from(deferTracker.keys.values());
       const types = Array.from(new Set(days.map((k) => k.type)));
       const sorted = days
         .map((k) => k.measuredAt.getTime())

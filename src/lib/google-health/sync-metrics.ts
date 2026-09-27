@@ -27,9 +27,11 @@
  */
 import {
   GOOGLE_HEALTH_DATA_TYPES,
+  GOOGLE_HEALTH_DENSE_MAX_PAGES,
   type GoogleHealthDataType,
   type GoogleHealthMappedMeasurement,
   fetchDataPoints,
+  forEachDataPointPage,
   mapBloodGlucose,
   mapBodyFat,
   mapCoreBodyTemperature,
@@ -61,6 +63,8 @@ interface MetricResource {
     tz: string,
   ) => GoogleHealthMappedMeasurement[];
   verb: string;
+  /** Page ceiling for the walk; the client default when omitted. */
+  maxPages?: number;
 }
 
 /** The launch metric resources (Measurement-producing). Height handled separately. */
@@ -99,6 +103,7 @@ const METRIC_RESOURCES: MetricResource[] = [
     dataType: GOOGLE_HEALTH_DATA_TYPES.heartRate,
     map: mapHeartRate,
     verb: "fetchHeartRate",
+    maxPages: GOOGLE_HEALTH_DENSE_MAX_PAGES,
   },
   {
     dataType: GOOGLE_HEALTH_DATA_TYPES.bloodGlucose,
@@ -139,48 +144,52 @@ export async function syncUserMetrics(
 
   // Each metric data type is fetched + mapped independently so a per-class 403
   // soft-skips only that class.
+  //
+  // Every type is written page by page as it is read. Intraday heart rate is
+  // one point a minute, so a full-history backfill is over a million points;
+  // collecting the whole collection first and mapping it second held the raw
+  // points and the readings at once and ran a 1 GB heap out of memory on
+  // exactly the accounts with the most history. A page is at most
+  // `GOOGLE_HEALTH_PAGE_SIZE` points, and nothing from it outlives its write.
+  //
+  // The mapper runs inside the same per-type catch: a single malformed point
+  // whose `resource.map(point)` throws must not escape the METRIC_RESOURCES
+  // loop and skip every metric type ordered after it (which also blocked the
+  // watermark, so the bad point refetched hourly and those types stayed dead).
+  // A map throw goes through the same ledger as a fetch failure — record it,
+  // fail the cycle, and move on to the next type. Pages already written before
+  // the failure stay written: every write is keyed, so the retry that the
+  // failed verdict causes overwrites them in place.
   for (const resource of METRIC_RESOURCES) {
-    let points: Record<string, unknown>[];
     try {
-      points = await fetchDataPoints(
+      await forEachDataPointPage(
         resource.dataType,
         tokenInfo.accessToken,
         resource.verb,
-        { start },
+        { start, maxPages: resource.maxPages },
+        async (points) => {
+          const readings: GoogleHealthMeasurementUpsert[] = [];
+          for (const point of points) {
+            for (const m of resource.map(point, tz)) {
+              readings.push({
+                type: m.type,
+                value: m.value,
+                unit: m.unit,
+                measuredAt: m.measuredAt,
+                externalId: m.fieldTag,
+              });
+            }
+          }
+          imported += (
+            await upsertGoogleHealthMeasurements(userId, readings, {
+              deferRollup: opts.deferRollup,
+            })
+          ).imported;
+        },
       );
     } catch (err) {
       imported += await handleCollectionFetchError(resource.verb, userId, err);
-      continue;
     }
-
-    // The mapper runs INSIDE a per-type catch too: a single malformed point
-    // whose `resource.map(point)` throws must not escape the METRIC_RESOURCES
-    // loop and skip every metric type ordered after it (which also blocked the
-    // watermark, so the bad point refetched hourly and those types stayed dead).
-    // Route a map throw through the same ledger as a fetch failure — record it,
-    // fail the cycle, and move on to the next type.
-    const readings: GoogleHealthMeasurementUpsert[] = [];
-    try {
-      for (const point of points) {
-        for (const m of resource.map(point, tz)) {
-          readings.push({
-            type: m.type,
-            value: m.value,
-            unit: m.unit,
-            measuredAt: m.measuredAt,
-            externalId: m.fieldTag,
-          });
-        }
-      }
-    } catch (err) {
-      imported += await handleCollectionFetchError(resource.verb, userId, err);
-      continue;
-    }
-    imported += (
-      await upsertGoogleHealthMeasurements(userId, readings, {
-        deferRollup: opts.deferRollup,
-      })
-    ).imported;
   }
 
   // Height → User.heightCm, only when the user has no height yet. Never mint a
