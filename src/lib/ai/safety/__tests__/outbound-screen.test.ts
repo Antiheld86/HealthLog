@@ -65,6 +65,28 @@ describe("screenModelOutput — dose-prescription, all six locales", () => {
   }
 });
 
+describe("screenModelOutput — a German change verb with its object", () => {
+  it.each([
+    "Erhöhe deine Dosis auf 2,4 mg pro Woche.",
+    "Steigere die Dosierung um 0,5 mg.",
+    "Reduziere deine Dosis auf 5 mg.",
+    "Senke die Tagesdosis auf 25 mg.",
+  ])("blocks %s", (text) => {
+    const d = screenModelOutput(text, "de", CONVERSATIONAL_CONTRACTS);
+    expect(d.block).toBe(true);
+    expect(d.reason).toBe("dose_prescription");
+  });
+
+  it("still passes a restatement that names the dose", () => {
+    const d = screenModelOutput(
+      "Deine Dosis liegt seit drei Wochen bei 7,5 mg.",
+      "de",
+      CONVERSATIONAL_CONTRACTS,
+    );
+    expect(d.block).toBe(false);
+  });
+});
+
 // ── risk-score fabrication ───────────────────────────────────────────────
 
 const RISK_VIOLATIONS: Record<Locale, string> = {
