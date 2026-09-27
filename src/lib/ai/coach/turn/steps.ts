@@ -31,9 +31,11 @@ import {
 } from "@/lib/ai/coach/dialog-keys";
 import type { CoachToolResult } from "@/lib/ai/coach/tools/executor";
 import {
+  SHOW_RESULT_TOOL_NAME,
   isCoachToolName,
   type CoachToolName,
 } from "@/lib/ai/coach/tools/definitions";
+import { isTurnResultRef } from "@/lib/ai/coach/results/refs";
 
 /** At most this many steps per turn; later calls run but show no step. */
 export const MAX_TURN_STEPS = 12;
@@ -42,6 +44,14 @@ const SCOPE_SOURCES: ReadonlySet<string> = new Set(
   coachScopeSourceSchema.options,
 );
 const WINDOWS: ReadonlySet<string> = new Set(coachScopeWindowSchema.options);
+/** Every domain a result table can name as its source. */
+const RESULT_DOMAINS: ReadonlySet<string> = new Set<string>([
+  ...coachScopeSourceSchema.options,
+  "labs",
+  "illness",
+  "cycle",
+  "correlations",
+]);
 const PERIODS: ReadonlySet<string> = new Set<CoachResultPeriod>([
   "current",
   "previous",
@@ -68,6 +78,7 @@ const TOOL_DOMAIN: Readonly<Record<CoachToolName, CoachStepDomain | null>> = {
   get_workouts: "workouts",
   get_cycle: "cycle",
   get_correlations: "correlations",
+  get_metric_table: null,
 };
 
 /**
@@ -88,6 +99,7 @@ const TOOL_WINDOW: Readonly<
   get_workouts: "fallback",
   get_cycle: null,
   get_correlations: null,
+  get_metric_table: "fallback",
 };
 
 /**
@@ -113,6 +125,12 @@ const MISS: Readonly<
     status: "failed",
     reason: "invalid_arguments",
   },
+  use_get_workouts: { status: "failed", reason: "invalid_arguments" },
+  // `show_result`: a name the conversation does not hold, a stored table
+  // that could not be read, a turn already holding six tables.
+  unknown_result: { status: "failed", reason: "invalid_arguments" },
+  result_unavailable: { status: "failed", reason: "retrieval_failed" },
+  result_limit: { status: "failed" },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -136,9 +154,24 @@ function pick<T extends string>(
 }
 
 /**
+ * The readings a table summary counted: the total of its readings column,
+ * or, for a table without one, the periods that hold a reading. Both are
+ * figures `summariseTable` counted on the server.
+ */
+function tableSummaryCount(data: Record<string, unknown>): number | undefined {
+  const stats = data.stats;
+  const readings = isRecord(stats) ? stats.readings : undefined;
+  return (
+    (isRecord(readings) ? asCount(readings.total) : undefined) ??
+    asCount(data.periodsWithReadings)
+  );
+}
+
+/**
  * How many readings or rows a present result covered, when the result says
  * so in a field the server counted:
  * - a metric series: the aggregate's coverage count;
+ * - a metric table: the readings its periods fold;
  * - workouts: the sessions in the window;
  * - labs: the biomarkers returned (one row each).
  * Anything else carries no count rather than a guess.
@@ -146,6 +179,8 @@ function pick<T extends string>(
 function presentCount(tool: CoachToolName, data: unknown): number | undefined {
   if (!isRecord(data)) return undefined;
   switch (tool) {
+    case "get_metric_table":
+      return tableSummaryCount(data);
     case "get_metric_series": {
       const section = data.section;
       if (!isRecord(section) || !isRecord(section.aggregate)) return undefined;
@@ -202,6 +237,9 @@ export function toStep(args: {
   if (!Number.isSafeInteger(index) || index < 0 || index >= MAX_TURN_STEPS) {
     return null;
   }
+  if (call.name === SHOW_RESULT_TOOL_NAME) {
+    return reuseStep({ index, result, locale });
+  }
   if (!isCoachToolName(call.name)) return null;
   const tool = call.name;
 
@@ -213,22 +251,28 @@ export function toStep(args: {
   // There is nothing true to show, so it gets no step.
   if (!domain) return null;
 
+  // A metric table says what it read (the window, and the period and
+  // granularity after the executor's defaults); before it settles, the
+  // validated arguments say what it is about to read.
+  const source = tool === "get_metric_table" ? tableSource(result) : undefined;
   const windowRule = TOOL_WINDOW[tool];
   const window =
     windowRule === null
       ? undefined
       : windowRule === "fallback"
-        ? (pick<CoachScopeWindow>(WINDOWS, parsedArgs?.window) ??
+        ? (source?.window ??
+          pick<CoachScopeWindow>(WINDOWS, parsedArgs?.window) ??
           pick<CoachScopeWindow>(WINDOWS, result?.searchedWindow) ??
           pick<CoachScopeWindow>(WINDOWS, args.fallbackWindow))
         : windowRule;
-  const period = pick<CoachResultPeriod>(PERIODS, parsedArgs?.period);
-  const granularity = pick<CoachResultGranularity>(
-    GRANULARITIES,
-    parsedArgs?.granularity,
-  );
+  const period =
+    source?.period ?? pick<CoachResultPeriod>(PERIODS, parsedArgs?.period);
+  const granularity =
+    source?.granularity ??
+    pick<CoachResultGranularity>(GRANULARITIES, parsedArgs?.granularity);
 
   const settled = settle(tool, result);
+  const resultRef = producedRef(result);
   return {
     id: `s${index + 1}`,
     tool,
@@ -240,7 +284,104 @@ export function toStep(args: {
     status: settled.status,
     ...(settled.count !== undefined ? { count: settled.count } : {}),
     ...(settled.reason ? { reason: settled.reason } : {}),
+    ...(resultRef ? { resultRef } : {}),
   };
+}
+
+/** The table a settled call produced for this turn, by its `r<n>` name. */
+function producedRef(result: CoachToolResult | undefined): string | undefined {
+  const ref = result?.present ? result.table?.ref : undefined;
+  return ref !== undefined && ref === result?.resultRef && isTurnResultRef(ref)
+    ? ref
+    : undefined;
+}
+
+/**
+ * What a present table result read, each field checked against its enum:
+ * the table's own source, else the source its model summary repeats.
+ */
+function tableSource(result: CoachToolResult | undefined):
+  | {
+      domain?: CoachStepDomain;
+      window?: CoachScopeWindow;
+      period?: CoachResultPeriod;
+      granularity?: CoachResultGranularity;
+    }
+  | undefined {
+  if (!result?.present) return undefined;
+  const raw: unknown =
+    result.table?.source ??
+    (isRecord(result.data) ? result.data.source : undefined);
+  if (!isRecord(raw)) return undefined;
+  return {
+    domain: pick<CoachStepDomain>(RESULT_DOMAINS, raw.domain),
+    window: pick<CoachScopeWindow>(WINDOWS, raw.window),
+    period: pick<CoachResultPeriod>(PERIODS, raw.period),
+    granularity: pick<CoachResultGranularity>(GRANULARITIES, raw.granularity),
+  };
+}
+
+/**
+ * A `show_result` call: an earlier table of the conversation shown again,
+ * with no new read. Before it settles the step names no domain (the name
+ * alone says nothing true about one); once the stored table is found, the
+ * step takes the domain, window, period and granularity of the read that
+ * built it, the readings that table counted, and the name the copy carries
+ * in this turn.
+ */
+function reuseStep(args: {
+  index: number;
+  result: CoachToolResult | undefined;
+  locale: Locale;
+}): CoachStep {
+  const { index, result, locale } = args;
+  const { t } = getServerTranslator(locale);
+  const labelKey = COACH_STEP_LABEL_KEYS.showResult;
+  const base = {
+    id: `s${index + 1}`,
+    tool: SHOW_RESULT_TOOL_NAME,
+    labelKey,
+    label: t(labelKey),
+  } as const;
+  if (!result) return { ...base, status: "running" };
+  const source = tableSource(result);
+  const resultRef = producedRef(result);
+  if (!source?.domain || !resultRef) {
+    // Nothing was shown. A reuse has no "no readings" outcome: the table
+    // either came back or it did not.
+    const miss = result.present ? undefined : missFor(result.reason);
+    return {
+      ...base,
+      status: "failed",
+      ...(miss?.reason ? { reason: miss.reason } : {}),
+    };
+  }
+  const count = isRecord(result.data)
+    ? tableSummaryCount(result.data)
+    : undefined;
+  return {
+    ...base,
+    domain: source.domain,
+    ...(source.window ? { window: source.window } : {}),
+    ...(source.period ? { period: source.period } : {}),
+    ...(source.granularity ? { granularity: source.granularity } : {}),
+    status: "done",
+    ...(count !== undefined ? { count } : {}),
+    resultRef,
+  };
+}
+
+function missFor(reason: unknown): {
+  status: CoachStepStatus;
+  reason?: CoachStepReason;
+} {
+  return (
+    (typeof reason === "string" &&
+      Object.hasOwn(MISS, reason) &&
+      MISS[reason]) || {
+      status: "empty",
+    }
+  );
 }
 
 function settle(
@@ -251,9 +392,7 @@ function settle(
   if (result.present) {
     return { status: "done", count: presentCount(tool, result.data) };
   }
-  const miss = (typeof result.reason === "string" &&
-    Object.hasOwn(MISS, result.reason) &&
-    MISS[result.reason]) || { status: "empty" as const };
+  const miss = missFor(result.reason);
   // An out-of-window miss knows how much the record holds elsewhere; the
   // count rides the step for the method line, the row shows the reason.
   const count =

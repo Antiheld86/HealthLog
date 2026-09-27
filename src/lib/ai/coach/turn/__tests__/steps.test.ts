@@ -22,11 +22,14 @@ import {
 import {
   coachScopeSourceSchema,
   coachScopeWindowSchema,
+  type CoachResultTable,
   type CoachStep,
   type CoachStepDomain,
 } from "@/lib/ai/coach/types";
+import { summariseTable } from "@/lib/ai/coach/results/metric-table-tool";
 import {
   COACH_TOOL_NAMES,
+  SHOW_RESULT_TOOL_NAME,
   parseCoachToolArgs,
 } from "@/lib/ai/coach/tools/definitions";
 import type { CoachToolResult } from "@/lib/ai/coach/tools/executor";
@@ -43,6 +46,8 @@ const DOMAINS: CoachStepDomain[] = [
   "correlations",
   "snapshot",
 ];
+/** Every call a turn can make: the catalogue and `show_result`. */
+const STEP_TOOLS = [...COACH_TOOL_NAMES, SHOW_RESULT_TOOL_NAME] as const;
 const STATUSES = new Set(["running", "done", "empty", "failed"]);
 const REASONS = new Set([
   "no_data",
@@ -132,6 +137,14 @@ function fuzzValue(r: () => number, depth = 0): unknown {
     "analyte",
     "value",
     "label",
+    "source",
+    "domain",
+    "window",
+    "granularity",
+    "stats",
+    "readings",
+    "total",
+    "periodsWithReadings",
   ];
   const obj: Record<string, unknown> = {};
   for (let i = 0; i < 1 + Math.floor(r() * 4); i += 1) {
@@ -155,6 +168,8 @@ function fuzzArgs(r: () => number): string {
   }
   if (r() < 0.3) args.analyte = PLANTED[0];
   if (r() < 0.1) args.period = r() < 0.5 ? "previous" : PLANTED[2];
+  if (r() < 0.2) args.granularity = r() < 0.7 ? "week" : PLANTED[2];
+  if (r() < 0.3) args.ref = r() < 0.7 ? "m2.r1" : PLANTED[0];
   return JSON.stringify(args);
 }
 
@@ -162,10 +177,38 @@ function fuzzResult(r: () => number): CoachToolResult | undefined {
   const roll = r();
   if (roll < 0.15) return undefined;
   if (roll < 0.55) {
+    const ref = ["r1", "r6", "r7", "m1.r1", PLANTED[0]][Math.floor(r() * 5)];
     return {
       present: true,
       data: fuzzValue(r),
       ...(r() < 0.3 ? { grounding: PLANTED[1] } : {}),
+      ...(r() < 0.4
+        ? {
+            resultRef: r() < 0.8 ? ref : "r2",
+            table: {
+              ref,
+              source: {
+                tool: "get_metric_table",
+                domain: (r() < 0.7
+                  ? DOMAINS[Math.floor(r() * DOMAINS.length)]
+                  : PLANTED[0]) as CoachStepDomain,
+                window: WINDOWS[Math.floor(r() * WINDOWS.length)],
+                period: "current",
+                granularity: "day",
+              },
+              shape: "timeSeries",
+              titleKey: "coach.result.title.byDay",
+              title: PLANTED[0],
+              rowCount: 1,
+              chartKind: null,
+              displayed: false,
+              columns: [],
+              rows: [[PLANTED[0], 128.4]],
+              truncated: false,
+              chart: null,
+            },
+          }
+        : {}),
     };
   }
   const reasons = [
@@ -179,6 +222,10 @@ function fuzzResult(r: () => number): CoachToolResult | undefined {
     "analyte_not_found",
     "no_significant_pattern",
     "module_disabled",
+    "unknown_result",
+    "result_unavailable",
+    "result_limit",
+    "use_get_workouts",
     PLANTED[1],
     "__proto__",
     "toString",
@@ -227,6 +274,9 @@ function assertClean(step: CoachStep, locale: Locale) {
     expect(step.count).toBeGreaterThanOrEqual(0);
   }
   if (step.reason !== undefined) expect(REASONS.has(step.reason)).toBe(true);
+  if (step.resultRef !== undefined) {
+    expect(step.resultRef).toMatch(/^r[1-6]$/);
+  }
   const wire = JSON.stringify(step);
   for (const planted of PLANTED) expect(wire).not.toContain(planted);
   expect(wire.toLowerCase()).not.toContain("zqx");
@@ -237,7 +287,7 @@ describe("toStep — property: only catalog keys, domains, windows and integers"
     const r = rng(0x5eed);
     let produced = 0;
     for (let i = 0; i < 4000; i += 1) {
-      const name = COACH_TOOL_NAMES[i % COACH_TOOL_NAMES.length];
+      const name = STEP_TOOLS[i % STEP_TOOLS.length];
       const locale = locales[Math.floor(r() * locales.length)];
       const call = { id: `c${i}`, name, arguments: fuzzArgs(r) };
       const step = toStep({
@@ -259,8 +309,15 @@ describe("toStep — property: only catalog keys, domains, windows and integers"
   });
 
   it("covers every tool with a step", () => {
-    for (const name of COACH_TOOL_NAMES) {
-      const args = name === "get_metric_series" ? '{"metric":"bp"}' : "{}";
+    // The smallest valid arguments each tool takes: the metric tools need a
+    // metric, show_result a table name.
+    const MINIMAL_ARGS: Partial<Record<(typeof STEP_TOOLS)[number], string>> = {
+      get_metric_series: '{"metric":"bp"}',
+      get_metric_table: '{"metric":"bp"}',
+      show_result: '{"ref":"m1.r1"}',
+    };
+    for (const name of STEP_TOOLS) {
+      const args = MINIMAL_ARGS[name] ?? "{}";
       const step = toStep({
         call: { id: "x", name, arguments: args },
         index: 0,
@@ -423,6 +480,213 @@ describe("toStep — mapping", () => {
         result: { present: false, reason: "invalid_arguments" },
       }),
     ).toBeNull();
+  });
+});
+
+describe("toStep — tables", () => {
+  function bpWeekTable(ref: string): CoachResultTable {
+    return {
+      ref,
+      source: {
+        tool: "get_metric_table",
+        domain: "bp",
+        window: "last90days",
+        period: "current",
+        granularity: "week",
+      },
+      shape: "timeSeries",
+      titleKey: "coach.result.title.byWeek",
+      title: "Blood pressure by week",
+      rowCount: 3,
+      chartKind: null,
+      displayed: false,
+      columns: [
+        { key: "week", kind: "period", labelKey: "k", label: "Week" },
+        { key: "systolic", kind: "number", labelKey: "k", label: "Sys" },
+        { key: "readings", kind: "count", labelKey: "k", label: "Readings" },
+      ],
+      rows: [
+        ["2026-W27", 128.4, 9],
+        ["2026-W28", null, null],
+        ["2026-W29", 131, 12],
+      ],
+      truncated: false,
+      chart: null,
+    };
+  }
+  /** The result the executor hands the settled callback: summary + table. */
+  function tableResult(table: CoachResultTable): CoachToolResult {
+    return {
+      present: true,
+      resultRef: table.ref,
+      data: summariseTable(table),
+      table,
+    };
+  }
+
+  const tableCall = {
+    id: "t",
+    name: "get_metric_table",
+    arguments: '{"metric":"bp","window":"last90days"}',
+  };
+  const tableArgs = parseCoachToolArgs(tableCall.name, tableCall.arguments);
+
+  it("a metric table is labelled by its metric and window while it runs", () => {
+    expect(
+      toStep({
+        call: tableCall,
+        index: 0,
+        parsedArgs: tableArgs,
+        locale: "en",
+      }),
+    ).toEqual({
+      id: "s1",
+      tool: "get_metric_table",
+      labelKey: "coach.step.readWindow",
+      label: "Checking: Blood pressure, last 90 days",
+      domain: "bp",
+      window: "last90days",
+      status: "running",
+    });
+  });
+
+  it("a settled metric table counts its readings, takes its granularity and names its table", () => {
+    expect(
+      toStep({
+        call: tableCall,
+        index: 1,
+        parsedArgs: tableArgs,
+        locale: "en",
+        result: tableResult(bpWeekTable("r2")),
+      }),
+    ).toMatchObject({
+      id: "s2",
+      tool: "get_metric_table",
+      domain: "bp",
+      window: "last90days",
+      period: "current",
+      granularity: "week",
+      status: "done",
+      count: 21,
+      resultRef: "r2",
+    });
+  });
+
+  it("past the sixth table the read still counts, with no table to name", () => {
+    const {
+      table: _table,
+      resultRef: _ref,
+      ...plain
+    } = tableResult(bpWeekTable("r1"));
+    const step = toStep({
+      call: tableCall,
+      index: 0,
+      parsedArgs: tableArgs,
+      locale: "en",
+      result: plain,
+    });
+    expect(step).toMatchObject({ status: "done", count: 21 });
+    expect(step).not.toHaveProperty("resultRef");
+  });
+
+  it("a projected table of an older tool names its table too", () => {
+    const table = {
+      ...bpWeekTable("r3"),
+      source: {
+        ...bpWeekTable("r3").source,
+        tool: "get_workouts" as const,
+        domain: "workouts" as const,
+      },
+    };
+    const step = toStep({
+      call: { id: "w", name: "get_workouts", arguments: "{}" },
+      index: 0,
+      parsedArgs: {},
+      locale: "en",
+      result: {
+        present: true,
+        data: { totalInWindow: 4 },
+        resultRef: "r3",
+        table,
+      },
+    });
+    expect(step).toMatchObject({ count: 4, resultRef: "r3" });
+  });
+
+  const showCall = {
+    id: "r",
+    name: "show_result",
+    arguments: '{"ref":"m2.r1"}',
+  };
+  const showArgs = parseCoachToolArgs(showCall.name, showCall.arguments);
+
+  it("show_result runs without a domain: the name alone says nothing about one", () => {
+    expect(
+      toStep({ call: showCall, index: 0, parsedArgs: showArgs, locale: "en" }),
+    ).toEqual({
+      id: "s1",
+      tool: "show_result",
+      labelKey: "coach.step.showResult",
+      label: "Opening an earlier table",
+      status: "running",
+    });
+  });
+
+  it("a shown table takes the source of the read that built it, and its new name", () => {
+    const copy = {
+      ...bpWeekTable("r1"),
+      reusedFrom: { messageId: "msg-1", ref: "r1" },
+    };
+    const step = toStep({
+      call: showCall,
+      index: 0,
+      parsedArgs: showArgs,
+      locale: "de",
+      result: {
+        ...tableResult(copy),
+        data: { shownAgain: "m2.r1", ...summariseTable(copy) },
+      },
+    });
+    expect(step).toEqual({
+      id: "s1",
+      tool: "show_result",
+      labelKey: "coach.step.showResult",
+      label: "Öffne eine frühere Tabelle",
+      domain: "bp",
+      window: "last90days",
+      period: "current",
+      granularity: "week",
+      status: "done",
+      count: 21,
+      resultRef: "r1",
+    });
+  });
+
+  it("a table that could not be shown is a failed step, never an empty read", () => {
+    const at = (reason: string) =>
+      toStep({
+        call: showCall,
+        index: 0,
+        parsedArgs: showArgs,
+        locale: "en",
+        result: { present: false, reason },
+      });
+    expect(at("unknown_result")).toMatchObject({
+      status: "failed",
+      reason: "invalid_arguments",
+    });
+    expect(at("result_unavailable")).toMatchObject({
+      status: "failed",
+      reason: "retrieval_failed",
+    });
+    expect(at("module_disabled")).toMatchObject({
+      status: "failed",
+      reason: "module_disabled",
+    });
+    const limit = at("result_limit");
+    expect(limit).toMatchObject({ status: "failed" });
+    expect(limit).not.toHaveProperty("reason");
+    expect(limit).not.toHaveProperty("domain");
   });
 });
 
