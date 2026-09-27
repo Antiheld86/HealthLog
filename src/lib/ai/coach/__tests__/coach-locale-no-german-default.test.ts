@@ -13,13 +13,24 @@
  * which is precisely what makes it survive a refactor of the logic around it.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(__dirname, "../../../..");
 
+/**
+ * The chat route hands each turn to the pipeline under `lib/ai/coach/turn/`,
+ * so every module there is guarded — read from the directory, so a step added
+ * later is covered without editing this list.
+ */
+const TURN_PIPELINE_FILES = readdirSync(resolve(ROOT, "lib/ai/coach/turn"))
+  .filter((name) => name.endsWith(".ts"))
+  .sort()
+  .map((name) => `lib/ai/coach/turn/${name}`);
+
 const GUARDED_FILES = [
   "app/api/insights/chat/route.ts",
+  ...TURN_PIPELINE_FILES,
   "app/api/insights/narrative/route.ts",
   "lib/ai/coach/snapshot.ts",
   "lib/ai/coach/memory-snapshot.ts",
@@ -60,6 +71,12 @@ describe("no German-default locale binary", () => {
 
   it.each(GUARDED_FILES)("%s carries no de-default fallback", (rel) => {
     expect(readCode(rel)).not.toMatch(DE_DEFAULT_NULLISH);
+  });
+
+  it("finds the turn pipeline it guards", () => {
+    // An empty directory read would leave the pipeline unguarded and green.
+    expect(TURN_PIPELINE_FILES).toContain("lib/ai/coach/turn/context.ts");
+    expect(TURN_PIPELINE_FILES).toContain("lib/ai/coach/turn/pipeline.ts");
   });
 
   it("recognises the shape it bans", () => {
