@@ -8,8 +8,10 @@
  * `clarification: { messageId, choiceId }`; a typed answer goes out with
  * `clarification: { messageId }`.
  *
- * Announced politely when it appears and never takes focus: the person may
- * already be typing.
+ * Announced politely when it appears, through the live region the
+ * conversation keeps mounted beside it (a region that arrives with its
+ * content is never heard), and never takes focus on its own: the person may
+ * already be typing. A tapped choice hands focus to the composer.
  */
 import { MessageCircleQuestionMark } from "lucide-react";
 
@@ -21,6 +23,8 @@ import type {
   CoachClarification,
   CoachClarificationChoice,
 } from "@/lib/ai/coach/types";
+
+import { focusCoachComposer } from "./composer-focus";
 
 export interface CoachClarificationCardProps {
   clarification: CoachClarification;
@@ -56,7 +60,6 @@ export function CoachClarificationCard({
     <Card
       data-slot="coach-clarification-card"
       data-message-id={messageId}
-      aria-live="polite"
       aria-label={t(COACH_CLARIFY_UI_KEYS.cardLabel)}
       role="region"
       className="gap-2 py-3 md:py-4"
@@ -85,7 +88,10 @@ export function CoachClarificationCard({
               className="min-h-11 sm:min-h-9"
               disabled={disabled}
               data-choice-id={choice.id}
-              onClick={() => onChoose(choice)}
+              onClick={() => {
+                onChoose(choice);
+                focusCoachComposer();
+              }}
             >
               {choiceLabel(choice)}
             </Button>

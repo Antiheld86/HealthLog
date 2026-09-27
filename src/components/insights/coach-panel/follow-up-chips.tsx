@@ -9,12 +9,15 @@
  * re-rendered from `labelKey` here: a related-metric chip names its metric
  * in the label, and the key alone does not carry it. Hidden while a turn is
  * in flight, so a chip can never be tapped against a reply that is about to
- * stop being the latest.
+ * stop being the latest. The tapped chip goes away with the rest, so focus
+ * moves to the composer.
  */
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "@/lib/i18n/context";
 import { COACH_FOLLOW_UP_UI_KEYS } from "@/lib/ai/coach/dialog-keys";
 import type { CoachFollowUp } from "@/lib/ai/coach/types";
+
+import { focusCoachComposer } from "./composer-focus";
 
 /** At most this many chips render, whatever the payload carries. */
 const MAX_CHIPS = 3;
@@ -54,7 +57,10 @@ export function CoachFollowUpChips({
           className="min-h-11"
           data-follow-up-id={chip.id}
           data-follow-up-kind={chip.kind}
-          onClick={() => onSelect(chip, messageId)}
+          onClick={() => {
+            onSelect(chip, messageId);
+            focusCoachComposer();
+          }}
         >
           {chip.label}
         </Button>

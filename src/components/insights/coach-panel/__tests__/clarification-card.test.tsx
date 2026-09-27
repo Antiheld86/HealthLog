@@ -14,6 +14,11 @@ vi.mock("@/lib/i18n/context", () => ({
   }),
 }));
 
+const focusComposer = vi.fn();
+vi.mock("../composer-focus", () => ({
+  focusCoachComposer: () => focusComposer(),
+}));
+
 import { CoachClarificationCard } from "../clarification-card";
 import type { CoachClarification } from "@/lib/ai/coach/types";
 
@@ -58,9 +63,11 @@ function choiceButtons(
 }
 
 describe("<CoachClarificationCard>", () => {
-  it("announces politely and takes no focus", () => {
+  it("is labelled, takes no focus, and leaves announcing to the live region beside it", () => {
     const { html } = card(METRIC);
-    expect(html).toContain('aria-live="polite"');
+    // The card mounts with its content, so a live region on the card itself
+    // is never heard; the conversation keeps one mounted for it.
+    expect(html).not.toContain("aria-live");
     expect(html).toContain('aria-label="The Coach has a question"');
     expect(html).not.toContain("autofocus");
     expect(html).not.toContain("autoFocus");
@@ -78,8 +85,11 @@ describe("<CoachClarificationCard>", () => {
     const { tree, onChoose } = card(METRIC);
     const buttons = choiceButtons(tree);
     expect(buttons).toHaveLength(2);
+    focusComposer.mockClear();
     (buttons[1].props.onClick as () => void)();
     expect(onChoose).toHaveBeenCalledWith(METRIC.choices[1]);
+    // The choices disable while the answer runs: focus goes to the composer.
+    expect(focusComposer).toHaveBeenCalledTimes(1);
   });
 
   it("disables the choices while a turn is in flight", () => {

@@ -113,6 +113,18 @@ describe("<CoachConversation> page deep-link (#67)", () => {
     expect(html).not.toContain('data-slot="coach-hero"');
   });
 
+  it("keeps the clarification live region mounted before any question arrives", () => {
+    // A region that mounts together with its content is not announced; the
+    // empty region has to be in the page first.
+    const html = render(
+      <CoachConversation surface="page" initialConversationId="older" />,
+      makeClient(),
+    );
+    expect(html).toMatch(
+      /<div[^>]*data-slot="coach-clarification-live"[^>]*aria-live="polite"[^>]*class="sr-only"[^>]*><\/div>/,
+    );
+  });
+
   it("auto-opens the most-recent thread when none is pinned", () => {
     const html = render(
       <CoachConversation surface="page" autoOpenMostRecent />,
