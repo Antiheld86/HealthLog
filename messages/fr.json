@@ -2261,6 +2261,8 @@
     "noData": "Aucune donnée sur la période sélectionnée",
     "bucketWeekly": "Moyenne hebdomadaire",
     "bucketMonthly": "Moyenne mensuelle",
+    "bucketWeeklyDaily": "Moyenne par jour, par semaine",
+    "bucketMonthlyDaily": "Moyenne par jour, par mois",
     "days7Label": "7 j",
     "days7Title": "7 derniers jours",
     "days30Label": "30 j",

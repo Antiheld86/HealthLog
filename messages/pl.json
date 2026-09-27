@@ -2261,6 +2261,8 @@
     "noData": "Brak danych w wybranym okresie",
     "bucketWeekly": "Średnia tygodniowa",
     "bucketMonthly": "Średnia miesięczna",
+    "bucketWeeklyDaily": "Średnia dzienna w tygodniu",
+    "bucketMonthlyDaily": "Średnia dzienna w miesiącu",
     "days7Label": "7 dni",
     "days7Title": "Ostatnie 7 dni",
     "days30Label": "30 dni",
