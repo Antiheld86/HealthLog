@@ -7490,7 +7490,11 @@
       "countOther": "{count} failures",
       "lastFailed": "Last failure {when}"
     },
-    "deleteAllDetail": "User accounts will be preserved."
+    "deleteAllDetail": "User accounts will be preserved.",
+    "cardError": {
+      "title": "This part of the page could not be shown",
+      "description": "The rest of the page still works; try again or reload if it keeps failing."
+    }
   },
   "achievements": {
     "title": "Achievements",

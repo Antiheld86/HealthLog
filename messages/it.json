@@ -7490,7 +7490,11 @@
       "countOther": "{count} errori",
       "lastFailed": "Ultimo errore {when}"
     },
-    "deleteAllDetail": "Gli account utente vengono conservati."
+    "deleteAllDetail": "Gli account utente vengono conservati.",
+    "cardError": {
+      "title": "Questa parte della pagina non è stata mostrata",
+      "description": "Il resto della pagina funziona; riprova o ricarica se il problema continua."
+    }
   },
   "achievements": {
     "title": "Obiettivi",

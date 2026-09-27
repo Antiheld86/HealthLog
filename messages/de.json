@@ -7490,7 +7490,11 @@
       "countOther": "{count} Fehlschläge",
       "lastFailed": "Letzter Fehlschlag {when}"
     },
-    "deleteAllDetail": "Nutzerkonten bleiben bestehen."
+    "deleteAllDetail": "Nutzerkonten bleiben bestehen.",
+    "cardError": {
+      "title": "Dieser Teil der Seite konnte nicht angezeigt werden",
+      "description": "Der Rest der Seite funktioniert weiter; versuche es erneut oder lade neu, wenn es bleibt."
+    }
   },
   "achievements": {
     "title": "Erfolge",

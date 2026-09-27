@@ -7490,7 +7490,11 @@
       "countOther": "{count} fallos",
       "lastFailed": "Último fallo {when}"
     },
-    "deleteAllDetail": "Las cuentas de usuario se conservarán."
+    "deleteAllDetail": "Las cuentas de usuario se conservarán.",
+    "cardError": {
+      "title": "Esta parte de la página no se pudo mostrar",
+      "description": "El resto de la página sigue funcionando; inténtalo de nuevo o recarga si el fallo continúa."
+    }
   },
   "achievements": {
     "title": "Logros",

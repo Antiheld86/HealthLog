@@ -7490,6 +7490,10 @@
       "typeLocal": "로컬 모델 (개인)",
       "typeGateway": "OpenAI 호환 게이트웨이 (개인)",
       "spendToday": "오늘({date}): 토큰 {total}개, 그중 {operator}개는 운영자 키에서 사용되었습니다."
+    },
+    "cardError": {
+      "title": "페이지의 이 부분을 표시할 수 없습니다",
+      "description": "페이지의 나머지 부분은 계속 작동합니다. 다시 시도하거나 계속 실패하면 새로고침하세요."
     }
   },
   "achievements": {

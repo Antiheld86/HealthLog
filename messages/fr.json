@@ -7490,7 +7490,11 @@
       "countOther": "{count} échecs",
       "lastFailed": "Dernier échec {when}"
     },
-    "deleteAllDetail": "Les comptes utilisateurs sont conservés."
+    "deleteAllDetail": "Les comptes utilisateurs sont conservés.",
+    "cardError": {
+      "title": "Cette partie de la page n’a pas pu s’afficher",
+      "description": "Le reste de la page fonctionne ; réessayez ou rechargez si le problème persiste."
+    }
   },
   "achievements": {
     "title": "Réussites",

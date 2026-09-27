@@ -7490,7 +7490,11 @@
       "countOther": "{count} niepowodzeń",
       "lastFailed": "Ostatnie niepowodzenie {when}"
     },
-    "deleteAllDetail": "Konta użytkowników zostaną zachowane."
+    "deleteAllDetail": "Konta użytkowników zostaną zachowane.",
+    "cardError": {
+      "title": "Nie udało się wyświetlić tej części strony",
+      "description": "Reszta strony działa; spróbuj ponownie lub odśwież, jeśli błąd się powtarza."
+    }
   },
   "achievements": {
     "title": "Osiągnięcia",
