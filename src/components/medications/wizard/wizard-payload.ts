@@ -87,13 +87,20 @@ export type WizardTreatmentRow =
   | "supplement"
   | "antibiotic"
   | "mentalHealth"
+  | "thyroid"
+  | "digestive"
+  | "skin"
+  | "sleepAid"
   | "other";
 
 /**
  * The taxonomy rows in their visible order (D-1 §3 Step 2): Blutdruck ·
  * Diabetes · Hormone · GLP-1-Injektion · Schmerz · Allergie · Vitamine ·
- * Nahrungsergänzung · Antibiotikum · Psychische Gesundheit (v1.39.4) ·
- * Sonstiges.
+ * Nahrungsergänzung · Antibiotikum · Psychische Gesundheit · Schilddrüse ·
+ * Verdauung · Haut · Schlafmittel · Sonstiges. v1.39.4 gave every stored
+ * category a row; before, a thyroid, digestive, skin or sleep-aid
+ * medication hydrated as
+ * "Sonstiges" and an edit saved it back as OTHER.
  */
 export const WIZARD_TREATMENT_ROWS: readonly WizardTreatmentRow[] = [
   "bloodPressure",
@@ -106,6 +113,10 @@ export const WIZARD_TREATMENT_ROWS: readonly WizardTreatmentRow[] = [
   "supplement",
   "antibiotic",
   "mentalHealth",
+  "thyroid",
+  "digestive",
+  "skin",
+  "sleepAid",
   "other",
 ];
 
@@ -131,6 +142,10 @@ export const WIZARD_TREATMENT_MAPPING: Record<
   supplement: { treatmentClass: "GENERIC", category: "SUPPLEMENT" },
   antibiotic: { treatmentClass: "GENERIC", category: "ANTIBIOTIC" },
   mentalHealth: { treatmentClass: "GENERIC", category: "MENTAL_HEALTH" },
+  thyroid: { treatmentClass: "GENERIC", category: "THYROID" },
+  digestive: { treatmentClass: "GENERIC", category: "DIGESTIVE" },
+  skin: { treatmentClass: "GENERIC", category: "SKIN" },
+  sleepAid: { treatmentClass: "GENERIC", category: "SLEEP_AID" },
   other: { treatmentClass: "GENERIC", category: "OTHER" },
 };
 
@@ -164,6 +179,14 @@ export function rowFromTreatment(
       return "antibiotic";
     case "MENTAL_HEALTH":
       return "mentalHealth";
+    case "THYROID":
+      return "thyroid";
+    case "DIGESTIVE":
+      return "digestive";
+    case "SKIN":
+      return "skin";
+    case "SLEEP_AID":
+      return "sleepAid";
     default:
       return "other";
   }
@@ -226,6 +249,14 @@ export interface WizardPayload {
   doseAmount: string;
   doseUnit: string;
   treatmentRow: WizardTreatmentRow | null;
+  /**
+   * v1.39.4 — the row the edit hydrated to. An edit sends `category` and
+   * `treatmentClass` only when `treatmentRow` differs from it, so a stored
+   * category the wizard has no row for (a value a newer server or another
+   * client wrote) is never overwritten by saving an unrelated change.
+   * Absent on create.
+   */
+  initialTreatmentRow?: WizardTreatmentRow | null;
   /**
    * v1.6.0 — route of administration. Drives the injection-site
    * rotation preview (shown when `INJECTION`) and, paired with
@@ -597,8 +628,9 @@ export function firstInvalidIndex(
 export interface CreateMedicationBody {
   name: string;
   dose: string;
-  category: MedicationCategoryValue;
-  treatmentClass: MedicationTreatmentClass;
+  /** Omitted on an edit that left the category row untouched (v1.39.4). */
+  category?: MedicationCategoryValue;
+  treatmentClass?: MedicationTreatmentClass;
   /** v1.6.0 — route of administration (ORAL | INJECTION | OTHER). */
   deliveryForm: MedicationDeliveryForm;
   /** v1.6.0 — doses per pen / vial. Omitted when inventory is off. */
@@ -808,11 +840,20 @@ export function buildCreateBody(
   // reads 1), "1 1/2" and "1½" are 1.5, and a value the server would
   // refuse is null. Step 3 cannot be left while it is null.
   const parsedUnitsPerDose = parseUnitsPerDoseInput(committed.unitsPerDose);
+  // v1.39.4 — an edit that did not touch the category row leaves the stored
+  // category (and treatment class) alone rather than re-deriving them from
+  // the row, which cannot represent every stored value.
+  const keepStoredCategory =
+    forMode === "edit" &&
+    committed.initialTreatmentRow !== undefined &&
+    committed.treatmentRow === committed.initialTreatmentRow;
   const body: CreateMedicationBody = {
     name: committed.name.trim(),
     dose,
-    category: mapping.category,
-    treatmentClass: mapping.treatmentClass,
+    ...(!keepStoredCategory && {
+      category: mapping.category,
+      treatmentClass: mapping.treatmentClass,
+    }),
     deliveryForm: committed.deliveryForm,
     ...(Number.isFinite(parsedDosesPerUnit) &&
       parsedDosesPerUnit >= 1 && {
@@ -1194,6 +1235,10 @@ export function hydrateWizardPayload(
     doseAmount: parsedDose.amount,
     doseUnit: parsedDose.unit || base.doseUnit,
     treatmentRow: rowFromTreatment(initial.treatmentClass, initial.category),
+    initialTreatmentRow: rowFromTreatment(
+      initial.treatmentClass,
+      initial.category,
+    ),
     deliveryForm: normaliseDeliveryForm(initial.deliveryForm),
     dosesPerUnit:
       typeof initial.dosesPerUnit === "number" && initial.dosesPerUnit >= 1

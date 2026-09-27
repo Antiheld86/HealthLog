@@ -1569,6 +1569,10 @@
         "supplement": "Suplement",
         "antibiotic": "Antybiotyk",
         "mentalHealth": "Zdrowie psychiczne",
+        "thyroid": "Tarczyca",
+        "digestive": "Trawienne",
+        "skin": "Pielęgnacja skóry",
+        "sleepAid": "Na sen",
         "other": "Inne"
       },
       "cadence": {

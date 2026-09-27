@@ -1569,6 +1569,10 @@
         "supplement": "보충제",
         "antibiotic": "항생제",
         "mentalHealth": "정신 건강",
+        "thyroid": "갑상선",
+        "digestive": "소화기",
+        "skin": "피부",
+        "sleepAid": "수면 보조",
         "other": "기타"
       },
       "cadence": {

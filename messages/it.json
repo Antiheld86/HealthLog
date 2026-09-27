@@ -1569,6 +1569,10 @@
         "supplement": "Integratore",
         "antibiotic": "Antibiotico",
         "mentalHealth": "Salute mentale",
+        "thyroid": "Tiroide",
+        "digestive": "Digestivo",
+        "skin": "Cura della pelle",
+        "sleepAid": "Per dormire",
         "other": "Altro"
       },
       "cadence": {

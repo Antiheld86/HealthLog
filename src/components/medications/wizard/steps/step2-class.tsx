@@ -3,9 +3,12 @@
 import {
   Activity,
   Apple,
+  BedDouble,
   Brain,
   Droplet,
   Flame,
+  Gauge,
+  Hand,
   Leaf,
   type LucideIcon,
   type LucideProps,
@@ -13,6 +16,7 @@ import {
   Stethoscope,
   Syringe,
   Tag,
+  Utensils,
   Wind,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -37,6 +41,10 @@ const ROW_ICONS: Record<WizardTreatmentRow, ComponentType<LucideProps>> = {
   supplement: Leaf,
   antibiotic: ShieldCheck,
   mentalHealth: Brain,
+  thyroid: Gauge,
+  digestive: Utensils,
+  skin: Hand,
+  sleepAid: BedDouble,
   other: Tag as unknown as LucideIcon,
 };
 
