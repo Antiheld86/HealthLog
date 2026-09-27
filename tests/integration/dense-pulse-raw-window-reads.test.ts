@@ -147,7 +147,9 @@ describe("resting-pulse proxy folded in Postgres", () => {
     const spy = vi.spyOn(prisma.measurement, "findMany");
     try {
       const { GET } = await import("@/app/api/insights/comprehensive/route");
-      const res = await GET(
+      // The route reads no request field, so its handler is typed without one.
+      const callGet = GET as unknown as (req: NextRequest) => Promise<Response>;
+      const res = await callGet(
         new NextRequest("http://localhost/api/insights/comprehensive"),
       );
       expect(res.status).toBe(200);
