@@ -24,6 +24,7 @@ import {
 } from "@/lib/analytics/compliance";
 import { getMedicationCategories } from "@/lib/medication-category";
 import { resolveRestingPulseSeries } from "@/lib/analytics/resting-pulse";
+import { readRestingPulseProxy } from "@/lib/analytics/resting-pulse-read";
 import {
   apiHandler,
   requireRecordAuth,
@@ -341,24 +342,24 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
     },
     select: { measuredAt: true, value: true },
   });
-  const rawPulseRowsForResting =
-    restingPulseRows.length === 0
-      ? await prisma.measurement.findMany({
-          where: {
-            userId,
-            type: "PULSE",
-            deletedAt: null,
-            measuredAt: { gte: ninetyDaysAgo },
-          },
-          select: { measuredAt: true, value: true },
-        })
-      : [];
+  //
+  // #1023 — the proxy folds in Postgres. It needs one percentile per day, and
+  // reading the raw samples to get it walked 130 000 rows per page view on a
+  // watch that records once a minute, blocking the event loop for over a
+  // second. `readRestingPulseProxy` returns the same series one row per day.
   const localDayKey = (d: Date) => userDayKey(d, userTz);
-  const { series: restingPulseSeries } = resolveRestingPulseSeries({
-    restingSamples: restingPulseRows,
-    pulseSamples: rawPulseRowsForResting,
-    dayKeyOf: localDayKey,
-  });
+  const restingPulseSeries =
+    restingPulseRows.length > 0
+      ? resolveRestingPulseSeries({
+          restingSamples: restingPulseRows,
+          pulseSamples: [],
+          dayKeyOf: localDayKey,
+        }).series
+      : await readRestingPulseProxy({
+          userId,
+          since: ninetyDaysAgo,
+          timeZone: userTz,
+        });
   const restingByDay = new Map<string, { sum: number; count: number }>();
   for (const s of restingPulseSeries) {
     const key = localDayKey(s.measuredAt);

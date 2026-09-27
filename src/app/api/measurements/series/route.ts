@@ -51,6 +51,21 @@ const SLEEP_SERIES_MAX_DAYS = 365;
 const DENSE_SERIES_RAW_WINDOW_DAYS = 90;
 const DENSE_SERIES_KINDS: ReadonlySet<string> = new Set(["glucose", "pulse"]);
 
+/**
+ * #1023 — inside the raw window, a pulse series with more rows than this is
+ * bucketed per local hour in SQL instead of sent raw.
+ *
+ * A watch that records heart rate once a minute puts 43 000 rows in the
+ * default 30-day window and 130 000 in 90 days: a 15 MB response the client
+ * could not draw at that resolution anyway, built from as many objects on the
+ * server. Hourly buckets carry the hour's mean with its low/high band, the
+ * shape an hourly-bucket import already has, and cap the answer at 24 points
+ * a day. The cap sits far above what sparse sources produce (a cuff, hourly
+ * buckets over 90 days, a watch sampling every five minutes over 30 days), so
+ * those series stay raw and unchanged.
+ */
+const DENSE_SERIES_RAW_ROW_CAP = 10_000;
+
 const kindEnum = z.enum([
   "weight",
   "bloodPressure",
@@ -352,9 +367,20 @@ export const GET = apiHandler(async (request: NextRequest) => {
       };
     });
   } else if (
-    DENSE_SERIES_KINDS.has(kind) &&
-    days > DENSE_SERIES_RAW_WINDOW_DAYS
+    (DENSE_SERIES_KINDS.has(kind) && days > DENSE_SERIES_RAW_WINDOW_DAYS) ||
+    (kind === "pulse" &&
+      (await prisma.measurement.count({
+        where: {
+          userId: user.id,
+          type: "PULSE",
+          measuredAt: { gte: since },
+          deletedAt: null,
+        },
+      })) > DENSE_SERIES_RAW_ROW_CAP)
   ) {
+    // Day buckets past the raw window; hour buckets for a pulse stream too
+    // dense to send raw inside it.
+    const grain = days > DENSE_SERIES_RAW_WINDOW_DAYS ? "day" : "hour";
     // v1.28.25 — long-window read of a sample-dense kind (CGM glucose,
     // per-sample / hourly pulse). Day-bucket in SQL instead of walking
     // every raw row into JS: one aggregate pass in Postgres returns at
@@ -377,7 +403,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
           m."value_min",
           m."value_max",
           date_trunc(
-            'day',
+            ${grain},
             (m."measured_at" AT TIME ZONE 'UTC') AT TIME ZONE ${userTz}
           ) AS local_day
         FROM measurements m
@@ -422,7 +448,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
         AND m."deleted_at" IS NULL
     `;
     const round2 = (v: number) => Math.round(v * 100) / 100;
-    const dayId = (d: Date) => `day:${userDayKey(d, userTz)}`;
+    const dayId = (d: Date) =>
+      grain === "day"
+        ? `day:${userDayKey(d, userTz)}`
+        : `hour:${d.toISOString()}`;
     if (kind === "glucose") {
       // Same unit engine as the raw glucose branch: canonical mg/dL in
       // the DB, converted ONCE at serialization to the user's preference.
@@ -457,9 +486,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
         };
       }
     } else {
-      // pulse — `value` is the day's average; valueMin/valueMax carry the
-      // day's low/high band (folding each hourly bucket's own spread via
-      // the COALESCE above), same band semantics as the per-hour shape.
+      // pulse — `value` is the bucket's average; valueMin/valueMax carry the
+      // bucket's low/high band (folding each hourly import bucket's own
+      // spread via the COALESCE above), same band semantics as the per-hour
+      // shape.
       points = bucketRows.map((r) => ({
         id: dayId(r.bucket_start),
         at: r.bucket_start.toISOString(),

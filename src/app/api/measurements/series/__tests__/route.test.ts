@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    measurement: { findMany: vi.fn() },
+    measurement: { findMany: vi.fn(), count: vi.fn() },
     user: { findUnique: vi.fn() },
     auditLog: { create: vi.fn() },
     // v1.28.25 — dense kinds (glucose / pulse) day-bucket in SQL for
@@ -68,6 +68,7 @@ function req(query: string): NextRequest {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(prisma.measurement.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.measurement.count).mockResolvedValue(0 as never);
   vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
   vi.mocked(prisma.user.findUnique).mockResolvedValue({
@@ -584,6 +585,72 @@ describe("GET /api/measurements/series — dense-kind day-bucketing (v1.28.25)",
     // Raw read, individual row ids — the SQL bucket path never fires.
     expect(prisma.$queryRaw).not.toHaveBeenCalled();
     expect(body.data.points[0].id).toBe("g1");
+  });
+
+  it("hour-buckets a pulse window too dense to send raw (#1023)", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    // One reading a minute for 30 days.
+    vi.mocked(prisma.measurement.count).mockResolvedValue(43_200 as never);
+    vi.mocked(prisma.$queryRaw)
+      .mockResolvedValueOnce([
+        {
+          bucket_start: new Date("2026-06-01T08:00:00Z"),
+          mean: 71.666,
+          min_value: 58,
+          max_value: 96,
+        },
+      ] as never)
+      .mockResolvedValueOnce([
+        { n: 43_200, mean: 72.1, min: 50, max: 150, sd: 11.5 },
+      ] as never);
+
+    const res = await GET(req("kind=pulse&days=30"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: {
+        points: Array<Record<string, unknown>>;
+        stats: { count: number; mean: number };
+      };
+    };
+    expect(prisma.measurement.findMany).not.toHaveBeenCalled();
+    expect(body.data.points).toEqual([
+      {
+        id: "hour:2026-06-01T08:00:00.000Z",
+        at: "2026-06-01T08:00:00.000Z",
+        value: 71.67,
+        secondary: null,
+        valueMin: 58,
+        valueMax: 96,
+      },
+    ]);
+    // Stats describe the readings, not the buckets.
+    expect(body.data.stats.count).toBe(43_200);
+    expect(body.data.stats.mean).toBe(72.1);
+    // The bucket read folds per hour, not per day.
+    const bucketSql = vi.mocked(prisma.$queryRaw).mock.calls[0] as unknown[];
+    expect(bucketSql.slice(1)).toContain("hour");
+  });
+
+  it("keeps a pulse window at or under the row cap raw", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.measurement.count).mockResolvedValue(10_000 as never);
+    vi.mocked(prisma.measurement.findMany).mockResolvedValue([
+      {
+        id: "p1",
+        value: 64,
+        measuredAt: new Date("2026-06-01T08:03:00Z"),
+        valueMin: null,
+        valueMax: null,
+      },
+    ] as never);
+    const res = await GET(req("kind=pulse&days=90"));
+    const body = (await res.json()) as {
+      data: { points: Array<{ id: string; at: string }> };
+    };
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    expect(body.data.points).toEqual([
+      expect.objectContaining({ id: "p1", at: "2026-06-01T08:03:00.000Z" }),
+    ]);
   });
 
   it("keeps sparse kinds raw even on the ten-year window", async () => {
