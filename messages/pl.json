@@ -9572,6 +9572,7 @@
         "systolic": "Skurczowe",
         "diastolic": "Rozkurczowe",
         "mean": "Średnia",
+        "total": "Suma",
         "min": "Najniższa",
         "max": "Najwyższa",
         "readings": "Pomiary",

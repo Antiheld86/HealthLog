@@ -285,6 +285,17 @@ export function pickRollupGranularityForWindow(
   return "DAY";
 }
 
+/**
+ * A tier bucket starts at UTC midnight, and a client names a row by the
+ * date its `measuredAt` falls on in the person's zone. West of UTC that
+ * midnight is still the evening before, so a March bucket read as February
+ * and every month of the chart's "All" range sat one month early. A row is
+ * therefore stamped at noon UTC of the bucket's first day: that instant falls
+ * inside the bucket's own week, month and year in every zone, and on the
+ * bucket's own day from UTC−12 to UTC+11.
+ */
+const TIER_ROW_ANCHOR_MS = 12 * 3_600_000;
+
 /** DAY → WEEK → MONTH → YEAR, finest first. */
 const TIER_ORDER: RollupGranularity[] = ["DAY", "WEEK", "MONTH", "YEAR"];
 
@@ -399,7 +410,9 @@ export async function readTieredRollupSeries(opts: {
     rows: rows.map((r) => ({
       type,
       value: useSum ? (r.sumValue ?? r.mean * r.count) : r.mean,
-      measuredAt: r.bucketStart.toISOString(),
+      measuredAt: new Date(
+        r.bucketStart.getTime() + TIER_ROW_ANCHOR_MS,
+      ).toISOString(),
       count: r.count,
       minValue: useSum ? undefined : r.minValue,
       maxValue: useSum ? undefined : r.maxValue,

@@ -9572,6 +9572,7 @@
         "systolic": "Sistólica",
         "diastolic": "Diastólica",
         "mean": "Promedio",
+        "total": "Total",
         "min": "Mínimo",
         "max": "Máximo",
         "readings": "Mediciones",

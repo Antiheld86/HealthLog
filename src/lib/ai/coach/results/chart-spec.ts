@@ -86,7 +86,12 @@ export const METRIC_AGGREGATION_KIND: Readonly<
   workouts: "total",
 };
 
-function aggregationKind(domain: CoachStepDomain): "level" | "total" {
+/**
+ * Whether a metric's periods are totals or levels. The table tool folds a
+ * week or month with it (a sum or a mean), the method line names it, and the
+ * chart draws it: one answer for all three.
+ */
+export function aggregationKind(domain: CoachStepDomain): "level" | "total" {
   return (
     (METRIC_AGGREGATION_KIND as Partial<Record<string, "level" | "total">>)[
       domain
@@ -125,6 +130,14 @@ function columnIndex(table: ChartInput, key: string): number {
 }
 
 /**
+ * Metrics whose value columns are alternative estimators of one quantity
+ * (HRV as SDNN and as RMSSD), not two sides of one reading: the chart draws
+ * the first, which the table tool orders as the one with more readings.
+ */
+const SINGLE_SERIES_DOMAINS: ReadonlySet<CoachStepDomain> =
+  new Set<CoachStepDomain>(["hrv"]);
+
+/**
  * The series a time series is drawn with: its value columns, and only the
  * first one plus one partner in the same unit — two axes with different
  * units on one chart read as a comparison they are not.
@@ -137,6 +150,7 @@ function timeSeriesColumns(table: ChartInput): CoachResultColumn[] {
       : table.columns.filter((column) => column.kind === "count");
   const [first, ...rest] = candidates;
   if (!first) return [];
+  if (SINGLE_SERIES_DOMAINS.has(table.source.domain)) return [first];
   const partner = rest.find((column) => column.unit === first.unit);
   return partner ? [first, partner] : [first];
 }

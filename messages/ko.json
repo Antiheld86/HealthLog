@@ -9572,6 +9572,7 @@
         "systolic": "수축기",
         "diastolic": "이완기",
         "mean": "평균",
+        "total": "합계",
         "min": "최저",
         "max": "최고",
         "readings": "측정 횟수",

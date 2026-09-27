@@ -9572,6 +9572,7 @@
         "systolic": "Systolisch",
         "diastolic": "Diastolisch",
         "mean": "Durchschnitt",
+        "total": "Summe",
         "min": "Niedrigster",
         "max": "Höchster",
         "readings": "Messwerte",

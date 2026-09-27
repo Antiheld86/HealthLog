@@ -53,7 +53,7 @@ import {
   readTieredRollupSeries,
   type RollupBucketRow,
 } from "../measurement-read-wmy";
-import { pickBucket } from "@/lib/charts/bucket-time-series";
+import { bucketTimeSeries, pickBucket } from "@/lib/charts/bucket-time-series";
 
 const { findMany, aggregate, queryRaw } = mocks;
 const DAY_MS = 86_400_000;
@@ -459,7 +459,7 @@ describe("readTieredRollupSeries", () => {
 
     expect(result?.granularity).toBe("MONTH");
     expect(sqlOf(queryRaw.mock.calls[0])).toContain("'month'");
-    expect(result?.rows[0].measuredAt).toBe("2017-01-01T00:00:00.000Z");
+    expect(result?.rows[0].measuredAt).toBe("2017-01-01T12:00:00.000Z");
     expect(result?.rows).toHaveLength(2);
   });
 
@@ -516,7 +516,7 @@ describe("readTieredRollupSeries", () => {
       });
       expect(result?.granularity).toBe("DAY");
       expect(queryRaw).not.toHaveBeenCalled();
-      expect(result?.rows[0].measuredAt).toBe("2026-02-03T00:00:00.000Z");
+      expect(result?.rows[0].measuredAt).toBe("2026-02-03T12:00:00.000Z");
     });
 
     it("serves WEEK buckets for a span between one and two years", async () => {
@@ -533,6 +533,74 @@ describe("readTieredRollupSeries", () => {
       });
       expect(result?.granularity).toBe("WEEK");
       expect(sqlOf(queryRaw.mock.calls[0])).toContain("'week'");
+    });
+  });
+
+  // The chart names a row by the date its `measuredAt` falls on in the
+  // person's zone and folds it into that week or month. A bucket stamped at
+  // UTC midnight read as the day before west of UTC, so every month of the
+  // "All" range sat one month early there.
+  describe("row stamp", () => {
+    const ZONES = [
+      "Pacific/Pago_Pago",
+      "America/Los_Angeles",
+      "UTC",
+      "Europe/Berlin",
+      "Pacific/Auckland",
+      "Pacific/Kiritimati",
+    ];
+
+    it("puts each month in its own month in every zone", async () => {
+      aggregate.mockResolvedValueOnce(
+        spanOf("2023-01-01T00:00:00.000Z", "2026-03-01T00:00:00.000Z"),
+      );
+      queryRaw.mockResolvedValueOnce([
+        folded("2026-01-01T00:00:00.000Z", [["2026-01-01", 80]]),
+        folded("2026-02-01T00:00:00.000Z", [["2026-02-01", 81]]),
+        folded("2026-03-01T00:00:00.000Z", [["2026-03-01", 82]]),
+      ]);
+      const result = await readTieredRollupSeries({
+        userId: "u",
+        type: "WEIGHT",
+        ...win(3650),
+      });
+      expect(result?.granularity).toBe("MONTH");
+      for (const timeZone of ZONES) {
+        const months = bucketTimeSeries(
+          result!.rows.map((row) => ({
+            timestamp: new Date(row.measuredAt),
+            values: { v: row.value },
+          })),
+          { bucket: "month", timeZone },
+        ).points.map((p) => new Date(p.timestamp).toISOString().slice(0, 7));
+        expect(months, timeZone).toEqual(["2026-01", "2026-02", "2026-03"]);
+      }
+    });
+
+    it("puts each week in its own ISO week in every zone", async () => {
+      aggregate.mockResolvedValueOnce(
+        spanOf("2025-01-01T00:00:00.000Z", "2026-05-01T00:00:00.000Z"),
+      );
+      queryRaw.mockResolvedValueOnce([
+        folded("2025-12-29T00:00:00.000Z", [["2025-12-29", 80]]),
+        folded("2026-01-05T00:00:00.000Z", [["2026-01-05", 81]]),
+      ]);
+      const result = await readTieredRollupSeries({
+        userId: "u",
+        type: "WEIGHT",
+        ...win(3650),
+      });
+      expect(result?.granularity).toBe("WEEK");
+      for (const timeZone of ZONES) {
+        const weeks = bucketTimeSeries(
+          result!.rows.map((row) => ({
+            timestamp: new Date(row.measuredAt),
+            values: { v: row.value },
+          })),
+          { bucket: "week", timeZone },
+        ).points.map((p) => new Date(p.timestamp).toISOString().slice(0, 10));
+        expect(weeks, timeZone).toEqual(["2025-12-29", "2026-01-05"]);
+      }
     });
   });
 });
