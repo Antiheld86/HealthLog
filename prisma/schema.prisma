@@ -503,6 +503,14 @@ model User {
   // instead of running ahead of one.
   lastSyncedAt DateTime? @map("last_synced_at")
 
+  // When the account's record was last replaced wholesale: a backup restore
+  // committed, or the person deleted all their data. `/api/sync/changes`
+  // answers `cursorExpired` to any cursor issued before it, because such a
+  // cursor can no longer be caught up incrementally: a restore writes rows
+  // back with their original `updatedAt` and removes rows without leaving a
+  // tombstone, so the delta from an old cursor would miss both.
+  syncResetAt DateTime? @map("sync_reset_at")
+
   // v0.5.4 ios-coord — daily mood-reminder opt-in.
   //
   // When `true` the reminder worker dispatches a `MOOD_REMINDER`

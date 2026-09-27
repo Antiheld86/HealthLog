@@ -34,7 +34,9 @@
  *   - `cursorExpired: true` when ANY domain watermark predates the
  *     tombstone-retention horizon — the client drops its cursor and does
  *     a clean initial sync (a deletion older than retention may have
- *     been pruned, so an incremental delta could silently miss it).
+ *     been pruned, so an incremental delta could silently miss it) — or
+ *     when the cursor was issued before the account's `syncResetAt` (a
+ *     backup restore or a delete-all-data since, see the schema note).
  *   - `syncVersion` is echoed per row so the client can keep its mirror's
  *     version monotonic.
  *   - The `cycleDays` / `cycles` blocks are MODULE-GATED: an account with
@@ -64,6 +66,7 @@ import { contextForWire, type MoodContextWire } from "@/lib/mood/context";
 import { TOMBSTONE_RETENTION_DAYS } from "@/lib/auth/native-client";
 import {
   decodeCursor,
+  decodeCursorIssuedAt,
   encodeCursor,
   SYNC_DOMAINS,
   type DomainWatermark,
@@ -271,14 +274,39 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // A stale cursor (ANY domain watermark older than retention) forces a
   // clean re-init: a deletion older than retention may already be pruned.
-  const expired = SYNC_DOMAINS.some((domain) => {
+  const pastRetention = SYNC_DOMAINS.some((domain) => {
     const wm = cursor[domain];
     return wm !== undefined && wm.updatedAtMs < retentionHorizon.getTime();
   });
+  // A cursor issued before the account's record was last replaced (a backup
+  // restore, or the person deleting all their data) cannot be caught up
+  // either: the restore wrote rows back with their original `updatedAt`,
+  // behind the cursor's watermarks, and removed rows without tombstones. The
+  // client re-initialises instead. Compared by the time the cursor was
+  // issued, not by its watermarks, which a restore leaves meaningless; a
+  // cursor from before the issue time was recorded counts as issued before
+  // any reset.
+  let beforeReset = false;
+  if (parsed.data.cursor) {
+    const account = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { syncResetAt: true },
+    });
+    if (account?.syncResetAt) {
+      const issuedAt = decodeCursorIssuedAt(parsed.data.cursor);
+      beforeReset =
+        issuedAt === null || issuedAt < account.syncResetAt.getTime();
+    }
+  }
+  const expired = pastRetention || beforeReset;
   if (expired) {
     annotate({
       action: { name: "sync.changes.pull" },
-      meta: { cursor_expired: true, returned: 0 },
+      meta: {
+        cursor_expired: true,
+        cursor_expired_reason: beforeReset ? "sync_reset" : "retention",
+        returned: 0,
+      },
     });
     return apiSuccess({
       serverNow: serverNow.toISOString(),
@@ -552,7 +580,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   return apiSuccess({
     serverNow: serverNow.toISOString(),
-    cursor: encodeCursor(nextCursor),
+    cursor: encodeCursor(nextCursor, serverNow.getTime()),
     hasMore,
     cursorExpired: false,
     changes: {

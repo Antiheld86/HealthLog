@@ -103,6 +103,7 @@ import { restoreEcgData } from "@/lib/export/ecg-backup";
 import { restoredMedicationCreatedAt } from "@/lib/export/medication-created-at";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 import { TOMBSTONE_RETENTION_DAYS } from "@/lib/auth/native-client";
+import { stampSyncReset } from "@/lib/sync/reset";
 import {
   classifyRestoreFailure,
   RESTORE_FAILURE_CAUSE_MESSAGES,
@@ -2412,6 +2413,11 @@ export async function restoreBackup(
           foreignBefore,
           await countForeignReferences(tx, ownerId, tenantEdges),
         );
+        // Paired clients' delta cursors are no longer valid (see
+        // `User.syncResetAt`). Stamped as the last write, so it commits with
+        // the data, and stamped again right after the commit below to cover
+        // a cursor issued while this transaction was still running.
+        await stampSyncReset(tx, ownerId);
         progress.sectionsDone = RESTORE_SECTION_STEPS.length;
         report("sections", true);
         return {
@@ -2477,6 +2483,22 @@ export async function restoreBackup(
       RESTORE_FAILURE_CAUSE_MESSAGES[classified.cause],
       { cause: classified.cause },
     );
+  }
+
+  // A pull that started before the commit read the pre-restore rows and may
+  // have been issued a cursor after the stamp inside the transaction. The
+  // second stamp expires that one too; it can only expire more cursors, so a
+  // failure here costs a client at most one extra incremental page.
+  try {
+    await stampSyncReset(prisma, ownerId);
+  } catch (err) {
+    annotate({
+      meta: {
+        restore_sync_reset_failed: true,
+        restore_sync_reset_error:
+          err instanceof Error ? err.message : String(err),
+      },
+    });
   }
 
   const { cleared, skipped, expiredTombstonesSkipped } = outcome;

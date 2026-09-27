@@ -469,6 +469,8 @@ export const USER_KEPT_FIELDS: Readonly<Record<string, string>> = {
     "the version of the medical disclaimer the account acknowledged",
   documentQuotaBytes:
     "a per-account storage quota set by the operator, not by the person",
+  syncResetAt:
+    "sync bookkeeping, not record content: the wipe sets it to its own time rather than clearing it, so a paired client's delta cursor from before the wipe is refused and the client starts over",
 };
 
 /**

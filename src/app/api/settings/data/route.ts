@@ -23,6 +23,7 @@ import {
   wipeDelegateKey,
   WIPE_MODELS,
 } from "@/lib/data-wipe/wipe-plan";
+import { stampSyncReset } from "@/lib/sync/reset";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +105,9 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
         // The account row survives; the personal data carried on its own columns
         // does not. Same classification contract as the model list.
         await tx.user.update({ where: { id: userId }, data: USER_RESET });
+        // Paired clients drop their delta cursors and start over, instead of
+        // catching up from a position whose rows are gone.
+        await stampSyncReset(tx, userId);
 
         // The nightly off-host copies of the record are part of "all your
         // data". The request commits with the wipe; the purge job deletes
