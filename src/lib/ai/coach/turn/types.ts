@@ -14,6 +14,7 @@
 import type { Locale } from "@/lib/i18n/config";
 import type { CoachTurn } from "@/lib/ai/coach/chat-request-builder";
 import type { PriorResultTurn } from "@/lib/ai/coach/results/refs";
+import type { LatestMessagesLoader } from "@/lib/ai/coach/latest-messages";
 import type { CoachSuggestedAction } from "@/lib/ai/coach/suggest-action";
 import type {
   CoachClarification,
@@ -73,6 +74,12 @@ export interface TurnConversation {
    * conversation.
    */
   priorResults?: PriorResultTurn[];
+  /**
+   * v1.39.4 — the turn's one read of the conversation's newest messages,
+   * shared by the chip, clarification, "keep looking" and repeat-question
+   * checks. Absent on a new conversation.
+   */
+  latestMessages?: LatestMessagesLoader;
 }
 
 /**

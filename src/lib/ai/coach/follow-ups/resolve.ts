@@ -11,7 +11,11 @@
  */
 import type { z } from "zod/v4";
 
-import { prisma } from "@/lib/db";
+import {
+  readLatestMessages,
+  type LatestMessage,
+  type LatestMessagesLoader,
+} from "@/lib/ai/coach/latest-messages";
 import { annotate } from "@/lib/logging/context";
 import type { CoachFollowUp, CoachStep } from "@/lib/ai/coach/types";
 import {
@@ -40,21 +44,6 @@ export interface ResolvedFollowUp {
    * stored step; absent when the step carried no count.
    */
   sourceCount?: number;
-}
-
-/** The newest few messages of an owned conversation, newest first. */
-async function latestMessages(userId: string, conversationId: string) {
-  return prisma.coachMessage.findMany({
-    where: { conversationId, conversation: { userId } },
-    orderBy: { createdAt: "desc" },
-    take: 4,
-    select: {
-      id: true,
-      role: true,
-      providerType: true,
-      metricSourceJson: true,
-    },
-  });
 }
 
 /** The chips and steps a stored reply carries, each parsed against its schema. */
@@ -149,6 +138,8 @@ export async function resolveFollowUp(args: {
   followUp: { messageId: string; id: string } | undefined;
   /** The tables earlier replies hold, named as the turn's context names them. */
   priorResults?: readonly PriorResultTurn[];
+  /** The turn's shared read of the latest messages, when it has one. */
+  latest?: LatestMessagesLoader;
 }): Promise<ResolvedFollowUp | null> {
   const { userId, conversationId, followUp } = args;
   if (!followUp || !conversationId) return null;
@@ -159,9 +150,10 @@ export async function resolveFollowUp(args: {
     });
     return null;
   };
-  let rows: Awaited<ReturnType<typeof latestMessages>>;
+  let rows: LatestMessage[];
   try {
-    rows = await latestMessages(userId, conversationId);
+    rows = await (args.latest?.() ??
+      readLatestMessages(userId, conversationId));
   } catch {
     return stale("unreadable");
   }

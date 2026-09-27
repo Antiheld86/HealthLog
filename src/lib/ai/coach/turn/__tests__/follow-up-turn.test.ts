@@ -27,6 +27,7 @@ const m = vi.hoisted(() => ({
   surfaceCards: vi.fn(),
   persistAssistantReply: vi.fn(),
   resolveModuleMap: vi.fn(),
+  readFollowUpHistory: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -55,6 +56,12 @@ vi.mock("../budget", () => ({
   settleReservation: m.settleReservation,
 }));
 vi.mock("../model", () => ({ runTurnModel: m.runTurnModel }));
+// The record reaches back years, so the history chips have something to
+// offer; the chip rules themselves are pinned in derive.test.ts.
+vi.mock("@/lib/ai/coach/follow-ups/derive", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  readFollowUpHistory: m.readFollowUpHistory,
+}));
 vi.mock("../reply-guards", () => ({ guardReply: m.guardReply }));
 vi.mock("../cards", () => ({ surfaceCards: m.surfaceCards }));
 vi.mock("../persist", () => ({
@@ -229,6 +236,10 @@ function modelPath(prefs = DEFAULT_COACH_PREFS) {
 
 beforeEach(() => {
   for (const fn of Object.values(m)) fn.mockReset();
+  m.readFollowUpHistory.mockResolvedValue({
+    today: "2026-09-27",
+    firstDate: { bp: "2024-01-01" },
+  });
   m.resolveTurnConversation.mockResolvedValue({
     conversation: {
       conversationId: "c1",

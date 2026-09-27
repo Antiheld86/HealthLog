@@ -166,6 +166,7 @@ export async function guardReply(args: {
     userId,
     conversationId: workingConversationId,
     clarification: clarifyParse.clarification,
+    latest: conversation.latestMessages,
   });
   const resultRefs = stripResultRefs(replyText);
   replyText = resultRefs.prose.trim() || replyText;

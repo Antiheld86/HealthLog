@@ -64,6 +64,18 @@ describe("prior result names", () => {
     ]);
   });
 
+  it("keeps a table's name when older messages fall out of the loaded window", () => {
+    // The same two replies, once in a short conversation and once after 150
+    // earlier assistant messages that the turn no longer loads: the names
+    // count the whole conversation, so they do not shift turn to turn.
+    const prior = collectPriorResults(messages, 150);
+    expect(prior.map((p) => [p.messageId, p.turnIndex])).toEqual([
+      ["a1", 151],
+      ["a3", 153],
+    ]);
+    expect(resolvePriorResultRef("m153.r2", prior)?.messageId).toBe("a3");
+  });
+
   it("formats and parses m<k>.r<n>", () => {
     expect(formatPriorResultRef(3, "r2")).toBe("m3.r2");
     expect(parsePriorResultRef("m3.r2")).toEqual({ turnIndex: 3, ref: "r2" });

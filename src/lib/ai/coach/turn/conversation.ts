@@ -9,16 +9,37 @@ import { auditLog } from "@/lib/auth/audit";
 import type { Locale } from "@/lib/i18n/config";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import {
+  CONVERSATION_MESSAGE_DETAIL_CAP,
   appendMessage,
+  countAssistantMessagesBefore,
   createConversation,
   fetchConversationWithMessages,
 } from "@/lib/ai/coach/persistence";
 import { detectRefusal } from "@/lib/ai/coach/refusal";
 import type { CoachTurn } from "@/lib/ai/coach/chat-request-builder";
 import { collectPriorResults } from "@/lib/ai/coach/results/refs";
+import { latestMessagesOnce } from "@/lib/ai/coach/latest-messages";
 
 import { streamRefusal } from "./sse";
 import type { TurnConversation } from "./types";
+
+/**
+ * How many assistant messages precede the loaded window. The detail read
+ * loads only the newest messages; counting from the first loaded one gave
+ * an older table a new `m<k>` name every turn once a conversation outgrew
+ * the window, so a name the model had read earlier pointed somewhere else.
+ * Read only when the window is full.
+ */
+async function assistantMessagesBefore(existing: {
+  id: string;
+  messages: ReadonlyArray<{ createdAt: string }>;
+}): Promise<number> {
+  const first = existing.messages[0];
+  if (!first || existing.messages.length < CONVERSATION_MESSAGE_DETAIL_CAP) {
+    return 0;
+  }
+  return countAssistantMessagesBefore(existing.id, new Date(first.createdAt));
+}
 
 export async function resolveTurnConversation(args: {
   userId: string;
@@ -141,7 +162,11 @@ export async function resolveTurnConversation(args: {
       priorToolFigures,
       priorSummary: existing.summary ?? null,
       // v1.39.4 — the tables earlier replies hold, named for the context.
-      priorResults: collectPriorResults(existing.messages),
+      priorResults: collectPriorResults(
+        existing.messages,
+        await assistantMessagesBefore(existing),
+      ),
+      latestMessages: latestMessagesOnce(userId, existing.id),
     },
   };
 }
