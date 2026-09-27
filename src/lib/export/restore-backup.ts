@@ -102,6 +102,7 @@ import { restoreEnvironmentData } from "@/lib/export/environment-backup";
 import { restoreEcgData } from "@/lib/export/ecg-backup";
 import { restoredMedicationCreatedAt } from "@/lib/export/medication-created-at";
 import { invalidateUserData } from "@/lib/cache/invalidate";
+import { TOMBSTONE_RETENTION_DAYS } from "@/lib/auth/native-client";
 import {
   classifyRestoreFailure,
   RESTORE_FAILURE_CAUSE_MESSAGES,
@@ -657,6 +658,7 @@ export async function restoreBackup(
   }
 
   let outcome: {
+    expiredTombstonesSkipped: number;
     cleared: RestoreResponse["cleared"];
     skipped: RestoreSkipSummary;
   };
@@ -917,10 +919,42 @@ export async function restoreBackup(
         }
         const writtenReferencedIds = new Set<string>();
         const measurementBatchSize = 1_000;
+        // Deleted readings the file carries are restored as deleted rows
+        // (tombstones), with one exception: a tombstone deleted longer ago
+        // than `TOMBSTONE_RETENTION_DAYS` is not written at all.
+        //
+        // Such a row is exactly what the nightly tombstone purge
+        // (`measurement-tombstone-cleanup.ts`) hard-deletes, so writing it
+        // costs the restore a row in thirteen indexes for a row that is gone
+        // by the next morning. Nothing reads it in between: the delta feed
+        // answers `cursorExpired` for every cursor older than the same
+        // horizon, so no client that would still be served this tombstone
+        // exists; the step-consolidation repair and the hourly rebuild only
+        // look inside the horizon; and the undo of a delete is offered for
+        // what the purge has not removed yet, which this row would not
+        // survive either.
+        //
+        // Younger tombstones are written. They still have readers: a paired
+        // client that has not yet drained that deletion from the delta feed,
+        // the undo of a recent delete, the consolidation repairs that rebuild
+        // from folded samples, and the unique `(user, type, source,
+        // externalId)` key that stops a device from uploading a folded
+        // sample again. The backup file itself is unchanged and keeps every
+        // row.
+        const tombstoneHorizonMs =
+          Date.now() - TOMBSTONE_RETENTION_DAYS * 86_400_000;
+        const isExpiredTombstone = (measurement: BackupMeasurement) =>
+          measurement.deletedAt != null &&
+          new Date(measurement.deletedAt).getTime() < tombstoneHorizonMs;
+        let expiredTombstonesSkipped = 0;
         report("measurements");
         await streamed.forEachMeasurementBatch(
           measurementBatchSize,
-          async (batch) => {
+          async (fileBatch) => {
+            const batch = fileBatch.filter(
+              (measurement) => !isExpiredTombstone(measurement),
+            );
+            expiredTombstonesSkipped += fileBatch.length - batch.length;
             const stableRows = batch.flatMap(
               (measurement): MeasurementInsertRow[] =>
                 measurement.id
@@ -936,7 +970,8 @@ export async function restoreBackup(
             // One statement per batch, not `createMany`: see
             // `insertMeasurementRows` for what the latter cost here.
             await insertMeasurementRows(tx, stableRows);
-            progress.measurementsWritten += batch.length;
+            // Counted through the file, so the bar ends at the file's total.
+            progress.measurementsWritten += fileBatch.length;
             report("measurements");
             for (const row of stableRows) {
               if (referencedMeasurementIds.has(row.id)) {
@@ -2379,7 +2414,11 @@ export async function restoreBackup(
         );
         progress.sectionsDone = RESTORE_SECTION_STEPS.length;
         report("sections", true);
-        return { cleared, skipped: summarizeRestoreSkips(skips) };
+        return {
+          cleared,
+          skipped: summarizeRestoreSkips(skips),
+          expiredTombstonesSkipped,
+        };
       },
       {
         maxWait: 10_000,
@@ -2440,7 +2479,12 @@ export async function restoreBackup(
     );
   }
 
-  const { cleared, skipped } = outcome;
+  const { cleared, skipped, expiredTombstonesSkipped } = outcome;
+  const measurementsRestored =
+    streamed.measurementCount - expiredTombstonesSkipped;
+  annotate({
+    meta: { restore_expired_tombstones_skipped: expiredTombstonesSkipped },
+  });
   report("rebuilding", true);
   await input.onCommitted?.();
 
@@ -2464,9 +2508,17 @@ export async function restoreBackup(
   // outside the transaction (the 5-year fold would otherwise hold a
   // long write lock) and is best-effort so a populator hiccup never
   // undoes the restore. The boot-time backfill is the safety net.
-  if (streamed.measurementCount > 0) {
+  //
+  // The fold covers five years of the account in a handful of statements,
+  // right after the restore wrote every reading. On a slow disk one of them
+  // ran past the per-request statement limit, the fold was dropped, and the
+  // account's charts stayed empty until the next boot (#1031). It gets the
+  // time the deadline check above keeps free for it instead.
+  if (measurementsRestored > 0) {
     try {
-      await recomputeUserRollups(ownerId);
+      await recomputeUserRollups(ownerId, {
+        statementTimeoutMs: AFTER_TRANSACTION_ALLOWANCE_MS,
+      });
     } catch (err) {
       annotate({
         meta: {
@@ -2526,7 +2578,7 @@ export async function restoreBackup(
 
   const summary = {
     ...summarizeBackup(payload),
-    measurements: streamed.measurementCount,
+    measurements: measurementsRestored,
   };
 
   await auditLog("admin.backups.restore", {
