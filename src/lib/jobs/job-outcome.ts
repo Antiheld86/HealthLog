@@ -43,6 +43,7 @@ export type JobFacts = Readonly<Record<string, JobFact>>;
  */
 export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
   "access_tokens_deleted",
+  "appointment_addresses_cleared",
   "assessments_warmed",
   "auto_resolved",
   "backed",
@@ -54,6 +55,7 @@ export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
   "connect_tickets_deleted",
   "connections_deleted",
   "considered",
+  "contact_audit_rows_scrubbed",
   "context_surfaced",
   "continuation",
   "continued",
