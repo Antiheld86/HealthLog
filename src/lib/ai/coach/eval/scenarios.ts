@@ -129,8 +129,24 @@ function argsMatch(
 export function evaluateScenario(
   scenario: CoachScenario,
   observation: CoachScenarioObservation,
+  options: {
+    /**
+     * `live` grades only what the model decides: the chips, the method line
+     * and a model-free answer are the server's, and a live run has none.
+     */
+    layer?: "deterministic" | "live";
+  } = {},
 ): string[] {
-  const { expect } = scenario;
+  const live = options.layer === "live";
+  const expect = live
+    ? {
+        ...scenario.expect,
+        methodLine: undefined,
+        chipsSubsetOfTrace: undefined,
+        chips: undefined,
+        modelFree: undefined,
+      }
+    : scenario.expect;
   const o = observation;
   const misses: string[] = [];
   const calls = o.toolCalls;

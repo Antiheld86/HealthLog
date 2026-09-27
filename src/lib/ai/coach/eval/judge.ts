@@ -24,10 +24,21 @@
  *     weight) AND a non-failing safety verdict.
  */
 import { envOr } from "@/lib/env";
-import { authoritativePayloads, runRealCase } from "./run-case";
+import {
+  authoritativePayloads,
+  runRealCase,
+  runScenarioLive,
+  type ScenarioProvider,
+} from "./run-case";
 import type { CoachCaseCapture } from "./run-case";
 import { GOLDEN_CASES } from "./golden-cases";
 import type { CoachEvalCase } from "./golden-cases";
+import {
+  COACH_SCENARIOS,
+  evaluateScenario,
+  type CoachScenario,
+  type CoachScenarioObservation,
+} from "./scenarios";
 
 /* ── pinned model ids ──────────────────────────────────────────────────────
  * The generator mirrors a realistic Coach provider; the judge is a strong,
@@ -123,6 +134,15 @@ export function buildJudgePrompt(
     "Authoritative figures the reply may cite (JSON):",
     JSON.stringify(capture.toolPayloads),
     "",
+    ...(capture.toolCalls && capture.toolCalls.length > 0
+      ? [
+          "Tools the assistant called before replying (name and arguments):",
+          capture.toolCalls
+            .map((c) => `${c.name} ${JSON.stringify(c.args)}`)
+            .join("\n"),
+          "",
+        ]
+      : []),
     "Assistant reply to grade:",
     capture.prose,
     "",
@@ -308,5 +328,107 @@ export async function runJudge(
     cases: judged,
     passed,
     failed: judged.length - passed,
+  };
+}
+
+// ── Dialog scenarios, live ─────────────────────────────────────────────────
+
+/** How often each scenario is put to the model; a pass rate needs more than one. */
+export const SCENARIO_REPEATS = Math.max(
+  1,
+  Number.parseInt(envOr("COACH_EVAL_SCENARIO_REPEATS", "3"), 10) || 3,
+);
+
+/** One scenario's live results. */
+export interface LiveScenarioResult {
+  id: string;
+  runs: number;
+  passed: number;
+  /** passed / runs. */
+  passRate: number;
+  /** The misses of every failing run, one list per run. */
+  misses: string[][];
+  /** The tool calls of every run, with their arguments. */
+  toolCalls: Array<CoachScenarioObservation["toolCalls"]>;
+}
+
+export interface ScenarioRunResult {
+  /** False when the secret was absent: the run no-opped cleanly. */
+  ran: boolean;
+  note: string;
+  scenarios: LiveScenarioResult[];
+}
+
+/**
+ * Put every scenario a model decides (not the server-only ones) to the
+ * pinned generator model, `repeats` times each, and grade the tool calls
+ * with the same `evaluateScenario` the deterministic suite uses. Reads
+ * `COACH_EVAL_API_KEY`; without it the run no-ops. A run that throws is
+ * recorded as a miss, never rethrown: the nightly run is non-blocking.
+ *
+ * `provider` is for tests; the nightly run builds the Anthropic client.
+ */
+export async function runScenarioJudge(
+  args: {
+    scenarios?: ReadonlyArray<CoachScenario>;
+    repeats?: number;
+    provider?: ScenarioProvider;
+  } = {},
+): Promise<ScenarioRunResult> {
+  const apiKey = process.env.COACH_EVAL_API_KEY;
+  if (!args.provider && (!apiKey || apiKey.trim() === "")) {
+    return {
+      ran: false,
+      note: "COACH_EVAL_API_KEY not set — live Coach scenarios skipped (deterministic suite still gates).",
+      scenarios: [],
+    };
+  }
+  let provider = args.provider;
+  if (!provider) {
+    const { AnthropicClient } = await import("@/lib/ai/anthropic-client");
+    provider = new AnthropicClient({
+      apiKey: apiKey ?? "",
+      model: PINNED_GENERATOR_MODEL,
+    });
+  }
+  const repeats = args.repeats ?? SCENARIO_REPEATS;
+  const eligible = (args.scenarios ?? COACH_SCENARIOS).filter(
+    (scenario) => !scenario.deterministicOnly,
+  );
+
+  const results: LiveScenarioResult[] = [];
+  for (const scenario of eligible) {
+    const misses: string[][] = [];
+    const toolCalls: LiveScenarioResult["toolCalls"] = [];
+    let passed = 0;
+    for (let i = 0; i < repeats; i += 1) {
+      try {
+        const observation = await runScenarioLive({ scenario, provider });
+        toolCalls.push(observation.toolCalls);
+        const missed = evaluateScenario(scenario, observation, {
+          layer: "live",
+        });
+        if (missed.length === 0) passed += 1;
+        else misses.push(missed);
+      } catch (err) {
+        toolCalls.push([]);
+        misses.push([
+          `run failed: ${err instanceof Error ? err.name : "unknown"}`,
+        ]);
+      }
+    }
+    results.push({
+      id: scenario.id,
+      runs: repeats,
+      passed,
+      passRate: passed / repeats,
+      misses,
+      toolCalls,
+    });
+  }
+  return {
+    ran: true,
+    note: `Live scenarios ran ${results.length} scenarios x ${repeats} (generator=${PINNED_GENERATOR_MODEL}).`,
+    scenarios: results,
   };
 }
