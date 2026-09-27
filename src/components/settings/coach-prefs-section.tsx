@@ -40,6 +40,7 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
 import { useCoachPrefs, useSaveCoachPrefs } from "@/hooks/use-coach-prefs";
 import { useAiCapability } from "@/hooks/use-ai-capability";
+import { COACH_FOLLOW_UP_UI_KEYS } from "@/lib/ai/coach/dialog-keys";
 import {
   DEFAULT_COACH_PREFS,
   type CoachExcludeMetric,
@@ -348,6 +349,30 @@ export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
                       prev.reminderSuggestions?.lastSuggestedAt ?? null,
                   },
                 }))
+              }
+            />
+          </div>
+
+          {/* v1.39.4 — follow-up chips under the Coach's latest answer.
+              Absent in the saved prefs means on. */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <Label
+                htmlFor="coach-prefs-follow-up-chips"
+                className="cursor-pointer text-xs font-medium"
+              >
+                {t(COACH_FOLLOW_UP_UI_KEYS.settingLabel)}
+              </Label>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                {t(COACH_FOLLOW_UP_UI_KEYS.settingHint)}
+              </p>
+            </div>
+            <Switch
+              id="coach-prefs-follow-up-chips"
+              data-slot="coach-prefs-follow-up-chips"
+              checked={draft.followUpChips !== false}
+              onCheckedChange={(next) =>
+                setDraft((prev) => ({ ...prev, followUpChips: next }))
               }
             />
           </div>

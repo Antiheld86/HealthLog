@@ -21,6 +21,7 @@ import { persistUserTurn, resolveTurnConversation } from "./conversation";
 import { handleProducerFailure } from "./errors";
 import { resolveClarificationAnswer } from "@/lib/ai/coach/clarify";
 import { resolveFollowUp } from "@/lib/ai/coach/follow-ups/resolve";
+import { readFollowUpHistory } from "@/lib/ai/coach/follow-ups/derive";
 
 import { runTurnModel } from "./model";
 import { persistAssistantReply } from "./persist";
@@ -56,6 +57,7 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
     userId,
     conversationId: input.conversationId,
     followUp: input.followUp,
+    priorResults: conversation.priorResults,
   });
   if (resolvedFollowUp?.followUp.reuse) {
     const reused = await runReuseTurn({
@@ -152,11 +154,22 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
       coachPrefs: ctx.coachPrefs,
       reply,
     });
+    // v1.39.4 — the record's history for the tables' metrics, which the
+    // year-ago and wider-window chips need. Read only when a table could
+    // carry one.
+    const history = reply.outboundBlocked
+      ? undefined
+      : await readFollowUpHistory({
+          userId,
+          results: model.results,
+          prefs: ctx.coachPrefs,
+        });
     const dialog = assembleTurnDialog({
       model,
       reply,
       prefs: ctx.coachPrefs,
       locale,
+      history,
     });
     const provenance = buildTurnProvenance({
       snapshotProvenance: ctx.snapshot.provenance,
