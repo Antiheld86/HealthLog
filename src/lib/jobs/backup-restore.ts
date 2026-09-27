@@ -73,6 +73,10 @@ import {
   type RestorePhase,
   type RestoreProgress,
 } from "@/lib/export/restore-backup";
+import {
+  RESTORE_FAILURE_CAUSES,
+  type RestoreFailureCause,
+} from "@/lib/export/restore-failure-cause";
 
 export const BACKUP_RESTORE_QUEUE = "backup-restore";
 
@@ -122,6 +126,8 @@ export interface BackupRestoreFailure {
   sections?: string[];
   /** The encryption key ids a file needs and this host cannot open it with. */
   keyIds?: string[];
+  /** For `transaction_failed`: what the database refused the restore over. */
+  cause?: RestoreFailureCause;
 }
 
 const failureSchema = z.object({
@@ -129,6 +135,7 @@ const failureSchema = z.object({
   message: z.string(),
   sections: z.array(z.string()).optional(),
   keyIds: z.array(z.string()).optional(),
+  cause: z.enum(RESTORE_FAILURE_CAUSES).optional(),
 });
 
 const progressSchema = z.object({
@@ -312,6 +319,7 @@ function failureJson(failure: BackupRestoreFailure) {
     message: failure.message,
     ...(failure.sections ? { sections: failure.sections } : {}),
     ...(failure.keyIds ? { keyIds: failure.keyIds } : {}),
+    ...(failure.cause ? { cause: failure.cause } : {}),
   });
 }
 
@@ -639,19 +647,27 @@ export async function runBackupRestoreJob(
     const keyIds = Array.isArray(outcome.meta?.keyIds)
       ? (outcome.meta.keyIds as unknown[]).map(String)
       : undefined;
+    const cause = (RESTORE_FAILURE_CAUSES as readonly unknown[]).includes(
+      outcome.meta?.cause,
+    )
+      ? (outcome.meta?.cause as RestoreFailureCause)
+      : undefined;
     await finish("failed", {
       failure: {
         code: outcome.code,
         message: outcome.message,
         ...(sections ? { sections } : {}),
         ...(keyIds ? { keyIds } : {}),
+        ...(cause ? { cause } : {}),
       },
     });
     // A file refused by its checks is the operator's to fix and fails the
     // same way on every try; the job did what it was asked. A transaction
     // that could not be written is a fault, and is reported as one.
     return outcome.status >= 500 && outcome.code === "transaction_failed"
-      ? jobFailed("restore_transaction_failed")
+      ? jobFailed("restore_transaction_failed", undefined, {
+          restore_fail_cause: cause ?? "other",
+        })
       : jobDone({ refused: jobFactCode(outcome.code) });
   } catch (err) {
     // After the commit the data is restored and only a step after it

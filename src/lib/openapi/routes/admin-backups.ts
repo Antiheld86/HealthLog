@@ -91,11 +91,14 @@ const restoreFailure = z
     message: z.string(),
     sections: z.array(z.string()).optional(),
     keyIds: z.array(z.string()).optional(),
+    cause: z
+      .enum(["timeout", "lock", "constraint", "storage", "connection", "other"])
+      .optional(),
   })
   .meta({
     id: "AdminBackupRestoreFailure",
     description:
-      "Why the restore did not happen, in a sentence an operator can act on. `sections` names the missing sections for `backup.section.missing`; `keyIds` names the encryption key ids the file needs and this server cannot open it with, for `backup.key.missing`.",
+      "Why the restore did not happen, in a sentence an operator can act on. `sections` names the missing sections for `backup.section.missing`; `keyIds` names the encryption key ids the file needs and this server cannot open it with, for `backup.key.missing`; `cause` says what the database refused a `transaction_failed` restore over: it ran out of time, waited on a lock, rejected a record, ran out of disk space or memory, lost the connection, or something else.",
   });
 
 const restoreJob = z

@@ -35,6 +35,7 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     dataBackup: { findUnique: vi.fn() },
     user: { findUnique: vi.fn() },
+    measurement: { count: vi.fn().mockResolvedValue(0) },
     $transaction: mocks.transaction,
   },
   toJson: <T>(value: T) => value,
