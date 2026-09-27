@@ -2268,6 +2268,8 @@
     "noData": "Keine Daten im gewählten Zeitraum",
     "bucketWeekly": "Wochendurchschnitt",
     "bucketMonthly": "Monatsdurchschnitt",
+    "bucketWeeklyDaily": "Tagesschnitt je Woche",
+    "bucketMonthlyDaily": "Tagesschnitt je Monat",
     "days7Label": "7T",
     "days7Title": "Letzte 7 Tage",
     "days30Label": "30T",

@@ -760,7 +760,11 @@ const seriesResponse = z
 // `GET /api/measurements?aggregate=daily&source=rollup` emits.
 const seriesBatchRowSchema = z.object({
   type: measurementTypeEnum,
-  value: z.number().describe("Daily mean (spot metrics) or SUM (cumulative)."),
+  value: z
+    .number()
+    .describe(
+      "The day's mean (spot metrics) or total (cumulative). A row of a coarser tier (a window longer than the daily cap) carries the average day of its bucket, the same quantity: a spot metric's mean of its daily means, a cumulative metric's total over the days of the bucket that hold a reading.",
+    ),
   measuredAt: z.iso
     .datetime({ offset: true })
     .describe(

@@ -2268,6 +2268,8 @@
     "noData": "선택한 기간에 데이터가 없어요",
     "bucketWeekly": "주 평균",
     "bucketMonthly": "월 평균",
+    "bucketWeeklyDaily": "주별 일평균",
+    "bucketMonthlyDaily": "월별 일평균",
     "systolic": "수축기",
     "diastolic": "이완기",
     "bodyWater": "체수분",
