@@ -27,7 +27,11 @@
 import type { Browser, Page } from "@playwright/test";
 import { expect, test } from "./setup/test";
 
-import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { E2E_USER, STORAGE_STATE_PATH } from "./setup/global-setup";
+import {
+  completeReproofWithPassword,
+  useStaleSession,
+} from "./setup/recent-proof";
 import {
   ensureShareDocFixture,
   ensureVaultFixture,
@@ -96,6 +100,9 @@ async function createShareWithDocs(page: Page): Promise<CreatedShare> {
   await expect(page.getByRole("button", { name: "Create link" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Create link" }).click();
+  // Making a link asks for a recent proof, and the session is a stale one
+  // (see the `beforeEach`), so the owner confirms it is them first.
+  await completeReproofWithPassword(page, E2E_USER.password);
 
   const reveal = page.getByTestId("share-token-reveal");
   await expect(reveal).toBeVisible();
@@ -145,6 +152,18 @@ async function openUnlockedClinician(
 
 test.describe("clinician document sharing", () => {
   test.use({ storageState: STORAGE_STATE_PATH });
+
+  // Every test here starts from a session signed in ten minutes ago, so making
+  // a link always meets the re-proof dialog rather than only when the run has
+  // been going for five minutes.
+  let endStaleSession: (() => Promise<void>) | null = null;
+  test.beforeEach(async ({ page }) => {
+    endStaleSession = await useStaleSession(page, E2E_USER.username);
+  });
+  test.afterEach(async () => {
+    await endStaleSession?.();
+    endStaleSession = null;
+  });
 
   test.beforeAll(async () => {
     await ensureVaultFixture();
@@ -298,6 +317,7 @@ test.describe("clinician document sharing", () => {
     // Create the link — the one-time reveal (with the scannable QR) lands in
     // the same sheet, carrying the one attached document.
     await shareSheet.getByRole("button", { name: "Create link" }).click();
+    await completeReproofWithPassword(page, E2E_USER.password);
     const reveal = shareSheet.getByTestId("share-token-reveal");
     await expect(reveal).toBeVisible();
     await expect(
