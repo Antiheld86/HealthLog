@@ -81,10 +81,13 @@ model User {
   timezone    String    @default("Europe/Berlin")
 
   // v1.25 (W-ENV) — opt-in environmental-context module home location. A coarse,
-  // user-set city (rounded lat/lon, ~city granularity — never a GPS track) the
-  // nightly weather fetch resolves against when no travel override covers the
-  // day. City-level granularity is the privacy floor: the weather model only
-  // needs ~10–25 km. All nullable — an account without the module enabled (or
+  // user-set city (never a GPS track) the nightly weather fetch resolves
+  // against when no travel override covers the day. Stored rounded to 1
+  // decimal (`roundCoarse`): about 11 km north-south and 7 km east-west at
+  // 50° N, a town or a city district. That is the privacy floor, and the
+  // weather reanalysis is gridded at 9 to 25 km, so nothing finer is needed.
+  // Up to v1.39.3 the rounding was 2 decimals (about 1 km, a neighbourhood);
+  // migration 0361 rounded the existing rows. All nullable — an account without the module enabled (or
   // without a home set) simply has no environment rows. `homeTimezone` anchors
   // the day-key an observation is stored under (it can differ from the display
   // `timezone` above for an account that tracks weather for another locale).
@@ -1055,8 +1058,8 @@ model EnvironmentContext {
   /// YYYY-MM-DD anchored to the resolved location's timezone.
   date String
 
-  /// Coarse resolved location for the day (rounded lat/lon + label + the source
-  /// that won precedence).
+  /// Coarse resolved location for the day (lat/lon rounded to 1 decimal, about
+  /// 11 km, + label + the source that won precedence).
   lat           Float
   lon           Float
   /// @internal: human-readable label of the resolved location, stored as

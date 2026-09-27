@@ -12,9 +12,11 @@
 -- columns until the backfill has reached a row. The old columns are dropped in
 -- a later release, once the backfill reports nothing left on every instance.
 --
--- Additive only: no table rewrite, no data change. The geometry loses its NOT
--- NULL because every new track is written to the ciphertext column and the
--- readable one stays empty.
+-- The encryption half is additive: no table rewrite, no data change. The
+-- geometry loses its NOT NULL because every new track is written to the
+-- ciphertext column and the readable one stays empty. The last block below is
+-- the one data change in this file: it coarsens the environment module's
+-- stored coordinates.
 
 ALTER TABLE "workout_routes" ADD COLUMN "geometry_encrypted" BYTEA;
 ALTER TABLE "workout_routes" ALTER COLUMN "geometry" DROP NOT NULL;
@@ -35,3 +37,22 @@ CREATE INDEX IF NOT EXISTS "workout_routes_geometry_backfill_idx"
 CREATE INDEX IF NOT EXISTS "practitioners_contact_backfill_idx"
   ON "practitioners" ("user_id")
   WHERE "phone" IS NOT NULL OR "location" IS NOT NULL;
+
+-- The environment module's stored coordinates drop to 1 decimal, about 11 km
+-- north-south and 7 km east-west at 50° N. They were rounded to 2 decimals
+-- (about 1 km), which places a home in a neighbourhood rather than a town;
+-- the weather reanalysis the module reads is gridded at 9 to 25 km, so the
+-- coarser value costs no accuracy. The app rounds every new write the same
+-- way. Idempotent: rounding an already-rounded value changes nothing.
+UPDATE "users"
+  SET "home_lat" = round("home_lat"::numeric, 1)::double precision,
+      "home_lon" = round("home_lon"::numeric, 1)::double precision
+  WHERE "home_lat" IS NOT NULL OR "home_lon" IS NOT NULL;
+
+UPDATE "environment_travel_locations"
+  SET "lat" = round("lat"::numeric, 1)::double precision,
+      "lon" = round("lon"::numeric, 1)::double precision;
+
+UPDATE "environment_contexts"
+  SET "lat" = round("lat"::numeric, 1)::double precision,
+      "lon" = round("lon"::numeric, 1)::double precision;

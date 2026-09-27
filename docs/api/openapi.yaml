@@ -20693,8 +20693,8 @@ paths:
         - Environment
       summary: Set the coarse home location
       description: >-
-        Stores the picked city and stamps the effective-from instant. Coordinates are rounded to 2 dp server-side
-        regardless of what was sent.
+        Stores the picked city and stamps the effective-from instant. Coordinates are rounded to 1 decimal (about 11 km)
+        server-side regardless of what was sent.
 
 
         Re-stamping is the part worth knowing: EVERY write moves `since` to now, including one that changes only the
@@ -20850,7 +20850,7 @@ paths:
       summary: Add a travel override
       description: >-
         Declares that the account was somewhere other than home for an inclusive date range; the days it covers resolve
-        against this location instead. Coordinates are rounded to 2 dp server-side.
+        against this location instead. Coordinates are rounded to 1 decimal (about 11 km) server-side.
 
 
         Adding one enqueues a refresh over exactly the declared window so its days re-resolve. Nothing checks for
@@ -72713,10 +72713,10 @@ components:
       properties:
         lat:
           type: number
-          description: Coarse latitude, rounded to 2 dp (~1 km).
+          description: Coarse latitude, rounded to 1 decimal (about 11 km).
         lon:
           type: number
-          description: Coarse longitude, rounded to 2 dp.
+          description: Coarse longitude, rounded to 1 decimal.
         label:
           anyOf:
             - type: string
@@ -72855,10 +72855,10 @@ components:
       properties:
         lat:
           type: number
-          description: Coarse latitude, rounded to 2 dp.
+          description: Coarse latitude, rounded to 1 decimal.
         lon:
           type: number
-          description: Coarse longitude, rounded to 2 dp.
+          description: Coarse longitude, rounded to 1 decimal.
         label:
           type: string
           description: Assembled from name, region and country, e.g. "City, Region, Country".

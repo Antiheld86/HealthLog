@@ -60,6 +60,7 @@
  */
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { EnvironmentLocationSource } from "@/generated/prisma/client";
+import { roundCoarse } from "@/lib/environment/open-meteo";
 
 /** One day's environmental observation, at the location resolved for that day. */
 export interface EnvironmentContextBackupEntry {
@@ -312,8 +313,10 @@ export async function restoreEnvironmentData(
         // neither bound goes near a `Date`.
         startDate: entry.startDate,
         endDate: entry.endDate,
-        lat: entry.lat,
-        lon: entry.lon,
+        // A file written before v1.39.4 carries 2-decimal coordinates; they
+        // come back at today's privacy floor.
+        lat: roundCoarse(entry.lat),
+        lon: roundCoarse(entry.lon),
         label: entry.label,
         ...(entry.createdAt ? { createdAt: new Date(entry.createdAt) } : {}),
         ...(entry.updatedAt ? { updatedAt: new Date(entry.updatedAt) } : {}),
@@ -326,8 +329,8 @@ export async function restoreEnvironmentData(
       data: payload.environmentContexts.map((entry) => ({
         userId: ownerId,
         date: entry.date,
-        lat: entry.lat,
-        lon: entry.lon,
+        lat: roundCoarse(entry.lat),
+        lon: roundCoarse(entry.lon),
         locationLabel: entry.locationLabel,
         source: entry.source,
         tempMin: entry.tempMin ?? null,
