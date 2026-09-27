@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getPrismaClient, truncateAllTables } from "./setup";
 import { readDailySeries } from "@/lib/measurements/daily-series-read";
 import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
+import { recomputeUserRollups } from "@/lib/rollups/measurement-rollups";
 import { bucketTimeSeries } from "@/lib/charts/bucket-time-series";
 import { userDayKey } from "@/lib/tz/format";
 import {
@@ -215,6 +216,111 @@ describe("get_metric_table — the chart's numbers", () => {
     expect(result.resultRef).toBe("r1");
     expect(result.table?.rows.at(-1)).toEqual(["2026-03-15", 64, 1]);
     expect(JSON.stringify(result.data)).not.toContain("rowsNote");
+  });
+});
+
+describe("get_metric_table — all time", () => {
+  const WEST = "America/Los_Angeles";
+  // 10:00 on 20 September in Los Angeles.
+  const WEST_NOW = new Date("2026-09-20T17:00:00.000Z");
+
+  async function seedStepsUser() {
+    seq += 1;
+    return getPrismaClient().user.create({
+      data: {
+        username: `metric-table-steps-${seq}`,
+        email: `metric-table-steps-${seq}@example.test`,
+        role: "USER",
+        timezone: WEST,
+      },
+    });
+  }
+
+  /** One step row a day at 18:00 UTC from `from` for `days` days. */
+  function stepDays(from: string, days: number, value = 8_000) {
+    const start = Date.parse(`${from}T18:00:00.000Z`);
+    return Array.from({ length: days }, (_, i) => ({
+      at: new Date(start + i * 86_400_000),
+      value: value + (i % 5) * 100,
+    }));
+  }
+
+  async function seedSteps(
+    userId: string,
+    rows: Array<{ at: Date; value: number }>,
+  ) {
+    await getPrismaClient().measurement.createMany({
+      data: rows.map((r) => ({
+        userId,
+        type: "ACTIVITY_STEPS" as const,
+        value: r.value,
+        unit: "count",
+        source: "APPLE_HEALTH" as const,
+        measuredAt: r.at,
+      })),
+    });
+  }
+
+  function utcMonthTotals(rows: Array<{ at: Date; value: number }>) {
+    const totals = new Map<string, number>();
+    for (const r of rows) {
+      const month = r.at.toISOString().slice(0, 7);
+      totals.set(month, (totals.get(month) ?? 0) + r.value);
+    }
+    return totals;
+  }
+
+  const read = (userId: string) =>
+    readMetricTable({
+      userId,
+      metric: "steps",
+      window: "allTime",
+      period: "current",
+      granularity: undefined,
+      timeZone: WEST,
+      locale: "en",
+      ref: "r1",
+      now: WEST_NOW,
+    });
+
+  it("gives each month its step total, the same for a short and a long history, from the tier or the live table", async () => {
+    const recent = stepDays("2026-05-01", 120);
+    const old = stepDays("2023-01-10", 60, 5_000);
+
+    const short = await seedStepsUser();
+    await seedSteps(short.id, recent);
+    const long = await seedStepsUser();
+    await seedSteps(long.id, [...old, ...recent]);
+    for (const user of [short, long]) {
+      await recomputeUserRollups(user.id, {
+        from: new Date("2022-12-01T00:00:00.000Z"),
+        to: WEST_NOW,
+      });
+    }
+
+    const expected = utcMonthTotals(recent);
+    const shortTable = (await read(short.id))!;
+    const longTable = (await read(long.id))!;
+    expect(shortTable.columns[1].labelKey).toBe("coach.result.column.total");
+    for (const table of [shortTable, longTable]) {
+      const byMonth = new Map(table.rows.map((row) => [row[0], row[1]]));
+      for (const [month, total] of expected) {
+        expect(byMonth.get(month), month).toBe(total);
+      }
+      // 1 May 18:00 UTC is still 1 May in Los Angeles; nothing lands in April.
+      expect(byMonth.get("2026-04") ?? null).toBeNull();
+    }
+    const longByMonth = new Map(longTable.rows.map((row) => [row[0], row[1]]));
+    for (const [month, total] of utcMonthTotals(old)) {
+      expect(longByMonth.get(month), month).toBe(total);
+    }
+
+    // Without the tier the live table serves the same months.
+    await getPrismaClient().measurementRollup.deleteMany({
+      where: { userId: long.id },
+    });
+    const liveTable = (await read(long.id))!;
+    expect(liveTable.rows).toEqual(longTable.rows);
   });
 });
 
