@@ -115,7 +115,7 @@
     "@tesseract.js-data/deu": "1.0.0",
     "@tesseract.js-data/eng": "1.0.0",
     "@testcontainers/postgresql": "^12.1.0",
-    "@types/node": "26.5.1",
+    "@types/node": "26.6.2",
     "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
