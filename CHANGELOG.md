@@ -1,5 +1,352 @@
 # Changelog
 
+## [1.39.3] — 2026-09-27
+
+Documents can be picked straight from Paperless-ngx and Papra. Exports,
+share links, tokens, invitations and new second factors ask for a recent
+confirmation, and sign out everywhere reaches every way into the record.
+Medication days west of UTC, long-range figures and synced daily totals
+land on the right day. Deleting an account removes its off-site copies,
+restores check the keys they need, and the privacy wording says what is
+and is not encrypted.
+
+### Added
+
+- **Document picker for Paperless-ngx and Papra.** Settings, Integrations
+  has a Document archives card (address, API token, for Papra the
+  organization id); the connection is tested before it is saved, the
+  token is stored encrypted and never shown again, and it is sent only to
+  the origin it was saved for. The Documents page and the document link
+  dialogs on visits, vaccinations and conditions get an Import button:
+  search by name, filter by tag or date, tick documents, and each is
+  copied with its title and date and linked where the picker was opened.
+  Documents already imported are marked and linked instead of stored
+  twice; documents deleted in HealthLog are marked and not brought back.
+  Picked documents follow the owner's automatic AI reading setting. The
+  archive is contacted only on search or import, never in the background.
+  Off until the operator sets `DOCUMENT_SOURCE_ORIGINS`. Paperless-ngx
+  2.16 or later; a Papra key needs read access to documents and tags.
+  Seven cookie-only routes under `/api/documents/sources` (a Bearer token
+  gets `403 documents.sources.browserOnly`). Thanks to @AntonPalmqvist for
+  #1038 and to the self-hoster behind #938.
+- **Source instance for imports.** `POST /api/documents/inbound` and
+  `GET /api/documents/inbound/source` take an optional `sourceInstance`
+  (the archive's address, normalised to its origin), so the same id in two
+  archives is two documents. Keys stored without it match any instance, as
+  before. The import script sends it and skips files larger than the
+  server accepts once it has learned the limit. `sourceId` refuses `.` and
+  `..`.
+- **Body site in the FHIR export.** A condition's site goes out as
+  `Condition.bodySite.text` ("knee (left)"); a recorded side also goes out
+  as a contained `BodyStructure` with an active SNOMED CT laterality
+  qualifier (7771000 left, 24028007 right, 51440002 both). Applies to the
+  health-record download, `Patient/$everything` and the clinician share
+  link. Thanks to @Cnote43 for #1025.
+- **MCP search and fetch cover visits, conditions, documents and
+  vaccinations.** Ids `visit:<id>`, `condition:<id>`, `document:<id>` and
+  `vaccination:<id>`; `fetch` returns fields in `metadata` (unrecorded
+  values `null`) and linked records in `metadata.links`. Matching covers
+  visit type, reason, outcome, body site and side, practitioner and
+  specialty, condition name, document title, file name and type, and
+  vaccine name, with German and English body-part names treated alike.
+  Documents are searchable by their indexed text and `fetch` returns a
+  short excerpt, never the file, a link or the AI summary. A document held
+  back from AI reading answers `metadata.reason: "ai_read_deferred"` with
+  no excerpt. Condition and vaccination notes are never sent. The consent
+  page says all of this. Thanks to @Cnote43 for #1025.
+- **Low-supply notice for as-needed medications.** Sent once when two
+  doses or fewer are left, re-armed by a refill, naming the units left
+  rather than a date. Push metadata carries `asNeeded: true`,
+  `runwayDays: null`, `triggerDays: null`.
+- **Switches for the remaining outbound requests.**
+  `PASSWORD_BREACH_CHECK_DISABLED` stops the HaveIBeenPwned range check
+  (known leaked passwords are then no longer refused);
+  `UPDATE_CHECK_DISABLED` stops the daily GitHub update check, and
+  `/api/version/check-updates` answers `status: "unknown"` with
+  `reason: "disabled"`. Both default to on and are on the compose
+  whitelist.
+- **Admin, Encryption lists the keys backups still need.** Per key, the
+  stored backups and off-site copies written under it; the "safe to drop"
+  badge appears only when backups are clear too. Backups written before
+  this release show as unrecorded.
+- **`BACKUP_ENCRYPTION_PREVIOUS_KEYS`** keeps retired off-site backup keys
+  readable, so `BACKUP_ENCRYPTION_KEY` can be rotated.
+- **`POST /api/auth/reproof`** (cookie only) takes the step-up body and
+  counts as a recent confirmation for five minutes.
+
+### Changed
+
+- **Sign out everywhere ends everything that can open the record.** Besides
+  browser and phone sign-ins it now revokes connected AI assistants, API
+  tokens (except the caller's own access token), clinician share links
+  (kept with `?keepShareLinks=1`, a checkbox in the dialog) and invitations
+  nobody has accepted. Accepted access is kept and listed on the sessions
+  card with End access. `DELETE /api/auth/me/sessions` adds
+  `accessTokensRevoked`, `connectorsRevoked`, `shareLinksRevoked`,
+  `pendingInvitesRevoked` and `grantsKept`.
+- **A password change revokes connected assistants and share links too.**
+- **Turning on the first second factor signs out other devices.** A second
+  key added later does not.
+- **Password sign-in is limited per account without locking it.** From a
+  place the account has not signed in from, five wrong passwords a day are
+  free, then each doubles the wait from 30 seconds up to 15 minutes. A
+  remembered browser, a phone whose `X-Device-Id` a login of this account
+  was issued to, and an address used by this account in the last 30 days
+  are never held back. The per-address limit of five in fifteen minutes is
+  unchanged. Answers are `429` with `Retry-After`.
+- **Request bodies are capped at 1 MB before authentication** (was 512 MB).
+  Apple Health archives, backup uploads, documents, CSV and dose history
+  imports, lab scans, profile pictures and the app's measurement, workout,
+  ECG, mood, medication and cycle batches read their own bodies after
+  authenticating, with their own limits enforced while reading (`413`).
+- **`X-Real-IP` is read only with `TRUST_PROXY_HOPS=1`** (the default) and
+  only when `X-Forwarded-For` is absent. With `0`, or `2` and more, it is
+  ignored. The log says once when a proxy header arrives that the setting
+  does not allow reading, naming the header and the setting.
+- **CSV re-import.** An unchanged row with an `externalId` is left alone and
+  reported `skipped` with reason `duplicate` (was `updated`); lookups and
+  writes run in small batches.
+- **`GET /api/analytics/range`.** For step-like totals `mean` is the
+  average daily total and `count` the number of days; for
+  `SLEEP_DURATION` it is the average night asleep, `count` the number of
+  nights, `granularity` `live`.
+- **Synced daily totals from Withings, Fitbit, Google Health, Polar and
+  Oura** are stored at noon in the user's zone (was noon UTC). The
+  `externalId` is unchanged; rows the next sync rereads move and reach the
+  change feed as updates. Fitbit weigh-ins without an offset are read in
+  the user's zone.
+- **Check-up `anchorDate`** accepts a bare `YYYY-MM-DD`, read as that day in
+  the profile zone; the web form sends it. Responses keep the date-time.
+- **"Send raw data" is now "Send detailed history"** and says what it sends:
+  daily averages for 90 days, weekly for the year before, monthly up to
+  five years, each with its date and reading count.
+- **Encryption wording.** The app, the Coach and the README said all health
+  data is encrypted at rest. Notes and other free text, documents,
+  questionnaire answers, AI-written text, the Coach conversation and every
+  access token are; measurement values, lab values, medication names and
+  mood scores are not. The wording now says so. Storage did not change.
+- **Local lab OCR is served from the instance.** The engine and its German
+  and English data (about 17 MB) come from the server instead of a public
+  CDN, which the page policy blocked; `/labs`, `/documents` and the OCR
+  worker may run WebAssembly.
+- **The image ships `scripts/reset-password.mjs`** and the intake repair
+  script from the operator guide. Key rotation is documented as Admin,
+  Encryption, Rotate now.
+- `IP_GEO_LOOKUP_DISABLED`, like every on/off setting, accepts `1`, `true`,
+  `yes` and `on`.
+- `.env.production.example` is the complete settings list; `.env.example`
+  is a starter and no longer lists the unused `WITHINGS_CLIENT_ID` and
+  `WITHINGS_CLIENT_SECRET`.
+
+### Deprecated
+
+- **`ALLOW_LOCAL_AI_PRIVATE_HOSTS=true`.** It now covers only the admin AI
+  key and AI settings saved on an admin account, over a pinned connection
+  without redirects, and will be removed in a later release. Other
+  accounts' private endpoints need `AI_PRIVATE_ORIGINS`. The host-list form
+  (`ollama.lan,10.0.0.5`) keeps working with the same pinning. The boot
+  summary names the setting, and the admin AI settings page shows the
+  `AI_PRIVATE_ORIGINS` line for the endpoints saved on the instance.
+
+### Fixed
+
+- **Medication days west of UTC.** A Monday plan reminded on Sunday, a
+  course starting on the 14th had a dose on the 13th, and an evening dose
+  on the last day could be dropped; monthly and one-time doses were a day
+  early too. Start and end dates are read as calendar days and the times
+  placed on them in the user's zone, for the list, today list, reminders,
+  history and adherence. History for affected weeks can show the wrongly
+  named day as an off-schedule entry beside the planned day.
+- **Weeks on and weeks off count whole weeks from the start day** instead
+  of Sunday-based UTC weeks; the pause of a plan that did not start on a
+  Sunday can move.
+- **A snooze holds only the dose it answered.** Skipping the morning dose
+  from Telegram no longer silences the evening dose. A snooze set while no
+  dose is open holds the next one.
+- **Check-up reminders with several times of day are sent at each.** The
+  evening half of the morning-and-evening blood pressure course waited
+  until the next morning.
+- **Supply estimate.** Honours `INTERVAL` on daily, monthly and yearly
+  rules, several days of the month or months of the year, every weekday a
+  monthly rule names (every Monday counts four or five times; the first
+  Monday once), the pause of an on/off plan, and as-needed schedules as
+  not consuming. An injection every third month with two doses left reads
+  about 180 days, not 60. Whole-dose counts no longer lose one to rounding
+  (2.4 mL at 0.8 mL is three doses).
+- **The doctor report keeps same-named medications apart**, in the PDF, the
+  FHIR export, the clinician link and the AI summary.
+- **A doctor report for a past period stays inside it** and compares course
+  dates by day in the report's zone, so west of UTC it no longer drops a
+  course ending on the first day or lists one starting after the last.
+- **Weekly, monthly and yearly figures pick the source per day** instead of
+  once per bucket, so mixed manual and synced readings and a device switch
+  mid-month count every day. Affects year and All ranges, baselines, the
+  one-year change and assessments.
+- **"vs. last year"** is the average of the 30 days starting a year and a
+  month ago, not whichever month began inside that window.
+- **All-time average, minimum and maximum** count one source per day for
+  histories older than five years, and so do the all-time figures the
+  assessments and the Coach see for weight, blood pressure and pulse.
+- **The logging streak** was one day short west of UTC in the evening.
+- **The activity part of the health score** uses the 28 completed days up
+  to yesterday, so it no longer dips every morning.
+- **Heatmaps, digest milestones, assessments and mood and cycle
+  comparisons** use the user's day instead of the server's or Berlin's.
+- **Days that start at a skipped midnight** (Chile, Cuba) or on a clock
+  change in New Zealand and eastern Australia start at their first real
+  minute.
+- **Synced daily totals from UTC+12 and beyond** showed a day late. The next
+  sync fixes the recent days, about the last month for most services;
+  reconnecting Fitbit or Google Health rereads the whole history. Oura
+  cycle phases are fetched over the user's days as well.
+- **Apple Health export import** split a day on which the phone or watch
+  updated and kept only the larger half of its steps. Importing the export
+  again fixes stored days.
+- **Step and sleep period comparisons** compare average days and nights
+  instead of single readings, and end with yesterday.
+- **Long ranges showed no data** when all readings fell in the first,
+  partial year; they fall back to monthly figures.
+- **Assessments refresh after readings from every source** (assistant,
+  Telegram, CSV, backup import, Apple Health export), not only in-app entry.
+- **CSV re-import** of a few thousand rows timed out. A re-import that moves
+  a reading recalculates the day it left, and a failed import recalculates
+  the days it wrote; uploading the same file again finishes it.
+- **A queued Apple Health import lost its upload** when it waited longer
+  than seven hours; the cleanup keeps files a queued or running import
+  needs.
+- **Empty settings from the compose file count as not set**: weather and
+  daylight lookups, the login-location lookup, `TRUST_PROXY_HOPS`, and the
+  Withings, Fitbit and Google Health redirect URIs.
+- **The first due date of a check-up** no longer moves a day when the
+  browser is in another zone than the profile.
+- **The password reset command failed** with "Cannot find module" in the
+  published image.
+- **FHIR export codes.** Body water and bone mass use the body-composition
+  codes; step length, walking speed, walking asymmetry and VO2 max go out
+  under their Apple Health names; mood (now outside vital signs), estimated
+  A1C and average cycle and period length go out as named values without a
+  code; LDL, vitamin D and eGFR use the method-less codes; mean glucose is
+  coded (in mg/dL) only from a continuous monitor; allergy and injury use
+  current SNOMED CT concepts; a medication code no longer carries the
+  user's name as its display; resting heart rate and oxygen saturation add
+  the required vital-signs codes; an export without vital signs has no
+  empty vital-signs report. No longer sent: 73704-9, 73708-0, 41955-6,
+  41957-2, 91557-1, 96402-2, 76542-6, 41995-2, 64700-8, 64698-4, 18262-6,
+  1989-3, 33914-3, SNOMED CT 106190000.
+- **MCP tools follow the module switches.** With Medications, Labs,
+  Conditions, Documents or Vaccinations off, search and fetch skip them and
+  `get_labs`, `get_medication_schedule`, `get_medication_compliance` and
+  the lab and medication resources answer `present: false`,
+  `reason: "module_disabled"`; `get_visits` sets
+  `conditionsReason: "module_disabled"`.
+
+### Security
+
+- **Recent confirmation for actions that outlast a session.** Whole-record
+  exports (full backup, encrypted backup, JSON and CSV of everything, the
+  doctor report, FHIR `$everything`), share links, API and
+  MCP tokens, invitations, connecting an AI assistant, and the admin
+  backup download, upload, restore, delete all data and reset password
+  need a sign-in or confirmation within five minutes, with the second
+  factor on an account that has one. Otherwise `401 auth.reproof.required`
+  with `meta.methods`, and the app shows a confirm dialog and continues.
+  The encrypted backup now asks accounts without a second factor too. On a
+  token, `GET /api/export/full-backup` and `GET /api/export?type=all` need
+  an `X-Step-Up` elevation and `POST /api/export/encrypted` a second-factor
+  one on accounts that have a second factor; the doctor report
+  (`POST /api/export/health-record`) and `$everything` keep taking the
+  token. Migration `0359`.
+- **Adding a second factor needs a recent confirmation.** Without a second
+  factor: a sign-in within five minutes or the password. With one: that
+  factor or a passkey, never the password alone, also for passkeys and on
+  the token path. An authenticator never confirmed with a code no longer
+  counts as a factor anywhere.
+- **Confirmation attempts share one limit** of five per fifteen minutes per
+  account, including password change and email change; each wrong attempt
+  is in the security activity and a correct one is not counted. Second
+  factor attempts at sign-in are counted before they are checked.
+- **Single sign-on links an existing account only after its own sign-in**
+  (password and second factor, or passkey) within ten minutes, also on
+  SSO-only instances. The app receives `oidc_link_required`. Existing links
+  stay.
+- **Changing the email address** needs the current password or a sign-in
+  within five minutes; on an account with a second factor, that factor or
+  a passkey. The rest of the save still lands; the address is reported in
+  `rejectedFields`.
+- **Private AI endpoints by exact origin.** New `AI_PRIVATE_ORIGINS`
+  (comma-separated `scheme://host[:port]`). Granted endpoints are called
+  over a pinned connection without redirects; metadata, link-local and
+  unspecified addresses stay refused. A failed lab scan no longer logs the
+  endpoint's answer.
+- **Coach conversation titles and custom-metric notes are encrypted at
+  rest.** Existing rows are encrypted in the background after start;
+  reads fall back to the old column until then. Migration `0357`.
+- **Deleting an account, a managed profile or all data removes its
+  off-site backup copies**, right after and again the next night; refused
+  deletions are retried and shown on Admin, Backups, Off-host, which also
+  warns when the bucket has no lifecycle rule. Admin Wipe all data leaves
+  the bucket alone. Migration `0358`.
+- **Restores check the keys a backup needs.** Preview, restore, upload and
+  the monthly drill refuse a backup whose encrypted content needs a key the
+  server lacks (`backup.key.missing` with `keyIds`), before changing
+  anything. A restore that would reference another account is rolled back
+  (`backup.foreign_reference`).
+- **Off-site copies are bound to their account and date** (envelope
+  version 4 with a key id); older copies still restore.
+- **Apple Health imports.** An archive may inflate to 200 times its size on
+  disk (64 MiB to 8 GiB); one import runs per account, and a second one
+  answers `409` `import.apple_health.busy` with `meta.jobId`; the upload
+  is removed on every exit and swept every fifteen minutes; a job that
+  cannot be queued answers `503` and is marked failed. The admin backup
+  upload stops at 100 times its compressed size (256 MB to 4 GB) with
+  `413`.
+- Every credential the server issues, invite links and the sign-in handoff
+  code included, is kept out of logs and the replay cache.
+- A passkey or security-key challenge is used up when checked.
+- A device-bound refresh token is refused without `X-Device-Id`.
+- Upload routes that read their own body send the same security headers
+  as the rest.
+
+### Upgrade notes
+
+- Take a database backup before upgrading.
+- Migrations: `0356` adds document archive connections and a nullable
+  `source_instance` to the document import tables, `0357` adds encrypted
+  columns for Coach titles and custom-metric notes, `0358` records the
+  keys each backup needs and adds off-site purge requests, `0359` adds
+  `reproof_at` to sessions. None deletes anything.
+- Going back to 1.39.2 is not supported once the server has started: it
+  cannot read Coach titles stored only encrypted. Restore the database
+  backup from before the upgrade instead.
+- Off-site backup: the bucket credential needs `DeleteObject` (an R2 Object
+  Read & Write token has it). To rotate `BACKUP_ENCRYPTION_KEY`, move the
+  old key into `BACKUP_ENCRYPTION_PREVIOUS_KEYS`.
+- Key rotation does not reach inside earlier backups. Keep a retired
+  `ENCRYPTION_KEYS` entry until Admin, Encryption lists nothing for it.
+- `ALLOW_LOCAL_AI_PRIVATE_HOSTS=true`: nothing changes for the admin key
+  or an admin account. If other accounts use an AI endpoint on your
+  network, copy the `AI_PRIVATE_ORIGINS` line from the admin AI settings
+  page, restart and remove the old setting.
+- `TRUST_PROXY_HOPS`: with a proxy that sends only `X-Real-IP`, set `1`
+  (unset means `1`); a host reachable directly wants `0`. Check the log for
+  a line starting `[getClientIp] requests carry`.
+- Request bodies over 1 MB are refused outside the upload routes. Keep any
+  upload size limit in your reverse proxy as it is.
+- New settings, all on the compose whitelist: `DOCUMENT_SOURCE_ORIGINS`
+  (empty, picker off), `AI_PRIVATE_ORIGINS` (empty),
+  `BACKUP_ENCRYPTION_PREVIOUS_KEYS` (empty),
+  `PASSWORD_BREACH_CHECK_DISABLED` and `UPDATE_CHECK_DISABLED` (unset,
+  checks on).
+- Users are asked to confirm before exports, share links, tokens,
+  invitations and connecting an assistant when their last sign-in is older
+  than five minutes. After a password change or sign out everywhere, share
+  links have to be made again.
+- The image is about 17 MB larger for the local OCR engine.
+- Past medication history west of UTC is not rewritten; a wrongly named day
+  stays as an off-schedule entry and can be deleted by hand.
+- iPhone app 1.0.3 and 1.0.4 keep working. Reminders, supply figures,
+  aggregates and synced rows change value without a schema change.
+
 ## [1.39.2] — 2026-09-26
 
 Documents can be brought over from Paperless-ngx and Papra, conditions
