@@ -816,6 +816,17 @@ exports[`coach chat golden transcripts > 03 no-tools path with the full snapshot
         "metrics": [
           "bp",
         ],
+        "steps": [
+          {
+            "count": 1,
+            "domain": "snapshot",
+            "id": "s1",
+            "label": "Reading your record summary",
+            "labelKey": "coach.step.snapshot",
+            "status": "done",
+            "tool": "snapshot",
+          },
+        ],
         "windows": [
           "last30days",
         ],
@@ -844,6 +855,18 @@ exports[`coach chat golden transcripts > 03 no-tools path with the full snapshot
   ],
   "contentType": "text/event-stream; charset=utf-8",
   "frames": [
+    {
+      "step": {
+        "count": 1,
+        "domain": "snapshot",
+        "id": "s1",
+        "label": "Reading your record summary",
+        "labelKey": "coach.step.snapshot",
+        "status": "done",
+        "tool": "snapshot",
+      },
+      "type": "step",
+    },
     {
       "token": "Your ",
       "type": "token",
@@ -888,6 +911,17 @@ exports[`coach chat golden transcripts > 03 no-tools path with the full snapshot
         ],
         "metrics": [
           "bp",
+        ],
+        "steps": [
+          {
+            "count": 1,
+            "domain": "snapshot",
+            "id": "s1",
+            "label": "Reading your record summary",
+            "labelKey": "coach.step.snapshot",
+            "status": "done",
+            "tool": "snapshot",
+          },
         ],
         "windows": [
           "last30days",
@@ -4004,6 +4038,17 @@ exports[`coach chat golden transcripts > 16b an empty chain served by the legacy
         "metrics": [
           "bp",
         ],
+        "steps": [
+          {
+            "count": 1,
+            "domain": "snapshot",
+            "id": "s1",
+            "label": "Reading your record summary",
+            "labelKey": "coach.step.snapshot",
+            "status": "done",
+            "tool": "snapshot",
+          },
+        ],
         "windows": [
           "last30days",
         ],
@@ -4032,6 +4077,18 @@ exports[`coach chat golden transcripts > 16b an empty chain served by the legacy
   ],
   "contentType": "text/event-stream; charset=utf-8",
   "frames": [
+    {
+      "step": {
+        "count": 1,
+        "domain": "snapshot",
+        "id": "s1",
+        "label": "Reading your record summary",
+        "labelKey": "coach.step.snapshot",
+        "status": "done",
+        "tool": "snapshot",
+      },
+      "type": "step",
+    },
     {
       "token": "Your ",
       "type": "token",
@@ -4076,6 +4133,17 @@ exports[`coach chat golden transcripts > 16b an empty chain served by the legacy
         ],
         "metrics": [
           "bp",
+        ],
+        "steps": [
+          {
+            "count": 1,
+            "domain": "snapshot",
+            "id": "s1",
+            "label": "Reading your record summary",
+            "labelKey": "coach.step.snapshot",
+            "status": "done",
+            "tool": "snapshot",
+          },
         ],
         "windows": [
           "last30days",
@@ -5231,6 +5299,352 @@ exports[`coach chat golden transcripts > 21 the German locale with a stored self
         ],
         "metrics": [
           "bp",
+        ],
+        "toolCalls": [
+          {
+            "name": "get_metric_series",
+            "present": true,
+          },
+        ],
+        "windows": [
+          "last30days",
+        ],
+      },
+      "type": "provenance",
+    },
+    {
+      "conversationId": "c-new",
+      "messageId": "m2",
+      "type": "done",
+      "usage": {
+        "model": "m-tool",
+        "totalTokens": 80,
+      },
+    },
+  ],
+  "status": 200,
+  "thrown": null,
+}
+`;
+
+exports[`coach chat golden transcripts > 22 tool mode with live steps: found, empty and failed, all before the first token 1`] = `
+{
+  "body": null,
+  "calls": [
+    {
+      "call": "createConversation",
+    },
+    {
+      "call": "appendMessage",
+      "content": "How is my blood pressure?",
+      "metricSource": null,
+      "model": null,
+      "providerType": null,
+      "role": "user",
+      "tokensUsed": null,
+    },
+    {
+      "call": "storeDeterministicFacts",
+    },
+    {
+      "call": "assertConsentForChain",
+      "chain": [
+        "anthropic",
+      ],
+    },
+    {
+      "amount": 1800,
+      "call": "reserveBudget",
+      "cap": 2000000,
+      "dateKey": "2026-09-26",
+      "owner": "user",
+      "surface": "coach",
+    },
+    {
+      "call": "runCoachToolLoop",
+      "fallbackWindow": "allTime",
+      "maxTokens": 600,
+      "messages": [
+        "user:0c52b5bc28a6:239",
+      ],
+      "providers": [
+        "anthropic",
+      ],
+      "sharedScope": {
+        "sources": [
+          "bp",
+        ],
+        "window": "last30days",
+      },
+      "signal": true,
+      "system": "c7cb63b1723d:2954",
+      "temperature": 0.4,
+      "timeoutMs": 180000,
+      "tools": 2,
+    },
+    {
+      "actual": 80,
+      "attribution": {
+        "reservedOwner": "user",
+        "servedBy": "anthropic",
+      },
+      "cached": 0,
+      "call": "reconcileSpend",
+      "dateKey": "2026-09-26",
+      "reserved": 1800,
+    },
+    {
+      "call": "appendMessage",
+      "content": "Your systolic averaged 128 mmHg.",
+      "metricSource": {
+        "groundedFigures": [
+          128,
+          82,
+          46,
+          105,
+          35.9375,
+          56.09756097560976,
+          42,
+        ],
+        "method": {
+          "entries": [
+            {
+              "count": 142,
+              "domain": "bp",
+              "window": "last90days",
+            },
+            {
+              "absent": "no_data",
+              "domain": "sleep",
+              "window": "allTime",
+            },
+          ],
+          "text": "Blood pressure, last 90 days: 142 readings · Sleep, all time: no readings",
+        },
+        "metrics": [
+          "bp",
+        ],
+        "steps": [
+          {
+            "count": 142,
+            "domain": "bp",
+            "id": "s1",
+            "label": "Checking: Blood pressure, last 90 days",
+            "labelKey": "coach.step.readWindow",
+            "status": "done",
+            "tool": "get_metric_series",
+            "window": "last90days",
+          },
+          {
+            "domain": "sleep",
+            "id": "s2",
+            "label": "Checking: Sleep, all time",
+            "labelKey": "coach.step.readWindow",
+            "reason": "no_data",
+            "status": "empty",
+            "tool": "get_sleep",
+            "window": "allTime",
+          },
+          {
+            "domain": "labs",
+            "id": "s3",
+            "label": "Checking: Lab results, last 12 months",
+            "labelKey": "coach.step.readWindow",
+            "reason": "retrieval_failed",
+            "status": "failed",
+            "tool": "get_labs",
+            "window": "lastYear",
+          },
+        ],
+        "toolCalls": [
+          {
+            "name": "get_metric_series",
+            "present": true,
+          },
+        ],
+        "windows": [
+          "last30days",
+        ],
+      },
+      "model": "m-tool",
+      "providerType": "anthropic",
+      "role": "assistant",
+      "tokensUsed": 80,
+    },
+    {
+      "call": "annotate",
+      "metaKeys": [
+        "clusterCount",
+        "conversationId",
+        "historyTurns",
+        "promptChars",
+        "promptVersion",
+        "provider",
+        "snapshotSent",
+        "tokens",
+        "toolMode",
+        "toolsCalled",
+      ],
+      "name": "insights.coach.replied",
+    },
+  ],
+  "contentType": "text/event-stream; charset=utf-8",
+  "frames": [
+    {
+      "step": {
+        "domain": "bp",
+        "id": "s1",
+        "label": "Checking: Blood pressure, last 90 days",
+        "labelKey": "coach.step.readWindow",
+        "status": "running",
+        "tool": "get_metric_series",
+        "window": "last90days",
+      },
+      "type": "step",
+    },
+    {
+      "step": {
+        "domain": "sleep",
+        "id": "s2",
+        "label": "Checking: Sleep, all time",
+        "labelKey": "coach.step.readWindow",
+        "status": "running",
+        "tool": "get_sleep",
+        "window": "allTime",
+      },
+      "type": "step",
+    },
+    {
+      "step": {
+        "domain": "labs",
+        "id": "s3",
+        "label": "Checking: Lab results, last 12 months",
+        "labelKey": "coach.step.readWindow",
+        "status": "running",
+        "tool": "get_labs",
+        "window": "lastYear",
+      },
+      "type": "step",
+    },
+    {
+      "step": {
+        "count": 142,
+        "domain": "bp",
+        "id": "s1",
+        "label": "Checking: Blood pressure, last 90 days",
+        "labelKey": "coach.step.readWindow",
+        "status": "done",
+        "tool": "get_metric_series",
+        "window": "last90days",
+      },
+      "type": "step",
+    },
+    {
+      "step": {
+        "domain": "sleep",
+        "id": "s2",
+        "label": "Checking: Sleep, all time",
+        "labelKey": "coach.step.readWindow",
+        "reason": "no_data",
+        "status": "empty",
+        "tool": "get_sleep",
+        "window": "allTime",
+      },
+      "type": "step",
+    },
+    {
+      "step": {
+        "domain": "labs",
+        "id": "s3",
+        "label": "Checking: Lab results, last 12 months",
+        "labelKey": "coach.step.readWindow",
+        "reason": "retrieval_failed",
+        "status": "failed",
+        "tool": "get_labs",
+        "window": "lastYear",
+      },
+      "type": "step",
+    },
+    {
+      "token": "Your ",
+      "type": "token",
+    },
+    {
+      "token": "systolic ",
+      "type": "token",
+    },
+    {
+      "token": "averaged ",
+      "type": "token",
+    },
+    {
+      "token": "128 ",
+      "type": "token",
+    },
+    {
+      "token": "mmHg.",
+      "type": "token",
+    },
+    {
+      "metricSource": {
+        "groundedFigures": [
+          128,
+          82,
+          46,
+          105,
+          35.9375,
+          56.09756097560976,
+          42,
+        ],
+        "method": {
+          "entries": [
+            {
+              "count": 142,
+              "domain": "bp",
+              "window": "last90days",
+            },
+            {
+              "absent": "no_data",
+              "domain": "sleep",
+              "window": "allTime",
+            },
+          ],
+          "text": "Blood pressure, last 90 days: 142 readings · Sleep, all time: no readings",
+        },
+        "metrics": [
+          "bp",
+        ],
+        "steps": [
+          {
+            "count": 142,
+            "domain": "bp",
+            "id": "s1",
+            "label": "Checking: Blood pressure, last 90 days",
+            "labelKey": "coach.step.readWindow",
+            "status": "done",
+            "tool": "get_metric_series",
+            "window": "last90days",
+          },
+          {
+            "domain": "sleep",
+            "id": "s2",
+            "label": "Checking: Sleep, all time",
+            "labelKey": "coach.step.readWindow",
+            "reason": "no_data",
+            "status": "empty",
+            "tool": "get_sleep",
+            "window": "allTime",
+          },
+          {
+            "domain": "labs",
+            "id": "s3",
+            "label": "Checking: Lab results, last 12 months",
+            "labelKey": "coach.step.readWindow",
+            "reason": "retrieval_failed",
+            "status": "failed",
+            "tool": "get_labs",
+            "window": "lastYear",
+          },
         ],
         "toolCalls": [
           {

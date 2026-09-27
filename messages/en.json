@@ -9485,8 +9485,8 @@
     },
     "noRecordedData": "I don't have any recorded readings for what you asked about, so there is nothing I can give you a figure from. Once you log some, ask me again and I'll work from your own numbers.",
     "step": {
-      "read": "Reading {domain}",
-      "readWindow": "Reading {domain}, {window}",
+      "read": "Checking: {domain}",
+      "readWindow": "Checking: {domain}, {window}",
       "snapshot": "Reading your record summary",
       "showResult": "Opening an earlier table",
       "reuse": "Using the table from before",

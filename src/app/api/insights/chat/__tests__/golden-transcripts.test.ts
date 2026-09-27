@@ -120,8 +120,13 @@ vi.mock("@/lib/medications/scheduled-doses", () => ({
 vi.mock("@/lib/ai/coach/workout-evidence-builder", () => ({
   buildWorkoutEvidenceSection: h.m.buildWorkoutEvidenceSection,
 }));
-vi.mock("@/lib/ai/coach/tools", () => ({
+vi.mock("@/lib/ai/coach/tools", async () => ({
   COACH_TOOL_DEFS: [{ name: "get_metric_series" }, { name: "get_sleep" }],
+  parseCoachToolArgs: (
+    await vi.importActual<typeof import("@/lib/ai/coach/tools/definitions")>(
+      "@/lib/ai/coach/tools/definitions",
+    )
+  ).parseCoachToolArgs,
   MAX_ROUNDS: 3,
   buildCoachDataInventory: h.m.buildCoachDataInventory,
   renderDataInventory: h.m.renderDataInventory,
@@ -520,6 +525,54 @@ describe("coach chat golden transcripts", () => {
     m.getSelfContextTextForUser.mockResolvedValue("Ich laufe 30 km pro Woche.");
     reply("Du läufst 30 km pro Woche, dein Blutdruck liegt bei 128 mmHg.");
     await golden({ message: "Wie ist mein Blutdruck?", locale: "de" });
+  });
+
+  it("22 tool mode with live steps: found, empty and failed, all before the first token", async () => {
+    type Call = { id: string; name: string; arguments: string };
+    type Settled = { present: boolean; reason?: string; data?: unknown };
+    const calls: Array<[Call, Settled]> = [
+      [
+        {
+          id: "a",
+          name: "get_metric_series",
+          arguments: '{"metric":"bp","window":"last90days"}',
+        },
+        {
+          present: true,
+          data: {
+            metric: "bp",
+            section: { aggregate: { coverage: { count: 142 } } },
+          },
+        },
+      ],
+      [
+        { id: "b", name: "get_sleep", arguments: "{}" },
+        { present: false, reason: "no_data" },
+      ],
+      [
+        { id: "c", name: "get_labs", arguments: '{"analyte":"Ferritin"}' },
+        { present: false, reason: "retrieval_failed" },
+      ],
+    ];
+    m.runCoachToolLoop.mockImplementation(
+      async (args: {
+        onCallStart?: (call: Call, index: number) => void;
+        onCallSettled?: (call: Call, result: Settled, index: number) => void;
+      }) => {
+        calls.forEach(([call], i) => args.onCallStart?.(call, i));
+        calls.forEach(([call, result], i) =>
+          args.onCallSettled?.(call, result, i),
+        );
+        return toolLoopResult("Your systolic averaged 128 mmHg.");
+      },
+    );
+    const transcript = await golden({ message: "How is my blood pressure?" });
+    const types = transcript.frames.map((f) => (f as { type: string }).type);
+    const firstToken = types.indexOf("token");
+    expect(firstToken).toBeGreaterThan(0);
+    expect(types.lastIndexOf("step")).toBeLessThan(firstToken);
+    expect(types.filter((t) => t === "step")).toHaveLength(6);
+    expect(JSON.stringify(transcript)).not.toContain("Ferritin");
   });
 });
 
