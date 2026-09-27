@@ -11,10 +11,12 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { safeFetchMock, upsertMock, events } = vi.hoisted(() => ({
+const { safeFetchMock, upsertMock, events, shape } = vi.hoisted(() => ({
   safeFetchMock: vi.fn(),
   upsertMock: vi.fn(),
   events: [] as string[],
+  /** How the fake heart-rate collection is cut into pages. */
+  shape: { pages: 3, perPage: 0 },
 }));
 
 vi.mock("@/lib/safe-fetch", async (importOriginal) => {
@@ -36,7 +38,10 @@ vi.mock("@/lib/tz/resolver", () => ({
   resolveUserTimezone: vi.fn(async () => "UTC"),
 }));
 
-import { GOOGLE_HEALTH_PAGE_SIZE } from "../client";
+import {
+  GOOGLE_HEALTH_PAGE_SIZE,
+  runWithGoogleHealthClientOutcome,
+} from "../client";
 import { syncUserMetrics } from "../sync-metrics";
 
 const PAGES = 3;
@@ -44,8 +49,8 @@ const NOW = Date.parse("2026-09-27T17:00:00.000Z");
 
 function heartRatePage(page: number): unknown {
   const dataPoints = [];
-  for (let i = 0; i < GOOGLE_HEALTH_PAGE_SIZE; i++) {
-    const g = page * GOOGLE_HEALTH_PAGE_SIZE + i;
+  for (let i = 0; i < shape.perPage; i++) {
+    const g = page * shape.perPage + i;
     dataPoints.push({
       heartRate: {
         beatsPerMinute: String(55 + (g % 50)),
@@ -55,11 +60,13 @@ function heartRatePage(page: number): unknown {
   }
   return {
     dataPoints,
-    ...(page + 1 < PAGES ? { nextPageToken: String(page + 1) } : {}),
+    ...(page + 1 < shape.pages ? { nextPageToken: String(page + 1) } : {}),
   };
 }
 
 beforeEach(() => {
+  shape.pages = PAGES;
+  shape.perPage = GOOGLE_HEALTH_PAGE_SIZE;
   events.length = 0;
   upsertMock.mockReset().mockImplementation(async (_u, readings: unknown[]) => {
     events.push(`upsert:${readings.length}`);
@@ -107,5 +114,20 @@ describe("syncUserMetrics over a dense heart-rate collection", () => {
       "fetch:2",
       `upsert:${GOOGLE_HEALTH_PAGE_SIZE}`,
     ]);
+  });
+
+  it("walks a heart-rate history longer than a thousand pages to its end", async () => {
+    // A thousand pages is a million points: under two years of one reading a
+    // minute. The old ceiling ended every longer history truncated, which the
+    // backfill reads as incomplete, so it retried the whole walk forever.
+    shape.pages = 1_001;
+    shape.perPage = 1;
+
+    const { outcome } = await runWithGoogleHealthClientOutcome(() =>
+      syncUserMetrics("dense-user", { deferRollup: true }),
+    );
+
+    expect(events.filter((e) => e.startsWith("fetch:"))).toHaveLength(1_001);
+    expect(outcome.truncated).toBe(false);
   });
 });
