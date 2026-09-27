@@ -1,5 +1,228 @@
 # Changelog
 
+## [1.39.4] — 2026-09-27
+
+The Coach shows what it reads while it works, puts the figures behind an
+answer in a table you can copy or view as a chart, and offers follow-up
+questions. Workout GPS tracks and the phone numbers and addresses of your
+doctors are encrypted at rest, and the weather location is stored more
+coarsely. Restoring a backup of a very large account works again. An
+ended medication course no longer offers a dose, mental health is a
+medication category, and editing or restoring a medication keeps its
+category. The All range of a chart means one thing at every length.
+
+### Added
+
+- **The Coach shows what it is reading.** While a reply is being worked
+  out, a line above it names the current read ("Checking: Blood
+  pressure, last 90 days"). Once the answer is in, the line collapses to
+  "Looked at 3 sources" and opens to a list with the window and the
+  number of readings of each read, or why it found nothing (no readings,
+  none in this window, module switched off). The list comes back after a
+  reload. It never contains a health value.
+- **Result tables under an answer.** When the Coach reads a series it
+  keeps the figures as a table: one row per day, week or month, the same
+  numbers the app's charts show, at most 400 rows. The latest twelve rows
+  show first, with Show all for the rest. Copy for spreadsheet puts the
+  table on the clipboard as tab-separated text and as an HTML table
+  (cells that a spreadsheet would read as a formula are quoted); Copy as
+  text gives aligned columns. Tables the answer relies on show under it;
+  the others sit under "Data used" in the evidence panel. A table copied
+  from an earlier answer says so and names its date. Workouts by sport,
+  sleep by night, adherence by day and the latest lab results come out
+  as tables too.
+- **Charts for result tables.** The server picks the chart from the
+  table: a line for levels such as blood pressure, weight or pulse, bars
+  for totals such as steps and for counts by category (horizontal above
+  six categories, the top eight plus "Other"), and a histogram when you
+  ask how often a value came up (at least ten readings). A table with
+  fewer than two rows gets no chart. A toggle switches between chart and
+  table.
+- **Follow-up suggestions.** Up to three buttons under the latest answer:
+  show as a chart or as a table, compare with the period before or with a
+  year earlier, look further back, or a related metric the Coach found a
+  connection to. Each is offered only when your record holds what it
+  asks for. "Show as a chart" and "Show as a table" are answered from the
+  stored table, without a request to your provider and without using
+  tokens. A suggestion tapped after a newer answer arrived is sent as a
+  plain question. Settings, Coach, "Suggest follow-up questions" turns
+  them off.
+- **Clarifying questions.** When a question could mean more than one
+  metric or time window ("my pulse" with resting, walking and spot pulse
+  all recorded), the Coach may ask back with up to four choices above the
+  message box, or you type your own answer. Metric choices are only ones
+  your record holds, the Coach never asks about doses or diagnoses, and
+  it never asks twice in a row.
+- **How this was worked out.** The evidence panel has a line naming the
+  sources, windows, reading counts and how they were combined (daily
+  averages, weekly totals, latest reading), written by the server. When
+  you question a figure, the Coach reads it again and corrects the
+  answer if the figures differ.
+- **Keep looking.** When the Coach reached its limit of reads for one
+  answer and had to stop, a Keep looking button continues the same
+  question, reusing what it already read. An answer is continued once.
+- **Mental health as a medication category** for antidepressants,
+  anxiety and ADHD medication and mood stabilisers, in the add and edit
+  form and on the card, in all seven languages. Thanks to @Cnote43 for
+  #1041.
+- **API.** `GET /api/insights/chat/{id}/messages/{messageId}/results`
+  returns a reply's tables, owner only and not gated on the Coach being
+  available; a table whose module is switched off comes back as
+  `{ ref, withheld: "module_disabled" }`, one that cannot be read as
+  `withheld: "unavailable"`. `POST /api/insights/chat` takes optional
+  `followUp: { messageId, id }` and
+  `clarification: { messageId, choiceId? }`. The stream has four new
+  frames, `step`, `result`,
+  `followUps` and `clarification`, in the order `step*`, `token*`,
+  `provenance`, `result*`, `suggestion`, `suggestedAction`,
+  `clarification`, `followUps`, `done`; older clients ignore them.
+  `metricSource` gains `steps`, `method`, `results` (metadata only),
+  `followUps`, `clarification`, `forcedFinal` and `continuationOf`. A
+  reply answered from a stored table has `providerType: "reuse"`. Coach
+  settings take `followUpChips` (absent means on). The medication list
+  and detail reads carry `courseStatus` (`UPCOMING`, `CURRENT`, `ENDED`)
+  and `intakeActionable`. The stream frames are now in the OpenAPI
+  document, including `suggestedAction`, which was missing.
+
+### Changed
+
+- **The All range of a chart shows the average day of each week or
+  month.** A long history is drawn from weekly or monthly figures. For
+  steps, energy, distance, flights and daylight such a figure was the
+  whole week's or month's total, while a short history showed a daily
+  average, so a month of steps read about thirty times higher once the
+  history was long enough. Every length now shows the daily average, and
+  the caption says "Daily avg per week" or "Daily avg per month". For
+  levels such as blood pressure each day weighs the same, so a day with
+  many readings no longer outweighs the rest.
+- **The sidebar collapse control is at the bottom.** It is a full row
+  labelled Collapse above Admin, or above Settings without Admin. The
+  saved choice carries over, and the width change respects reduced
+  motion.
+- **A booked appointment reminder reads the practice address when it is
+  sent**, so changing the address in the address book also reaches a
+  reminder that is already booked.
+- **A restore that cannot fit its time limit is refused up front** and
+  the message names both the readings in the backup and the readings the
+  account holds now, since clearing those takes time too.
+- **An edit of a practitioner's phone number or address is logged by
+  field name**, without the old or new value.
+
+### Fixed
+
+- **Restoring a backup of a very large account failed.** On an account
+  with close to two million readings, most of them folded into hourly
+  averages and waiting for the nightly clean-up, the restore stopped
+  while clearing the current data because every database request is
+  limited to 60 seconds. Nothing was lost, since a restore is all or
+  nothing. Deleting the readings was slow because the database checked
+  personal records and ECG recordings once per reading without an index;
+  both are indexed now, which also speeds up the nightly clean-up and
+  deleting an account. The restore now runs under its own time limit,
+  which grows with the readings in the file and in the account, and the
+  background job may run for six hours instead of two. On a test account
+  of 1.89 million readings with the database held to half a processor
+  core and 40 MB/s of disk writes, the restore finished in about a
+  quarter of an hour with every reading identical to the backup. Thanks
+  to @mills1975 for #1031.
+- **Charts were empty after a large restore** until the next restart,
+  because rebuilding the chart summaries ran into the same 60-second
+  limit. The rebuild has its own allowance.
+- **Restores skip deletion markers older than 75 days.** They are what
+  the nightly clean-up removes anyway. Younger markers are restored as
+  before and the backup file is unchanged. On the test account, with 1.68
+  million old markers, the restore took 5.4 minutes instead of 15.
+- **A failed restore now says why**: it ran out of time, waited on
+  records something else was changing, the database rejected a record,
+  the database ran out of disk space or memory, or the connection
+  dropped, each with what to do next. The full error stays in the server
+  log and the audit log.
+- **An ended medication course offered taken and skip.** The table, the
+  cards and the take-all button now leave it out and show an Ended badge;
+  a course that ends today keeps its buttons for the whole day on your
+  clock, and no overdue marker is raised for an ended course. The detail
+  page called the last day of a course ended while it was still running.
+  A missed dose can still be added from the history. Thanks to @Cnote43
+  for #1040.
+- **Editing a medication on the web reset its category.** The form had
+  no choice for thyroid, digestive, skin or sleep medication, so such a
+  medication opened on Other and saving any change stored Other. The form
+  lists every category now, and an edit sends the category only when you
+  changed it.
+- **Backups did not carry a medication's category**, so after a restore
+  every medication read as Other. Both backup formats carry it now and a
+  restore writes it back. Backups made before this release still restore
+  without categories; take a fresh backup after upgrading.
+- **Long-range charts named weeks and months one early west of UTC.**
+  Weekly and monthly points are now placed inside their own week or
+  month in every zone.
+- **East of UTC the Coach could name a night by the day before**, because
+  it dated a night by its wake-up time in UTC. It uses the day the night
+  ends on in your zone, the same day the sleep table shows.
+
+### Security
+
+- **Workout GPS tracks and practitioner phone numbers and addresses are
+  encrypted at rest.** Both were stored readable, and a track usually
+  starts and ends at home. Existing rows are encrypted in the background
+  after the first start and again every night for anything an older
+  server wrote meanwhile; until then they are read as before. The map,
+  splits and GPX download of a workout and the address book behind
+  visits and vaccinations look the same. Name, practice and specialty
+  stay readable, because the picker searches and sorts on them. The same
+  pass removes the readable copies left in activity log entries of
+  earlier address book edits and in booked appointment reminders. Key
+  rotation covers the new columns. A disaster-recovery backup carries
+  the phone number and address encrypted, a portable export carries them
+  readable, and a restore of either stores them encrypted. Workout tracks
+  are still not part of a backup.
+- **Coach result tables are encrypted at rest** like the conversation.
+  Only their titles, sources and row counts are stored readable. They are
+  deleted with the conversation or the account, carried in both backup
+  formats (encrypted in a disaster-recovery backup) and covered by key
+  rotation.
+- **The weather location is stored to about 11 km instead of about
+  1 km.** Home, travel periods and the daily weather rows are rounded to
+  one decimal of a degree on every write and on restore, and the upgrade
+  rounds what is stored. The weather data comes in cells of 9 to 25 km,
+  so readings stay practically the same.
+- **A German reply telling you to change a dose could pass the dose
+  check.** "Erhöhe auf 2,4 mg" was caught, "Erhöhe deine Dosis auf 2,4 mg"
+  was not. Both are caught now, in the Coach and in the other written
+  texts that pass the same check.
+- **An earlier table of a metric you have since excluded from the Coach,
+  or whose module you switched off, is not shown to the Coach again**,
+  and the list of earlier tables it sees leaves them out.
+- **Paired apps start over after a restore or after deleting all data.**
+  The change feed answers `cursorExpired` to a bookmark issued before a
+  restore, Delete all data or the admin Wipe all data, so an app loads
+  the account afresh instead of missing what the restore replaced.
+
+### Upgrade notes
+
+- Take a database backup before upgrading.
+- Migrations: `0360` adds the encrypted column for Coach result tables,
+  `0361` adds encrypted columns for workout tracks and practitioner phone
+  and address (the readable track column becomes nullable) and rounds
+  stored weather coordinates to one decimal, `0362` indexes the two
+  columns that point at readings, `0363` adds `sync_reset_at` to users.
+  Only `0361` changes data, by rounding coordinates.
+- Going back to 1.39.3 is not supported once the server has started: it
+  cannot read tracks and contact details that are stored only encrypted.
+  Restore the database backup from before the upgrade instead.
+- The background encryption of existing tracks runs after the first
+  start. A large archive of outdoor workouts takes a few minutes. Keep a
+  retired `ENCRYPTION_KEYS` entry until Admin, Encryption lists nothing
+  for it.
+- A restore job may now run for up to six hours. No new settings.
+- Backups made before this release restore without medication
+  categories. Take a fresh backup once the server is up.
+- iPhone app 1.0.3 and 1.0.4 keep working; the new stream frames and
+  fields are additive. The app does not show the Coach's steps, tables
+  or suggestions yet. Editing a medication in the app still stores Other
+  for a category the app does not list (diabetes, antibiotic, mental
+  health).
+
 ## [1.39.3] — 2026-09-27
 
 Documents can be picked straight from Paperless-ngx and Papra. Exports,
