@@ -330,7 +330,7 @@ const coachSuggestedActionSchema = z
     ]),
   })
   .meta({
-    id: "CoachSuggestedAction",
+    id: "CoachSuggestedActionCard",
     description:
       "A confirm-to-apply action card from a closed allowlist. Nothing is created until the person confirms it through `POST /api/coach/suggested-actions`.",
   });

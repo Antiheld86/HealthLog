@@ -8879,18 +8879,27 @@ paths:
         - Insights
       summary: Send a Coach turn (streaming reply)
       description: 'v1.18.0 — sends a user turn and streams the assistant reply as Server-Sent Events. The response is
-        `text/event-stream`, not JSON: one `data: <json>\n\n` frame per event. Frame `type` is one of `token` (a chunk
-        of reply text: `{ type, token }`), `provenance` (the evidence envelope: `{ type, metricSource }`), `suggestion`
-        (a cadence-suggestion card: `{ type, suggestion }`), `reasoning` (v1.18.9, optional reasoning-summary text: `{
-        type, text }` — emitted only by reasoning-capable providers; absent otherwise), `done` (`{ type, conversationId,
-        messageId, usage? }` — v1.18.9 adds the optional `usage` envelope `{ totalTokens, promptTokens?,
-        completionTokens?, model? }`, server-authoritative; clients display it, never recompute), or `error` (`{ type,
-        code, message, reason? }`). The HTTP status is 200 even for a provider/refusal outcome — clients dispatch on the
-        `error` frame, not the status. Clients ignore unknown frame types (additive evolution). Omitting
-        `conversationId` starts a new conversation. Requires the `coach` AI capability, checked right after auth: an
-        unavailable Coach is refused with the capability envelope before the stream opens, except a missing provider,
-        which keeps its `coach.provider.none` error frame and adds `reason: "no_provider"`. Budget- and rate-limited.
-        Auth via cookie or Bearer.'
+        `text/event-stream`, not JSON: one `data: <json>\n\n` frame per event, each a `CoachStreamEvent` dispatched on
+        `type`. Frames, in the order they arrive: `step` (v1.39.4, live progress while the Coach reads the record: `{
+        type, step }`, upserted by `step.id` from `running` to `done` / `empty` / `failed`; catalog labels, domains,
+        windows and counts only), `token` (a chunk of reply text: `{ type, token }`), `provenance` (the evidence
+        envelope: `{ type, metricSource }`), `result` (v1.39.4, a table of the values the turn read: `{ type, result }`,
+        zero or more, sent only to the account that owns the conversation), `suggestion` (a cadence-suggestion card: `{
+        type, suggestion }`), `suggestedAction` (v1.22, a confirm-to-apply action card: `{ type, suggestedAction }`;
+        nothing is created until the person confirms it through `POST /api/coach/suggested-actions`), `clarification`
+        (v1.39.4, the choices when the reply is a clarifying question: `{ type, clarification }`; answer with
+        `clarification` on the next request), `followUps` (v1.39.4, up to three chips under the reply: `{ type,
+        followUps }`; send one back with `followUp` on the next request), `reasoning` (v1.18.9, optional
+        reasoning-summary text: `{ type, text }` — emitted only by reasoning-capable providers; absent otherwise), and
+        `done` (`{ type, conversationId, messageId, usage? }` — v1.18.9 adds the optional `usage` envelope `{
+        totalTokens, promptTokens?, completionTokens?, model? }`, server-authoritative; clients display it, never
+        recompute), or a single `error` (`{ type, code, message, reason? }`). No frame added after v1.18.9 carries a
+        top-level key an older frame uses, so a client decoding every frame into one flat struct is safe. The HTTP
+        status is 200 even for a provider/refusal outcome — clients dispatch on the `error` frame, not the status.
+        Clients ignore unknown frame types (additive evolution). Omitting `conversationId` starts a new conversation.
+        Requires the `coach` AI capability, checked right after auth: an unavailable Coach is refused with the
+        capability envelope before the stream opens, except a missing provider, which keeps its `coach.provider.none`
+        error frame and adds `reason: "no_provider"`. Budget- and rate-limited. Auth via cookie or Bearer.'
       requestBody:
         required: true
         content:
@@ -8899,12 +8908,12 @@ paths:
               $ref: "#/components/schemas/CoachChatRequest"
       responses:
         "200":
-          description: Server-Sent Events stream of `token` / `provenance` / `done` / `error` frames.
+          description: "Server-Sent Events stream: each `data: <json>\\n\\n` frame is one `CoachStreamEvent`. Keepalive comment
+            lines (`: ka`) carry no data and are ignored."
           content:
             text/event-stream:
               schema:
-                type: string
-                description: "SSE frames: `data: <json>\\n\\n`. See the operation description for the per-`type` frame shapes."
+                $ref: "#/components/schemas/CoachStreamEvent"
         "401": *a1
         "403":
           description: "The `coach` AI capability is unavailable for this record. `meta.capability` = `coach` and `meta.reason`
@@ -8931,6 +8940,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+  /api/insights/chat/{id}/messages/{messageId}/results:
+    get:
+      tags:
+        - Insights
+      summary: Read the tables one Coach message read
+      description: "v1.39.4 — the tables of values one assistant message read, decrypted server-side for the account that owns
+        the conversation. One entry per table the message's `metricSource.results` lists, in that order: the full
+        `CoachResultTable`, or `{ ref, withheld }` when it is not served — `module_disabled` when the table's domain is
+        switched off for the record now, `unavailable` when the stored tables cannot be read. A message without tables
+        answers an empty list. Fetch lazily, per message, when a table scrolls into view. Never AI-gated: the tables are
+        stored data and stay readable while the Coach is unavailable. A foreign or unknown conversation or message id
+        maps to 404 (never 403). Auth via cookie or Bearer."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Conversation id.
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Assistant message id within the conversation.
+      responses:
+        "200":
+          description: The message's tables, each served whole or withheld.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoachMessageResultsResponse"
+        "401": *a1
+        "404":
+          description: Conversation or message not found, or not owned by the caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a4
+        "429": *a5
   /api/insights/chat/{id}:
     get:
       tags:
@@ -25598,13 +25648,44 @@ components:
         workoutId:
           type: string
           maxLength: 64
+        followUp:
+          type: object
+          properties:
+            messageId:
+              type: string
+              minLength: 1
+              maxLength: 64
+            id:
+              type: string
+              minLength: 1
+              maxLength: 8
+          required:
+            - messageId
+            - id
+        clarification:
+          type: object
+          properties:
+            messageId:
+              type: string
+              minLength: 1
+              maxLength: 64
+            choiceId:
+              type: string
+              minLength: 1
+              maxLength: 8
+          required:
+            - messageId
       required:
         - message
-      description: Inbound Coach turn. `message` is the user's turn (1–4 000 chars). `conversationId` is omitted to start a
+      description: "Inbound Coach turn. `message` is the user's turn (1–4 000 chars). `conversationId` is omitted to start a
         new conversation (the server mints a title from the first message) and supplied to continue one. `scope` narrows
         which metrics the snapshot ships and which window the timeline covers; omitted fields fall back to server
         defaults. `locale` picks the reply language. `guidedQuestion` carries the clarifying question a message answers
-        (client-side bubble, never persisted). No `userId` field — the owner is narrowed from the session / Bearer.
+        (client-side bubble, never persisted). v1.39.4 — `followUp: { messageId, id }` names a follow-up chip the person
+        tapped (send the chip's `label` as `message`); the server resolves the chip from the conversation's latest
+        assistant message, and a chip that is no longer current is treated as a plain message. `clarification: {
+        messageId, choiceId? }` answers a clarifying question, `choiceId` absent when the person typed their own answer.
+        No `userId` field — the owner is narrowed from the session / Bearer."
     RenameCoachConversationRequest:
       type: object
       properties:
@@ -37227,6 +37308,15 @@ components:
                           maximum: 9007199254740991
                         - type: "null"
                     model:
+                      anyOf:
+                        - type: string
+                        - type: "null"
+                    resultsEncrypted:
+                      anyOf:
+                        - type: string
+                          minLength: 1
+                        - type: "null"
+                    resultsJson:
                       anyOf:
                         - type: string
                         - type: "null"
@@ -49950,6 +50040,1181 @@ components:
         - documentId
         - title
       additionalProperties: false
+    CoachStreamEvent:
+      oneOf:
+        - type: object
+          properties:
+            type:
+              type: string
+              const: token
+            token:
+              type: string
+          required:
+            - type
+            - token
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              const: provenance
+            metricSource:
+              $ref: "#/components/schemas/CoachProvenance"
+          required:
+            - type
+            - metricSource
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              const: suggestion
+            suggestion:
+              $ref: "#/components/schemas/CoachSuggestion"
+          required:
+            - type
+            - suggestion
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              const: suggestedAction
+            suggestedAction:
+              $ref: "#/components/schemas/CoachSuggestedActionCard"
+          required:
+            - type
+            - suggestedAction
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              const: reasoning
+            text:
+              type: string
+          required:
+            - type
+            - text
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              const: done
+            conversationId:
+              type: string
+            messageId:
+              type: string
+            usage:
+              $ref: "#/components/schemas/CoachUsage"
+          required:
+            - type
+            - conversationId
+            - messageId
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              const: error
+            code:
+              type: string
+            message:
+              type: string
+            reason:
+              type: string
+              enum:
+                - check_failed
+                - operator_disabled
+                - not_permitted_for_record
+                - module_disabled
+                - user_disabled
+                - no_provider
+                - consent_required
+          required:
+            - type
+            - code
+            - message
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              const: step
+            step:
+              $ref: "#/components/schemas/CoachStep"
+          required:
+            - type
+            - step
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              const: result
+            result:
+              $ref: "#/components/schemas/CoachResultTable"
+          required:
+            - type
+            - result
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              const: followUps
+            followUps:
+              type: array
+              items:
+                $ref: "#/components/schemas/CoachFollowUp"
+          required:
+            - type
+            - followUps
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              const: clarification
+            clarification:
+              $ref: "#/components/schemas/CoachClarification"
+          required:
+            - type
+            - clarification
+          additionalProperties: false
+      description: "One Server-Sent Events frame of a Coach turn, sent as `data: <json>\\n\\n` and dispatched on `type`.
+        Order: `step*` → `token*` → `provenance` → `result*` → `suggestion?` → `suggestedAction?` → `clarification?` →
+        `followUps?` → `done`, or a single `error`. Clients ignore a `type` they do not know."
+      type: object
+    CoachProvenance:
+      type: object
+      properties:
+        windows:
+          readOnly: true
+          description: Analysis windows the assistant drew on this turn.
+          type: array
+          items:
+            type: string
+            enum:
+              - last7days
+              - last30days
+              - last90days
+              - lastYear
+              - allTime
+        metrics:
+          readOnly: true
+          description: Stable metric-topic keys referenced (e.g. bp, weight, sleep, glucose). `general` is the empty-snapshot
+            sentinel. The client translates these labels; the server never localises them.
+          type: array
+          items:
+            type: string
+            enum:
+              - bp
+              - weight
+              - pulse
+              - mood
+              - compliance
+              - hrv
+              - sleep
+              - resting_hr
+              - steps
+              - active_energy
+              - flights
+              - distance
+              - vo2_max
+              - body_temp
+              - walking_hr
+              - respiratory_rate
+              - spo2
+              - pulse_wave_velocity
+              - vascular_age
+              - body_fat
+              - fat_mass
+              - fat_free_mass
+              - muscle_mass
+              - lean_body_mass
+              - bone_mass
+              - total_body_water
+              - bmi
+              - visceral_fat
+              - glucose
+              - walking_steadiness
+              - walking_asymmetry
+              - walking_double_support
+              - walking_step_length
+              - walking_speed
+              - audio_env
+              - audio_headphone
+              - audio_event
+              - daylight
+              - skin_temp
+              - workouts
+              - general
+        counts:
+          description: Per-metric sample-count summary; absent on an empty snapshot.
+          type: object
+          propertyNames:
+            type: string
+            enum:
+              - bp
+              - weight
+              - pulse
+              - mood
+              - compliance
+              - hrv
+              - sleep
+              - resting_hr
+              - steps
+              - active_energy
+              - flights
+              - distance
+              - vo2_max
+              - body_temp
+              - walking_hr
+              - respiratory_rate
+              - spo2
+              - pulse_wave_velocity
+              - vascular_age
+              - body_fat
+              - fat_mass
+              - fat_free_mass
+              - muscle_mass
+              - lean_body_mass
+              - bone_mass
+              - total_body_water
+              - bmi
+              - visceral_fat
+              - glucose
+              - walking_steadiness
+              - walking_asymmetry
+              - walking_double_support
+              - walking_step_length
+              - walking_speed
+              - audio_env
+              - audio_headphone
+              - audio_event
+              - daylight
+              - skin_temp
+              - workouts
+              - general
+          additionalProperties:
+            type: integer
+            minimum: -9007199254740991
+            maximum: 9007199254740991
+        keyValues:
+          description: Load-bearing numbers the assistant surfaced, rendered in the collapsible evidence block. Hard-capped at 8
+            entries.
+          readOnly: true
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+                minLength: 1
+                maxLength: 80
+              value:
+                type: string
+                minLength: 1
+                maxLength: 40
+              unit:
+                type: string
+                maxLength: 16
+              window:
+                type: string
+                maxLength: 40
+            required:
+              - label
+              - value
+            additionalProperties: false
+        suggestion:
+          description: The cadence-suggestion card this turn carried, if any.
+          $ref: "#/components/schemas/CoachSuggestion"
+        suggestedAction:
+          description: The confirm-to-apply action card this turn carried, if any.
+          $ref: "#/components/schemas/CoachSuggestedActionCard"
+        toolCalls:
+          description: "v1.20.0 — the retrieval-tool trace for this turn: which tools the Coach called and whether each found
+            data. Metadata only (no values). Absent on the legacy snapshot path and on turns that called no tools."
+          readOnly: true
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              present:
+                type: boolean
+            required:
+              - name
+              - present
+            additionalProperties: false
+        groundedFigures:
+          description: Bare magnitudes the turn's tools returned, recalled by a later turn's number check. Server-computed,
+            label-less.
+          readOnly: true
+          type: array
+          items:
+            type: number
+        unverifiedFigures:
+          description: v1.32.14 — count of numeric tokens the grounding guard withheld from this reply (each rewritten to the
+            editorial elision mark). Drives the quiet per-message notice. Count only, never the withheld values. Absent
+            when the turn withheld nothing.
+          type: integer
+          exclusiveMinimum: 0
+          maximum: 9007199254740991
+        steps:
+          description: v1.39.4 — what the Coach read on this turn.
+          type: array
+          items:
+            $ref: "#/components/schemas/CoachStep"
+        method:
+          description: v1.39.4 — how the answer was reached.
+          $ref: "#/components/schemas/CoachMethod"
+        results:
+          description: v1.39.4 — the tables this turn produced, metadata only; the values are behind the results endpoint.
+          type: array
+          items:
+            $ref: "#/components/schemas/CoachResultMeta"
+        followUps:
+          description: v1.39.4 — the chips offered under this reply.
+          type: array
+          items:
+            $ref: "#/components/schemas/CoachFollowUp"
+        clarification:
+          description: v1.39.4 — the choices, when this reply is a question.
+          $ref: "#/components/schemas/CoachClarification"
+        forcedFinal:
+          description: v1.39.4 — the answer was forced at the round cap while the Coach still wanted to read. Absent otherwise.
+          type: boolean
+          const: true
+      required:
+        - windows
+        - metrics
+      additionalProperties: false
+      description: Provenance envelope attached to an assistant message — labels and counts only, plus the optional evidence
+        key-values and cards. No raw timestamps and no table values.
+    CoachSuggestion:
+      type: object
+      properties:
+        cadenceId:
+          type: string
+        measurementType:
+          type: string
+        label:
+          type: string
+      required:
+        - cadenceId
+        - measurementType
+        - label
+      additionalProperties: false
+      description: A cadence-suggestion card. Accepting it posts `cadenceId` to `POST /api/measurement-reminders`.
+    CoachSuggestedActionCard:
+      type: object
+      properties:
+        actionType:
+          type: string
+          enum:
+            - checkup.create
+            - reminder.note
+        summary:
+          type: string
+        titleKey:
+          type: string
+        params:
+          oneOf:
+            - type: object
+              properties:
+                actionType:
+                  type: string
+                  const: checkup.create
+                label:
+                  type: string
+                interval:
+                  type: string
+              required:
+                - actionType
+                - label
+                - interval
+              additionalProperties: false
+            - type: object
+              properties:
+                actionType:
+                  type: string
+                  const: reminder.note
+                note:
+                  type: string
+                when:
+                  type: string
+                metric:
+                  type: string
+              required:
+                - actionType
+                - note
+              additionalProperties: false
+          type: object
+      required:
+        - actionType
+        - summary
+        - titleKey
+        - params
+      additionalProperties: false
+      description: A confirm-to-apply action card from a closed allowlist. Nothing is created until the person confirms it
+        through `POST /api/coach/suggested-actions`.
+    CoachStep:
+      type: object
+      properties:
+        id:
+          type: string
+          description: "`s1`..`s12`, unique within a turn."
+        tool:
+          type: string
+          enum:
+            - get_metric_series
+            - get_glucose_panel
+            - get_sleep
+            - get_medication_compliance
+            - get_labs
+            - get_illness_recovery
+            - get_workouts
+            - get_cycle
+            - get_correlations
+            - show_result
+            - snapshot
+        labelKey:
+          type: string
+          description: Closed catalog key (`coach.step.*`) the client localises.
+        label:
+          type: string
+          description: The label rendered on the server in the request locale. Render it when the client has no string for
+            `labelKey`.
+        domain:
+          $ref: "#/components/schemas/CoachStepDomain"
+        window:
+          type: string
+          enum:
+            - last7days
+            - last30days
+            - last90days
+            - lastYear
+            - allTime
+        period:
+          type: string
+          enum:
+            - current
+            - previous
+            - yearAgo
+        granularity:
+          type: string
+          enum:
+            - day
+            - week
+            - month
+        status:
+          type: string
+          enum:
+            - running
+            - done
+            - empty
+            - failed
+        count:
+          description: Readings or rows the server counted. Never a health value.
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        reason:
+          type: string
+          enum:
+            - no_data
+            - outside_window
+            - module_disabled
+            - retrieval_failed
+            - invalid_arguments
+        resultRef:
+          description: The table this step produced (`r1`..), when it produced one.
+          type: string
+      required:
+        - id
+        - tool
+        - labelKey
+        - label
+        - status
+      additionalProperties: false
+      description: "One thing the Coach read on a turn. Sent live as `step` frames that upsert by `id` (`running`, then `done`
+        / `empty` / `failed`), and persisted on `metricSource.steps`. Catalog labels, domains, windows and counts only:
+        never free text, an analyte name or a value."
+    CoachStepDomain:
+      type: string
+      enum:
+        - bp
+        - weight
+        - pulse
+        - mood
+        - compliance
+        - hrv
+        - sleep
+        - resting_hr
+        - steps
+        - active_energy
+        - flights
+        - distance
+        - vo2_max
+        - body_temp
+        - walking_hr
+        - respiratory_rate
+        - spo2
+        - pulse_wave_velocity
+        - vascular_age
+        - body_fat
+        - fat_mass
+        - fat_free_mass
+        - muscle_mass
+        - lean_body_mass
+        - bone_mass
+        - total_body_water
+        - bmi
+        - visceral_fat
+        - glucose
+        - walking_steadiness
+        - walking_asymmetry
+        - walking_double_support
+        - walking_step_length
+        - walking_speed
+        - audio_env
+        - audio_headphone
+        - audio_event
+        - daylight
+        - skin_temp
+        - workouts
+        - labs
+        - illness
+        - cycle
+        - correlations
+        - snapshot
+      description: "The data domain a step, table or chip is about: a measurement-backed scope source, or a domain read as a
+        whole (labs, illness, cycle, correlations, the full snapshot)."
+    CoachMethod:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              domain:
+                $ref: "#/components/schemas/CoachStepDomain"
+              window:
+                type: string
+                enum:
+                  - last7days
+                  - last30days
+                  - last90days
+                  - lastYear
+                  - allTime
+              period:
+                type: string
+                enum:
+                  - current
+                  - previous
+                  - yearAgo
+              granularity:
+                type: string
+                enum:
+                  - day
+                  - week
+                  - month
+              count:
+                type: integer
+                minimum: -9007199254740991
+                maximum: 9007199254740991
+              aggregation:
+                type: string
+                enum:
+                  - mean
+                  - median
+                  - latest
+                  - sum
+                  - count
+                  - rate
+              absent:
+                type: string
+                enum:
+                  - no_data
+                  - outside_window
+                  - module_disabled
+            required:
+              - domain
+            additionalProperties: false
+        text:
+          type: string
+          description: Rendered on the server in the request locale.
+      required:
+        - entries
+        - text
+      additionalProperties: false
+      description: "How an answer was reached: which sources, windows, counts and aggregation. Never a health value."
+    CoachResultMeta:
+      type: object
+      properties:
+        ref:
+          type: string
+          description: "`r1`..`r6`, unique within a message."
+        source:
+          type: object
+          properties:
+            tool:
+              type: string
+              enum:
+                - get_metric_series
+                - get_glucose_panel
+                - get_sleep
+                - get_medication_compliance
+                - get_labs
+                - get_illness_recovery
+                - get_workouts
+                - get_cycle
+                - get_correlations
+            domain:
+              $ref: "#/components/schemas/CoachStepDomain"
+            window:
+              type: string
+              enum:
+                - last7days
+                - last30days
+                - last90days
+                - lastYear
+                - allTime
+            period:
+              type: string
+              enum:
+                - current
+                - previous
+                - yearAgo
+            granularity:
+              type: string
+              enum:
+                - day
+                - week
+                - month
+          required:
+            - tool
+            - domain
+            - window
+            - period
+          additionalProperties: false
+        shape:
+          type: string
+          enum:
+            - timeSeries
+            - categoryCounts
+            - distribution
+            - single
+        titleKey:
+          type: string
+        title:
+          type: string
+        rowCount:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: The full row count, before any trim.
+        chartKind:
+          anyOf:
+            - type: string
+              enum:
+                - line
+                - bar
+                - histogram
+            - type: "null"
+        displayed:
+          type: boolean
+          description: True when the answer referenced the table (shown expanded); false when it sits under the data-used
+            disclosure.
+        reusedFrom:
+          description: Set when the table was copied from an earlier message.
+          type: object
+          properties:
+            messageId:
+              type: string
+            ref:
+              type: string
+          required:
+            - messageId
+            - ref
+          additionalProperties: false
+      required:
+        - ref
+        - source
+        - shape
+        - titleKey
+        - title
+        - rowCount
+        - chartKind
+        - displayed
+      additionalProperties: false
+      description: "A table's metadata, persisted in the plaintext provenance (`metricSource.results`). The values are not
+        here: fetch them from `GET /api/insights/chat/{id}/messages/{messageId}/results`."
+    CoachFollowUp:
+      type: object
+      properties:
+        id:
+          type: string
+          description: "`f1`..`f3`."
+        kind:
+          type: string
+          enum:
+            - widen_window
+            - previous_period
+            - year_ago
+            - as_chart
+            - as_table
+            - related_metric
+            - continue
+        labelKey:
+          type: string
+        label:
+          type: string
+          description: Rendered on the server from a catalog; never model text.
+        anchor:
+          type: object
+          properties:
+            ref:
+              type: string
+            domain:
+              $ref: "#/components/schemas/CoachStepDomain"
+            window:
+              type: string
+              enum:
+                - last7days
+                - last30days
+                - last90days
+                - lastYear
+                - allTime
+            granularity:
+              type: string
+              enum:
+                - day
+                - week
+                - month
+            period:
+              type: string
+              enum:
+                - current
+                - previous
+                - yearAgo
+          required:
+            - ref
+            - domain
+          additionalProperties: false
+        reuse:
+          type: boolean
+          description: True when the chip is answered from a stored table without a model call.
+        origin:
+          type: string
+          enum:
+            - server
+            - model
+      required:
+        - id
+        - kind
+        - labelKey
+        - label
+        - reuse
+        - origin
+      additionalProperties: false
+      description: "A chip offered under the latest assistant reply. Send it back as `followUp: { messageId, id }` with the
+        chip's label as `message`."
+    CoachClarification:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - metric
+            - window
+            - context
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              labelKey:
+                type: string
+              label:
+                type: string
+              value:
+                type: object
+                properties:
+                  metric:
+                    type: string
+                    enum:
+                      - bp
+                      - weight
+                      - pulse
+                      - mood
+                      - compliance
+                      - hrv
+                      - sleep
+                      - resting_hr
+                      - steps
+                      - active_energy
+                      - flights
+                      - distance
+                      - vo2_max
+                      - body_temp
+                      - walking_hr
+                      - respiratory_rate
+                      - spo2
+                      - pulse_wave_velocity
+                      - vascular_age
+                      - body_fat
+                      - fat_mass
+                      - fat_free_mass
+                      - muscle_mass
+                      - lean_body_mass
+                      - bone_mass
+                      - total_body_water
+                      - bmi
+                      - visceral_fat
+                      - glucose
+                      - walking_steadiness
+                      - walking_asymmetry
+                      - walking_double_support
+                      - walking_step_length
+                      - walking_speed
+                      - audio_env
+                      - audio_headphone
+                      - audio_event
+                      - daylight
+                      - skin_temp
+                      - workouts
+                  window:
+                    type: string
+                    enum:
+                      - last7days
+                      - last30days
+                      - last90days
+                      - lastYear
+                      - allTime
+                additionalProperties: false
+            required:
+              - id
+              - labelKey
+              - label
+              - value
+            additionalProperties: false
+          description: At most 4. Metric choices are always ones the record holds.
+        freeText:
+          type: boolean
+          description: Whether a typed answer is welcome.
+      required:
+        - kind
+        - choices
+        - freeText
+      additionalProperties: false
+      description: "The choices for a clarifying question. The question itself is the assistant message's text. Answer with
+        `clarification: { messageId, choiceId? }`."
+    CoachUsage:
+      type: object
+      properties:
+        totalTokens:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+        promptTokens:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+        completionTokens:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+        model:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - totalTokens
+      additionalProperties: false
+      description: "Per-turn token usage. Server-authoritative: clients display it, never recompute it."
+    CoachResultTable:
+      type: object
+      properties:
+        ref:
+          type: string
+          description: "`r1`..`r6`, unique within a message."
+        source:
+          type: object
+          properties:
+            tool:
+              type: string
+              enum:
+                - get_metric_series
+                - get_glucose_panel
+                - get_sleep
+                - get_medication_compliance
+                - get_labs
+                - get_illness_recovery
+                - get_workouts
+                - get_cycle
+                - get_correlations
+            domain:
+              $ref: "#/components/schemas/CoachStepDomain"
+            window:
+              type: string
+              enum:
+                - last7days
+                - last30days
+                - last90days
+                - lastYear
+                - allTime
+            period:
+              type: string
+              enum:
+                - current
+                - previous
+                - yearAgo
+            granularity:
+              type: string
+              enum:
+                - day
+                - week
+                - month
+          required:
+            - tool
+            - domain
+            - window
+            - period
+          additionalProperties: false
+        shape:
+          type: string
+          enum:
+            - timeSeries
+            - categoryCounts
+            - distribution
+            - single
+        titleKey:
+          type: string
+        title:
+          type: string
+        rowCount:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: The full row count, before any trim.
+        chartKind:
+          anyOf:
+            - type: string
+              enum:
+                - line
+                - bar
+                - histogram
+            - type: "null"
+        displayed:
+          type: boolean
+          description: True when the answer referenced the table (shown expanded); false when it sits under the data-used
+            disclosure.
+        reusedFrom:
+          description: Set when the table was copied from an earlier message.
+          type: object
+          properties:
+            messageId:
+              type: string
+            ref:
+              type: string
+          required:
+            - messageId
+            - ref
+          additionalProperties: false
+        columns:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              kind:
+                type: string
+                enum:
+                  - period
+                  - category
+                  - number
+                  - count
+              labelKey:
+                type: string
+              label:
+                type: string
+              unit:
+                description: Display unit token such as `mmHg`, never free text.
+                type: string
+              decimals:
+                type: integer
+                minimum: -9007199254740991
+                maximum: 9007199254740991
+            required:
+              - key
+              - kind
+              - labelKey
+              - label
+            additionalProperties: false
+        rows:
+          type: array
+          items:
+            type: array
+            items:
+              anyOf:
+                - type: string
+                - type: number
+                - type: "null"
+          description: Row-major cells, at most 400 rows. `null` is a period with no reading.
+        truncated:
+          type: boolean
+          description: True when `rowCount` exceeds the rows.
+        chart:
+          anyOf:
+            - oneOf:
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      const: line
+                    x:
+                      type: string
+                    series:
+                      type: array
+                      items:
+                        type: string
+                  required:
+                    - kind
+                    - x
+                    - series
+                  additionalProperties: false
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      const: bar
+                    x:
+                      type: string
+                    series:
+                      type: array
+                      items:
+                        type: string
+                    orientation:
+                      type: string
+                      enum:
+                        - vertical
+                        - horizontal
+                  required:
+                    - kind
+                    - x
+                    - series
+                    - orientation
+                  additionalProperties: false
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      const: histogram
+                    column:
+                      type: string
+                    unit:
+                      type: string
+                    bins:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          from:
+                            type: number
+                          to:
+                            type: number
+                          count:
+                            type: integer
+                            minimum: -9007199254740991
+                            maximum: 9007199254740991
+                        required:
+                          - from
+                          - to
+                          - count
+                        additionalProperties: false
+                  required:
+                    - kind
+                    - column
+                    - bins
+                  additionalProperties: false
+              type: object
+            - type: "null"
+          description: The chart the server chose for the table, or null.
+      required:
+        - ref
+        - source
+        - shape
+        - titleKey
+        - title
+        - rowCount
+        - chartKind
+        - displayed
+        - columns
+        - rows
+        - truncated
+        - chart
+      additionalProperties: false
+      description: "A table of the values a turn read. Health data: encrypted at rest and sent only to the account that owns
+        the conversation."
+    CoachMessageResultsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: "#/components/schemas/CoachResultEntry"
+          required:
+            - results
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    CoachResultEntry:
+      anyOf:
+        - $ref: "#/components/schemas/CoachResultTable"
+        - type: object
+          properties:
+            ref:
+              type: string
+            withheld:
+              type: string
+              enum:
+                - module_disabled
+                - unavailable
+              description: "`module_disabled`: the table's domain is switched off for this record. `unavailable`: the stored tables
+                could not be read."
+          required:
+            - ref
+            - withheld
+          additionalProperties: false
+      description: "One stored table, or the reason it is not served. Absence is explicit: a withheld table names why."
     CoachConversationDetailResponse:
       type: object
       properties:
@@ -50053,9 +51318,11 @@ components:
           anyOf:
             - type: string
             - type: "null"
-          description: Provider that produced the reply (e.g. anthropic, openai, local, refusal). The sentinel `cancelled` marks
+          description: 'Provider that produced the reply (e.g. anthropic, openai, local, refusal). The sentinel `cancelled` marks
             an empty assistant row closing a turn the client aborted mid-generation (navigation away); clients should
-            render it as an interrupted turn with a retry affordance. Null for user turns.
+            render it as an interrupted turn with a retry affordance. v1.39.4 — the sentinel `reuse` marks a turn
+            answered from a table already stored in the conversation (a follow-up chip such as "as a chart"), with no
+            model call: render it as a normal assistant turn without a token footer. Null for user turns.'
         promptVersion:
           anyOf:
             - type: string
@@ -50087,82 +51354,6 @@ components:
         - model
       additionalProperties: false
       description: One Coach chat message, decrypted server-side. Ordered oldest-first within a conversation.
-    CoachProvenance:
-      type: object
-      properties:
-        windows:
-          type: array
-          items:
-            type: string
-            enum:
-              - last7days
-              - last30days
-              - last90days
-              - lastYear
-              - allTime
-          description: Analysis windows the assistant drew on this turn.
-        metrics:
-          type: array
-          items:
-            type: string
-          description: Stable metric-topic keys referenced (e.g. bp, weight, sleep, glucose). `general` is the empty-snapshot
-            sentinel. The client translates these labels; the server never localises them.
-        counts:
-          description: Per-metric sample-count summary; absent on an empty snapshot.
-          type: object
-          propertyNames:
-            type: string
-          additionalProperties:
-            type: integer
-            minimum: -9007199254740991
-            maximum: 9007199254740991
-        keyValues:
-          description: Load-bearing numbers the assistant surfaced, rendered in the collapsible evidence block. Hard-capped at 8
-            entries.
-          type: array
-          items:
-            type: object
-            properties:
-              label:
-                type: string
-              value:
-                type: string
-              unit:
-                type: string
-              window:
-                type: string
-            required:
-              - label
-              - value
-            additionalProperties: false
-        toolCalls:
-          description: "v1.20.0 — the retrieval-tool trace for this turn: which tools the Coach called and whether each found
-            data. Metadata only (no values). Absent on the legacy snapshot path and on turns that called no tools."
-          type: array
-          items:
-            type: object
-            properties:
-              name:
-                type: string
-              present:
-                type: boolean
-            required:
-              - name
-              - present
-            additionalProperties: false
-        unverifiedFigures:
-          description: v1.32.14 — count of numeric tokens the grounding guard withheld from this reply (each rewritten to the
-            editorial elision mark). Drives the quiet per-message notice. Count only, never the withheld values. Absent
-            when the turn withheld nothing.
-          type: integer
-          exclusiveMinimum: 0
-          maximum: 9007199254740991
-      required:
-        - windows
-        - metrics
-      additionalProperties: false
-      description: Provenance envelope attached to an assistant message — labels and counts only, plus the optional evidence
-        key-values. No raw timestamps.
     CoachConversationRenamed:
       type: object
       properties:
