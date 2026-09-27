@@ -76,6 +76,7 @@ async function seedAccount() {
   cookieJar.set("healthlog_session", session.id);
 
   const start = Date.UTC(2024, 0, 1);
+  const yesterday = new Date(Date.now() - 86_400_000);
   await prisma.measurement.createMany({
     data: Array.from({ length: COUNT }, (_, i) => ({
       id: `m-${String(i).padStart(5, "0")}`,
@@ -91,7 +92,9 @@ async function seedAccount() {
       deviceType: "watch",
       syncVersion: 1 + (i % 4),
       notesEncrypted: i === 17 ? encryptNote("after the long run") : null,
-      deletedAt: i % 97 === 0 ? new Date(start) : null,
+      // Deleted yesterday, inside the tombstone retention, so a weekly
+      // backup's restore writes it back.
+      deletedAt: i % 97 === 0 ? yesterday : null,
     })),
   });
   await prisma.personalRecord.create({

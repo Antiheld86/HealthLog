@@ -15,12 +15,16 @@
  * because nothing was slow. The restore then has to finish and give back
  * exactly the rows the backup holds.
  *
- * The last test makes the database refuse the clearing step with a disk-full
- * error and checks the job says so, and that nothing changed.
+ * The third test makes the database refuse the clearing step with a
+ * disk-full error and checks the job says so, and that nothing changed. The
+ * last makes every write of chart buckets outlast the session limit and
+ * checks the rebuild after the commit still lands every granularity.
  *
- * Mutation check: remove the `set_config('statement_timeout', …)` call at the
- * top of the restore transaction and the restore test goes red with
- * `cause: "timeout"`.
+ * Mutation checks: remove the `set_config('statement_timeout', …)` call at
+ * the top of the restore transaction and the restore test goes red with
+ * `cause: "timeout"`; drop `statementTimeoutMs` from the restore's
+ * `recomputeUserRollups` call and the rebuild test finds no buckets; write
+ * every tombstone again and the restore test finds the expired ones back.
  */
 import {
   afterAll,
@@ -146,8 +150,14 @@ async function seedAccountWithBackup() {
       source: "APPLE_HEALTH" as const,
       measuredAt: new Date(start + i * 60_000),
       externalId: `hk-${i}`,
-      // Most of them deleted, as after the nightly consolidation.
-      deletedAt: i % 8 === 0 ? null : new Date(start),
+      // Most of them deleted, as after the nightly consolidation: half of
+      // those yesterday, half long past the tombstone retention.
+      deletedAt:
+        i % 8 === 0
+          ? null
+          : i % 2 === 0
+            ? new Date(start)
+            : new Date(Date.now() - 86_400_000),
     })),
   });
   const { id } = await storeBackupBlob(
@@ -218,7 +228,14 @@ describe("restore under a short statement timeout (#1031)", () => {
     expect(job?.failure ?? null).toBeNull();
     expect(res.status).toBe(200);
     expect(job?.status).toBe("succeeded");
-    expect(await measurementsOf(user.id)).toEqual(before);
+    // Every row comes back but the tombstones past retention, which the
+    // nightly purge would remove anyway.
+    const kept = before.filter(
+      (m) => m.deletedAt === null || m.deletedAt.getTime() > Date.UTC(2025, 0),
+    );
+    expect(kept.some((m) => m.deletedAt !== null)).toBe(true);
+    expect(kept.length).toBeLessThan(before.length);
+    expect(await measurementsOf(user.id)).toEqual(kept);
   });
 
   it("a refused clearing step names its cause and changes nothing", async () => {
@@ -249,4 +266,37 @@ describe("restore under a short statement timeout (#1031)", () => {
       code: "53100",
     });
   });
+
+  it("the chart rebuild after the commit outlasts the session limit too", async () => {
+    const { user, backupId } = await seedAccountWithBackup();
+    const prisma = housekeeping();
+    // Every write of rollup buckets takes longer than the session limit.
+    await prisma.$executeRawUnsafe(
+      `CREATE FUNCTION restore_test_slow_rollups() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(6); RETURN NULL; END $$`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE TRIGGER restore_test_slow_rollups BEFORE INSERT ON measurement_rollups FOR EACH STATEMENT EXECUTE FUNCTION restore_test_slow_rollups()`,
+    );
+    try {
+      expect((await restore(backupId)).status).toBe(200);
+      const buckets = await prisma.measurementRollup.groupBy({
+        by: ["granularity"],
+        where: { userId: user.id },
+        _count: true,
+      });
+      expect(buckets.map((b) => b.granularity).sort()).toEqual([
+        "DAY",
+        "MONTH",
+        "WEEK",
+        "YEAR",
+      ]);
+    } finally {
+      await prisma.$executeRawUnsafe(
+        `DROP TRIGGER IF EXISTS restore_test_slow_rollups ON measurement_rollups`,
+      );
+      await prisma.$executeRawUnsafe(
+        `DROP FUNCTION IF EXISTS restore_test_slow_rollups()`,
+      );
+    }
+  }, 120_000);
 });
