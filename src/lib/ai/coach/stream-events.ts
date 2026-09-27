@@ -429,6 +429,13 @@ export const coachProvenanceSchema = z
       .describe(
         "v1.39.4 — the answer was forced at the round cap while the Coach still wanted to read. Absent otherwise.",
       ),
+    continuationOf: z
+      .string()
+      .max(64)
+      .optional()
+      .describe(
+        "v1.39.4 — this reply continues an answer that was forced at the round cap (the `continue` chip): the id of that earlier assistant message. A continuation offers no further `continue` chip. Absent otherwise.",
+      ),
   })
   .meta({
     id: "CoachProvenance",

@@ -66,6 +66,8 @@ export function assembleTurnDialog(args: {
   reply: GuardedReply;
   prefs: CoachPrefs;
   locale: Locale;
+  /** v1.39.4 — the forced reply this turn continues, if it does. */
+  continuationOf?: string;
 }): TurnDialog {
   const { model, reply, prefs, locale } = args;
   const blocked = reply.outboundBlocked;
@@ -79,7 +81,11 @@ export function assembleTurnDialog(args: {
   const method = buildMethod({ steps: model.steps, results: metas, locale });
   const continueChip = blocked
     ? null
-    : buildContinueFollowUp({ forcedFinal: model.forcedFinal, locale });
+    : buildContinueFollowUp({
+        forcedFinal: model.forcedFinal,
+        continuationOf: args.continuationOf,
+        locale,
+      });
   const followUps = blocked
     ? []
     : [
@@ -112,6 +118,8 @@ export function buildTurnProvenance(args: {
   steps: CoachStep[];
   dialog: TurnDialog;
   forcedFinal: boolean;
+  /** v1.39.4 — the forced reply this turn continues, if it does. */
+  continuationOf?: string;
 }): CoachProvenance {
   const { snapshotProvenance, reply, toolTrace, steps, dialog } = args;
   const surfacedSuggestion = args.suggestion;
@@ -163,6 +171,7 @@ export function buildTurnProvenance(args: {
     ...(dialog.followUps.length > 0 ? { followUps: dialog.followUps } : {}),
     ...(dialog.clarification ? { clarification: dialog.clarification } : {}),
     ...(args.forcedFinal ? { forcedFinal: true as const } : {}),
+    ...(args.continuationOf ? { continuationOf: args.continuationOf } : {}),
   };
   if (sentinel.malformed) {
     // Graceful degrade: log so ops can spot a provider whose
