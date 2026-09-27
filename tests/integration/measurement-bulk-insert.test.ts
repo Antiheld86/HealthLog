@@ -11,6 +11,7 @@ import { getPrismaClient, truncateAllTables } from "./setup";
 import {
   insertMeasurementRows,
   insertNewMeasurementRows,
+  MEASUREMENT_INSERT_ROWS_PER_STATEMENT,
   newMeasurementId,
   type MeasurementInsertRow,
   type NewMeasurementRow,
@@ -123,7 +124,8 @@ describe("insertMeasurementRows", () => {
     expect(Date.now() - sparseRow.createdAt.getTime()).toBeLessThan(60_000);
   });
 
-  it("inserts a whole batch in one statement and reports the count", async () => {
+  it("splits a batch across statements and reports the whole count", async () => {
+    // 2 500 rows is 25 statements of MEASUREMENT_INSERT_ROWS_PER_STATEMENT.
     const prisma = getPrismaClient();
     const batch = Array.from({ length: 2_500 }, (_, i) =>
       sparse(
@@ -270,6 +272,24 @@ describe("insertNewMeasurementRows", () => {
     expect(viaRaw.returned).toEqual(viaPrisma.returned);
     expect(viaRaw.table).toEqual(viaPrisma.table);
     expect(viaRaw.returned).toHaveLength(1);
+  });
+
+  it("skips a duplicate that falls in a later statement than its twin", async () => {
+    // More rows than one statement carries, with the twin of row 20 at row
+    // 150: the two land in different statements, and the second has to be
+    // skipped exactly as Prisma skips it within one.
+    const rows = Array.from({ length: 250 }, (_, i) =>
+      spot(
+        i === 150 ? "hr-20" : `hr-${i}`,
+        new Date(Date.UTC(2026, 2, 5) + i * 60_000).toISOString(),
+        { value: 50 + (i % 40) },
+      ),
+    );
+    expect(rows.length).toBeGreaterThan(MEASUREMENT_INSERT_ROWS_PER_STATEMENT);
+    const { viaPrisma, viaRaw } = await both([], rows);
+    expect(viaRaw.returned).toEqual(viaPrisma.returned);
+    expect(viaRaw.table).toEqual(viaPrisma.table);
+    expect(viaRaw.returned).toHaveLength(249);
   });
 
   it("mints ids in the shape the cuid() default produces", async () => {
