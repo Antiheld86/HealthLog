@@ -15,6 +15,7 @@ import {
 } from "@/lib/ai/coach/persistence";
 import { detectRefusal } from "@/lib/ai/coach/refusal";
 import type { CoachTurn } from "@/lib/ai/coach/chat-request-builder";
+import { collectPriorResults } from "@/lib/ai/coach/results/refs";
 
 import { streamRefusal } from "./sse";
 import type { TurnConversation } from "./types";
@@ -139,6 +140,8 @@ export async function resolveTurnConversation(args: {
       priorUserMessages,
       priorToolFigures,
       priorSummary: existing.summary ?? null,
+      // v1.39.4 — the tables earlier replies hold, named for the context.
+      priorResults: collectPriorResults(existing.messages),
     },
   };
 }

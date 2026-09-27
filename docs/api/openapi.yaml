@@ -50490,6 +50490,7 @@ components:
             - get_workouts
             - get_cycle
             - get_correlations
+            - get_metric_table
             - show_result
             - snapshot
         labelKey:
@@ -50685,6 +50686,7 @@ components:
                 - get_workouts
                 - get_cycle
                 - get_correlations
+                - get_metric_table
             domain:
               $ref: "#/components/schemas/CoachStepDomain"
             window:
@@ -50977,6 +50979,7 @@ components:
                 - get_workouts
                 - get_cycle
                 - get_correlations
+                - get_metric_table
             domain:
               $ref: "#/components/schemas/CoachStepDomain"
             window:

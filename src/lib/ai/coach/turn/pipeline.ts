@@ -126,6 +126,7 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
       reservation,
       emitter,
       turnHints,
+      priorResults: conversation.priorResults,
     });
     if (!model.ok) return model;
 
