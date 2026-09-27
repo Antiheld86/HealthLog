@@ -394,7 +394,8 @@ export const COACH_TOOL_DEFS: AiToolDef[] = [
         view: {
           type: "string",
           enum: ["table", "chart"],
-          description: "How the person asked to see it, when they said.",
+          description:
+            "How the person asked to see it, when they said. table: without a chart. chart: with one; an earlier table by day is shown as how often its values fell into each range.",
         },
       },
     },
