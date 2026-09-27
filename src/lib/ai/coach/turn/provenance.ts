@@ -1,15 +1,106 @@
 /**
  * The provenance envelope a Coach reply is persisted and streamed with:
  * what the snapshot covered, plus what this turn added (key values, cards,
- * the tool trace, the grounded figures, the withheld-figure count).
+ * the tool trace, the grounded figures, the withheld-figure count, and the
+ * dialog: steps, tables, method, chips, clarification).
  */
 import { annotate } from "@/lib/logging/context";
+import type { Locale } from "@/lib/i18n/config";
 import { PROMPT_VERSION } from "@/lib/ai/prompts/insight-generator";
-import type { CoachProvenance, CoachSuggestion } from "@/lib/ai/coach/types";
+import type {
+  CoachClarification,
+  CoachFollowUp,
+  CoachMethod,
+  CoachProvenance,
+  CoachResultMeta,
+  CoachResultTable,
+  CoachStep,
+  CoachSuggestion,
+} from "@/lib/ai/coach/types";
 import type { CoachSuggestedAction } from "@/lib/ai/coach/suggest-action";
 import type { CoachToolTrace } from "@/lib/ai/coach/tools";
+import { buildMethod } from "@/lib/ai/coach/method";
+import { deriveFollowUps } from "@/lib/ai/coach/follow-ups/derive";
+import { buildContinueFollowUp } from "@/lib/ai/coach/follow-ups/continue";
+import type { CoachPrefs } from "@/lib/validations/coach-prefs";
 
+import type { ModelOutcome } from "./model";
 import type { GuardedReply } from "./reply-guards";
+
+/** v1.39.4 — at most this many chips under a reply. */
+const MAX_FOLLOW_UPS = 3;
+
+/** What the dialog adds to a guarded reply. */
+export interface TurnDialog {
+  /** The tables to stream and persist; empty on a blocked turn. */
+  results: CoachResultTable[];
+  method: CoachMethod | null;
+  /** Empty on a blocked turn. */
+  followUps: CoachFollowUp[];
+  /** Null on a blocked turn. */
+  clarification: CoachClarification | null;
+}
+
+/** A table's metadata: everything but the values, for the plaintext blob. */
+function toResultMeta(table: CoachResultTable): CoachResultMeta {
+  return {
+    ref: table.ref,
+    source: table.source,
+    shape: table.shape,
+    titleKey: table.titleKey,
+    title: table.title,
+    rowCount: table.rowCount,
+    chartKind: table.chartKind,
+    displayed: table.displayed,
+    ...(table.reusedFrom ? { reusedFrom: table.reusedFrom } : {}),
+  };
+}
+
+/**
+ * v1.39.4 — the dialog of a guarded reply. On an outbound block the tables,
+ * chips and clarification are dropped, the way key values already are: the
+ * reply they belonged to was replaced.
+ */
+export function assembleTurnDialog(args: {
+  model: Extract<ModelOutcome, { ok: true }>;
+  reply: GuardedReply;
+  prefs: CoachPrefs;
+  locale: Locale;
+}): TurnDialog {
+  const { model, reply, prefs, locale } = args;
+  const blocked = reply.outboundBlocked;
+  const referenced = new Set(reply.referencedResults);
+  const results = blocked
+    ? []
+    : model.results.map((table) =>
+        referenced.has(table.ref) ? { ...table, displayed: true } : table,
+      );
+  const metas = results.map(toResultMeta);
+  const method = buildMethod({ steps: model.steps, results: metas, locale });
+  const continueChip = blocked
+    ? null
+    : buildContinueFollowUp({ forcedFinal: model.forcedFinal, locale });
+  const followUps = blocked
+    ? []
+    : [
+        ...(continueChip ? [continueChip] : []),
+        ...deriveFollowUps({
+          results: metas,
+          steps: model.steps,
+          inventory: model.inventory,
+          proposals: reply.followUpProposals,
+          forcedFinal: model.forcedFinal,
+          prefs,
+          locale,
+        }),
+      ].slice(0, MAX_FOLLOW_UPS);
+  return {
+    results,
+    method,
+    followUps,
+    clarification: reply.clarification,
+  };
+}
 
 export function buildTurnProvenance(args: {
   snapshotProvenance: CoachProvenance;
@@ -17,8 +108,12 @@ export function buildTurnProvenance(args: {
   suggestion: CoachSuggestion | null;
   action: CoachSuggestedAction | null;
   toolTrace: CoachToolTrace[];
+  /** v1.39.4 — the steps the turn read; kept on a blocked turn too. */
+  steps: CoachStep[];
+  dialog: TurnDialog;
+  forcedFinal: boolean;
 }): CoachProvenance {
-  const { snapshotProvenance, reply, toolTrace } = args;
+  const { snapshotProvenance, reply, toolTrace, steps, dialog } = args;
   const surfacedSuggestion = args.suggestion;
   const surfacedAction = args.action;
   const sentinel = reply.keyValuesSentinel;
@@ -58,6 +153,16 @@ export function buildTurnProvenance(args: {
     ...(unverifiedStripped > 0
       ? { unverifiedFigures: unverifiedStripped }
       : {}),
+    // v1.39.4 — the dialog. Metadata only: a table's values are in the
+    // encrypted column, never in this plaintext envelope.
+    ...(steps.length > 0 ? { steps } : {}),
+    ...(dialog.method ? { method: dialog.method } : {}),
+    ...(dialog.results.length > 0
+      ? { results: dialog.results.map(toResultMeta) }
+      : {}),
+    ...(dialog.followUps.length > 0 ? { followUps: dialog.followUps } : {}),
+    ...(dialog.clarification ? { clarification: dialog.clarification } : {}),
+    ...(args.forcedFinal ? { forcedFinal: true as const } : {}),
   };
   if (sentinel.malformed) {
     // Graceful degrade: log so ops can spot a provider whose

@@ -1357,6 +1357,10 @@ const coachMessageBackupSchema = z
     promptVersion: z.string().nullable().optional(),
     tokensUsed: z.number().int().nullable().optional(),
     model: z.string().nullable().optional(),
+    // v1.39.4 — the turn's tables: ciphertext on a disaster-recovery file,
+    // readable JSON on a portable one, absent on every file written before.
+    resultsEncrypted: base64BytesSchema.nullable().optional(),
+    resultsJson: z.string().nullable().optional(),
     createdAt: isoDateTime,
   })
   .passthrough();

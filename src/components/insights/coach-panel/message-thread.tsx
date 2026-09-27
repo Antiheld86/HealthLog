@@ -9,12 +9,17 @@ import { useTranslations } from "@/lib/i18n/context";
 
 import { PlanProposalCards } from "./plan-proposal-card";
 import { ChatBubble } from "./chat-bubble";
+import { CoachFollowUpChips } from "./follow-up-chips";
 import type {
   CoachConversationDetailDTO,
   CoachOptimisticUserMessage,
   CoachStreamingMessage,
 } from "./use-coach";
-import type { CoachMessageDTO } from "@/lib/ai/coach/types";
+import type {
+  CoachClarification,
+  CoachFollowUp,
+  CoachMessageDTO,
+} from "@/lib/ai/coach/types";
 
 // v1.28.26 file-size split (pure code motion): the bubble renderer +
 // per-message actions live in `chat-bubble.tsx`, the read-aloud stack in
@@ -72,6 +77,54 @@ export interface MessageThreadProps {
    * resubmits it as a fresh turn. Omitted → the regenerate action is hidden.
    */
   onRegenerate?: (userText: string) => void;
+  /**
+   * v1.39.4 — a follow-up chip was tapped. Omitted → no chips are shown.
+   */
+  onFollowUp?: (followUp: CoachFollowUp, messageId: string) => void;
+}
+
+/**
+ * v1.39.4 — the open clarifying question: the latest assistant turn's
+ * choices, whether it is the just-settled streamed turn or the last
+ * persisted message. None while a turn is in flight, and none once the
+ * person has answered (their message is then the last one).
+ */
+export function latestClarification(
+  messages: CoachMessageDTO[],
+  streaming: CoachStreamingMessage | undefined,
+): { messageId: string; clarification: CoachClarification } | null {
+  if (streaming?.inProgress) return null;
+  if (streaming?.messageId && streaming.clarification) {
+    return {
+      messageId: streaming.messageId,
+      clarification: streaming.clarification,
+    };
+  }
+  const last = messages[messages.length - 1];
+  if (streaming?.messageId && streaming.messageId !== last?.id) return null;
+  if (last?.role !== "assistant") return null;
+  const clarification = last.metricSource?.clarification;
+  return clarification ? { messageId: last.id, clarification } : null;
+}
+
+/**
+ * v1.39.4 — the chips to offer, and the message that offered them: the
+ * latest assistant turn only, whether it is the just-settled streamed turn
+ * or the last persisted message. None while a turn is in flight.
+ */
+export function latestFollowUps(
+  messages: CoachMessageDTO[],
+  streaming: CoachStreamingMessage | undefined,
+): { messageId: string; followUps: CoachFollowUp[] } | null {
+  if (streaming?.inProgress) return null;
+  if (streaming?.messageId && streaming.followUps.length > 0) {
+    return { messageId: streaming.messageId, followUps: streaming.followUps };
+  }
+  const last = messages[messages.length - 1];
+  if (streaming?.messageId && streaming.messageId !== last?.id) return null;
+  if (last?.role !== "assistant") return null;
+  const followUps = last.metricSource?.followUps ?? [];
+  return followUps.length > 0 ? { messageId: last.id, followUps } : null;
 }
 
 /**
@@ -167,6 +220,7 @@ export function MessageThread({
   emptyHint,
   interleaved,
   onRegenerate,
+  onFollowUp,
 }: MessageThreadProps) {
   const { t } = useTranslations();
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -252,6 +306,8 @@ export function MessageThread({
     messages,
     optimisticActive && optimisticUser ? optimisticUser.content : null,
   );
+
+  const chips = latestFollowUps(messages, streaming);
 
   // Track scroll position so we don't yank the viewport when the user
   // is browsing earlier turns.
@@ -385,6 +441,7 @@ export function MessageThread({
               role={m.role}
               content={m.content}
               metricSource={m.metricSource}
+              conversationId={conversation?.id ?? null}
               providerType={m.providerType}
               messageId={m.id}
               tokensUsed={m.tokensUsed}
@@ -437,6 +494,8 @@ export function MessageThread({
             metricSource={streaming.metricSource}
             suggestion={streaming.suggestion}
             suggestedAction={streaming.suggestedAction}
+            steps={streaming.steps}
+            results={streaming.results}
             providerType={streaming.inProgress ? "streaming" : null}
             inProgress={streaming.inProgress}
             errorCode={streaming.errorCode}
@@ -446,6 +505,15 @@ export function MessageThread({
           />
         </div>
       )}
+      {/* v1.39.4 — follow-up chips under the latest assistant turn only. */}
+      {onFollowUp && chips ? (
+        <CoachFollowUpChips
+          followUps={chips.followUps}
+          messageId={chips.messageId}
+          disabled={!!streaming?.inProgress}
+          onSelect={onFollowUp}
+        />
+      ) : null}
       {/* v1.16.5 — thread tail: the current guided question and/or the
           closing summary follow the last completed turn. */}
       {placement.tail.map((i) => (

@@ -6,7 +6,7 @@
  * figures, and a bounded loop that executes them. The legacy snapshot path
  * stays alive as the no-tools fallback (per-provider `supportsTools`).
  */
-export { COACH_TOOL_DEFS } from "./definitions";
+export { COACH_TOOL_DEFS, parseCoachToolArgs } from "./definitions";
 export type { CoachToolTrace } from "./executor";
 export {
   buildCoachDataInventory,

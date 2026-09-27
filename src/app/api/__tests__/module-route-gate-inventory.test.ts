@@ -337,6 +337,11 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   // entry here would fail the "does not hide a gate" check below.
   "src/app/api/insights/chat/[id]/route.ts",
   "src/app/api/insights/chat/messages/[id]/feedback/route.ts",
+  // One message's stored tables. No whole-route gate for the same reason,
+  // but each table is withheld when the module owning its domain is off
+  // (`isCoachDomainWithheld` over the resolved module map), so a switched-off
+  // domain's values never come back through a stored answer.
+  "src/app/api/insights/chat/[id]/messages/[messageId]/results/route.ts",
   // The Today digest and its dismiss: data, with the AI parts masked by the
   // loader through the capability resolver.
   "src/app/api/daily/digest/route.ts",

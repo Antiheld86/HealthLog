@@ -23,14 +23,24 @@ import {
   renderDataInventory,
   renderFocusHint,
   buildToolModeAddendum,
+  parseCoachToolArgs,
   runCoachToolLoop,
   type CoachToolTrace,
 } from "@/lib/ai/coach/tools";
+import type { InventoryEntry } from "@/lib/ai/coach/tools/inventory";
+import type { CoachResultTable, CoachStep } from "@/lib/ai/coach/types";
+import {
+  projectResults,
+  type SettledToolCall,
+} from "@/lib/ai/coach/results/project";
+import { deriveChartSpec } from "@/lib/ai/coach/results/chart-spec";
 
+import { buildDialogAddenda } from "./addenda";
 import { refundReservation, type TurnReservation } from "./budget";
 import type { TurnChain } from "./chain";
 import type { TurnContext } from "./context";
 import { classifyBubblingProviderError } from "./errors";
+import { snapshotStep, toStep } from "./steps";
 import type { TurnEmitter } from "./types";
 
 export type ModelOutcome =
@@ -77,8 +87,55 @@ export type ModelOutcome =
        * to the daily meter).
        */
       cachedTokens: number;
+      /**
+       * v1.39.4 — the steps this turn read, in first-seen order: the tool
+       * calls on the tool path, one snapshot step on the no-tools path.
+       * Already streamed as `step` frames; persisted on the provenance.
+       */
+      steps: CoachStep[];
+      /**
+       * v1.39.4 — the tables this turn's tool results project to, with their
+       * charts. Not streamed here: they go out after the reply guards, and
+       * not at all on a blocked turn.
+       */
+      results: CoachResultTable[];
+      /** v1.39.4 — the loop forced the answer at its round cap. */
+      forcedFinal: boolean;
+      /** v1.39.4 — the DATA INVENTORY entries; null on the no-tools path. */
+      inventory: InventoryEntry[] | null;
     }
   | { ok: false; code: string };
+
+/**
+ * v1.39.4 — the turn's steps, upserted by id and streamed as they change.
+ * A frame is never written to a stream the client already closed.
+ */
+function stepRecorder(emitter: TurnEmitter): {
+  record(step: CoachStep | null): void;
+  list(): CoachStep[];
+} {
+  const byId = new Map<string, CoachStep>();
+  return {
+    record(step) {
+      if (!step) return;
+      byId.set(step.id, step);
+      if (!emitter.aborted()) emitter.emit({ type: "step", step });
+    },
+    list: () => [...byId.values()],
+  };
+}
+
+/** v1.39.4 — a projected table with the chart the server chose for it. */
+function withChart(table: CoachResultTable): CoachResultTable {
+  const chart = deriveChartSpec(table);
+  return { ...table, chart, chartKind: chart?.kind ?? null };
+}
+
+/** v1.39.4 — server-authored lines appended to the system prompt. */
+function appendBlocks(base: string, blocks: string[]): string {
+  const extra = blocks.filter((block) => block.length > 0);
+  return extra.length > 0 ? [base, ...extra].join("\n\n") : base;
+}
 
 export async function runTurnModel(args: {
   userId: string;
@@ -89,14 +146,18 @@ export async function runTurnModel(args: {
   chain: TurnChain;
   toolMode: boolean;
   reservation: TurnReservation;
-  /**
-   * The turn's frame channel. Not written to yet: the model step is where
-   * live progress frames will originate.
-   */
+  /** The turn's frame channel; the live `step` frames go out on it. */
   emitter: TurnEmitter;
+  /**
+   * v1.39.4 — server-authored context lines for this turn (a resolved
+   * follow-up chip, an answered clarification). Empty on a plain turn,
+   * which then sends its prompt unchanged.
+   */
+  turnHints: string[];
 }): Promise<ModelOutcome> {
   const { userId, locale, signal, conversationId, ctx, chain, toolMode } = args;
   const { effectiveScope, workoutEvidence, turnContext, snapshot } = ctx;
+  const steps = stepRecorder(args.emitter);
   try {
     if (toolMode) {
       // v1.20.0 (F1) — base context: the full system prompt + a tool-mode
@@ -108,7 +169,10 @@ export async function runTurnModel(args: {
       const inventory = await buildCoachDataInventory(userId, effectiveScope);
       const toolRequest = buildCoachToolRequest({
         systemPrompt: ctx.systemPrompt,
-        toolModeAddendum: buildToolModeAddendum(locale),
+        toolModeAddendum: appendBlocks(buildToolModeAddendum(locale), [
+          buildDialogAddenda(locale),
+          ...args.turnHints,
+        ]),
         focusHint: renderFocusHint(effectiveScope?.sources),
         workoutEvidence,
         dataInventory: renderDataInventory(inventory),
@@ -116,6 +180,9 @@ export async function runTurnModel(args: {
         transcript: turnContext.transcript,
         languageName: LANGUAGE_NAMES[locale],
       });
+      // v1.39.4 — every call this turn settled, by its turn-wide index, for
+      // the result tables. Only this turn's own calls ever reach them.
+      const settled: SettledToolCall[] = [];
       const loop = await runCoachToolLoop({
         userId,
         providers: chain,
@@ -135,6 +202,26 @@ export async function runTurnModel(args: {
         signal,
         // v1.22 (#89) — per-user response timeout for each tool-round call.
         timeoutMs: ctx.aiResponseTimeoutMs,
+        // v1.39.4 — live steps: a `running` step as each call starts, its
+        // final status as it settles.
+        onCallStart: (call, index) =>
+          steps.record(
+            toStep({
+              call,
+              index,
+              parsedArgs: parseCoachToolArgs(call.name, call.arguments),
+              locale,
+            }),
+          ),
+        onCallSettled: (call, result, index) => {
+          const parsedArgs = parseCoachToolArgs(call.name, call.arguments);
+          settled[index] = {
+            name: call.name,
+            ...(parsedArgs ? { args: parsedArgs } : {}),
+            result,
+          };
+          steps.record(toStep({ call, index, parsedArgs, result, locale }));
+        },
       });
       // v1.32.1 — the numeric verifier ACTIVATES only when this turn actually
       // delivered figures the model was told to ground against: a pinned
@@ -171,6 +258,13 @@ export async function runTurnModel(args: {
         inventoryPayloads: [inventory.entries],
         totalTokens: loop.totalTokens,
         cachedTokens: loop.cachedTokens,
+        steps: steps.list(),
+        results: projectResults({
+          calls: settled.filter((call) => call !== undefined),
+          locale,
+        }).map(withChart),
+        forcedFinal: loop.forcedFinal === true,
+        inventory: inventory.entries,
       };
     }
     // v1.22 (#89) — the no-tools path (local / Ollama / exo, and any chain
@@ -180,6 +274,13 @@ export async function runTurnModel(args: {
     // heartbeat keeps the proxy connection warm and the assembled reply is
     // returned in full so every guard still runs on the complete text.
     let streamedDeltas = 0;
+    // v1.39.4 — the no-tools path reads the whole snapshot: one step.
+    steps.record(
+      snapshotStep({
+        metricCount: snapshot.provenance.metrics.length,
+        locale,
+      }),
+    );
     const fallback = await runStreamingRawCompletionWithFallback({
       surface: "coach",
       userId,
@@ -192,7 +293,7 @@ export async function runTurnModel(args: {
       // on every stateless no-tools request), so it ships as a single user
       // message. The stable persona rides `system` and is cache-eligible.
       params: singleUserTurn({
-        system: ctx.systemPrompt,
+        system: appendBlocks(ctx.systemPrompt, args.turnHints),
         user: ctx.userPrompt,
         temperature: AI_BUDGETS.coach.temperature,
         maxTokens: AI_BUDGETS.coach.maxTokens,
@@ -228,6 +329,10 @@ export async function runTurnModel(args: {
       inventoryPayloads: [],
       totalTokens: result.tokensUsed ?? 0,
       cachedTokens: result.cachedInputTokens ?? 0,
+      steps: steps.list(),
+      results: [],
+      forcedFinal: false,
+      inventory: null,
     };
   } catch (err) {
     // The provider chain failed outright — no tokens were billed, so refund

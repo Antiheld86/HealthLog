@@ -117,6 +117,46 @@ const METRIC_SEALED_NOTE = "right hand, rested";
 const COACH_USER_TURN = "my readings look higher this week, is that real?";
 const COACH_ASSISTANT_TURN =
   "the last seven mornings average 4 mmHg above the fortnight before";
+/** The table of values the assistant turn read: ciphertext at rest. */
+const COACH_RESULTS_JSON = JSON.stringify([
+  {
+    ref: "r1",
+    source: {
+      tool: "get_metric_series",
+      domain: "bp",
+      window: "last7days",
+      period: "current",
+      granularity: "day",
+    },
+    shape: "timeSeries",
+    titleKey: "coach.result.title.metricByPeriod",
+    title: "Blood pressure by day",
+    rowCount: 2,
+    chartKind: "line",
+    displayed: true,
+    columns: [
+      {
+        key: "period",
+        kind: "period",
+        labelKey: "coach.result.column.day",
+        label: "Day",
+      },
+      {
+        key: "sys",
+        kind: "number",
+        labelKey: "coach.result.column.systolic",
+        label: "Systolic",
+        unit: "mmHg",
+      },
+    ],
+    rows: [
+      ["2026-07-19", 131],
+      ["2026-07-20", null],
+    ],
+    truncated: false,
+    chart: { kind: "line", x: "period", series: ["sys"] },
+  },
+]);
 const DOSE_CHANGE_NOTE = "titration note, encrypted at rest";
 const EXTRACTED_FACT_SPAN = "Ferritin  91 ng/mL   (30 - 400)";
 const SIDE_EFFECT_NOTE = "nausea for two hours after the evening dose";
@@ -926,6 +966,7 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
           {
             role: "assistant",
             encryptedContent: encryptToBytes(COACH_ASSISTANT_TURN),
+            resultsEncrypted: encryptToBytes(COACH_RESULTS_JSON),
             providerType: "anthropic",
             model: "claude-opus-5",
             tokensUsed: 812,
@@ -1580,6 +1621,9 @@ describe("every model the plan claims two-ended survives a real restore", () => 
           content: decryptFromBytes(message.encryptedContent),
           model: message.model,
           tokensUsed: message.tokensUsed,
+          results: message.resultsEncrypted
+            ? decryptFromBytes(message.resultsEncrypted)
+            : null,
         })),
         attachments: thread.attachments.map((a) => a.documentId),
       })),
@@ -1597,12 +1641,14 @@ describe("every model the plan claims two-ended survives a real restore", () => 
             content: COACH_USER_TURN,
             model: null,
             tokensUsed: null,
+            results: null,
           },
           {
             role: "assistant",
             content: COACH_ASSISTANT_TURN,
             model: "claude-opus-5",
             tokensUsed: 812,
+            results: COACH_RESULTS_JSON,
           },
         ],
         attachments: [],
@@ -1619,6 +1665,7 @@ describe("every model the plan claims two-ended survives a real restore", () => 
             content: "What does the ferritin mean?",
             model: null,
             tokensUsed: null,
+            results: null,
           },
         ],
         attachments: [vaultDocument.id],
@@ -2699,6 +2746,75 @@ describe("every model the plan claims two-ended survives a real restore", () => 
    * side by side: a dropped row and a nulled pointer, each named in the report,
    * and a restore that still answers 200.
    */
+  /**
+   * The Coach's stored tables through a portable file.
+   *
+   * A disaster-recovery file carries them as ciphertext (the round trip at
+   * the top of this file). A portable file has to carry them readable, like
+   * the prose they sit beside, and the restore has to seal them again under
+   * the target's key. A restore that dropped the readable JSON would bring
+   * the thread back with every answer's table missing and nothing to say so.
+   */
+  it("carries a turn's tables readable in a portable file and seals them again on restore", async () => {
+    const prisma = getPrismaClient();
+    await seedAdminSession(prisma);
+    await createOwner(prisma);
+    await prisma.coachConversation.create({
+      data: {
+        userId: OWNER_ID,
+        titleEncrypted: encryptToBytes("How is my blood pressure trending?"),
+        documentScoped: false,
+        messages: {
+          create: [
+            {
+              role: "assistant",
+              encryptedContent: encryptToBytes(COACH_ASSISTANT_TURN),
+              resultsEncrypted: encryptToBytes(COACH_RESULTS_JSON),
+              createdAt: AT("2026-07-20T09:59:00.000Z"),
+            },
+          ],
+        },
+      },
+    });
+
+    const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
+      purpose: "portable-export",
+    });
+    const { coachConversations } = payload as {
+      coachConversations: Array<{ messages: Array<Record<string, unknown>> }>;
+    };
+    const [turn] = coachConversations[0].messages;
+    expect(turn).toMatchObject({ resultsJson: COACH_RESULTS_JSON });
+    expect(turn).not.toHaveProperty("resultsEncrypted");
+
+    await prisma.user.delete({ where: { id: OWNER_ID } });
+    await createOwner(prisma);
+    const backup = await prisma.dataBackup.create({
+      data: {
+        userId: OWNER_ID,
+        type: "TWO_ENDED_ROUND_TRIP",
+        data: encrypt(JSON.stringify(payload)),
+      },
+    });
+    const response = await POST(
+      new Request(`http://localhost/api/admin/backups/${backup.id}/restore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: "RESTORE" }),
+      }) as never,
+      { params: Promise.resolve({ id: backup.id }) },
+    );
+    expect(response.status, JSON.stringify(await response.json())).toBe(200);
+
+    const restored = await prisma.coachMessage.findFirstOrThrow({
+      where: { conversation: { userId: OWNER_ID } },
+    });
+    expect(restored.resultsEncrypted).not.toBeNull();
+    expect(decryptFromBytes(restored.resultsEncrypted!)).toBe(
+      COACH_RESULTS_JSON,
+    );
+  });
+
   it("drops and names a filing and a commitment a truncated file cannot resolve", async () => {
     const prisma = getPrismaClient();
     await seedAdminSession(prisma);

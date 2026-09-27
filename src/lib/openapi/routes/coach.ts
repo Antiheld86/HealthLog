@@ -36,6 +36,11 @@ import {
 } from "@/lib/validations/coach-plan";
 import { coachChatRequestSchema } from "@/lib/ai/coach/types";
 import {
+  coachProvenanceSchema,
+  coachResultEntrySchema,
+  coachStreamEventSchema,
+} from "@/lib/ai/coach/stream-events";
+import {
   coachAttachmentCreateSchema,
   fencedChatRequestSchema,
 } from "@/lib/validations/inbound-documents";
@@ -468,68 +473,8 @@ const coachSuggestedActionResultResponse = z
 // endpoint decrypts every message server-side, so the client never
 // handles a key. The list endpoint stays metadata-only (no decryption).
 
-const coachProvenanceSchema = z
-  .object({
-    windows: z
-      .array(
-        z.enum([
-          "last7days",
-          "last30days",
-          "last90days",
-          "lastYear",
-          "allTime",
-        ]),
-      )
-      .describe("Analysis windows the assistant drew on this turn."),
-    metrics: z
-      .array(z.string())
-      .describe(
-        "Stable metric-topic keys referenced (e.g. bp, weight, sleep, glucose). `general` is the empty-snapshot sentinel. The client translates these labels; the server never localises them.",
-      ),
-    counts: z
-      .record(z.string(), z.number().int())
-      .optional()
-      .describe(
-        "Per-metric sample-count summary; absent on an empty snapshot.",
-      ),
-    keyValues: z
-      .array(
-        z.object({
-          label: z.string(),
-          value: z.string(),
-          unit: z.string().optional(),
-          window: z.string().optional(),
-        }),
-      )
-      .optional()
-      .describe(
-        "Load-bearing numbers the assistant surfaced, rendered in the collapsible evidence block. Hard-capped at 8 entries.",
-      ),
-    toolCalls: z
-      .array(
-        z.object({
-          name: z.string(),
-          present: z.boolean(),
-        }),
-      )
-      .optional()
-      .describe(
-        "v1.20.0 — the retrieval-tool trace for this turn: which tools the Coach called and whether each found data. Metadata only (no values). Absent on the legacy snapshot path and on turns that called no tools.",
-      ),
-    unverifiedFigures: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe(
-        "v1.32.14 — count of numeric tokens the grounding guard withheld from this reply (each rewritten to the editorial elision mark). Drives the quiet per-message notice. Count only, never the withheld values. Absent when the turn withheld nothing.",
-      ),
-  })
-  .meta({
-    id: "CoachProvenance",
-    description:
-      "Provenance envelope attached to an assistant message — labels and counts only, plus the optional evidence key-values. No raw timestamps.",
-  });
+// The provenance envelope and the stream frames come from the Coach's own
+// wire mirror, which a type test holds equal to the TypeScript contract.
 
 const coachMessageSchema = z
   .object({
@@ -546,7 +491,7 @@ const coachMessageSchema = z
       .string()
       .nullable()
       .describe(
-        "Provider that produced the reply (e.g. anthropic, openai, local, refusal). The sentinel `cancelled` marks an empty assistant row closing a turn the client aborted mid-generation (navigation away); clients should render it as an interrupted turn with a retry affordance. Null for user turns.",
+        'Provider that produced the reply (e.g. anthropic, openai, local, refusal). The sentinel `cancelled` marks an empty assistant row closing a turn the client aborted mid-generation (navigation away); clients should render it as an interrupted turn with a retry affordance. v1.39.4 — the sentinel `reuse` marks a turn answered from a table already stored in the conversation (a follow-up chip such as "as a chart"), with no model call: render it as a normal assistant turn without a token footer. Null for user turns.',
       ),
     promptVersion: z
       .string()
@@ -720,7 +665,7 @@ const coachAttachmentsResponseSchema = z
 const coachChatRequest = coachChatRequestSchema.meta({
   id: "CoachChatRequest",
   description:
-    "Inbound Coach turn. `message` is the user's turn (1–4 000 chars). `conversationId` is omitted to start a new conversation (the server mints a title from the first message) and supplied to continue one. `scope` narrows which metrics the snapshot ships and which window the timeline covers; omitted fields fall back to server defaults. `locale` picks the reply language. `guidedQuestion` carries the clarifying question a message answers (client-side bubble, never persisted). No `userId` field — the owner is narrowed from the session / Bearer.",
+    "Inbound Coach turn. `message` is the user's turn (1–4 000 chars). `conversationId` is omitted to start a new conversation (the server mints a title from the first message) and supplied to continue one. `scope` narrows which metrics the snapshot ships and which window the timeline covers; omitted fields fall back to server defaults. `locale` picks the reply language. `guidedQuestion` carries the clarifying question a message answers (client-side bubble, never persisted). v1.39.4 — `followUp: { messageId, id }` names a follow-up chip the person tapped (send the chip's `label` as `message`); the server resolves the chip from the conversation's latest assistant message, and a chip that is no longer current is treated as a plain message. `clarification: { messageId, choiceId? }` answers a clarifying question, `choiceId` absent when the person typed their own answer. No `userId` field — the owner is narrowed from the session / Bearer.",
 });
 
 const anamnesisFactCurrentExistsResponse = {
@@ -790,7 +735,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Send a Coach turn (streaming reply)",
       description:
-        'v1.18.0 — sends a user turn and streams the assistant reply as Server-Sent Events. The response is `text/event-stream`, not JSON: one `data: <json>\\n\\n` frame per event. Frame `type` is one of `token` (a chunk of reply text: `{ type, token }`), `provenance` (the evidence envelope: `{ type, metricSource }`), `suggestion` (a cadence-suggestion card: `{ type, suggestion }`), `reasoning` (v1.18.9, optional reasoning-summary text: `{ type, text }` — emitted only by reasoning-capable providers; absent otherwise), `done` (`{ type, conversationId, messageId, usage? }` — v1.18.9 adds the optional `usage` envelope `{ totalTokens, promptTokens?, completionTokens?, model? }`, server-authoritative; clients display it, never recompute), or `error` (`{ type, code, message, reason? }`). The HTTP status is 200 even for a provider/refusal outcome — clients dispatch on the `error` frame, not the status. Clients ignore unknown frame types (additive evolution). Omitting `conversationId` starts a new conversation. Requires the `coach` AI capability, checked right after auth: an unavailable Coach is refused with the capability envelope before the stream opens, except a missing provider, which keeps its `coach.provider.none` error frame and adds `reason: "no_provider"`. Budget- and rate-limited. Auth via cookie or Bearer.',
+        'v1.18.0 — sends a user turn and streams the assistant reply as Server-Sent Events. The response is `text/event-stream`, not JSON: one `data: <json>\\n\\n` frame per event, each a `CoachStreamEvent` dispatched on `type`. Frames, in the order they arrive: `step` (v1.39.4, live progress while the Coach reads the record: `{ type, step }`, upserted by `step.id` from `running` to `done` / `empty` / `failed`; catalog labels, domains, windows and counts only), `token` (a chunk of reply text: `{ type, token }`), `provenance` (the evidence envelope: `{ type, metricSource }`), `result` (v1.39.4, a table of the values the turn read: `{ type, result }`, zero or more, sent only to the account that owns the conversation), `suggestion` (a cadence-suggestion card: `{ type, suggestion }`), `suggestedAction` (v1.22, a confirm-to-apply action card: `{ type, suggestedAction }`; nothing is created until the person confirms it through `POST /api/coach/suggested-actions`), `clarification` (v1.39.4, the choices when the reply is a clarifying question: `{ type, clarification }`; answer with `clarification` on the next request), `followUps` (v1.39.4, up to three chips under the reply: `{ type, followUps }`; send one back with `followUp` on the next request), `reasoning` (v1.18.9, optional reasoning-summary text: `{ type, text }` — emitted only by reasoning-capable providers; absent otherwise), and `done` (`{ type, conversationId, messageId, usage? }` — v1.18.9 adds the optional `usage` envelope `{ totalTokens, promptTokens?, completionTokens?, model? }`, server-authoritative; clients display it, never recompute), or a single `error` (`{ type, code, message, reason? }`). No frame added after v1.18.9 carries a top-level key an older frame uses, so a client decoding every frame into one flat struct is safe. The HTTP status is 200 even for a provider/refusal outcome — clients dispatch on the `error` frame, not the status. Clients ignore unknown frame types (additive evolution). Omitting `conversationId` starts a new conversation. Requires the `coach` AI capability, checked right after auth: an unavailable Coach is refused with the capability envelope before the stream opens, except a missing provider, which keeps its `coach.provider.none` error frame and adds `reason: "no_provider"`. Budget- and rate-limited. Auth via cookie or Bearer.',
       requestBody: {
         required: true,
         content: {
@@ -800,14 +745,10 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       responses: {
         "200": {
           description:
-            "Server-Sent Events stream of `token` / `provenance` / `done` / `error` frames.",
+            "Server-Sent Events stream: each `data: <json>\\n\\n` frame is one `CoachStreamEvent`. Keepalive comment lines (`: ka`) carry no data and are ignored.",
           content: {
             "text/event-stream": {
-              schema: {
-                type: "string",
-                description:
-                  "SSE frames: `data: <json>\\n\\n`. See the operation description for the per-`type` frame shapes.",
-              },
+              schema: coachStreamEventSchema,
             },
           },
         },
@@ -820,6 +761,49 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         "503": aiCheckFailedResponse,
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/insights/chat/{id}/messages/{messageId}/results": {
+    get: {
+      tags: ["Insights"],
+      summary: "Read the tables one Coach message read",
+      description:
+        "v1.39.4 — the tables of values one assistant message read, decrypted server-side for the account that owns the conversation. One entry per table the message's `metricSource.results` lists, in that order: the full `CoachResultTable`, or `{ ref, withheld }` when it is not served — `module_disabled` when the table's domain is switched off for the record now, `unavailable` when the stored tables cannot be read. A message without tables answers an empty list. Fetch lazily, per message, when a table scrolls into view. Never AI-gated: the tables are stored data and stay readable while the Coach is unavailable. A foreign or unknown conversation or message id maps to 404 (never 403). Auth via cookie or Bearer.",
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+          description: "Conversation id.",
+        },
+        {
+          name: "messageId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+          description: "Assistant message id within the conversation.",
+        },
+      ],
+      responses: {
+        "200": {
+          description: "The message's tables, each served whole or withheld.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ results: z.array(coachResultEntrySchema) }),
+                "CoachMessageResultsResponse",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "Conversation or message not found, or not owned by the caller.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         ...stdResponses,
       },
     },

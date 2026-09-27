@@ -6237,6 +6237,12 @@ model CoachMessage {
   // nullable: user turns, refusals, and pre-feature rows carry NULL.
   tokensUsed       Int?     @map("tokens_used")
   model            String?
+  // v1.39.4 — the tables of values this turn read (JSON `CoachResultTable[]`,
+  // at most 128 KB), AES-256-GCM encrypted like `encryptedContent`. Health
+  // values, so they never ride the plaintext `metricSourceJson`, which holds
+  // only the tables' metadata. Read through `readMessageResults` by the
+  // owner-narrowed results endpoint; NULL on every turn without a table.
+  resultsEncrypted Bytes?   @map("results_encrypted")
   createdAt        DateTime @default(now()) @map("created_at")
 
   conversation CoachConversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)

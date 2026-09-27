@@ -19,10 +19,14 @@ import { resolveTurnChain } from "./chain";
 import { assembleTurnContext } from "./context";
 import { persistUserTurn, resolveTurnConversation } from "./conversation";
 import { handleProducerFailure } from "./errors";
+import { resolveClarificationAnswer } from "@/lib/ai/coach/clarify";
+import { resolveFollowUp } from "@/lib/ai/coach/follow-ups/resolve";
+
 import { runTurnModel } from "./model";
 import { persistAssistantReply } from "./persist";
-import { buildTurnProvenance } from "./provenance";
+import { assembleTurnDialog, buildTurnProvenance } from "./provenance";
 import { guardReply } from "./reply-guards";
+import { runReuseTurn } from "./reuse-turn";
 import {
   SSE_HEADERS,
   createTurnEmitter,
@@ -44,6 +48,32 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
   if ("refusal" in resolved) return resolved.refusal;
   const conversation = resolved.conversation;
   const workingConversationId = conversation.conversationId;
+
+  // v1.39.4 — a tapped chip or an answered question. Resolved against what
+  // the server persisted, never against what the client says the chip was.
+  // A reuse chip is answered from a stored table without a model call.
+  const resolvedFollowUp = await resolveFollowUp({
+    userId,
+    conversationId: input.conversationId,
+    followUp: input.followUp,
+  });
+  if (resolvedFollowUp?.followUp.reuse) {
+    const reused = await runReuseTurn({
+      input,
+      conversation,
+      resolved: resolvedFollowUp,
+    });
+    if (reused) return reused;
+  }
+  const clarifiedLine = await resolveClarificationAnswer({
+    userId,
+    conversationId: input.conversationId,
+    clarification: input.clarification,
+  });
+  const turnHints = [
+    ...(resolvedFollowUp?.contextHint ? [resolvedFollowUp.contextHint] : []),
+    ...(clarifiedLine ? [clarifiedLine] : []),
+  ];
 
   await persistUserTurn(workingConversationId, message);
 
@@ -95,6 +125,7 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
       toolMode,
       reservation,
       emitter,
+      turnHints,
     });
     if (!model.ok) return model;
 
@@ -120,12 +151,21 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
       coachPrefs: ctx.coachPrefs,
       reply,
     });
+    const dialog = assembleTurnDialog({
+      model,
+      reply,
+      prefs: ctx.coachPrefs,
+      locale,
+    });
     const provenance = buildTurnProvenance({
       snapshotProvenance: ctx.snapshot.provenance,
       reply,
       suggestion: cards.suggestion,
       action: cards.action,
       toolTrace: model.toolTrace,
+      steps: model.steps,
+      dialog,
+      forcedFinal: model.forcedFinal,
     });
     const { messageId } = await persistAssistantReply({
       conversationId: workingConversationId,
@@ -134,6 +174,7 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
       model,
       ctx,
       toolMode,
+      results: dialog.results,
     });
 
     return {
@@ -142,6 +183,9 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
       provenance,
       suggestion: cards.suggestion,
       action: cards.action,
+      results: dialog.results,
+      followUps: dialog.followUps,
+      clarification: dialog.clarification,
       messageId,
       totalTokens: model.totalTokens,
       model: model.result.model ?? null,

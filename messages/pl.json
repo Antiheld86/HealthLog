@@ -9480,7 +9480,180 @@
       "promptInjection": "Zauważyłem polecenia, które próbują obejść moje wytyczne. Jestem Coachem HealthLog i podsumowuję wyłącznie Twoje własne dane zdrowotne — sformułuj pytanie w tych ramach.",
       "conversationPoisoned": "Wcześniejsza wiadomość w tej rozmowie zawiera polecenia, które próbują obejść moje wytyczne. Rozpocznij nową rozmowę."
     },
-    "noRecordedData": "Nie masz zapisanych żadnych pomiarów dla tego, o co pytasz, więc nie mogę podać Ci żadnej liczby. Gdy coś zapiszesz, zapytaj ponownie — wtedy oprę się na Twoich własnych wartościach."
+    "noRecordedData": "Nie masz zapisanych żadnych pomiarów dla tego, o co pytasz, więc nie mogę podać Ci żadnej liczby. Gdy coś zapiszesz, zapytaj ponownie — wtedy oprę się na Twoich własnych wartościach.",
+    "step": {
+      "read": "Czytam: {domain}",
+      "readWindow": "Czytam: {domain}, {window}",
+      "snapshot": "Czytam podsumowanie Twoich danych",
+      "showResult": "Otwieram wcześniejszą tabelę",
+      "reuse": "Korzystam z tabeli z poprzedniej odpowiedzi",
+      "headerActive": "{label}…",
+      "headerDoneOne": "Sprawdzono 1 źródło",
+      "headerDoneFew": "Sprawdzono {count} źródła",
+      "headerDoneOther": "Sprawdzono {count} źródeł",
+      "listLabel": "Co sprawdził Coach",
+      "toggleShow": "Pokaż, co sprawdził Coach",
+      "toggleHide": "Ukryj, co sprawdził Coach",
+      "announceDone": "Gotowe: {label}",
+      "readingsOne": "1 pomiar",
+      "readingsFew": "{count} pomiary",
+      "readingsOther": "{count} pomiarów",
+      "rowsOne": "1 wiersz",
+      "rowsFew": "{count} wiersze",
+      "rowsOther": "{count} wierszy",
+      "metricsOne": "1 wskaźnik",
+      "metricsFew": "{count} wskaźniki",
+      "metricsOther": "{count} wskaźników",
+      "reason": {
+        "noData": "brak pomiarów",
+        "outsideWindow": "brak pomiarów w tym okresie",
+        "moduleDisabled": "wyłączone",
+        "retrievalFailed": "nie udało się odczytać",
+        "invalidArguments": "nie zrozumiano zapytania"
+      },
+      "domain": {
+        "labs": "Wyniki badań",
+        "illness": "Choroba i powrót do zdrowia",
+        "cycle": "Cykl",
+        "correlations": "Związki między wskaźnikami",
+        "snapshot": "Podsumowanie danych"
+      },
+      "window": {
+        "last7days": "ostatnie 7 dni",
+        "last30days": "ostatnie 30 dni",
+        "last90days": "ostatnie 90 dni",
+        "lastYear": "ostatnie 12 miesięcy",
+        "allTime": "cały okres"
+      },
+      "period": {
+        "current": "ten okres",
+        "previous": "poprzedni okres",
+        "yearAgo": "rok wcześniej"
+      },
+      "granularity": {
+        "day": "według dni",
+        "week": "według tygodni",
+        "month": "według miesięcy"
+      }
+    },
+    "result": {
+      "title": {
+        "byDay": "{metric} według dni",
+        "byWeek": "{metric} według tygodni",
+        "byMonth": "{metric} według miesięcy",
+        "previousPeriod": "{metric}, poprzedni okres",
+        "yearAgo": "{metric}, rok wcześniej",
+        "workoutsBySport": "Treningi według dyscypliny",
+        "labsLatest": "Najnowsze wyniki badań",
+        "sleepByNight": "Sen według nocy",
+        "complianceByDay": "Przyjmowanie leków według dni",
+        "distribution": "{metric}: jak często występował każdy zakres"
+      },
+      "column": {
+        "day": "Dzień",
+        "week": "Tydzień",
+        "month": "Miesiąc",
+        "night": "Noc",
+        "sport": "Dyscyplina",
+        "sessions": "Sesje",
+        "analyte": "Badanie",
+        "value": "Wartość",
+        "unit": "Jednostka",
+        "date": "Data",
+        "referenceRange": "Zakres referencyjny",
+        "systolic": "Skurczowe",
+        "diastolic": "Rozkurczowe",
+        "mean": "Średnia",
+        "min": "Najniższa",
+        "max": "Najwyższa",
+        "readings": "Pomiary",
+        "rate": "Regularność",
+        "duration": "Czas trwania",
+        "range": "Zakres",
+        "count": "Liczba razy"
+      },
+      "other": "Inne",
+      "noReading": "brak pomiaru",
+      "showAll": "Pokaż wszystko ({count})",
+      "showFewer": "Pokaż mniej",
+      "copyMenu": "Kopiuj tabelę",
+      "copyForSpreadsheet": "Kopiuj do arkusza kalkulacyjnego",
+      "copyAsText": "Kopiuj jako tekst",
+      "copied": "Skopiowano",
+      "copyFailed": "Nie udało się skopiować tabeli",
+      "viewLabel": "Widok",
+      "viewChart": "Wykres",
+      "viewTable": "Tabela",
+      "chartSummary": "{title} w formie wykresu. Widok tabeli pokazuje każdą wartość.",
+      "dataUsed": "Użyte dane ({count})",
+      "truncated": "Pierwsze {shown} z {total} wierszy",
+      "withheld": {
+        "moduleDisabled": "Ta tabela jest ukryta, bo jej moduł jest wyłączony.",
+        "unavailable": "Nie udało się wczytać tej tabeli."
+      },
+      "loading": "Wczytywanie tabeli…",
+      "loadFailed": "Nie udało się wczytać tabel.",
+      "histogramBin": "{from}–{to} {unit}"
+    },
+    "method": {
+      "label": "Jak to ustalono",
+      "entry": "{domain}, {window}: {detail}",
+      "entryNoWindow": "{domain}: {detail}",
+      "readingsOne": "1 pomiar",
+      "readingsFew": "{count} pomiary",
+      "readingsOther": "{count} pomiarów",
+      "aggregation": {
+        "mean": "średnia",
+        "median": "mediana",
+        "latest": "ostatni pomiar",
+        "sum": "suma",
+        "count": "liczba",
+        "rate": "odsetek"
+      },
+      "averages": {
+        "day": "średnie dzienne",
+        "week": "średnie tygodniowe",
+        "month": "średnie miesięczne"
+      },
+      "totals": {
+        "day": "sumy dzienne",
+        "week": "sumy tygodniowe",
+        "month": "sumy miesięczne"
+      },
+      "absent": {
+        "noData": "brak pomiarów",
+        "outsideWindow": "brak pomiarów w tym okresie",
+        "moduleDisabled": "wyłączone"
+      }
+    },
+    "followUp": {
+      "groupLabel": "Proponowane pytania",
+      "widenWindow": "Sięgnij dalej wstecz",
+      "previousPeriod": "Porównaj z poprzednim okresem",
+      "yearAgo": "Porównaj z tym samym okresem rok wcześniej",
+      "asChart": "Pokaż jako wykres",
+      "asTable": "Pokaż jako tabelę",
+      "relatedMetric": "Sprawdź też: {metric}",
+      "continue": "Szukaj dalej",
+      "settingLabel": "Proponuj kolejne pytania",
+      "settingHint": "Pokazuje do trzech propozycji pod ostatnią odpowiedzią Coacha."
+    },
+    "clarify": {
+      "cardLabel": "Coach ma pytanie",
+      "choicesLabel": "Możliwe odpowiedzi",
+      "freeTextHint": "Możesz też wpisać własną odpowiedź.",
+      "contextHint": "Wpisz odpowiedź poniżej.",
+      "window": {
+        "last7days": "Ostatnie 7 dni",
+        "last30days": "Ostatnie 30 dni",
+        "last90days": "Ostatnie 90 dni",
+        "lastYear": "Ostatnie 12 miesięcy",
+        "allTime": "Cały okres"
+      }
+    },
+    "reuse": {
+      "caption": "Oto te same wartości z mojej poprzedniej odpowiedzi, bez zmian."
+    }
   },
   "safety": {
     "floor": {

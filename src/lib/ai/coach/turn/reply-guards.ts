@@ -29,6 +29,10 @@ import {
   captureReminderFromSentinel,
 } from "@/lib/ai/coach/reminders";
 import { parseSuggestAction } from "@/lib/ai/coach/suggest-action";
+import { parseClarifySentinel } from "@/lib/ai/coach/clarify";
+import { parseFollowUpsSentinel } from "@/lib/ai/coach/follow-ups/parse-sentinel";
+import { stripResultRefs } from "@/lib/ai/coach/results/refs";
+import type { CoachClarification } from "@/lib/ai/coach/types";
 
 import type { TurnContext } from "./context";
 import type { ModelOutcome } from "./model";
@@ -43,6 +47,15 @@ export interface GuardedReply {
   outboundBlocked: boolean;
   groundedFigures: number[];
   unverifiedStripped: number;
+  /** v1.39.4 — the refs (`r1`..) the prose marked as the tables it uses. */
+  referencedResults: string[];
+  /** v1.39.4 — the chip kinds and domains the model proposed. */
+  followUpProposals: ReturnType<typeof parseFollowUpsSentinel>["proposals"];
+  /**
+   * v1.39.4 — the validated clarification, when this reply asks one. Null
+   * when it does not, and on a blocked turn (the question was replaced).
+   */
+  clarification: CoachClarification | null;
 }
 
 export async function guardReply(args: {
@@ -130,6 +143,21 @@ export async function guardReply(args: {
   // server-side, field-by-field, by `POST /api/coach/suggested-actions`).
   const actionParse = parseSuggestAction(replyText);
   replyText = actionParse.prose.trim() || replyText;
+
+  // v1.39.4 — the dialog sentinels and marks, stripped before the safety
+  // screen and the number check read the prose: the optional
+  // `---FOLLOWUPS---` proposal, the optional `---CLARIFY---` block, and the
+  // `result:rN` marks (whose digits must never reach the number check).
+  const followUpsParse = parseFollowUpsSentinel(replyText);
+  replyText = followUpsParse.prose.trim() || replyText;
+  const clarifyParse = parseClarifySentinel({
+    prose: replyText,
+    inventory: model.inventory,
+    locale,
+  });
+  replyText = clarifyParse.prose.trim() || replyText;
+  const resultRefs = stripResultRefs(replyText);
+  replyText = resultRefs.prose.trim() || replyText;
 
   // v1.18.10 (HIGH-2) — OUTBOUND safety screen on the assembled assistant
   // reply, before persistence and streaming. The inbound `detectRefusal`
@@ -333,6 +361,11 @@ export async function guardReply(args: {
       outboundBlocked: outbound.block,
       groundedFigures,
       unverifiedStripped,
+      referencedResults: resultRefs.referenced,
+      followUpProposals: followUpsParse.proposals,
+      // A blocked turn carries the fallback prose, so a question it asked is
+      // gone and its choices must not ride along.
+      clarification: outbound.block ? null : clarifyParse.clarification,
     },
   };
 }

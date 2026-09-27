@@ -99,6 +99,44 @@ export const getCycleArgsSchema = z.object({}).strict();
 export const getCorrelationsArgsSchema = z.object({}).strict();
 
 /**
+ * v1.39.4 — each tool's argument schema, keyed by name. The record type makes
+ * a new tool name fail to compile until its schema is listed here.
+ */
+const COACH_TOOL_ARG_SCHEMAS: Record<CoachToolName, z.ZodType> = {
+  get_metric_series: getMetricSeriesArgsSchema,
+  get_glucose_panel: getGlucosePanelArgsSchema,
+  get_sleep: getSleepArgsSchema,
+  get_medication_compliance: getMedicationComplianceArgsSchema,
+  get_labs: getLabsArgsSchema,
+  get_illness_recovery: getIllnessRecoveryArgsSchema,
+  get_workouts: getWorkoutsArgsSchema,
+  get_cycle: getCycleArgsSchema,
+  get_correlations: getCorrelationsArgsSchema,
+};
+
+/**
+ * v1.39.4 — a call's arguments as its schema validates them, or undefined
+ * when the name is unknown, the JSON does not parse, or the schema refuses
+ * it. Only this validated form ever rides the tool trace; the model's raw
+ * argument string never does.
+ */
+export function parseCoachToolArgs(
+  name: string,
+  rawArguments: string,
+): Record<string, unknown> | undefined {
+  if (!isCoachToolName(name)) return undefined;
+  let raw: unknown;
+  try {
+    raw = rawArguments.trim() === "" ? {} : JSON.parse(rawArguments);
+  } catch {
+    return undefined;
+  }
+  const parsed = COACH_TOOL_ARG_SCHEMAS[name].safeParse(raw);
+  if (!parsed.success) return undefined;
+  return parsed.data as Record<string, unknown>;
+}
+
+/**
  * JSON-Schema parameter shapes handed to the provider. Kept hand-written
  * (rather than generated from Zod) so the wire description the model reads is
  * compact and stable — the byte-stable tool block keeps the cached prefix

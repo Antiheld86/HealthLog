@@ -79,7 +79,9 @@ describe("coach tool loop — which results reach the grounding guard", () => {
     const loop = await runCoachToolLoop(baseArgs);
 
     // The trace records that the tool ran and found nothing…
-    expect(loop.toolTrace).toEqual([{ name: "get_sleep", present: false }]);
+    expect(loop.toolTrace).toEqual([
+      { name: "get_sleep", present: false, args: {} },
+    ]);
     // …but the payload set the route grades against is empty, so the route's
     // `activatingPayloads.length > 0` gate is false and the numeric grounding
     // guard never runs for this turn.
