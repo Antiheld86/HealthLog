@@ -127,13 +127,22 @@ export function codeableFromMapping(m: LoincMapping): FhirCodeableConcept {
   return { text: m.display };
 }
 
-/** Latest `{ value, measuredAt }` for a type, or null when no rows. */
+/**
+ * Latest `{ value, measuredAt }` for a type, or null when no rows.
+ *
+ * A dense type (pulse, glucose) can be served from day buckets, and then the
+ * series' last point is the last day's MEAN stamped at that day's start: a
+ * value nobody measured, at a time nobody measured it. Its stats carry the
+ * newest actual reading, so that wins whenever it is there.
+ */
 export function latestReading(
   data: DoctorReportData,
   type: string,
 ): { value: number; measuredAt: string } | null {
   const series = data.measurements[type];
   if (!series || series.length === 0) return null;
+  const stat = data.stats[type];
+  if (stat?.latestAt) return { value: stat.latest, measuredAt: stat.latestAt };
   return series[series.length - 1];
 }
 

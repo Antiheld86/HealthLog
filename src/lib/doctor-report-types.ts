@@ -36,8 +36,16 @@ export interface DoctorReportStats {
   avg: number;
   min: number;
   max: number;
+  /** Readings behind the figures, however the series was drawn. */
   count: number;
   latest: number;
+  /**
+   * When the newest reading behind `latest` was taken (ISO). Set for a type
+   * served from day buckets, whose series points are day means: the series'
+   * last point is then not a reading, and this is the only place the newest
+   * one survives. Absent on the raw path, where the series' last point is it.
+   */
+  latestAt?: string;
 }
 
 /**

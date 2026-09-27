@@ -22,6 +22,7 @@ import { getPrismaClient, truncateAllTables } from "./setup";
 import { deriveRestingProxyFromPulse } from "@/lib/analytics/resting-pulse";
 import { readRestingPulseProxy } from "@/lib/analytics/resting-pulse-read";
 import { collectDoctorReportData } from "@/lib/doctor-report-data";
+import { latestReading } from "@/lib/fhir/resources/common";
 import { selectionFromLeaves } from "@/lib/report-selection/selection";
 import { userDayKey } from "@/lib/tz/format";
 import { invalidateUserTimezone } from "@/lib/tz/resolver";
@@ -230,6 +231,16 @@ describe("doctor report inside the raw window", () => {
     expect(points.length).toBeLessThanOrEqual(12);
     expect(points.length).toBeGreaterThanOrEqual(10);
     expect(data.stats.PULSE?.count).toBe(DENSE_ROWS);
+    // The export's latest observation is the newest reading itself.
+    const newest = await prisma.measurement.findFirstOrThrow({
+      where: { userId: DENSE, type: "PULSE" },
+      orderBy: { measuredAt: "desc" },
+      select: { value: true, measuredAt: true },
+    });
+    expect(latestReading(data, "PULSE")).toEqual({
+      value: newest.value,
+      measuredAt: newest.measuredAt.toISOString(),
+    });
   });
 
   it("keeps sparse readings raw", async () => {

@@ -143,6 +143,7 @@ export function summariseDenseBuckets(
       min: value.min,
       max: value.max,
       latest: value.latest,
+      latestAt: value.latestAt.toISOString(),
     };
   }
   const glucoseStats: DenseMeasurementSummary["glucoseStats"] = {};
