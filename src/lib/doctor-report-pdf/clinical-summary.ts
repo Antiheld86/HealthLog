@@ -55,8 +55,10 @@ export function buildClinicalSummaryLines(
   num: DoctorReportNumberFormatter,
 ): string[] {
   const lines: string[] = [];
-  const totalReadings = Object.values(data.measurements).reduce(
-    (sum, arr) => sum + arr.length,
+  // The reading count, not the point count: a dense type served from day
+  // buckets draws one point per day, but its stats count every reading.
+  const totalReadings = Object.entries(data.measurements).reduce(
+    (sum, [type, arr]) => sum + (data.stats[type]?.count ?? arr.length),
     0,
   );
   const paramCount = Object.keys(data.stats).length;

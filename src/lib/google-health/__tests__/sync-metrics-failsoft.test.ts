@@ -12,6 +12,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { fetchDataPointsMock, handleErrorMock, mapWeightMock } = vi.hoisted(
   () => ({
+    // Stands in for the page walk: every metric type is streamed through
+    // `forEachDataPointPage`, which hands its pages to the callback.
     fetchDataPointsMock: vi.fn(),
     handleErrorMock: vi.fn(async () => 0),
     mapWeightMock: vi.fn(() => {
@@ -25,6 +27,23 @@ vi.mock("../client", async (importOriginal) => {
   return {
     ...actual,
     fetchDataPoints: fetchDataPointsMock,
+    forEachDataPointPage: vi.fn(
+      async (
+        dataType: unknown,
+        token: string,
+        verb: string,
+        query: unknown,
+        onPage: (points: unknown[]) => Promise<void>,
+      ) => {
+        const points = (await fetchDataPointsMock(
+          dataType,
+          token,
+          verb,
+          query,
+        )) as unknown[];
+        if (points.length > 0) await onPage(points);
+      },
+    ),
     mapWeight: mapWeightMock,
   };
 });

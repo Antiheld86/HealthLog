@@ -48,6 +48,7 @@ const { calls, rows, prismaMock } = vi.hoisted(() => {
       }
       return Promise.resolve(rows[name] ?? []);
     },
+    count: () => Promise.resolve(0),
     findUnique: () => {
       calls.push(name);
       return Promise.resolve(rows[`${name}Unique`]?.[0] ?? null);

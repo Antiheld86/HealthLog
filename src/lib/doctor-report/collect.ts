@@ -76,6 +76,20 @@ import {
 
 const DENSE_REPORT_RAW_WINDOW_DAYS = 90;
 
+/**
+ * #1023 — inside the raw window, pulse takes the per-day path anyway once the
+ * window holds more readings than this.
+ *
+ * A watch that records heart rate once a minute puts 130 000 readings in a
+ * 90-day report. Read raw, every one of them became an object, went through
+ * the canonical-source collapse, and landed in the report's series, where the
+ * trend line and the sparkline draw a few hundred points at most. The day
+ * path already serves every longer report: statistics over the raw readings,
+ * one point per local day for the series. A cuff, an hourly-bucket import or
+ * a watch sampling every few minutes stays under the cap and stays raw.
+ */
+const DENSE_REPORT_RAW_ROW_CAP = 10_000;
+
 /** No medication row is read unless at least one medication leaf is admitted. */
 const MEDICATION_LEAVES = [
   "MEDICATION_LIST",
@@ -156,7 +170,17 @@ export async function collectDoctorReportData(
   const lastDay = new Date(`${userDayKey(end, reportTz)}T00:00:00.000Z`);
 
   const aggregateDenseTypes = days > DENSE_REPORT_RAW_WINDOW_DAYS;
-  const densePulse = aggregateDenseTypes && !excluded.includes("PULSE");
+  const densePulse =
+    !excluded.includes("PULSE") &&
+    (aggregateDenseTypes ||
+      (await prisma.measurement.count({
+        where: {
+          userId,
+          type: "PULSE",
+          measuredAt: { gte: start, lte: end },
+          deletedAt: null,
+        },
+      })) > DENSE_REPORT_RAW_ROW_CAP);
   const denseGlucose =
     aggregateDenseTypes && !excluded.includes("BLOOD_GLUCOSE");
   const rawExcluded = [...excluded];

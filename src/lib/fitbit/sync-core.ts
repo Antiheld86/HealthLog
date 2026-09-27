@@ -228,7 +228,11 @@ export const softSkipStorage = new AsyncLocalStorage<SoftSkipTracker>();
  * the soft-skip tracker.
  */
 export interface RollupDeferTracker {
-  keys: Array<{ type: MeasurementType; measuredAt: Date }>;
+  /**
+   * One entry per touched `(type, UTC day)`, never one per reading, so the
+   * ledger stays the size of the history in days rather than in samples.
+   */
+  keys: Map<string, { type: MeasurementType; measuredAt: Date }>;
 }
 export const rollupDeferStorage = new AsyncLocalStorage<RollupDeferTracker>();
 
@@ -877,14 +881,13 @@ export async function upsertFitbitMeasurements(
   // path keeps the inline per-day hook here (small touched set, warm next read).
   if (opts.deferRollup) {
     const tracker = rollupDeferStorage.getStore();
-    // Plain loop, never `push(...touched)`: `touched` carries ONE entry PER
-    // READING, and a full-history batch on a sample-dense account (a
-    // multi-year heart-rate series is six figures of rows) blows the call
-    // stack when spread into a single call — the engine caps argument counts.
-    // The RangeError aborted the whole metrics collection on exactly the
-    // accounts with the most data.
+    // Collapsed to type-days on the way in: `touched` carries ONE entry PER
+    // READING and the tracker lives for the whole cycle, so keeping the raw
+    // entries made the ledger grow with the sample count of the history.
     if (tracker) {
-      for (const t of touched) tracker.keys.push(t);
+      for (const k of collapseToTypeDayKeys(touched)) {
+        tracker.keys.set(`${k.type}|${k.measuredAt.getTime()}`, k);
+      }
     }
     return { imported, touched, inserted: insertedRows };
   }

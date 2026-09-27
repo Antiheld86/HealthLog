@@ -48,6 +48,12 @@ vi.mock("@/lib/rollups/mood-rollups", async () => {
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 
+// The raw-PULSE resting proxy folds in SQL; against the mocked client it is an
+// account with no pulse.
+vi.mock("@/lib/analytics/resting-pulse-read", () => ({
+  readRestingPulseProxy: vi.fn(),
+}));
+
 vi.mock("@/lib/auth/audit", () => ({
   auditLog: vi.fn().mockResolvedValue(undefined),
 }));
@@ -107,6 +113,7 @@ import { getSession } from "@/lib/auth/session";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { probeProviderPresence } from "@/lib/ai/provider";
+import { readRestingPulseProxy } from "@/lib/analytics/resting-pulse-read";
 import { prisma } from "@/lib/db";
 import { buildComprehensiveAggregate } from "@/lib/insights/comprehensive-aggregator";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
@@ -155,8 +162,9 @@ beforeEach(() => {
     dateOfBirth: new Date("1985-01-01"),
   });
   (prisma.moodEntry.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-  // The resting-pulse pairing (M-CS2) reads RESTING_HEART_RATE rows (and the
-  // raw-PULSE proxy only when none exist) straight from the measurement table.
+  vi.mocked(readRestingPulseProxy).mockResolvedValue([]);
+  // The resting-pulse pairing (M-CS2) reads RESTING_HEART_RATE rows straight
+  // from the measurement table (the raw-PULSE proxy is mocked above).
   (prisma.measurement.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(
     [],
   );

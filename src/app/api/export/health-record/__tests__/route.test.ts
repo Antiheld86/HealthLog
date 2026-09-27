@@ -19,7 +19,8 @@ import { unzipSync } from "fflate";
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    measurement: { findMany: vi.fn() },
+    // `count` sizes the report's pulse window (#1023): a sparse account.
+    measurement: { findMany: vi.fn(), count: vi.fn(async () => 0) },
     medication: { findMany: vi.fn() },
     medicationIntakeEvent: { findMany: vi.fn() },
     moodEntry: { findMany: vi.fn() },
