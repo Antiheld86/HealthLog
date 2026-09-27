@@ -63,14 +63,27 @@ const CURSOR_VERSION = 2;
  *  `cycleDays`/`cycles` domains; they decode as absent (fresh scan). */
 const SUPPORTED_CURSOR_VERSIONS: readonly number[] = [1, 2];
 
-/** Encode a per-domain keyset map into an opaque token. */
-export function encodeCursor(cursor: SyncCursor): string {
+/**
+ * Encode a per-domain keyset map into an opaque token.
+ *
+ * `issuedAtMs` is when the server handed the token out. The watermarks cannot
+ * say that: a restore writes rows back with their original `updatedAt`, so a
+ * cursor drained entirely after a restore can still carry watermarks older
+ * than it. The issue time is what `/api/sync/changes` compares against the
+ * account's `syncResetAt`. Additive inside the v2 envelope: a token without
+ * it decodes as before and counts as issued before any reset.
+ */
+export function encodeCursor(cursor: SyncCursor, issuedAtMs?: number): string {
   const d: Record<string, { u: number; i: string }> = {};
   for (const domain of SYNC_DOMAINS) {
     const wm = cursor[domain];
     if (wm) d[domain] = { u: wm.updatedAtMs, i: wm.id };
   }
-  const json = JSON.stringify({ v: CURSOR_VERSION, d });
+  const json = JSON.stringify(
+    issuedAtMs === undefined
+      ? { v: CURSOR_VERSION, d }
+      : { v: CURSOR_VERSION, t: issuedAtMs, d },
+  );
   return Buffer.from(json, "utf-8").toString("base64url");
 }
 
@@ -113,6 +126,21 @@ export function decodeCursor(token: string): SyncCursor | null {
       if (wm) cursor[domain] = wm;
     }
     return cursor;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * When a token was issued (see {@link encodeCursor}), or null for a token
+ * that does not say: one from before the field existed, or one that does not
+ * parse.
+ */
+export function decodeCursorIssuedAt(token: string): number | null {
+  try {
+    const json = Buffer.from(token, "base64url").toString("utf-8");
+    const t = (JSON.parse(json) as { t?: unknown } | null)?.t;
+    return typeof t === "number" && Number.isFinite(t) ? t : null;
   } catch {
     return null;
   }

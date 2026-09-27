@@ -3,7 +3,12 @@
  */
 import { describe, it, expect } from "vitest";
 
-import { encodeCursor, decodeCursor, type SyncCursor } from "../cursor";
+import {
+  encodeCursor,
+  decodeCursor,
+  decodeCursorIssuedAt,
+  type SyncCursor,
+} from "../cursor";
 
 describe("sync cursor codec", () => {
   it("round-trips a per-domain keyset map through encode/decode", () => {
@@ -110,5 +115,22 @@ describe("sync cursor codec", () => {
     expect(decodeCursor(token)).toEqual({
       mood: { updatedAtMs: 5, id: "clx0mood" },
     });
+  });
+});
+
+describe("cursor issue time (sync reset)", () => {
+  const cursor: SyncCursor = {
+    measurements: { updatedAtMs: 1_000, id: "clx0m" },
+  };
+
+  it("round-trips the issue time beside the watermarks", () => {
+    const token = encodeCursor(cursor, 1_790_000_000_000);
+    expect(decodeCursorIssuedAt(token)).toBe(1_790_000_000_000);
+    expect(decodeCursor(token)).toEqual(cursor);
+  });
+
+  it("reads no issue time from a token that carries none", () => {
+    expect(decodeCursorIssuedAt(encodeCursor(cursor))).toBeNull();
+    expect(decodeCursorIssuedAt("not a token")).toBeNull();
   });
 });

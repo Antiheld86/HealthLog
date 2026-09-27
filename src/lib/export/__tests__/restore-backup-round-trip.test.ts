@@ -759,7 +759,10 @@ describe("backup round trip — export, wire schema, restore", () => {
       });
 
       const userUpdate = written.find(
-        (w) => w.model === "user" && w.op === "update",
+        (w) =>
+          w.model === "user" &&
+          w.op === "update" &&
+          "insightsCachedText" in w.data,
       );
       expect(
         userUpdate,
@@ -798,8 +801,13 @@ describe("backup round trip — export, wire schema, restore", () => {
       // whether the restore over-invalidates on a genuine no-op.
       const { written: writtenUnchanged } = await roundTrip(liveSeed, payload);
 
+      // The restore also stamps the account's sync reset; only an update
+      // that touches the cached briefing is what this asks about.
       const userUpdate = writtenUnchanged.find(
-        (w) => w.model === "user" && w.op === "update",
+        (w) =>
+          w.model === "user" &&
+          w.op === "update" &&
+          "insightsCachedText" in w.data,
       );
       expect(
         userUpdate,

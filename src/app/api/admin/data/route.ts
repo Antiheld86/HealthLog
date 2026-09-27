@@ -113,7 +113,11 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
 
       // Every account row survives; the personal data carried on its own
       // columns does not. Same classification contract as the model list.
-      await tx.user.updateMany({ data: USER_RESET });
+      // Paired clients drop their delta cursors and start over, instead of
+      // catching up from a position whose rows are gone (`syncResetAt`).
+      await tx.user.updateMany({
+        data: { ...USER_RESET, syncResetAt: new Date() },
+      });
 
       return perModel;
     },
