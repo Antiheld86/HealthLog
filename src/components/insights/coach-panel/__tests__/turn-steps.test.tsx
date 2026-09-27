@@ -10,6 +10,7 @@ import type { CoachStep } from "@/lib/ai/coach/types";
 import {
   CoachTurnStepList,
   CoachTurnSteps,
+  countSources,
   currentStep,
   describeStep,
   nextAnnouncement,
@@ -110,7 +111,7 @@ describe("describeStep", () => {
 
   it("renders in the reader's language from the keys, not the server label", () => {
     const de = translators("de");
-    expect(stepLabel(BP, de.t)).toBe("Lese Blutdruck, letzte 90 Tage");
+    expect(stepLabel(BP, de.t)).toBe("Prüfe: Blutdruck, letzte 90 Tage");
     expect(describeStep(BP, de.t, de.tCount).meta).toEqual([
       "letzte 90 Tage",
       "142 Messwerte",
@@ -165,6 +166,28 @@ describe("<CoachTurnSteps>", () => {
     expect(html).not.toContain("skeleton-shimmer");
     expect(html).not.toContain("aria-label=");
     expect(html).not.toContain('data-slot="coach-turn-steps-list"');
+  });
+
+  it("counts distinct sources: a second read of the same domain is not a new source", () => {
+    const bpPrevious: CoachStep = {
+      ...BP,
+      id: "s4",
+      period: "previous",
+      count: 120,
+    };
+    const snapshot: CoachStep = {
+      id: "s5",
+      tool: "snapshot",
+      labelKey: "coach.step.snapshot",
+      label: "Overview",
+      status: "done",
+    };
+    expect(countSources([BP, bpPrevious, SLEEP])).toBe(2);
+    expect(countSources([BP, snapshot, snapshot])).toBe(2);
+    const html = render(
+      <CoachTurnSteps steps={[BP, bpPrevious, SLEEP]} active={false} />,
+    );
+    expect(html).toContain("Looked at 2 sources");
   });
 
   it("carries a polite status region that starts empty", () => {
