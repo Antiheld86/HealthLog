@@ -28,7 +28,7 @@ import {
 import { numberFollowUps } from "@/lib/ai/coach/follow-ups/catalog";
 import { buildContinueFollowUp } from "@/lib/ai/coach/follow-ups/continue";
 import type { CoachPrefs } from "@/lib/validations/coach-prefs";
-import { fitResultsToStorage } from "@/lib/ai/coach/results/project";
+import { fitResultsToStorage } from "@/lib/ai/coach/results/refs";
 
 import type { ModelOutcome } from "./model";
 import type { GuardedReply } from "./reply-guards";

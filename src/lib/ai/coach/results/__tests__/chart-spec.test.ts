@@ -287,7 +287,7 @@ describe("deriveChartSpec: time series", () => {
     });
   });
 
-    it("leaves the reading count off the chart", () => {
+  it("leaves the reading count off the chart", () => {
     const spec = deriveChartSpec(daySeries("pulse", [60, 62], "bpm"));
     expect(spec && "series" in spec ? spec.series : []).not.toContain(
       "readings",

@@ -21,7 +21,7 @@ import { DEFAULT_COACH_PREFS } from "@/lib/validations/coach-prefs";
 
 import { emitReply } from "../sse";
 import { assembleTurnDialog, buildTurnProvenance } from "../provenance";
-import { RESULTS_MAX_BYTES } from "@/lib/ai/coach/results/project";
+import { RESULTS_MAX_BYTES } from "@/lib/ai/coach/results/refs";
 import type { ModelOutcome } from "../model";
 import type { GuardedReply } from "../reply-guards";
 

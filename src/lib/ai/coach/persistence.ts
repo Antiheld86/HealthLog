@@ -23,7 +23,7 @@ import {
   coachStepSchema,
 } from "./stream-events";
 import { COACH_CONVERSATION_TITLE_MAX } from "./types";
-import { RESULTS_MAX_BYTES, fitResultsToStorage } from "./results/project";
+import { RESULTS_MAX_BYTES, fitResultsToStorage } from "./results/refs";
 import {
   isCheckupIntervalId,
   isSuggestedActionType,
@@ -609,7 +609,20 @@ export async function recordProactiveNudge(
 // newest messages up to this cap cover the rendered window without the
 // unbounded per-open AES-decrypt cost. The response shape is unchanged —
 // the messages array still arrives oldest->newest (see the reverse below).
-const CONVERSATION_MESSAGE_DETAIL_CAP = 200;
+export const CONVERSATION_MESSAGE_DETAIL_CAP = 200;
+
+/**
+ * The assistant messages of a conversation written before `before`. The
+ * caller has already read the conversation owner-narrowed; this only counts.
+ */
+export function countAssistantMessagesBefore(
+  conversationId: string,
+  before: Date,
+): Promise<number> {
+  return prisma.coachMessage.count({
+    where: { conversationId, role: "assistant", createdAt: { lt: before } },
+  });
+}
 
 /**
  * Fetch one conversation + its messages, decrypting each body on

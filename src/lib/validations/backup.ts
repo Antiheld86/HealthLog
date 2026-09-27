@@ -20,7 +20,7 @@
  * a useful summary for them.
  */
 import { z } from "zod/v4";
-import { RESULTS_MAX_BYTES } from "@/lib/ai/coach/results/project";
+import { RESULTS_MAX_BYTES } from "@/lib/ai/coach/results/refs";
 import {
   AllergyCategory,
   AllergySeverity,
