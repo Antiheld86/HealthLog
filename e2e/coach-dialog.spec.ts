@@ -17,9 +17,10 @@ import { aiBlockAvailable, serveAiBlock } from "./setup/ai-capabilities";
  *      puts the table on the clipboard.
  *   3. A follow-up chip under the latest reply sends its label with
  *      `followUp: { messageId, id }`.
- *   4. A reply that ends in a clarifying question shows the choices card;
- *      a choice sends its label with `clarification: { messageId, choiceId }`
- *      and the card and chips leave once a plain answer is the latest reply.
+ *   4. A reply that ends in a clarifying question shows the choices card
+ *      and no chips (as the server sends it); a choice sends its label with
+ *      `clarification: { messageId, choiceId }`, and the card leaves once a
+ *      plain answer is the latest reply.
  *   5. axe finds nothing on the answer, the chips and the clarification
  *      card, in the light and the dark theme.
  *
@@ -223,24 +224,13 @@ const TURN_TWO_CLARIFICATION = {
   ],
   freeText: true,
 };
-const TURN_TWO_FOLLOW_UPS = [
-  {
-    id: "f1",
-    kind: "year_ago",
-    labelKey: "coach.followUp.yearAgo",
-    label: "Compare with a year ago",
-    anchor: { ref: "r1", domain: "bp", window: "last30days" },
-    reuse: false,
-    origin: "server",
-  },
-];
 const TURN_TWO_SOURCE = {
   windows: ["last30days"],
   metrics: ["bp"],
   counts: { bp: 11 },
   steps: TURN_TWO_STEPS,
+  // A question offers no chips: its choices are the next step.
   clarification: TURN_TWO_CLARIFICATION,
-  followUps: TURN_TWO_FOLLOW_UPS,
 };
 
 const TURN_THREE_STEPS = [
@@ -296,7 +286,6 @@ const TURNS: Turn[] = [
       ...tokens(SECOND_ANSWER),
       { type: "provenance", metricSource: TURN_TWO_SOURCE },
       { type: "clarification", clarification: TURN_TWO_CLARIFICATION },
-      { type: "followUps", followUps: TURN_TWO_FOLLOW_UPS },
     ],
   },
   {
@@ -566,6 +555,8 @@ test.describe("Coach dialog", () => {
         TURNS[0].assistantId,
       );
       await expect(chips.locator("[data-follow-up-id]")).toHaveCount(2);
+      // axe over the answer with its result and the chips.
+      await expectNoAxeViolations(page, `${theme} chart view with chips`);
       await chips.locator('[data-follow-up-id="f2"]').click();
 
       const secondBubble = page
@@ -581,8 +572,8 @@ test.describe("Coach dialog", () => {
       });
       expect(posts[1].clarification).toBeUndefined();
 
-      // 4. The reply asks; the card offers the choices, and the chips move
-      //    to the latest reply.
+      // 4. The reply asks; the card offers the choices, and the chips of
+      //    the earlier reply are gone.
       const card = page.locator('[data-slot="coach-clarification-card"]');
       await expect(card).toBeVisible();
       await expect(card).toHaveAttribute(
@@ -590,19 +581,15 @@ test.describe("Coach dialog", () => {
         TURNS[1].assistantId,
       );
       await expect(card.locator("[data-choice-id]")).toHaveCount(2);
-      await expect(chips).toHaveAttribute(
-        "data-message-id",
-        TURNS[1].assistantId,
-      );
-      await expect(chips.locator("[data-follow-up-id]")).toHaveCount(1);
+      await expect(chips).toHaveCount(0);
       // The earlier result still renders under its own answer.
       await expect(figure).toBeVisible();
 
-      // 5. axe over the answer with its result, the chips and the card.
-      await expectNoAxeViolations(page, `${theme} chart view`);
+      // 5. axe over the answers, the result in both views and the card.
+      await expectNoAxeViolations(page, `${theme} chart view with a question`);
       await figure.locator('[data-slot="coach-result-view-table"]').click();
       await expect(table).toBeVisible();
-      await expectNoAxeViolations(page, `${theme} table view`);
+      await expectNoAxeViolations(page, `${theme} table view with a question`);
 
       await card.locator('[data-choice-id="c2"]').click();
 
