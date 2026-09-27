@@ -41,6 +41,9 @@ import { ReminderSuggestionCard } from "./reminder-suggestion-card";
 import { SuggestedActionCard } from "./suggested-action-card";
 import { StreamedProse } from "./streamed-prose";
 import { MessageTokenFooter } from "./message-token-footer";
+import { CoachTurnSteps } from "./turn-steps";
+import { CoachResults } from "./coach-results";
+import { CoachMethodLine } from "./method-line";
 import {
   COACH_ICON_BUTTON,
   ReadAloudButton,
@@ -387,6 +390,18 @@ interface ChatBubbleProps {
    */
   suggestedAction?:
     import("@/lib/ai/coach/suggest-action").CoachSuggestedAction | null;
+  /**
+   * v1.39.4 — live steps from the streaming hook. Persisted messages carry
+   * them on `metricSource.steps`; the bubble falls back to that.
+   */
+  steps?: import("@/lib/ai/coach/types").CoachStep[];
+  /**
+   * v1.39.4 — live tables from the streaming hook. A persisted message
+   * lists their metadata on `metricSource.results` and the values are
+   * fetched lazily, which needs the conversation id.
+   */
+  results?: import("@/lib/ai/coach/types").CoachResultTable[];
+  conversationId?: string | null;
   providerType?: string | null;
   inProgress?: boolean;
   errorCode?: string | null;
@@ -464,6 +479,9 @@ export function areChatBubblePropsEqual(
     prev.metricSource === next.metricSource &&
     prev.suggestion === next.suggestion &&
     prev.suggestedAction === next.suggestedAction &&
+    prev.steps === next.steps &&
+    prev.results === next.results &&
+    prev.conversationId === next.conversationId &&
     prev.usage === next.usage &&
     // onRegenerate is a per-render closure — compare only whether it is present.
     (prev.onRegenerate === undefined) === (next.onRegenerate === undefined)
@@ -476,6 +494,9 @@ function ChatBubbleImpl({
   metricSource,
   suggestion,
   suggestedAction,
+  steps,
+  results,
+  conversationId,
   providerType,
   inProgress,
   errorCode,
@@ -654,7 +675,8 @@ function ChatBubbleImpl({
     !!metricSource &&
     ((metricSource.metrics?.length ?? 0) > 0 ||
       (metricSource.windows?.length ?? 0) > 0);
-  const hasProvenance = hasChips || keyValues.length > 0;
+  const method = metricSource?.method ?? null;
+  const hasProvenance = hasChips || keyValues.length > 0 || method !== null;
 
   // v1.22 (W5) — Coach charts Phase 1. Render an allowlisted, provenance-
   // grounded `metric:<TYPE>` chart under a SETTLED assistant turn. Skipped
@@ -693,6 +715,12 @@ function ChatBubbleImpl({
         )}
       </div>
       <div className="flex max-w-[calc(80%-2.625rem)] flex-col gap-2">
+        {/* v1.39.4 — what the Coach read on this turn: live from the step
+            frames, restored from the provenance on reload. */}
+        <CoachTurnSteps
+          steps={steps ?? metricSource?.steps ?? []}
+          active={!!inProgress}
+        />
         {/* v1.19.1 (C3) — the live turn shows the classic typing animation
             (three pulsing dots) while it is still thinking with no prose
             yet, restoring the writing/typing indicator the maintainer
@@ -767,6 +795,17 @@ function ChatBubbleImpl({
               );
             })}
           </div>
+        )}
+        {/* v1.39.4 — the tables the turn read, on a settled turn only: live
+            from the result frames, or fetched lazily for a persisted
+            message whose provenance lists them. */}
+        {!inProgress && !errorCode && (
+          <CoachResults
+            conversationId={conversationId ?? null}
+            messageId={messageId ?? null}
+            metas={metricSource?.results ?? []}
+            live={results}
+          />
         )}
         {/* v1.18.6 — a "no provider configured anywhere" turn is a
             setup gap, not a transient failure: surface a direct link to
@@ -874,6 +913,9 @@ function ChatBubbleImpl({
                   ))}
                 </ul>
               )}
+              {/* v1.39.4 — how the answer was worked out, beside the key
+                  values it explains. */}
+              <CoachMethodLine method={method} />
             </div>
           </details>
         )}
