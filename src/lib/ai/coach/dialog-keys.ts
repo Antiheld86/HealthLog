@@ -166,6 +166,8 @@ export const COACH_RESULT_UI_KEYS = {
   truncated: "coach.result.truncated",
   loading: "coach.result.loading",
   loadFailed: "coach.result.loadFailed",
+  reusedFrom: "coach.result.reusedFrom",
+  reusedFromUndated: "coach.result.reusedFromUndated",
   histogramBin: "coach.result.histogramBin",
 } as const;
 

@@ -9490,8 +9490,8 @@
     },
     "noRecordedData": "Non hai misurazioni registrate su quello che chiedi, quindi non posso darti alcun valore. Appena ne inserisci qualcuna, richiedimelo e userò i tuoi dati.",
     "step": {
-      "read": "Lettura di {domain}",
-      "readWindow": "Lettura di {domain}, {window}",
+      "read": "Lettura: {domain}",
+      "readWindow": "Lettura: {domain}, {window}",
       "snapshot": "Lettura del riepilogo dei tuoi dati",
       "showResult": "Apertura di una tabella precedente",
       "reuse": "Uso della tabella di prima",
@@ -9595,13 +9595,15 @@
       "viewTable": "Tabella",
       "chartSummary": "{title}, mostrato come grafico. La vista tabella elenca ogni valore.",
       "dataUsed": "Dati usati ({count})",
-      "truncated": "Prime {shown} righe su {total}",
+      "truncated": "Ultime {shown} righe su {total}",
       "withheld": {
         "moduleDisabled": "Questa tabella è nascosta perché il suo modulo è disattivato.",
         "unavailable": "Impossibile caricare questa tabella."
       },
       "loading": "Caricamento della tabella…",
       "loadFailed": "Impossibile caricare le tabelle.",
+      "reusedFrom": "Da una risposta precedente ({date})",
+      "reusedFromUndated": "Da una risposta precedente",
       "histogramBin": "{from}–{to} {unit}"
     },
     "method": {
@@ -9643,7 +9645,7 @@
       "yearAgo": "Confronta con un anno prima",
       "asChart": "Mostra come grafico",
       "asTable": "Mostra come tabella",
-      "relatedMetric": "Guarda anche {metric}",
+      "relatedMetric": "Vedi anche: {metric}",
       "continue": "Continua a cercare",
       "settingLabel": "Suggerisci domande di approfondimento",
       "settingHint": "Mostra fino a tre suggerimenti sotto l'ultima risposta del Coach."

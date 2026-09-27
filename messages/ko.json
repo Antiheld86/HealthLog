@@ -9490,8 +9490,8 @@
     },
     "noRecordedData": "물어보신 내용에 대해 기록된 측정값이 없어서 수치를 알려드릴 수 없어요. 기록을 남기신 뒤에 다시 물어보시면 본인 수치로 답해 드릴게요.",
     "step": {
-      "read": "{domain} 확인 중",
-      "readWindow": "{domain}, {window} 확인 중",
+      "read": "확인 중: {domain}",
+      "readWindow": "확인 중: {domain}, {window}",
       "snapshot": "기록 요약 확인 중",
       "showResult": "이전 표 여는 중",
       "reuse": "앞서 만든 표 사용 중",
@@ -9595,13 +9595,15 @@
       "viewTable": "표",
       "chartSummary": "{title}을(를) 차트로 표시해요. 표 보기에서 모든 값을 확인할 수 있어요.",
       "dataUsed": "사용한 데이터 ({count})",
-      "truncated": "전체 {total}행 중 처음 {shown}행 표시",
+      "truncated": "전체 {total}행 중 최근 {shown}행 표시",
       "withheld": {
         "moduleDisabled": "해당 모듈이 꺼져 있어 이 표를 숨겼어요.",
         "unavailable": "이 표를 불러오지 못했어요."
       },
       "loading": "표 불러오는 중…",
       "loadFailed": "표를 불러오지 못했어요.",
+      "reusedFrom": "이전 답변에서 ({date})",
+      "reusedFromUndated": "이전 답변에서",
       "histogramBin": "{from}–{to} {unit}"
     },
     "method": {
@@ -9643,7 +9645,7 @@
       "yearAgo": "1년 전과 비교",
       "asChart": "차트로 보기",
       "asTable": "표로 보기",
-      "relatedMetric": "{metric}도 보기",
+      "relatedMetric": "함께 보기: {metric}",
       "continue": "계속 찾아보기",
       "settingLabel": "후속 질문 추천",
       "settingHint": "코치의 가장 최근 답변 아래에 후속 질문을 최대 세 개까지 보여줘요."

@@ -26,6 +26,8 @@ export function useCoachMessageResults(args: {
   results: CoachResultEntry[] | undefined;
   isLoading: boolean;
   isError: boolean;
+  /** Read again after a failure. */
+  refetch: () => void;
 } {
   const { conversationId, messageId, enabled } = args;
   const [node, setNode] = useState<HTMLElement | null>(null);
@@ -70,5 +72,6 @@ export function useCoachMessageResults(args: {
     results: query.data,
     isLoading: query.isLoading,
     isError: query.isError,
+    refetch: () => void query.refetch(),
   };
 }

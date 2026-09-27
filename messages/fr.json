@@ -9595,13 +9595,15 @@
       "viewTable": "Tableau",
       "chartSummary": "{title}, sous forme de graphique. La vue tableau liste chaque valeur.",
       "dataUsed": "Données utilisées ({count})",
-      "truncated": "Affichage des {shown} premières lignes sur {total}",
+      "truncated": "Affichage des {shown} dernières lignes sur {total}",
       "withheld": {
         "moduleDisabled": "Ce tableau est masqué car son module est désactivé.",
         "unavailable": "Impossible de charger ce tableau."
       },
       "loading": "Chargement du tableau…",
       "loadFailed": "Impossible de charger les tableaux.",
+      "reusedFrom": "D'une réponse précédente ({date})",
+      "reusedFromUndated": "D'une réponse précédente",
       "histogramBin": "{from}–{to} {unit}"
     },
     "method": {
@@ -9643,7 +9645,7 @@
       "yearAgo": "Comparer avec l'an dernier",
       "asChart": "Afficher en graphique",
       "asTable": "Afficher en tableau",
-      "relatedMetric": "Regarder aussi {metric}",
+      "relatedMetric": "Voir aussi : {metric}",
       "continue": "Continuer à chercher",
       "settingLabel": "Suggérer des questions de suivi",
       "settingHint": "Affiche jusqu'à trois suggestions sous la dernière réponse du Coach."

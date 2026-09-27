@@ -3,11 +3,15 @@
 /**
  * v1.39.4 — one table of values a Coach turn read.
  *
- * A captioned table (title, then the method line when the caller passes
- * one), numbers right-aligned in tabular figures, a period without a reading
- * shown as "—" and announced as "no reading". The first twelve rows show; a
- * "Show all (n)" button opens the rest in a scrolling region whose header
- * row stays put. Copy for a spreadsheet or as text sits beside the title.
+ * A title row (title, then the meta line when the caller passes one, with
+ * copy and the caller's toolbar beside it) above the table, so the controls
+ * stay on screen however wide the table scrolls; the table keeps the title
+ * as a visually hidden caption. Numbers are right-aligned in tabular
+ * figures, a period without a reading shows as "—" and is announced as "no
+ * reading". Twelve rows show — the latest twelve periods of a time series,
+ * still oldest first, and the first twelve rows of any other table; a
+ * "Show all (n)" button opens every row in a scrolling region whose header
+ * row stays put.
  *
  * Periods are calendar days (or the Monday of a week, or a month), so they
  * are spelled by the UTC-pinned bucket formatters: the label names the day
@@ -41,7 +45,7 @@ export const RESULT_TABLE_PREVIEW_ROWS = 12;
 
 export interface CoachResultTableProps {
   result: CoachResultTableData;
-  /** The method line for this table, shown under the title. */
+  /** A meta line for this table (where it came from), shown under the title. */
   method?: ReactNode;
   /** Controls shown beside the copy button (the chart/table toggle). */
   toolbar?: ReactNode;
@@ -96,6 +100,19 @@ function useCellFormatter(): (grouped: boolean) => CellFormatter {
   }, [locale, dateFormat]);
 }
 
+/**
+ * The rows shown before "Show all". A time series is chronological and the
+ * latest periods are what the answer is about, so it previews its last
+ * twelve (still oldest first); any other table previews its first twelve.
+ */
+function previewRows(
+  result: Pick<CoachResultTableData, "shape" | "rows">,
+): CoachResultCell[][] {
+  return result.shape === "timeSeries"
+    ? result.rows.slice(-RESULT_TABLE_PREVIEW_ROWS)
+    : result.rows.slice(0, RESULT_TABLE_PREVIEW_ROWS);
+}
+
 function headingText(column: CoachResultColumn): string {
   return column.unit ? `${column.label} (${column.unit})` : column.label;
 }
@@ -113,9 +130,7 @@ export function CoachResultTable({
 
   const format = useMemo(() => formatter(true), [formatter]);
   const hasMore = result.rows.length > RESULT_TABLE_PREVIEW_ROWS;
-  const rows = expanded
-    ? result.rows
-    : result.rows.slice(0, RESULT_TABLE_PREVIEW_ROWS);
+  const rows = expanded ? result.rows : previewRows(result);
 
   const grid = useCallback((): ClipboardGrid => {
     const plain = formatter(false);
@@ -136,40 +151,41 @@ export function CoachResultTable({
     <div
       data-slot="coach-result-table"
       data-ref={result.ref}
-      className="bg-card rounded-lg border"
+      className="bg-card w-full min-w-0 rounded-lg border"
     >
       <div
+        data-slot="coach-result-table-header"
+        className="flex items-start justify-between gap-3 px-3 pt-2 pb-1 text-sm"
+      >
+        <div className="min-w-0 flex-1 pt-1.5">
+          <p id={titleId} className="text-foreground font-medium">
+            {result.title}
+          </p>
+          {method ? (
+            <p className="text-muted-foreground text-xs">{method}</p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <CopyTableButton grid={grid} caption={result.title} />
+          {toolbar}
+        </div>
+      </div>
+      <div
         id={regionId}
+        data-slot="coach-result-table-scroll"
         {...(expanded
           ? { role: "region", tabIndex: 0, "aria-labelledby": titleId }
           : {})}
         className={cn(
-          "overflow-x-auto rounded-lg",
+          "overflow-x-auto rounded-b-lg",
           expanded &&
             "focus-visible:ring-ring/50 max-h-96 overflow-y-auto overscroll-contain outline-none focus-visible:ring-2",
         )}
       >
-        <table className="w-full caption-top text-sm">
-          <caption className="px-3 pt-2 pb-1 text-left">
-            <span className="flex items-start justify-between gap-3">
-              <span className="min-w-0 flex-1 pt-1.5">
-                <span
-                  id={titleId}
-                  className="text-foreground block font-medium"
-                >
-                  {result.title}
-                </span>
-                {method ? (
-                  <span className="text-muted-foreground block text-xs">
-                    {method}
-                  </span>
-                ) : null}
-              </span>
-              <span className="flex shrink-0 items-center gap-1.5">
-                <CopyTableButton grid={grid} caption={result.title} />
-                {toolbar}
-              </span>
-            </span>
+        <table className="w-full text-sm">
+          <caption className="sr-only">
+            {result.title}
+            {method ? <>. {method}</> : null}
           </caption>
           <TableHeader className="bg-card sticky top-0 z-10">
             <TableRow className="hover:bg-transparent">

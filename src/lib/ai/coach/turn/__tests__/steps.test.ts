@@ -367,7 +367,7 @@ describe("toStep — mapping", () => {
       },
     });
     expect(step).toMatchObject({ id: "s3", status: "done", count: 142 });
-    expect(step?.label).toBe("Lese Blutdruck, letzte 90 Tage");
+    expect(step?.label).toBe("Prüfe: Blutdruck, letzte 90 Tage");
   });
 
   it("maps each miss to its status and reason", () => {
