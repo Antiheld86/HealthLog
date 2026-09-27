@@ -10,8 +10,7 @@
  *
  * This file lowers the session limit to five seconds and makes the clearing
  * delete take six (a statement trigger that sleeps), which is the same
- * situation at a size a test can hold. Five, not one: the suite's own
- * truncation between tests runs under the same limit. The first test checks the limit
+ * situation at a size a test can hold. The first test checks the limit
  * really cancels that delete outside the restore, so the second cannot pass
  * because nothing was slow. The restore then has to finish and give back
  * exactly the rows the backup holds.
@@ -23,13 +22,24 @@
  * top of the restore transaction and the restore test goes red with
  * `cause: "timeout"`.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 vi.hoisted(() => {
   // Read once, when `@/lib/db` builds its pool; hoisted above every import.
   process.env.DATABASE_STATEMENT_TIMEOUT_MS = "5000";
 });
 
+import { PrismaPg } from "@prisma/adapter-pg";
+
+import { PrismaClient } from "@/generated/prisma/client";
 import { cookieJar, headerJar } from "./mock-next-headers";
 import { getPrismaClient, truncateAllTables } from "./setup";
 import { streamFullBackupJson } from "@/lib/export/full-backup-stream";
@@ -63,8 +73,21 @@ vi.mock("@/lib/db-compat", () => ({
 
 const COUNT = 600;
 
+/**
+ * A second pool without the lowered limit, for the suite's own housekeeping:
+ * truncating every table between tests can take longer than five seconds on
+ * a busy host, and it is not what this file measures.
+ */
+let setupClient: PrismaClient | null = null;
+function housekeeping(): PrismaClient {
+  setupClient ??= new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
+  });
+  return setupClient;
+}
+
 async function dropTrigger() {
-  const prisma = getPrismaClient();
+  const prisma = housekeeping();
   await prisma.$executeRawUnsafe(
     `DROP TRIGGER IF EXISTS restore_test_clearing ON measurements`,
   );
@@ -75,7 +98,7 @@ async function dropTrigger() {
 
 /** Run `body` on every DELETE statement against `measurements`. */
 async function onMeasurementDelete(body: string) {
-  const prisma = getPrismaClient();
+  const prisma = housekeeping();
   await prisma.$executeRawUnsafe(
     `CREATE FUNCTION restore_test_clearing() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN ${body} RETURN NULL; END $$`,
   );
@@ -86,13 +109,17 @@ async function onMeasurementDelete(body: string) {
 
 beforeEach(async () => {
   await dropTrigger();
-  await truncateAllTables(getPrismaClient());
+  await truncateAllTables(housekeeping());
   cookieJar.clear();
   headerJar.clear();
 });
 
 afterEach(async () => {
   await dropTrigger();
+});
+
+afterAll(async () => {
+  await setupClient?.$disconnect();
 });
 
 async function seedAccountWithBackup() {

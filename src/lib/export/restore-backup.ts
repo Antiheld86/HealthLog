@@ -177,17 +177,19 @@ export interface RestoreResponse {
  * The work is deleting the readings the account holds now and writing the
  * ones the file carries. Both count: an account whose readings were folded
  * into hourly averages still holds the originals as deleted rows until the
- * nightly purge removes them, and the restore deletes those too (#1031). The
- * budget is two minutes plus a second per 2 000 of those rows together. A
- * seeded account of 1.89 million readings restored in 196 s on a fast host
- * and in 9 min on a database held to half a CPU and 40 MB/s of writes; the
- * budget gives it 33 min.
+ * nightly purge removes them, and the restore deletes and rewrites those too
+ * (#1031). Writing is the slow half, since every reading goes into thirteen
+ * indexes. The budget is two minutes, plus a second per 1 000 readings in the
+ * file and per 10 000 in the account. A seeded account of 1.89 million
+ * readings restored in 196 s on a fast host and in 19 min on a database held
+ * to half a CPU and 40 MB/s of writes, where its transaction ran 16 min of a
+ * 37 min budget.
  */
 function restoreTransactionTimeoutMs(
   fileMeasurements: number,
   currentMeasurements: number,
 ): number {
-  return 120_000 + Math.ceil((fileMeasurements + currentMeasurements) / 2);
+  return 120_000 + fileMeasurements + Math.ceil(currentMeasurements / 10);
 }
 
 function decodeEncryptedBytes(encoded: string): Uint8Array<ArrayBuffer> {
