@@ -7,24 +7,24 @@
  * other half — a real form, a real POST, a real row in somebody else's record,
  * and the owner seeing it afterwards.
  *
- * ## Why it gates itself instead of seeding a WRITE grant directly
+ * ## Why it no longer gates itself
  *
- * The grant level is chosen in the invitation form. Rather than mint a WRITE
- * row behind the UI's back — which would prove the journey works for a grant
- * no person can create — the journey looks for the level control and stands
- * down when it is not there yet.
+ * It used to look for the invitation form's level control right after
+ * `goto()` and skip every test when it found none. The count ran before the
+ * form had painted, so it found none on every run, CI included, and the whole
+ * journey skipped for as long as that guard stood. A quiet skip and a passing
+ * suite look identical in a CI summary. The form is now awaited through its
+ * own `data-slot`, and a missing level control fails the first test instead of
+ * standing the file down. `e2e-conditional-skip-guard.test.ts` and
+ * `scripts/check-e2e-skipped-specs.mjs` hold that line for every spec.
  *
- * That guard was written against a `data-slot` the form never shipped under
- * (`grant-invite-level`; the control landed as `grant-invite-access-option`),
- * so from the day the control arrived until 2026-08-03 every test in this file
- * skipped and the whole delegated-write journey ran nowhere. The file said out
- * loud what to change and nobody changed it, which is the standing lesson
- * about a check that cannot fail: the skip is quiet, and a quiet skip and a
- * passing suite look identical in a CI summary.
+ * ## Its own pair
  *
- * The constant is the real one now. If it moves again, change that one string:
- * nothing else here assumes anything about the control except that choosing
- * WRITE and submitting mints a WRITE grant.
+ * The journey invites `E2E_WRITE_DELEGATE` from `E2E_WRITE_OWNER`, accounts no
+ * other spec uses. Only one live grant can stand between two accounts, so
+ * sharing a pair with the account-sharing journey made whichever file invited
+ * second meet a 409. The grant is revoked in `afterAll` so a local re-run
+ * starts clean even before global setup resets the pair.
  *
  * ## What this spec cannot cover
  *
@@ -39,17 +39,14 @@ import type { BrowserContext, Page } from "@playwright/test";
 import { actWithReproof, useStaleSession } from "./setup/recent-proof";
 import { expect, test } from "./setup/test";
 import {
-  DELEGATE_STORAGE_STATE_PATH,
-  E2E_OWNER,
-  E2E_OWNER_FULL_NAME,
-  E2E_USER,
-  OWNER_STORAGE_STATE_PATH,
+  E2E_WRITE_DELEGATE,
+  E2E_WRITE_OWNER,
+  E2E_WRITE_OWNER_FULL_NAME,
+  WRITE_DELEGATE_STORAGE_STATE_PATH,
+  WRITE_OWNER_STORAGE_STATE_PATH,
 } from "./setup/test-helpers";
 
-/**
- * The invitation form's grant-level control. The journey runs when this is on
- * the page and stands down when it is not. One string, one place.
- */
+/** The invitation form's grant-level control. One string, one place. */
 const GRANT_LEVEL_SLOT = "grant-invite-access-option";
 
 /** The value the level control carries for a grant that may add entries. */
@@ -58,55 +55,89 @@ const WRITE_LEVEL_VALUE = "WRITE";
 test.describe("delegated writes", () => {
   // One journey in order, like the read-only sibling: each step is the next
   // one's precondition, and the invitation endpoint is rate-limited.
+  // Desktop only: `playwright.config.ts` keeps it out of the mobile project,
+  // because a second project would drive the same pair in parallel.
   test.describe.configure({ mode: "serial" });
 
-  // The `page` fixture is the DELEGATE throughout, on this journey's own
-  // cookie jar — the switch is stamped on the session row, so switching a
-  // shared jar would switch it for every spec holding the same cookie.
-  test.use({ storageState: DELEGATE_STORAGE_STATE_PATH });
-
-  // Desktop only: the journey mutates shared rows between two seeded accounts,
-  // so two projects running it at once race each other and the second
-  // invitation is refused as a duplicate.
-  test.beforeEach(({}, testInfo) => {
-    test.skip(
-      testInfo.project.name !== "chromium-desktop",
-      "shared-fixture journey — runs once",
-    );
-  });
+  // The `page` fixture is the DELEGATE throughout, on its own account's jar.
+  test.use({ storageState: WRITE_DELEGATE_STORAGE_STATE_PATH });
 
   let ownerContext: BrowserContext;
   let ownerPage: Page;
-  let levelControlPresent = false;
   let endOwnerSession: (() => Promise<void>) | null = null;
 
   test.beforeAll(async ({ browser }) => {
     ownerContext = await browser.newContext({
-      storageState: OWNER_STORAGE_STATE_PATH,
+      storageState: WRITE_OWNER_STORAGE_STATE_PATH,
     });
     ownerPage = await ownerContext.newPage();
     // The invitation asks for a recent proof; see `useStaleSession`.
-    endOwnerSession = await useStaleSession(ownerPage, E2E_OWNER.username);
-    await ownerPage.goto("/settings/access");
-    levelControlPresent =
-      (await ownerPage.locator(`[data-slot="${GRANT_LEVEL_SLOT}"]`).count()) >
-      0;
-  });
-
-  test.afterAll(async () => {
-    await endOwnerSession?.();
-    await ownerContext.close();
-  });
-
-  test.beforeEach(() => {
-    test.skip(
-      !levelControlPresent,
-      `no [data-slot="${GRANT_LEVEL_SLOT}"] in the invitation form — a WRITE grant cannot be created through the UI yet`,
+    endOwnerSession = await useStaleSession(
+      ownerPage,
+      E2E_WRITE_OWNER.username,
     );
   });
 
-  test("the owner invites at a level that may add entries", async () => {
+  test.afterAll(async () => {
+    // End every live grant this journey minted, through the owner's own
+    // session. Revocation needs no re-proof (reducing access is never gated),
+    // and it clears the delegate's switch stamp in the same transaction.
+    try {
+      // On the app's origin, whatever step the journey stopped at.
+      await ownerPage.goto("/settings/access");
+      const revoked = await ownerPage.evaluate(async (grantee: string) => {
+        const res = await fetch("/api/account/grants");
+        if (!res.ok) return -res.status;
+        const body = (await res.json()) as {
+          data: {
+            given: Array<{
+              id: string;
+              state: string;
+              account: { username: string };
+            }>;
+          };
+        };
+        let count = 0;
+        for (const grant of body.data.given) {
+          if (grant.account.username !== grantee) continue;
+          if (grant.state !== "ACTIVE" && grant.state !== "PENDING") continue;
+          const del = await fetch(`/api/account/grants/${grant.id}`, {
+            method: "DELETE",
+          });
+          if (!del.ok) return -del.status;
+          count += 1;
+        }
+        return count;
+      }, E2E_WRITE_DELEGATE.username);
+      expect(revoked, "the journey's grant was revoked").toBeGreaterThanOrEqual(
+        0,
+      );
+    } finally {
+      await endOwnerSession?.();
+      await ownerContext.close();
+    }
+  });
+
+  /**
+   * The invitation form, painted. The card's `data-slot` is on the server
+   * render; the level control inside it is what the journey needs, so wait for
+   * that and fail loudly when it is gone rather than standing the file down.
+   */
+  async function openInviteForm(): Promise<void> {
     await ownerPage.goto("/settings/access");
+    await expect(
+      ownerPage.locator('[data-slot="grant-invite-card"]'),
+    ).toBeVisible();
+    await expect(
+      ownerPage.locator(
+        `[data-slot="${GRANT_LEVEL_SLOT}"][data-access="${WRITE_LEVEL_VALUE}"]`,
+      ),
+      "the invitation form offers a level that may add entries",
+    ).toBeVisible();
+  }
+
+  test("the owner invites at a level that may add entries", async () => {
+    await openInviteForm();
 
     const identifier = ownerPage.locator(
       '[data-slot="grant-invite-identifier"]',
@@ -124,7 +155,7 @@ test.describe("delegated writes", () => {
     // The controlled input keeps the submit disabled until React has attached,
     // so retry the pair rather than waiting a fixed time and hoping.
     await expect(async () => {
-      await identifier.fill(E2E_USER.username);
+      await identifier.fill(E2E_WRITE_DELEGATE.username);
       await expect(submit).toBeEnabled({ timeout: 1000 });
     }).toPass({ timeout: 15_000 });
 
@@ -140,7 +171,9 @@ test.describe("delegated writes", () => {
       (req) =>
         req.method() === "POST" && req.url().endsWith("/api/account/grants"),
     );
-    await actWithReproof(ownerPage, E2E_OWNER.password, () => submit.click());
+    await actWithReproof(ownerPage, E2E_WRITE_OWNER.password, () =>
+      submit.click(),
+    );
     const posted = JSON.parse((await invitePost).postData() ?? "{}") as {
       access?: string;
     };
@@ -164,8 +197,8 @@ test.describe("delegated writes", () => {
 
     const banner = page.locator('[data-slot="shared-record-banner"]');
     await expect(banner).toBeVisible();
-    // v1.37.2 — the owner set a full name, so the banner names them by it.
-    await expect(banner).toContainText(E2E_OWNER_FULL_NAME);
+    // The owner set a full name, so the banner names them by it.
+    await expect(banner).toContainText(E2E_WRITE_OWNER_FULL_NAME);
     // The banner drops its read-only clause on its own once the level says so.
     await expect(banner).not.toContainText("read it, not change it");
   });
@@ -248,6 +281,6 @@ test.describe("delegated writes", () => {
     await ownerPage.goto("/settings/access");
     const rows = ownerPage.locator('[data-slot="record-activity-row"]');
     await expect(rows.first()).toBeVisible();
-    await expect(rows.first()).toContainText(E2E_USER.username);
+    await expect(rows.first()).toContainText(E2E_WRITE_DELEGATE.username);
   });
 });

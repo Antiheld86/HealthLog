@@ -53,9 +53,25 @@ export default defineConfig({
   // timeout is lifted from 5s → 10s for the same settle headroom.
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 2 : undefined,
-  reporter: process.env.CI
-    ? [["github"], ["html", { open: "never" }]]
-    : [["list"], ["html", { open: "never" }]],
+  // The JSON report feeds `scripts/check-e2e-skipped-specs.mjs`, which the
+  // e2e workflow's gate job runs over every shard's report to fail a spec file
+  // that skipped all of its tests. Set E2E_JSON_REPORT to get one locally.
+  reporter: [
+    ...(process.env.CI
+      ? ([["github"], ["html", { open: "never" }]] as const)
+      : ([["list"], ["html", { open: "never" }]] as const)),
+    ...(process.env.CI || process.env.E2E_JSON_REPORT
+      ? ([
+          [
+            "json",
+            {
+              outputFile:
+                process.env.E2E_JSON_REPORT ?? "playwright-json/results.json",
+            },
+          ],
+        ] as const)
+      : []),
+  ],
 
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
@@ -241,6 +257,10 @@ export default defineConfig({
         // a second project would hold and clear that state underneath the
         // first — and underneath any other spec that reads AI availability.
         "onboarding-ai-offer.spec.ts",
+        // The delegated-writes journey invites, accepts and revokes between
+        // its own two accounts. A second project would send a second invitation
+        // between the same pair while the first is live, and meet the 409.
+        "delegated-writes.spec.ts",
         // The invitation journey mints its token and registers from a
         // cookie-less window. Two projects registering from one address
         // share the five-per-fifteen-minutes budget on `auth:register`, so

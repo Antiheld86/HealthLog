@@ -110,6 +110,17 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # The machine-readable report, for the skipped-spec check in the gate
+      # job below. Only uploaded when the shard ran to completion, so a missing
+      # artifact there means a shard that did not finish, not an empty suite.
+      - name: Upload Playwright JSON report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-json-shard-${{ matrix.shard }}
+          path: playwright-json/results.json
+          retention-days: 7
+          if-no-files-found: error
+
   # Branch protection requires a check named exactly "e2e". This job carries
   # that name and answers for both shards: it fails when any shard failed or
   # was cancelled, so a half-green matrix cannot satisfy the gate.
@@ -125,3 +136,19 @@ jobs:
             echo "shard result: ${{ needs.shard.result }}"
             exit 1
           fi
+
+      # A spec file that skipped every one of its tests reports green. The
+      # check aggregates both shards' reports, because Playwright splits a
+      # file's tests across shards; see the script's header for the allowlist.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: playwright-json-shard-*
+          path: playwright-json
+      - name: No spec file skipped all of its tests
+        run: node scripts/check-e2e-skipped-specs.mjs playwright-json/*/results.json

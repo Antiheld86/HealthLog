@@ -44,7 +44,11 @@ describe("Playwright CI determinism", () => {
 
     expect(config.retries).toBe(2);
     expect(config.failOnFlakyTests).toBe(true);
-    expect(config.reporter).toEqual([["github"], ["html", { open: "never" }]]);
+    expect(config.reporter).toEqual([
+      ["github"],
+      ["html", { open: "never" }],
+      ["json", { outputFile: "playwright-json/results.json" }],
+    ]);
     // Three servers, and which is which matters. The suite's own server runs
     // with the dashboard's RSC prefetch OFF so `page.route` fixtures govern
     // what the dashboard paints; the second runs it ON, which is the default

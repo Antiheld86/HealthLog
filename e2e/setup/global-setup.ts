@@ -105,6 +105,32 @@ export const E2E_BACKUP_DELEGATE = {
 } as const;
 
 /**
+ * The delegated-writes journey's own pair.
+ *
+ * That journey used to invite `E2E_USER` from `E2E_OWNER`, the same pair the
+ * account-sharing journey invites. Only one live grant can stand between two
+ * accounts, so whichever of the two files reached its invitation second met a
+ * 409, and on CI the two can run in parallel. A pair of its own removes the
+ * collision instead of ordering around it.
+ */
+export const E2E_WRITE_OWNER = {
+  email: "e2e-write-owner@healthlog.test",
+  username: "e2e-write-owner",
+  password: "Rk5!Wq8tHn3zPv6D",
+  role: "USER",
+} as const;
+
+/** Generic on purpose, like `E2E_OWNER_FULL_NAME`: fixtures hold no real name. */
+export const E2E_WRITE_OWNER_FULL_NAME = "Test Write Owner";
+
+export const E2E_WRITE_DELEGATE = {
+  email: "e2e-write-delegate@healthlog.test",
+  username: "e2e-write-delegate",
+  password: "Tm4!Xc9vBs2kLw7J",
+  role: "USER",
+} as const;
+
+/**
  * v1.37.0 — the account that creates and administers managed profiles.
  *
  * Its own account, and not one of the others, for one reason: every route in
@@ -402,6 +428,17 @@ export const GUARDIAN_STORAGE_STATE_PATH = resolve(
 export const CROSS_TAB_STORAGE_STATE_PATH = resolve(
   process.cwd(),
   "e2e/setup/storageStateCrossTab.json",
+);
+
+/** The delegated-writes journey's jars, one per side of its own pair. */
+export const WRITE_OWNER_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateWriteOwner.json",
+);
+
+export const WRITE_DELEGATE_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateWriteDelegate.json",
 );
 
 /** The backup/restore journey's jar, for the account it owns outright. */
@@ -1125,7 +1162,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
        WHERE key LIKE 'sharing:%'`,
     );
 
-    // The login bucket, for the same reason. This setup signs in SEVENTEEN times now
+    // The login bucket, for the same reason. This setup signs in more than twenty times
     // (the shared jar, the owner, and one jar apiece for every spec that moves
     // a session's record selector), and the ceiling is five attempts per IP per
     // quarter-hour — so two local runs in a row would otherwise end with a 429
@@ -1183,6 +1220,65 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
           AND source = 'MANUAL'
           AND external_id IS NULL`,
       ["e2e-level-write"],
+    );
+
+    // ── the delegated-writes journey's pair ──────────────────────────────
+    //
+    // Seeded like the sharing pair above and reset the same way: no grant
+    // between them, no switch stamp on either, so the journey always starts
+    // from the invitation. The spec revokes its grant when it ends; the delete
+    // here covers a run that died before getting there.
+    for (const [account, fullName] of [
+      [E2E_WRITE_OWNER, E2E_WRITE_OWNER_FULL_NAME],
+      [E2E_WRITE_DELEGATE, null],
+    ] as const) {
+      await pool.query(
+        `INSERT INTO users
+          (id, username, email, password_hash, role,
+           created_at, updated_at,
+           onboarding_completed_at, onboarding_tour_completed, full_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $6, $6, true, $7)
+         ON CONFLICT (username) DO UPDATE SET
+           email = EXCLUDED.email,
+           password_hash = EXCLUDED.password_hash,
+           role = EXCLUDED.role,
+           updated_at = EXCLUDED.updated_at,
+           onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+           onboarding_tour_completed = EXCLUDED.onboarding_tour_completed,
+           full_name = EXCLUDED.full_name,
+           totp_confirmed_at = NULL`,
+        [
+          cuid(),
+          account.username,
+          account.email,
+          await hashPassword(account.password),
+          account.role,
+          now,
+          fullName,
+        ],
+      );
+    }
+    await pool.query(
+      `DELETE FROM account_grants
+       WHERE grantor_id IN (SELECT id FROM users WHERE username = ANY($1))
+          OR grantee_id IN (SELECT id FROM users WHERE username = ANY($1))`,
+      [[E2E_WRITE_OWNER.username, E2E_WRITE_DELEGATE.username]],
+    );
+    await pool.query(
+      `UPDATE sessions SET acting_as_user_id = NULL
+       WHERE user_id IN (SELECT id FROM users WHERE username = ANY($1))`,
+      [[E2E_WRITE_OWNER.username, E2E_WRITE_DELEGATE.username]],
+    );
+    // The reading the delegate saves into the owner's record carries a
+    // minute-rounded `measuredAt`, so a second run inside the same minute would
+    // meet the natural-key 409 — the same reason `e2e-level-write` is cleared
+    // above.
+    await pool.query(
+      `DELETE FROM measurements
+        WHERE user_id = (SELECT id FROM users WHERE username = $1)
+          AND source = 'MANUAL'
+          AND external_id IS NULL`,
+      [E2E_WRITE_OWNER.username],
     );
 
     // ── the backup/restore journey's pair ────────────────────────────────
@@ -1308,7 +1404,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
      * Log one account in, clearing the login bucket first.
      *
      * The ceiling is FIVE attempts per IP per quarter-hour and this setup now
-     * signs in eighteen times, so clearing once before the batch is no longer
+     * signs in more than twenty times, so clearing once before the batch is no longer
      * enough — the sixth would be answered by the fixture's own 429 rather
      * than by the product. Only the auth surfaces' buckets are touched, and
      * only between logins this setup is itself performing.
@@ -1365,6 +1461,10 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     // The doctor-report journey's own account, for the reason written on
     // E2E_REPORT_OWNER: generating a report writes to the account row.
     await capture(E2E_REPORT_OWNER, REPORT_OWNER_STORAGE_STATE_PATH);
+
+    // The delegated-writes journey's pair.
+    await capture(E2E_WRITE_OWNER, WRITE_OWNER_STORAGE_STATE_PATH);
+    await capture(E2E_WRITE_DELEGATE, WRITE_DELEGATE_STORAGE_STATE_PATH);
 
     // The backup/restore journey's pair.
     await capture(E2E_BACKUP_ADMIN, BACKUP_STORAGE_STATE_PATH);
