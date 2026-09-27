@@ -1212,6 +1212,7 @@
     "categorySleepAid": "Aide au sommeil",
     "categoryDiabetes": "Diabetes",
     "categoryAntibiotic": "Antibiotique",
+    "categoryMentalHealth": "Santé mentale",
     "categoryOther": "Autres",
     "daysSun": "Dim",
     "daysMon": "Lun",
@@ -1226,6 +1227,7 @@
     "tomorrow": "Demain",
     "asNeededMarker": "Au besoin",
     "recordOnlyBadge": "Pour mémoire",
+    "courseEndedBadge": "Terminé",
     "trackIntake": {
       "title": "Suivi des prises",
       "label": "Suivre les prises",
@@ -1566,6 +1568,11 @@
         "vitamin": "Vitamines",
         "supplement": "Complément",
         "antibiotic": "Antibiotique",
+        "mentalHealth": "Santé mentale",
+        "thyroid": "Thyroïde",
+        "digestive": "Digestif",
+        "skin": "Soin de la peau",
+        "sleepAid": "Aide au sommeil",
         "other": "Autre"
       },
       "cadence": {

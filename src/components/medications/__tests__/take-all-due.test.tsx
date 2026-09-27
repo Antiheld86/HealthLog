@@ -174,6 +174,23 @@ describe("deriveDueMedications — only currently-due, active, unpaused", () => 
     expect(due.map((d) => d.id)).toEqual(["due"]);
   });
 
+  it("excludes a medication whose course has ended, even with an escalated dose (#1040)", () => {
+    const due = deriveDueMedications(
+      [
+        makeMed({ id: "ended", intakeActionable: false }),
+        makeMed({ id: "on" }),
+      ],
+      {
+        ...opts,
+        doseStatusById: new Map([
+          ["ended", "missed" as const],
+          ["on", "upcoming" as const],
+        ]),
+      },
+    );
+    expect(due.map((d) => d.id)).toEqual(["on"]);
+  });
+
   it("excludes a medication whose dose band is not currently open", () => {
     const due = deriveDueMedications(
       [

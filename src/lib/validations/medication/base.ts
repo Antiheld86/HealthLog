@@ -68,7 +68,9 @@ export const rxNormCodeField = z
  * wizard's Step 2 taxonomy can write a first-class bucket for those
  * two rows instead of collapsing them into `OTHER`. The column is a
  * plain TEXT field — no Prisma enum exists to migrate; the Zod values
- * list is the only enforcement layer.
+ * list is the only enforcement layer. v1.39.4 adds `MENTAL_HEALTH`
+ * (antidepressants, anxiolytics, mood stabilisers, ADHD medication), again
+ * without a migration.
  */
 export const MEDICATION_CATEGORY_VALUES = [
   "BLOOD_PRESSURE",
@@ -83,6 +85,7 @@ export const MEDICATION_CATEGORY_VALUES = [
   "SLEEP_AID",
   "DIABETES",
   "ANTIBIOTIC",
+  "MENTAL_HEALTH",
   "OTHER",
 ] as const;
 export type MedicationCategoryValue =

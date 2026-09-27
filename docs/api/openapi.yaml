@@ -23985,6 +23985,7 @@ components:
             - SLEEP_AID
             - DIABETES
             - ANTIBIOTIC
+            - MENTAL_HEALTH
             - OTHER
         treatmentClass:
           type: string
@@ -24321,6 +24322,7 @@ components:
             - SLEEP_AID
             - DIABETES
             - ANTIBIOTIC
+            - MENTAL_HEALTH
             - OTHER
         treatmentClass:
           type: string
@@ -34171,6 +34173,9 @@ components:
                 type: boolean
               trackIntake:
                 type: boolean
+              category:
+                type: string
+                maxLength: 64
               deliveryForm:
                 type: string
                 enum:
@@ -43976,6 +43981,20 @@ components:
             HealthKit Medications sync; NULL is a native HealthLog medication. Read-only echo of the stored provenance —
             the create route sets it, the list read surfaces it so mirrored-vs-native is visible without inspecting the
             iOS client's local registry.
+        courseStatus:
+          type: string
+          enum:
+            - UPCOMING
+            - CURRENT
+            - ENDED
+          description: "v1.39.4 — where today (on the user's clock) sits in the course: UPCOMING before `startsOn`, ENDED after
+            `endsOn`, CURRENT otherwise. Calendar days, both ends inclusive, so a course that ends today is CURRENT all
+            day. Read-only — computed, not stored."
+        intakeActionable:
+          type: boolean
+          description: "v1.39.4 — whether the medication offers taken / skip today: true only when it is `active`, its intake is
+            tracked (`trackIntake`) and `courseStatus` is CURRENT. Clients render the dose actions from this and do not
+            re-derive it. Logging a past dose from the history is not gated by it. Read-only — computed, not stored."
         lastTakenAt:
           anyOf:
             - type: string
@@ -44046,6 +44065,8 @@ components:
         - schedules
         - category
         - externalSource
+        - courseStatus
+        - intakeActionable
         - lastTakenAt
         - todayEventCount
         - stockUnitsRemaining
@@ -44073,6 +44094,7 @@ components:
         - SLEEP_AID
         - DIABETES
         - ANTIBIOTIC
+        - MENTAL_HEALTH
         - OTHER
       description: Clinical taxonomy stored in the `medication_categories` side-table. Orthogonal to `MedicationTreatmentClass`.
     CreateMedicationResponse:
@@ -44236,6 +44258,20 @@ components:
             $ref: "#/components/schemas/MedicationScheduleOutput"
         category:
           $ref: "#/components/schemas/MedicationCategory"
+        courseStatus:
+          type: string
+          enum:
+            - UPCOMING
+            - CURRENT
+            - ENDED
+          description: "v1.39.4 — where today (on the user's clock) sits in the course: UPCOMING before `startsOn`, ENDED after
+            `endsOn`, CURRENT otherwise. Calendar days, both ends inclusive, so a course that ends today is CURRENT all
+            day. Read-only — computed, not stored."
+        intakeActionable:
+          type: boolean
+          description: "v1.39.4 — whether the medication offers taken / skip today: true only when it is `active`, its intake is
+            tracked (`trackIntake`) and `courseStatus` is CURRENT. Clients render the dose actions from this and do not
+            re-derive it. Logging a past dose from the history is not gated by it. Read-only — computed, not stored."
         stockUnitsRemaining:
           anyOf:
             - type: number
@@ -44282,6 +44318,8 @@ components:
         - updatedAt
         - schedules
         - category
+        - courseStatus
+        - intakeActionable
         - stockUnitsRemaining
         - stockDosesRemaining
         - runwayDays

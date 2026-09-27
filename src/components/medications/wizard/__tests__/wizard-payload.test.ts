@@ -21,6 +21,7 @@ import {
   type WizardTreatmentRow,
 } from "@/components/medications/wizard/wizard-payload";
 import { encodeCadence } from "@/components/medications/scheduling/cadence-picker";
+import { MEDICATION_CATEGORY_VALUES } from "@/lib/validations/medication";
 import {
   type CadenceKind,
   DEFAULT_SUB_CONTROLS,
@@ -310,6 +311,13 @@ describe("WIZARD_TREATMENT_MAPPING — Step 2 row → request body", () => {
     });
   });
 
+  it("maps Psychische Gesundheit → (GENERIC, MENTAL_HEALTH) — new in v1.39.4", () => {
+    expect(WIZARD_TREATMENT_MAPPING.mentalHealth).toEqual({
+      treatmentClass: "GENERIC",
+      category: "MENTAL_HEALTH",
+    });
+  });
+
   it("maps GLP-1-Injektion → (GLP1, OTHER) — only row with GLP1", () => {
     expect(WIZARD_TREATMENT_MAPPING.glp1).toEqual({
       treatmentClass: "GLP1",
@@ -327,6 +335,11 @@ describe("WIZARD_TREATMENT_MAPPING — Step 2 row → request body", () => {
       "vitamin",
       "supplement",
       "antibiotic",
+      "mentalHealth",
+      "thyroid",
+      "digestive",
+      "skin",
+      "sleepAid",
       "other",
     ];
     for (const row of rows) {
@@ -347,6 +360,11 @@ describe("rowFromTreatment — reverse mapping for edit-hydration", () => {
 
   it("ANTIBIOTIC category maps to the antibiotic row", () => {
     expect(rowFromTreatment("GENERIC", "ANTIBIOTIC")).toBe("antibiotic");
+    expect(rowFromTreatment("GENERIC", "MENTAL_HEALTH")).toBe("mentalHealth");
+    expect(rowFromTreatment("GENERIC", "THYROID")).toBe("thyroid");
+    expect(rowFromTreatment("GENERIC", "DIGESTIVE")).toBe("digestive");
+    expect(rowFromTreatment("GENERIC", "SKIN")).toBe("skin");
+    expect(rowFromTreatment("GENERIC", "SLEEP_AID")).toBe("sleepAid");
   });
 
   it("unknown category falls back to 'other'", () => {
@@ -1238,5 +1256,77 @@ describe("as-needed mode (v1.16.11, #316)", () => {
     expect(validateStep(p, 5)).toBe(true);
     expect(validateStep(p, 8)).toBe(true);
     expect(validateStep({ ...p, mode: null }, 5)).toBe(false);
+  });
+});
+
+describe("category on edit (v1.39.4)", () => {
+  function hydrate(category: string, treatmentClass = "GENERIC") {
+    return hydrateWizardPayload({
+      id: "m1",
+      name: "Levothyroxine",
+      dose: "50 µg",
+      category,
+      treatmentClass,
+      notificationsEnabled: true,
+      startsOn: null,
+      endsOn: null,
+      oneShot: false,
+      schedules: [
+        {
+          windowStart: "07:00",
+          windowEnd: "08:00",
+          timesOfDay: ["07:00"],
+          rrule: "FREQ=DAILY",
+        },
+      ],
+    });
+  }
+
+  it("gives every stored category a wizard row of its own", () => {
+    const covered = new Set(
+      Object.values(WIZARD_TREATMENT_MAPPING).map((m) => m.category),
+    );
+    for (const value of MEDICATION_CATEGORY_VALUES) {
+      expect(covered.has(value), value).toBe(true);
+    }
+  });
+
+  it.each(["THYROID", "SKIN", "SLEEP_AID", "MENTAL_HEALTH"])(
+    "an edit that leaves the row alone keeps %s",
+    (category) => {
+      const body = buildCreateBody(
+        { ...hydrate(category), name: "Renamed" },
+        "edit",
+      );
+      expect("category" in body).toBe(false);
+      expect("treatmentClass" in body).toBe(false);
+    },
+  );
+
+  it("never overwrites a category the wizard has no row for", () => {
+    const payload = hydrate("SOMETHING_NEWER");
+    expect(payload.treatmentRow).toBe("other");
+    const body = buildCreateBody(payload, "edit");
+    expect("category" in body).toBe(false);
+  });
+
+  it("keeps a GLP-1 medication's clinical category on an untouched edit", () => {
+    const body = buildCreateBody(hydrate("BLOOD_PRESSURE", "GLP1"), "edit");
+    expect("category" in body).toBe(false);
+    expect("treatmentClass" in body).toBe(false);
+  });
+
+  it("sends the new category when the row changed", () => {
+    const body = buildCreateBody(
+      { ...hydrate("THYROID"), treatmentRow: "sleepAid" },
+      "edit",
+    );
+    expect(body.category).toBe("SLEEP_AID");
+    expect(body.treatmentClass).toBe("GENERIC");
+  });
+
+  it("always sends the category on create", () => {
+    const body = buildCreateBody({ ...hydrate("SKIN") }, "create");
+    expect(body.category).toBe("SKIN");
   });
 });

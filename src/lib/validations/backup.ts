@@ -358,6 +358,11 @@ const medicationSchema = z
     // v1.39.1 (#1033) — absent in a backup written before the field existed;
     // the restore defaults it to tracking on, the behaviour those had.
     trackIntake: z.boolean().optional(),
+    // v1.39.4 — the clinical category. Absent in older files. A string, not
+    // the enum: a file from a newer server may name a category this one does
+    // not know, and the restore reads that as OTHER rather than refusing the
+    // whole file.
+    category: z.string().max(64).optional(),
     deliveryForm: z.enum(MedicationDeliveryForm).optional(),
     trackInjectionSites: z.boolean().optional(),
     allowedInjectionSites: z.array(z.enum(InjectionSite)).optional(),

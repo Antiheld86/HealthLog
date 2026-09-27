@@ -1212,6 +1212,7 @@
     "categorySleepAid": "수면 보조",
     "categoryDiabetes": "당뇨",
     "categoryAntibiotic": "항생제",
+    "categoryMentalHealth": "정신 건강",
     "categoryOther": "기타",
     "daysSun": "일",
     "daysMon": "월",
@@ -1226,6 +1227,7 @@
     "tomorrow": "내일",
     "asNeededMarker": "필요시",
     "recordOnlyBadge": "기록만",
+    "courseEndedBadge": "종료됨",
     "trackIntake": {
       "title": "복용 기록",
       "label": "복용 기록하기",
@@ -1566,6 +1568,11 @@
         "vitamin": "비타민",
         "supplement": "보충제",
         "antibiotic": "항생제",
+        "mentalHealth": "정신 건강",
+        "thyroid": "갑상선",
+        "digestive": "소화기",
+        "skin": "피부",
+        "sleepAid": "수면 보조",
         "other": "기타"
       },
       "cadence": {

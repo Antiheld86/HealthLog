@@ -170,6 +170,8 @@ export interface MedicationDetailSnapshot {
    * `recordedSchedules`; the page shows (and edits) the stored rows.
    */
   trackIntake?: boolean;
+  /** v1.39.4 (#1040) — where today sits in the course (server-resolved). */
+  courseStatus?: "UPCOMING" | "CURRENT" | "ENDED";
   recordedSchedules?: ScheduleSnapshot[];
   schedules: ScheduleSnapshot[];
 }
@@ -501,7 +503,7 @@ export function MedicationDetailTabs({
         name={medication.name}
         dose={formatDose(medication.dose, t)}
         active={medication.active}
-        endsOn={medication.endsOn}
+        courseStatus={served.courseStatus}
         payload={payload}
         oneShot={oneShot}
         asNeeded={asNeeded}

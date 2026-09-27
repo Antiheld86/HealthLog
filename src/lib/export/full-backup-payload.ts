@@ -118,6 +118,7 @@ import {
   type OnboardingBackupCounts,
   type OnboardingBackupSection,
 } from "@/lib/export/onboarding-backup";
+import { getMedicationCategories } from "@/lib/medication-category";
 
 export interface FullBackupCounts
   extends
@@ -943,6 +944,14 @@ export async function buildFullBackupPayload(
       : moodEntries!,
   };
 
+  // The clinical category lives in a raw side table rather than on the
+  // medication row, so no Prisma include reaches it. Before v1.39.4 no backup
+  // carried it and every restored medication came back as "Other".
+  const categoryByMedication = await getMedicationCategories(
+    medications.map((m) => m.id),
+    prisma,
+  );
+
   // Where each archived era sits in its OWN drug's ordered list. Built once
   // here rather than per row, and scoped per medication because the supersede
   // pointer never crosses a drug — every route that writes it scopes the
@@ -1008,6 +1017,8 @@ export async function buildFullBackupPayload(
       // record only. Both purposes carry it: a restore that dropped it would
       // start reminding them about a medication they chose not to track.
       trackIntake: m.trackIntake,
+      // Both purposes: the category is something the person chose.
+      category: categoryByMedication[m.id] ?? "OTHER",
       // Both purposes carry the creation instant: it is the floor of the
       // medication's expected slots, so a restore stamped with the restore
       // time would read the whole restored history as predating the

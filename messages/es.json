@@ -1212,6 +1212,7 @@
     "categorySleepAid": "Para dormir",
     "categoryDiabetes": "Diabetes",
     "categoryAntibiotic": "Antibiótico",
+    "categoryMentalHealth": "Salud mental",
     "categoryOther": "Otros",
     "daysSun": "Do",
     "daysMon": "Lu",
@@ -1226,6 +1227,7 @@
     "tomorrow": "Mañana",
     "asNeededMarker": "Según necesidad",
     "recordOnlyBadge": "Solo registro",
+    "courseEndedBadge": "Finalizado",
     "trackIntake": {
       "title": "Registro de tomas",
       "label": "Registrar tomas",
@@ -1566,6 +1568,11 @@
         "vitamin": "Vitaminas",
         "supplement": "Suplemento",
         "antibiotic": "Antibiótico",
+        "mentalHealth": "Salud mental",
+        "thyroid": "Tiroides",
+        "digestive": "Digestivo",
+        "skin": "Cuidado de la piel",
+        "sleepAid": "Para dormir",
         "other": "Otro"
       },
       "cadence": {

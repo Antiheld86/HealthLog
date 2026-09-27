@@ -1212,6 +1212,7 @@
     "categorySleepAid": "Sleep Aid",
     "categoryDiabetes": "Diabetes",
     "categoryAntibiotic": "Antibiotic",
+    "categoryMentalHealth": "Mental health",
     "categoryOther": "Other",
     "daysSun": "Sun",
     "daysMon": "Mon",
@@ -1226,6 +1227,7 @@
     "tomorrow": "Tomorrow",
     "asNeededMarker": "As needed",
     "recordOnlyBadge": "Record only",
+    "courseEndedBadge": "Ended",
     "trackIntake": {
       "title": "Intake tracking",
       "label": "Track intake",
@@ -1566,6 +1568,11 @@
         "vitamin": "Vitamins",
         "supplement": "Supplement",
         "antibiotic": "Antibiotic",
+        "mentalHealth": "Mental health",
+        "thyroid": "Thyroid",
+        "digestive": "Gastrointestinal",
+        "skin": "Skincare",
+        "sleepAid": "Sleep aid",
         "other": "Other"
       },
       "cadence": {

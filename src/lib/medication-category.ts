@@ -7,6 +7,17 @@ export type MedicationCategory = (typeof MEDICATION_CATEGORIES)[number];
 
 const DEFAULT_CATEGORY: MedicationCategory = "OTHER";
 
+/**
+ * The raw-SQL surface the helpers below need. The default is the shared
+ * client; the backup builder and the restore pass their own (the restore's
+ * transaction client, so a category row lands in the same transaction as
+ * the medication it points at and its foreign key can see that row).
+ */
+type RawSqlClient = Pick<
+  typeof prisma,
+  "$queryRawUnsafe" | "$executeRawUnsafe"
+>;
+
 let ensureTablePromise: Promise<void> | null = null;
 
 function normalizeCategory(input: unknown): MedicationCategory {
@@ -16,7 +27,7 @@ function normalizeCategory(input: unknown): MedicationCategory {
     : DEFAULT_CATEGORY;
 }
 
-async function ensureMedicationCategoryTable() {
+export async function ensureMedicationCategoryTable() {
   if (!ensureTablePromise) {
     ensureTablePromise = (async () => {
       await prisma.$executeRawUnsafe(`
@@ -42,11 +53,12 @@ async function ensureMedicationCategoryTable() {
 
 export async function getMedicationCategories(
   medicationIds: string[],
+  client: RawSqlClient = prisma,
 ): Promise<Record<string, MedicationCategory>> {
   if (medicationIds.length === 0) return {};
   await ensureMedicationCategoryTable();
 
-  const rows = await prisma.$queryRawUnsafe<
+  const rows = await client.$queryRawUnsafe<
     Array<{ medication_id: string; category: string }>
   >(
     `
@@ -70,11 +82,12 @@ export async function getMedicationCategories(
 export async function setMedicationCategory(
   medicationId: string,
   category: unknown,
+  client: RawSqlClient = prisma,
 ) {
   await ensureMedicationCategoryTable();
   const normalized = normalizeCategory(category);
 
-  await prisma.$executeRawUnsafe(
+  await client.$executeRawUnsafe(
     `
       INSERT INTO medication_categories (medication_id, category, updated_at)
       VALUES ($1, $2, NOW())

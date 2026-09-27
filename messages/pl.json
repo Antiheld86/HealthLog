@@ -1212,6 +1212,7 @@
     "categorySleepAid": "Na sen",
     "categoryDiabetes": "Diabetes",
     "categoryAntibiotic": "Antybiotyk",
+    "categoryMentalHealth": "Zdrowie psychiczne",
     "categoryOther": "Inne",
     "daysSun": "Nd",
     "daysMon": "Pn",
@@ -1226,6 +1227,7 @@
     "tomorrow": "Jutro",
     "asNeededMarker": "W razie potrzeby",
     "recordOnlyBadge": "Tylko zapis",
+    "courseEndedBadge": "Zakończony",
     "trackIntake": {
       "title": "Rejestrowanie przyjęć",
       "label": "Rejestruj przyjęcia",
@@ -1566,6 +1568,11 @@
         "vitamin": "Witaminy",
         "supplement": "Suplement",
         "antibiotic": "Antybiotyk",
+        "mentalHealth": "Zdrowie psychiczne",
+        "thyroid": "Tarczyca",
+        "digestive": "Trawienne",
+        "skin": "Pielęgnacja skóry",
+        "sleepAid": "Na sen",
         "other": "Inne"
       },
       "cadence": {

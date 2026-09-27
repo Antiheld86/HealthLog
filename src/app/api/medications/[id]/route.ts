@@ -47,6 +47,7 @@ import {
   scheduleWireFields,
 } from "@/lib/medications/intake-tracking";
 import { floorWhole } from "@/lib/medications/units-per-dose";
+import { resolveIntakeActionability } from "@/lib/medications/intake-actionable";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -243,6 +244,12 @@ export const GET = apiHandler(
       category,
       nextDueAt: display ? display.at.toISOString() : null,
       nextDueOverdue: display?.overdue ?? false,
+      // v1.39.4 (#1040) — see `resolveIntakeActionability`.
+      ...resolveIntakeActionability(
+        medication,
+        now,
+        user.timezone || DEFAULT_TIMEZONE,
+      ),
       stockUnitsRemaining,
       stockDosesRemaining,
       runwayDays,

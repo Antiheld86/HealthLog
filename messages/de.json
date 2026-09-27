@@ -1212,6 +1212,7 @@
     "categorySleepAid": "Schlafmittel",
     "categoryDiabetes": "Diabetes",
     "categoryAntibiotic": "Antibiotikum",
+    "categoryMentalHealth": "Psychische Gesundheit",
     "categoryOther": "Sonstiges",
     "daysSun": "So",
     "daysMon": "Mo",
@@ -1226,6 +1227,7 @@
     "tomorrow": "Morgen",
     "asNeededMarker": "Bei Bedarf",
     "recordOnlyBadge": "Nur dokumentiert",
+    "courseEndedBadge": "Beendet",
     "trackIntake": {
       "title": "Einnahmen erfassen",
       "label": "Einnahmen erfassen",
@@ -1566,6 +1568,11 @@
         "vitamin": "Vitamine",
         "supplement": "Nahrungsergänzung",
         "antibiotic": "Antibiotikum",
+        "mentalHealth": "Psychische Gesundheit",
+        "thyroid": "Schilddrüse",
+        "digestive": "Magen/Darm",
+        "skin": "Hautpflege",
+        "sleepAid": "Schlafmittel",
         "other": "Sonstiges"
       },
       "cadence": {

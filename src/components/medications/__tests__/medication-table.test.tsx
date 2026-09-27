@@ -411,6 +411,39 @@ describe("<MedicationTable> — structure + shared payloads", () => {
     expect(html).toContain("4 doses");
   });
 
+  it("offers no dose actions on an ended course and names it; the last course day keeps them (#1040)", () => {
+    const client = makeClient();
+    seedCompliance(client, "ended", 90, 88);
+    seedCompliance(client, "last", 90, 88);
+    const html = render(
+      <MedicationTable
+        activeMedications={[
+          med({
+            id: "ended",
+            name: "Amoxicillin",
+            courseStatus: "ENDED",
+            intakeActionable: false,
+          }),
+          med({
+            id: "last",
+            name: "Prednisolone",
+            courseStatus: "CURRENT",
+            intakeActionable: true,
+          }),
+        ]}
+        inactiveMedications={[]}
+      />,
+      client,
+    );
+
+    expect(html).not.toContain('aria-label="Take – Amoxicillin"');
+    expect(html).not.toContain('aria-label="Skip – Amoxicillin"');
+    expect(html).toContain('data-slot="medication-table-course-ended-marker"');
+    expect(html).toContain(">Ended<");
+    expect(html).toContain('aria-label="Take – Prednisolone"');
+    expect(html).toContain('aria-label="Skip – Prednisolone"');
+  });
+
   it("renders an as-needed row: calm marker, no compliance bars (v1.16.11 #316)", () => {
     const client = makeClient();
     // Deliberately NOT seeding compliance for the PRN row — the batched
