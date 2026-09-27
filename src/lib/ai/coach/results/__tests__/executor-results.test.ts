@@ -376,7 +376,7 @@ describe("show_result", () => {
     });
   });
 
-  it("shows the table without a chart for view table", async () => {
+  it("shows the table first for view table, the chart kept beside it", async () => {
     readMessageResults.mockResolvedValue([STORED]);
     const result = await executeCoachTool({
       userId: "u1",
@@ -384,10 +384,12 @@ describe("show_result", () => {
       rawArguments: JSON.stringify({ ref: "m2.r1", view: "table" }),
       turn: turn(),
     });
+    // The table shows first; the chart the server picks stays beside it.
     expect(result.table).toMatchObject({
       rows: STORED.rows,
-      chart: null,
-      chartKind: null,
+      view: "table",
+      chart: { kind: "line", x: "day", series: ["value"] },
+      chartKind: "line",
     });
   });
 

@@ -108,6 +108,16 @@ describe("CoachResults", () => {
     expect(tableButton).toContain('aria-pressed="false"');
   });
 
+  it("opens an 'as a table' answer on the table, with the chart one tap away", () => {
+    const html = results([table({ view: "table" })], "displayed");
+    expect(html).toContain('data-slot="coach-result-table"');
+    expect(html).not.toContain('data-slot="coach-result-chart"');
+    const chartButton = html.match(
+      /<button[^>]*data-slot="coach-result-view-chart"[^>]*>/,
+    )?.[0];
+    expect(chartButton).toContain('aria-pressed="false"');
+  });
+
   it("opens a table without a chart as a table, with no toggle", () => {
     const html = results(
       [table({ chart: null, chartKind: null })],

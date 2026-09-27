@@ -152,6 +152,15 @@ describe("deriveFollowUps — the rules", () => {
     expect(all).toEqual([]);
   });
 
+  it("offers the chart back for a table shown as a table", () => {
+    const chips = derive({
+      results: [
+        table("bp", { chartKind: "line", displayed: true, view: "table" }),
+      ],
+    });
+    expect(chips[0]).toMatchObject({ kind: "as_chart", reuse: true });
+  });
+
   it("offers the other view of a table that has a chart, as a reuse chip", () => {
     const shown = derive({
       results: [table("bp", { chartKind: "line", displayed: true })],

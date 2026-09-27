@@ -167,9 +167,12 @@ export function deriveFollowUps(args: {
       period: source.period,
     };
     if (meta.chartKind !== null) {
+      // The other view of what the answer shows: a table shown as a table
+      // offers its chart, a shown chart offers its table.
+      const showsChart = meta.displayed && meta.view !== "table";
       candidates.push(
         buildFollowUp({
-          kind: meta.displayed ? "as_table" : "as_chart",
+          kind: showsChart ? "as_table" : "as_chart",
           anchor,
           origin: "server",
           locale,

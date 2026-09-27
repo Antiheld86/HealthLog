@@ -56,6 +56,7 @@ export function toResultMeta(table: CoachResultTable): CoachResultMeta {
     chartKind: table.chartKind,
     displayed: table.displayed,
     ...(table.reusedFrom ? { reusedFrom: table.reusedFrom } : {}),
+    ...(table.view ? { view: table.view } : {}),
   };
 }
 

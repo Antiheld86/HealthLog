@@ -700,7 +700,8 @@ describe.each(["de", "en"] as const)("in %s", (lang) => {
     const [table] = resultsOf(frames);
     // The person still sees the title on their own table.
     expect(table.title).toBe(INJECTED_TITLE);
-    expect(table.chart).toBeNull();
+    // Asked for as a table: the table shows first, its chart kept beside it.
+    expect(table.view).toBe("table");
 
     // Were the same text to ride the transcript, the fence check fails.
     const leaked = await run({

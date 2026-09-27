@@ -327,16 +327,21 @@ describe("a reuse chip", () => {
     expect(annotated("coach.followUp.reused")).toHaveLength(1);
   });
 
-  it("drops the chart on 'as a table'", async () => {
+  it("shows the table first on 'as a table' and offers the chart back", async () => {
     const asTable = { ...AS_CHART, kind: "as_table" as const };
     m.findMany.mockResolvedValue(latestReply([asTable]));
     m.readMessageResults.mockResolvedValue([STORED]);
     const out = await frames(await runCoachTurn(input()));
     const result = out.find((f) => f.type === "result");
-    expect(result?.type === "result" && result.result.chart).toBeNull();
-    expect(result?.type === "result" && result.result.rows).toEqual(
-      STORED.rows,
-    );
+    expect(result?.type === "result" && result.result).toMatchObject({
+      view: "table",
+      chart: STORED.chart,
+      rows: STORED.rows,
+    });
+    const chips = out.find((f) => f.type === "followUps");
+    expect(
+      chips?.type === "followUps" && chips.followUps.map((c) => c.kind),
+    ).toEqual(["as_chart"]);
   });
 
   it("goes to the model with the chip's hint when the table is withheld", async () => {

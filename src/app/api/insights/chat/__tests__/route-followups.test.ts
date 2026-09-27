@@ -205,11 +205,18 @@ describe("a reuse chip", () => {
       "result",
     ).map((f) => f.result);
     expect(result.rows).toEqual(world.storedTables[0].rows);
-    expect(result.chart).toBeNull();
+    // The table shows first; the chart stays, so the chart is offered back.
+    expect(result.view).toBe("table");
+    expect(result.chart).toEqual(world.storedTables[0].chart);
     expect(result.reusedFrom).toEqual({
       messageId: h.LAST_ASSISTANT_ID,
       ref: "r1",
     });
+    const [chips] = framesOf<{ followUps: CoachFollowUp[] }>(
+      run.frames,
+      "followUps",
+    );
+    expect(chips.followUps.map((c) => c.kind)).toEqual(["as_chart"]);
     expect(m.appendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ role: "assistant", providerType: "reuse" }),
     );

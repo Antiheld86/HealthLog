@@ -247,8 +247,9 @@ function CoachResultView({
   const titleId = useId();
   const reusedLine = useReusedLine(result);
   const hasChart = result.chart !== null;
+  // "As a table" keeps the chart for the toggle but shows the table first.
   const [view, setView] = useState<ResultView>(
-    hasChart && chartFirst ? "chart" : "table",
+    hasChart && chartFirst && result.view !== "table" ? "chart" : "table",
   );
   if (!hasChart) {
     return <CoachResultTable result={result} method={reusedLine} />;

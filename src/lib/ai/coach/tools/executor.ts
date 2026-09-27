@@ -893,11 +893,20 @@ async function getMetricTable(
  * then reads the summary of what is shown.
  */
 function withResultView(
-  table: CoachResultTable,
+  shown: CoachResultTable,
   view: "table" | "chart" | undefined,
   locale: Locale,
 ): CoachResultTable {
-  if (view === "table") return { ...table, chart: null, chartKind: null };
+  // The view is this showing's alone, never the stored copy's.
+  const { view: _stored, ...table } = shown;
+  if (view === "table") {
+    // The table shows first; the chart stays for the toggle and the chip
+    // back to it.
+    const chart = deriveChartSpec(table);
+    return chart
+      ? { ...table, chart, chartKind: chart.kind, view: "table" }
+      : { ...table, chart: null, chartKind: null };
+  }
   if (view === "chart") {
     const { t } = getServerTranslator(locale);
     const distribution = buildDistributionTable(table, {

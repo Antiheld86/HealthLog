@@ -167,6 +167,12 @@ const coachResultMetaShape = {
     .object({ messageId: messageIdSchema, ref: resultRefSchema })
     .optional()
     .describe("Set when the table was copied from an earlier message."),
+  view: z
+    .literal("table")
+    .optional()
+    .describe(
+      "`table` when the answer asked for the table view of a table that has a chart; the chart stays for the toggle. Absent: the chart shows first when there is one.",
+    ),
 };
 
 export const coachResultMetaSchema = z.object(coachResultMetaShape).meta({

@@ -50775,6 +50775,11 @@ components:
             - messageId
             - ref
           additionalProperties: false
+        view:
+          description: "`table` when the answer asked for the table view of a table that has a chart; the chart stays for the
+            toggle. Absent: the chart shows first when there is one."
+          type: string
+          const: table
       required:
         - ref
         - source
@@ -51074,6 +51079,11 @@ components:
             - messageId
             - ref
           additionalProperties: false
+        view:
+          description: "`table` when the answer asked for the table view of a table that has a chart; the chart stays for the
+            toggle. Absent: the chart shows first when there is one."
+          type: string
+          const: table
         columns:
           type: array
           items:
