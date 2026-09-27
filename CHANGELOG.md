@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.39.5] — 2026-09-28
+
+A server with a per-minute heart-rate history stays inside its memory: the
+Google Health import writes page by page, and charts, insights and the
+doctor report read such a history in buckets. A restore of a large account
+holds far less in memory and no longer collides with a background job
+right after a start.
+
+### Fixed
+
+- **A per-minute heart-rate history crashed the server.** The Google
+  Health full-history import read the whole collection into memory and
+  mapped it into a second list, and kept one entry per reading for the
+  later rollup pass. On an account with 1.3 million readings that passed
+  the default 1 GB heap within seconds. Each page is now written before
+  the next is requested, and the rollup list holds one entry per type and
+  day (Google Health and Fitbit). The heart-rate walk stopped at 1000
+  pages, which a per-minute stream passes in under two years; it then
+  counted the import as unfinished and started over on every retry and
+  start. It may now run to 10 000 pages. (#1023)
+- **Dense pulse inside 90 days.** A pulse window with more than 10 000
+  readings is bucketed per local hour for charts (mean with low and high,
+  `hour:` ids), read per day for the doctor report, and the resting-pulse
+  estimate on the insights page is computed per day in the database.
+  Sparse pulse data stays raw. (#1023)
+- **Doctor report readings.** Where a type is drawn from day buckets, the
+  summary counts its readings rather than its points, and the health-record
+  export's latest observation is the newest actual reading, not the last
+  day's mean.
+- **Restore memory.** The measurement bulk insert writes at most 100 rows
+  per statement. The database client keeps the parameters of its last
+  hundred statements, so 1000-row statements held about 100 000 readings
+  (about 60 MB) for the whole write; now about 7 MB. The Apple Health
+  export import uses the same insert. (#1031)
+- **Restore right after a start.** A restore could deadlock with the step
+  consolidation folding the same account after a boot. The consolidation
+  passes now take the restore's account lock in shared mode for each day
+  and leave an account being restored for their next run. (#1031)
+
+### Dependencies
+
+- pg-boss 12.34.0 (applies its own schema update 37 to 42 on the first
+  start), undici 8.11.2, @tanstack/react-query 5.103.2, @types/node 26.6.2,
+  CodeQL actions.
+
 ## [1.39.4] — 2026-09-27
 
 The Coach shows what it reads while it works, puts the figures behind an
