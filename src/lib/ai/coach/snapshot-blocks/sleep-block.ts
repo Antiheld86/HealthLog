@@ -97,7 +97,11 @@ export function buildSleepTimelineBlock(
       .filter((n) => n.measuredAt >= recentCutoff)
       .map((n) => {
         const row: Record<string, unknown> = {
-          date: n.measuredAt,
+          // The night's own key, the local day it ends on: the key the
+          // sleep table under the answer and every sleep surface use. The
+          // wake instant in UTC named the day before east of UTC, so the
+          // prose and the table disagreed about which night it was.
+          date: n.night,
           weekday: tzWeekday(n.measuredAt, userTz),
           minutes: Math.round(n.asleepMinutes),
         };
