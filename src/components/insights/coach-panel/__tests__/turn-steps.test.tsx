@@ -241,9 +241,12 @@ describe("<CoachTurnStepList>", () => {
     expect(html).toContain('data-status="done"');
     expect(html).toContain('data-status="empty"');
     expect(html).toContain('data-status="running"');
-    const text = html
-      .replace(/<span class="sr-only">, <\/span>/g, "")
-      .replace(/<[^>]+>/g, "");
+    let text = html.replace(/<span class="sr-only">, <\/span>/g, "");
+    // Strip tags until nothing changes, so no fragment can survive one pass.
+    for (let prev = ""; prev !== text;) {
+      prev = text;
+      text = text.replace(/<[^>]*>/g, "");
+    }
     expect(text).toContain("Blood pressure · last 90 days · 142 readings");
     expect(text).toContain("Sleep · last 30 days · no readings");
     expect(text).toContain("Lab results · last 12 months");
