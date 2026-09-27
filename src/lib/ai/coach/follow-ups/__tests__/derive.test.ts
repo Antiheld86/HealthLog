@@ -96,8 +96,8 @@ function derive(over: Partial<Parameters<typeof deriveFollowUps>[0]> = {}) {
 
 describe("deriveFollowUps — the rules", () => {
   it("offers the period before for a current time series the record holds", () => {
-    const chips = derive();
-    expect(chips.map((c) => c.kind)).toEqual(["previous_period"]);
+    const chips = derive({ history: LONG_HISTORY });
+    expect(chips[0].kind).toBe("previous_period");
     expect(chips[0]).toMatchObject({
       id: "f1",
       reuse: false,
@@ -115,14 +115,26 @@ describe("deriveFollowUps — the rules", () => {
     ]);
     const recent: FollowUpHistory = {
       today: "2026-09-27",
-      firstDate: { bp: "2026-09-10" },
+      firstDate: { bp: "2026-08-10" },
     };
     expect(derive({ history: recent }).map((c) => c.kind)).toEqual([
       "previous_period",
+      "widen_window",
     ]);
   });
 
-  it("offers no year ago over a year-long window, and no wider window from all time", () => {
+  it("offers no period before when the record starts inside the window, or without its history", () => {
+    // The first reading is 17 days old: the 30 days before this window hold
+    // nothing to compare with.
+    const recent: FollowUpHistory = {
+      today: "2026-09-27",
+      firstDate: { bp: "2026-09-10" },
+    };
+    expect(derive({ history: recent })).toEqual([]);
+    expect(derive()).toEqual([]);
+  });
+
+  it("offers no year ago over a year-long window, and nothing history-based from all time", () => {
     const year = derive({
       results: [table("bp", {}, "lastYear")],
       history: LONG_HISTORY,
@@ -131,11 +143,13 @@ describe("deriveFollowUps — the rules", () => {
       "previous_period",
       "widen_window",
     ]);
+    // All time has no period before it: the table tool would read the same
+    // table again.
     const all = derive({
       results: [table("bp", {}, "allTime")],
       history: LONG_HISTORY,
     });
-    expect(all.map((c) => c.kind)).toEqual(["previous_period"]);
+    expect(all).toEqual([]);
   });
 
   it("offers the other view of a table that has a chart, as a reuse chip", () => {
