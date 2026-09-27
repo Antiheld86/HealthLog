@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -45,9 +45,23 @@ vi.mock("@/components/providers", () => ({
   }),
 }));
 
+// Every suite but the collapsed-rail one renders the pre-hydration paint, where
+// `useMounted()` is false. The collapsed-rail suite flips this to render the
+// post-mount shell, which is the only state the stored preference applies in.
+const mockMountedRef = { value: false };
+vi.mock("@/hooks/use-mounted", () => ({
+  useMounted: () => mockMountedRef.value,
+}));
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nProvider } from "@/lib/i18n/context";
-import { SidebarNav } from "../sidebar-nav";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  SidebarCollapseToggle,
+  SidebarNav,
+  readSidebarCollapsedPref,
+  writeSidebarCollapsedPref,
+} from "../sidebar-nav";
 import { ADMIN_SECTIONS } from "@/components/admin/admin-shell";
 import { visibleUtilityDestinations } from "../nav-model";
 import { delegatedDomains } from "@/lib/sharing/domain-write-support";
@@ -301,7 +315,10 @@ describe("<SidebarNav> inside somebody else's record (#939)", () => {
     try {
       return render();
     } finally {
+      // `render()` replaces `mockUserRef.value` with a copy, so the grant
+      // has to come off the copy too or it leaks into later suites.
       delete user.accountAccess;
+      delete (mockUserRef.value as typeof user).accountAccess;
     }
   }
 
@@ -335,5 +352,149 @@ describe("<SidebarNav> inside somebody else's record (#939)", () => {
     expect(html).toContain('href="/measurements"');
     expect(settingsLinks(html)).toEqual([]);
     expect(html).not.toContain('href="/settings/');
+  });
+});
+
+describe("<SidebarNav> collapse control sits at the bottom, above the footer entries", () => {
+  /**
+   * The control used to be a small chevron above the first nav entry. It is
+   * now a full footer row heading the utility group: directly above Admin for
+   * an administrator, directly above Settings for everyone else.
+   *
+   * Mutation checks, run:
+   *   - rendering `<SidebarCollapseToggle>` after `renderAdminLink()` → the
+   *     admin ordering case goes red;
+   *   - moving it back into the `<nav>` above the first entry → both ordering
+   *     cases go red on the main-nav bound;
+   *   - dropping `sr-only` from the collapsed label → the rail case goes red.
+   */
+  const TOGGLE = 'data-slot="sidebar-collapse-toggle"';
+  const SETTINGS = 'data-slot="nav-settings-link"';
+
+  it("renders exactly one collapse control", () => {
+    const html = render();
+    expect(html.split(TOGGLE)).toHaveLength(2);
+  });
+
+  it("sits after the main navigation and directly above Admin, then Settings, for an administrator", () => {
+    const html = render({ role: "ADMIN" });
+    const navEnd = html.indexOf("</nav>");
+    const toggle = html.indexOf(TOGGLE);
+    const admin = html.indexOf('href="/admin"');
+    const settings = html.indexOf(SETTINGS);
+    expect(navEnd).toBeGreaterThan(-1);
+    expect(toggle).toBeGreaterThan(navEnd);
+    expect(admin).toBeGreaterThan(toggle);
+    expect(settings).toBeGreaterThan(admin);
+    // Nothing else links in between: the only anchor opened between the
+    // control and the Admin href is the Admin link itself.
+    expect(html.slice(toggle, admin).split("<a ")).toHaveLength(2);
+  });
+
+  it("sits directly above Settings when there is no Admin entry", () => {
+    const html = render({ role: "USER" });
+    const navEnd = html.indexOf("</nav>");
+    const toggle = html.indexOf(TOGGLE);
+    const settings = html.indexOf(SETTINGS);
+    expect(toggle).toBeGreaterThan(navEnd);
+    expect(settings).toBeGreaterThan(toggle);
+    expect(html.slice(toggle, settings).split("<a ")).toHaveLength(2);
+  });
+
+  it("shows a visible Collapse label with the sidebar expanded", () => {
+    const html = render();
+    const button =
+      /<button[^>]*data-slot="sidebar-collapse-toggle"[^>]*>.*?<\/button>/.exec(
+        html,
+      )?.[0];
+    expect(button).toBeDefined();
+    expect(button).toContain('aria-label="Collapse sidebar"');
+    expect(button).toContain('aria-expanded="true"');
+    expect(button).toContain("<span>Collapse</span>");
+    expect(button).not.toContain("sr-only");
+  });
+
+  function renderToggle(collapsed: boolean) {
+    return renderToStaticMarkup(
+      <I18nProvider initialLocale="en">
+        <TooltipProvider>
+          <SidebarCollapseToggle collapsed={collapsed} onToggle={() => {}} />
+        </TooltipProvider>
+      </I18nProvider>,
+    );
+  }
+
+  it("switches its labels and keeps the text for screen readers only in the rail", () => {
+    const html = renderToggle(true);
+    expect(html).toContain('aria-label="Expand sidebar"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('<span class="sr-only">Expand</span>');
+    expect(html).toContain('type="button"');
+  });
+
+  it("draws a different icon per state", () => {
+    const icon = (html: string) => /lucide-(panel-left-[a-z]+)/.exec(html)?.[1];
+    expect(icon(renderToggle(false))).toBe("panel-left-close");
+    expect(icon(renderToggle(true))).toBe("panel-left-open");
+  });
+});
+
+describe("<SidebarNav> collapse preference persistence", () => {
+  const KEY = "healthlog-sidebar-collapsed";
+
+  function stubStorage(initial: Record<string, string> = {}) {
+    const store = new Map(Object.entries(initial));
+    vi.stubGlobal("window", globalThis);
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    });
+    return store;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    mockMountedRef.value = false;
+  });
+
+  it("keeps the existing storage key, so a stored choice survives the move", () => {
+    const store = stubStorage();
+    writeSidebarCollapsedPref(true);
+    expect(store.get(KEY)).toBe("true");
+    expect(readSidebarCollapsedPref()).toBe(true);
+    writeSidebarCollapsedPref(false);
+    expect(store.get(KEY)).toBe("false");
+    expect(readSidebarCollapsedPref()).toBe(false);
+  });
+
+  it("reads no choice as null, so the viewport default decides", () => {
+    stubStorage();
+    expect(readSidebarCollapsedPref()).toBeNull();
+  });
+
+  it("survives storage that throws", () => {
+    vi.stubGlobal("window", globalThis);
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+    });
+    expect(readSidebarCollapsedPref()).toBeNull();
+    expect(() => writeSidebarCollapsedPref(true)).not.toThrow();
+  });
+
+  it("renders the rail with the stored collapsed choice once mounted", () => {
+    stubStorage({ [KEY]: "true" });
+    mockMountedRef.value = true;
+    const html = render({ role: "ADMIN" });
+    expect(html).toContain('aria-label="Expand sidebar"');
+    expect(html).toContain('<span class="sr-only">Expand</span>');
+    // Still at the bottom, above Admin, in the rail.
+    const toggle = html.indexOf('data-slot="sidebar-collapse-toggle"');
+    expect(toggle).toBeGreaterThan(html.indexOf("</nav>"));
+    expect(html.indexOf('href="/admin"')).toBeGreaterThan(toggle);
   });
 });
