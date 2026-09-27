@@ -17,7 +17,10 @@ import {
   PATCH as patchEncounter,
   DELETE as deleteEncounter,
 } from "@/app/api/encounters/[id]/route";
+import { POST as restoreEncounter } from "@/app/api/encounters/[id]/restore/route";
 import { GET as listReminders } from "@/app/api/measurement-reminders/route";
+import { encryptNote } from "@/lib/crypto/note-cipher";
+import { runMeasurementReminderTick } from "@/lib/jobs/measurement-reminder";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
 import { getPrismaClient, truncateAllTables } from "./setup";
@@ -840,5 +843,138 @@ describe("the Vorsorge list", () => {
     // the point of the refusal.
     expect(listed.data).toHaveLength(1);
     expect(listed.data[0]!.label).toBe("Annual blood panel");
+  });
+});
+
+/**
+ * The practice address on the nudge.
+ *
+ * The address is encrypted on the practitioner, so the reminder carries no
+ * readable copy of it: the tick resolves it from the visit's practitioner when
+ * it builds the push. Every path that re-anchors the reminder (booking,
+ * rescheduling, restoring a deleted visit) must still end in a push that names
+ * the address, and none of them may write it onto the reminder row.
+ */
+describe("the practice address on the nudge", () => {
+  const ADDRESS = "Hauptstr. 1, Berlin";
+
+  async function seedPractitioner() {
+    return getPrismaClient().practitioner.create({
+      data: {
+        userId: OWNER_ID,
+        name: "Praxis Nord",
+        locationEncrypted: encryptNote(ADDRESS),
+      },
+    });
+  }
+
+  /** Run the tick at the appointment instant and return the pushed body. */
+  async function pushedBodyAt(at: Date): Promise<string | undefined> {
+    const messages: string[] = [];
+    await runMeasurementReminderTick(getPrismaClient() as never, at, {
+      dispatch: (async (args: { message: string }) => {
+        messages.push(args.message);
+        return { dispatched: true } as never;
+      }) as never,
+    });
+    return messages[0];
+  }
+
+  async function encounterReminderLocation() {
+    const row = await getPrismaClient().measurementReminder.findFirstOrThrow({
+      where: { userId: OWNER_ID, origin: "ENCOUNTER" },
+    });
+    return row.location;
+  }
+
+  it("names the encrypted address when booked, and stores no copy of it", async () => {
+    const practitioner = await seedPractitioner();
+    const occurredAt = daysFromNow(10);
+    await post({
+      occurredAt: occurredAt.toISOString(),
+      status: "PLANNED",
+      practitionerId: practitioner.id,
+    });
+
+    expect(await encounterReminderLocation()).toBeNull();
+    expect(await pushedBodyAt(occurredAt)).toContain(ADDRESS);
+  });
+
+  it("keeps the address after a reschedule and clears an old readable copy", async () => {
+    const prisma = getPrismaClient();
+    const practitioner = await seedPractitioner();
+    const created = (
+      await body(
+        await post({
+          occurredAt: daysFromNow(10).toISOString(),
+          status: "PLANNED",
+          practitionerId: practitioner.id,
+        }),
+      )
+    ).data;
+    // A row written by an earlier release still carries a readable copy.
+    await prisma.measurementReminder.updateMany({
+      where: { userId: OWNER_ID, origin: "ENCOUNTER" },
+      data: { location: "old readable copy" },
+    });
+
+    const moved = daysFromNow(20);
+    const res = await patch(created.id as string, {
+      occurredAt: moved.toISOString(),
+    });
+    expect(res.status).toBe(200);
+
+    expect(await encounterReminderLocation()).toBeNull();
+    expect(await pushedBodyAt(moved)).toContain(ADDRESS);
+  });
+
+  it("keeps the address when a deleted visit is restored", async () => {
+    const practitioner = await seedPractitioner();
+    const occurredAt = daysFromNow(10);
+    const created = (
+      await body(
+        await post({
+          occurredAt: occurredAt.toISOString(),
+          status: "PLANNED",
+          practitionerId: practitioner.id,
+        }),
+      )
+    ).data;
+    const id = created.id as string;
+    await deleteEncounter(
+      new Request(`http://localhost/api/encounters/${id}`, {
+        method: "DELETE",
+      }) as never,
+      { params: Promise.resolve({ id }) } as never,
+    );
+    const res = await restoreEncounter(
+      new Request(`http://localhost/api/encounters/${id}/restore`, {
+        method: "POST",
+      }) as never,
+      { params: Promise.resolve({ id }) } as never,
+    );
+    expect(res.status).toBe(200);
+
+    expect(await encounterReminderLocation()).toBeNull();
+    expect(await pushedBodyAt(occurredAt)).toContain(ADDRESS);
+  });
+
+  it("follows an edit of the practitioner's address", async () => {
+    const prisma = getPrismaClient();
+    const practitioner = await seedPractitioner();
+    const occurredAt = daysFromNow(10);
+    await post({
+      occurredAt: occurredAt.toISOString(),
+      status: "PLANNED",
+      practitionerId: practitioner.id,
+    });
+    await prisma.practitioner.update({
+      where: { id: practitioner.id },
+      data: { locationEncrypted: encryptNote("Am Markt 3") },
+    });
+
+    const pushed = await pushedBodyAt(occurredAt);
+    expect(pushed).toContain("Am Markt 3");
+    expect(pushed).not.toContain(ADDRESS);
   });
 });

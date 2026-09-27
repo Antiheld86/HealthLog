@@ -60,6 +60,10 @@ import { evaluateCoachContextReminders } from "@/lib/ai/coach/context-reminders"
 import { calendarDaysUntil } from "@/lib/measurement-reminders/due-day";
 import { holdsOpenAfterReminder } from "@/lib/measurement-reminders/holds-open";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
+import {
+  APPOINTMENT_REMINDER_ADDRESS_INCLUDE,
+  appointmentReminderAddress,
+} from "@/lib/encounters/appointment-reminder";
 
 /**
  * v1.18.0 — map a reminder's `measurementType` to the toggleable module
@@ -321,6 +325,7 @@ export async function runMeasurementReminderTick(
           locale: true,
         },
       },
+      ...APPOINTMENT_REMINDER_ADDRESS_INCLUDE,
     },
   });
 
@@ -471,16 +476,19 @@ export async function runMeasurementReminderTick(
         continue;
       }
 
+      // An appointment's address lives encrypted on its practitioner and is
+      // resolved here; a checkup's is its own free-text column.
+      const address = appointmentReminderAddress(reminder);
       const { title, body } = buildMeasurementReminderPayload(
         await resolveJobLocale(reminder.user.locale),
         reminder.label,
-        reminder.location,
+        address,
       );
       const renderForRecipient = (locale: Locale) => {
         const rendered = buildMeasurementReminderPayload(
           locale,
           reminder.label,
-          reminder.location,
+          address,
         );
         return { title: rendered.title, message: rendered.body };
       };

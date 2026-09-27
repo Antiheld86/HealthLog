@@ -5519,7 +5519,16 @@ model MeasurementReminder {
   /// Local hour (0–23) to fire the nudge, mirroring the mood-reminder hour.
   /// DST-safe windowing is applied at the cron via the existing TZ helpers.
   notifyHour         Int              @default(9) @map("notify_hour")
-  /// Free-text "wo": "Hausarzt", "Labor Dr. X". Optional.
+  /// Free-text "wo": "Hausarzt", "Labor Dr. X". Optional. A checkup's own
+  /// words, readable like its label.
+  ///
+  /// Always NULL on an ENCOUNTER row: an appointment's address is the
+  /// practitioner's, encrypted there (`Practitioner.locationEncrypted`), and
+  /// the reminder tick resolves it from the owning visit when it builds the
+  /// push (`appointmentReminderAddress`). Earlier releases copied it here in
+  /// the clear; `free-text-encryption-backfill` clears those copies, a
+  /// re-anchor clears the row's own, and the backup neither writes nor
+  /// restores one.
   location           String?
   /// Server-computed canonical next-due instant (server-authoritative).
   nextDueAt          DateTime?        @map("next_due_at")
