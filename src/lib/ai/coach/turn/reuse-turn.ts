@@ -5,16 +5,171 @@
  * Streams `step → token (caption) → provenance → result → followUps → done`
  * and persists an assistant message with `providerType: "reuse"`.
  *
- * Not built yet: answers null, and the turn runs as a plain model turn.
+ * The table is copied as it was stored: the same rows, the same columns,
+ * marked with where it came from. Only the view changes: "as a chart" keeps
+ * the stored chart, "as a table" drops it so the table is what shows.
+ *
+ * Answers null, before anything is written, when the stored table cannot be
+ * served (withheld, unreadable, or no chart to show). The pipeline then runs
+ * the turn through the model with the chip's context hint instead.
  */
+import { prisma } from "@/lib/db";
+import { annotate } from "@/lib/logging/context";
+import { getServerTranslator } from "@/lib/i18n/server-translator";
+import { resolveModuleMap } from "@/lib/modules/gate";
+import { PROMPT_VERSION } from "@/lib/ai/prompts/insight-generator";
+import type {
+  CoachProvenance,
+  CoachResultTable,
+  CoachStep,
+} from "@/lib/ai/coach/types";
+import { appendMessage, readMessageResults } from "@/lib/ai/coach/persistence";
+import { isCoachDomainWithheld } from "@/lib/ai/coach/results/domain-module";
+import {
+  COACH_REUSE_CAPTION_KEY,
+  COACH_STEP_LABEL_KEYS,
+} from "@/lib/ai/coach/dialog-keys";
+import { buildMethod } from "@/lib/ai/coach/method";
+import { deriveFollowUps } from "@/lib/ai/coach/follow-ups/derive";
 import type { ResolvedFollowUp } from "@/lib/ai/coach/follow-ups/resolve";
+import { parseCoachPrefs } from "@/lib/validations/coach-prefs";
+import { createSseStream } from "@/lib/sse/create-stream";
 
+import { persistUserTurn } from "./conversation";
+import { toResultMeta } from "./provenance";
+import { SSE_HEADERS, createTurnEmitter, emitReply } from "./sse";
 import type { TurnConversation, TurnInput } from "./types";
 
-export async function runReuseTurn(_args: {
+/** The copy of a stored table this turn shows, or null when it cannot. */
+async function copyStoredTable(args: {
+  userId: string;
+  conversationId: string;
+  resolved: ResolvedFollowUp;
+}): Promise<CoachResultTable | null> {
+  const { userId, conversationId, resolved } = args;
+  const { followUp, sourceMessageId } = resolved;
+  const ref = followUp.anchor?.ref;
+  if (!ref) return null;
+  const modules = await resolveModuleMap(userId);
+  const entries = await readMessageResults(
+    userId,
+    conversationId,
+    sourceMessageId,
+    (domain) => isCoachDomainWithheld(domain, modules),
+  );
+  const entry = entries?.find((candidate) => candidate.ref === ref);
+  if (!entry || "withheld" in entry) return null;
+  const chart = followUp.kind === "as_chart" ? entry.chart : null;
+  if (followUp.kind === "as_chart" && chart === null) return null;
+  return {
+    ...entry,
+    ref: "r1",
+    displayed: true,
+    chart,
+    chartKind: chart?.kind ?? null,
+    reusedFrom: { messageId: sourceMessageId, ref },
+  };
+}
+
+export async function runReuseTurn(args: {
   input: TurnInput;
   conversation: TurnConversation;
   resolved: ResolvedFollowUp;
 }): Promise<Response | null> {
-  return null;
+  const { input, conversation, resolved } = args;
+  const { userId, locale } = input;
+  const conversationId = conversation.conversationId;
+  if (!resolved.followUp.reuse) return null;
+
+  const table = await copyStoredTable({ userId, conversationId, resolved });
+  if (!table) {
+    annotate({
+      action: { name: "coach.followUp.reuse_unavailable" },
+      meta: { kind: resolved.followUp.kind },
+    });
+    return null;
+  }
+
+  await persistUserTurn(conversationId, input.message);
+
+  const { t } = getServerTranslator(locale);
+  const caption = t(COACH_REUSE_CAPTION_KEY);
+  const { source } = table;
+  const step: CoachStep = {
+    id: "s1",
+    tool: "show_result",
+    labelKey: COACH_STEP_LABEL_KEYS.reuse,
+    label: t(COACH_STEP_LABEL_KEYS.reuse),
+    domain: source.domain,
+    window: source.window,
+    period: source.period,
+    ...(source.granularity ? { granularity: source.granularity } : {}),
+    status: "done",
+    ...(resolved.sourceCount !== undefined
+      ? { count: resolved.sourceCount }
+      : {}),
+    resultRef: table.ref,
+  };
+  const meta = toResultMeta(table);
+  const prefsRow = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { coachPrefsJson: true },
+  });
+  const prefs = parseCoachPrefs(prefsRow?.coachPrefsJson);
+  // The other view of the same table, if it has one. Nothing that would need
+  // a read: a reuse turn reads nothing.
+  const followUps = deriveFollowUps({
+    results: [meta],
+    steps: [step],
+    inventory: null,
+    proposals: [],
+    forcedFinal: false,
+    prefs,
+    locale,
+  });
+  const method = buildMethod({ steps: [step], results: [meta], locale });
+  const provenance: CoachProvenance = {
+    windows: [],
+    metrics: [],
+    steps: [step],
+    ...(method ? { method } : {}),
+    results: [meta],
+    ...(followUps.length > 0 ? { followUps } : {}),
+  };
+  const message = await appendMessage({
+    conversationId,
+    role: "assistant",
+    content: caption,
+    metricSource: provenance,
+    providerType: "reuse",
+    promptVersion: PROMPT_VERSION,
+    results: [table],
+  });
+  annotate({
+    action: { name: "coach.followUp.reused" },
+    meta: { kind: resolved.followUp.kind, rows: table.rows.length },
+  });
+
+  const stream = createSseStream(async (controller) => {
+    const emitter = createTurnEmitter(controller);
+    if (!emitter.aborted()) emitter.emit({ type: "step", step });
+    await emitReply(
+      emitter,
+      {
+        ok: true,
+        replyText: caption,
+        provenance,
+        suggestion: null,
+        action: null,
+        results: [table],
+        followUps,
+        clarification: null,
+        messageId: message.id,
+        totalTokens: 0,
+        model: null,
+      },
+      conversationId,
+    );
+  });
+  return new Response(stream, { status: 200, headers: SSE_HEADERS });
 }

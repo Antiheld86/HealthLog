@@ -24988,6 +24988,10 @@ components:
                 - type: string
                   maxLength: 40
                 - type: "null"
+        followUpChips:
+          description: v1.39.4 — offer up to three follow-up chips under the Coach's latest answer. Absent means on; only `false`
+            switches them off.
+          type: boolean
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
@@ -46837,6 +46841,10 @@ components:
             - dismissedCadences
             - lastSuggestedAt
           additionalProperties: false
+        followUpChips:
+          description: v1.39.4 — offer up to three follow-up chips under the Coach's latest answer. Absent means on; only `false`
+            switches them off.
+          type: boolean
         updatedAt:
           description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
             `baseUpdatedAt` on the next write. Opaque — only ever echo a server-returned value, never parse or
@@ -75367,6 +75375,10 @@ components:
             - dismissedCadences
             - lastSuggestedAt
           additionalProperties: false
+        followUpChips:
+          description: v1.39.4 — offer up to three follow-up chips under the Coach's latest answer. Absent means on; only `false`
+            switches them off.
+          type: boolean
       required:
         - tone
         - verbosity

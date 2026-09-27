@@ -38,6 +38,10 @@ import {
 } from "@/lib/ai/coach/results/project";
 import { deriveChartSpec } from "@/lib/ai/coach/results/chart-spec";
 import {
+  correlationPartners,
+  type CorrelationPair,
+} from "@/lib/ai/coach/follow-ups/derive";
+import {
   createResultRefAllocator,
   type PriorResultTurn,
 } from "@/lib/ai/coach/results/refs";
@@ -110,6 +114,11 @@ export type ModelOutcome =
       forcedFinal: boolean;
       /** v1.39.4 — the DATA INVENTORY entries; null on the no-tools path. */
       inventory: InventoryEntry[] | null;
+      /**
+       * v1.39.4 — the metric pairs a `get_correlations` call returned this
+       * turn, for the related-metric chip. Empty on the no-tools path.
+       */
+      correlations: CorrelationPair[];
     }
   | { ok: false; code: string };
 
@@ -297,6 +306,9 @@ export async function runTurnModel(args: {
         }).map(withChart),
         forcedFinal: loop.forcedFinal === true,
         inventory: inventory.entries,
+        correlations: correlationPartners(
+          settled.filter((call) => call !== undefined),
+        ),
       };
     }
     // v1.22 (#89) — the no-tools path (local / Ollama / exo, and any chain
@@ -365,6 +377,7 @@ export async function runTurnModel(args: {
       results: [],
       forcedFinal: false,
       inventory: null,
+      correlations: [],
     };
   } catch (err) {
     // The provider chain failed outright — no tokens were billed, so refund

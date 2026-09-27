@@ -187,6 +187,17 @@ export const coachPrefsSchema = z.object({
   // back to `DEFAULT_REMINDER_SUGGESTION_PREFS`. When the key IS present,
   // its inner fields default (so `{}` fills to the all-on shape).
   reminderSuggestions: coachReminderSuggestionPrefsSchema.optional(),
+  // v1.39.4 — up to three follow-up chips under the Coach's latest answer.
+  // On by default: an absent key reads as on (`followUpChipsEnabled`), and
+  // like `reminderSuggestions` it carries no schema default, so a legacy
+  // blob and `parse({})` stay byte-identical. Only an explicit `false`
+  // switches the chips off.
+  followUpChips: z
+    .boolean()
+    .optional()
+    .describe(
+      "v1.39.4 — offer up to three follow-up chips under the Coach's latest answer. Absent means on; only `false` switches them off.",
+    ),
 });
 
 export type CoachPrefs = z.infer<typeof coachPrefsSchema>;

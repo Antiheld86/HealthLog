@@ -20,15 +20,17 @@ import type {
 import type { CoachSuggestedAction } from "@/lib/ai/coach/suggest-action";
 import type { CoachToolTrace } from "@/lib/ai/coach/tools";
 import { buildMethod } from "@/lib/ai/coach/method";
-import { deriveFollowUps } from "@/lib/ai/coach/follow-ups/derive";
+import {
+  deriveFollowUps,
+  followUpChipsEnabled,
+  type FollowUpHistory,
+} from "@/lib/ai/coach/follow-ups/derive";
+import { numberFollowUps } from "@/lib/ai/coach/follow-ups/catalog";
 import { buildContinueFollowUp } from "@/lib/ai/coach/follow-ups/continue";
 import type { CoachPrefs } from "@/lib/validations/coach-prefs";
 
 import type { ModelOutcome } from "./model";
 import type { GuardedReply } from "./reply-guards";
-
-/** v1.39.4 — at most this many chips under a reply. */
-const MAX_FOLLOW_UPS = 3;
 
 /** What the dialog adds to a guarded reply. */
 export interface TurnDialog {
@@ -42,7 +44,7 @@ export interface TurnDialog {
 }
 
 /** A table's metadata: everything but the values, for the plaintext blob. */
-function toResultMeta(table: CoachResultTable): CoachResultMeta {
+export function toResultMeta(table: CoachResultTable): CoachResultMeta {
   return {
     ref: table.ref,
     source: table.source,
@@ -66,6 +68,8 @@ export function assembleTurnDialog(args: {
   reply: GuardedReply;
   prefs: CoachPrefs;
   locale: Locale;
+  /** The record's history for the tables' metrics, for the history chips. */
+  history?: FollowUpHistory;
 }): TurnDialog {
   const { model, reply, prefs, locale } = args;
   const blocked = reply.outboundBlocked;
@@ -77,12 +81,16 @@ export function assembleTurnDialog(args: {
       );
   const metas = results.map(toResultMeta);
   const method = buildMethod({ steps: model.steps, results: metas, locale });
-  const continueChip = blocked
-    ? null
-    : buildContinueFollowUp({ forcedFinal: model.forcedFinal, locale });
-  const followUps = blocked
-    ? []
-    : [
+  // No chips on a blocked turn, when the pref is off, or under a clarifying
+  // question: its choices are the next step, and chips beside them would
+  // compete with the answer the question waits for.
+  const offerChips =
+    !blocked && followUpChipsEnabled(prefs) && reply.clarification === null;
+  const continueChip = offerChips
+    ? buildContinueFollowUp({ forcedFinal: model.forcedFinal, locale })
+    : null;
+  const followUps = offerChips
+    ? numberFollowUps([
         ...(continueChip ? [continueChip] : []),
         ...deriveFollowUps({
           results: metas,
@@ -92,8 +100,11 @@ export function assembleTurnDialog(args: {
           forcedFinal: model.forcedFinal,
           prefs,
           locale,
+          history: args.history,
+          correlations: model.correlations,
         }),
-      ].slice(0, MAX_FOLLOW_UPS);
+      ])
+    : [];
   return {
     results,
     method,
