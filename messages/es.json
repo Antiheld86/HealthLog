@@ -380,6 +380,9 @@
     "themeDark": "Oscuro",
     "themeLight": "Claro",
     "collapseSidebar": "Contraer",
+    "expandSidebar": "Expandir",
+    "collapseSidebarLabel": "Contraer barra lateral",
+    "expandSidebarLabel": "Expandir barra lateral",
     "userMenu": "Menú de usuario",
     "accountSettings": "Ajustes de cuenta",
     "mood": "Estado de ánimo",
@@ -1209,6 +1212,7 @@
     "categorySleepAid": "Para dormir",
     "categoryDiabetes": "Diabetes",
     "categoryAntibiotic": "Antibiótico",
+    "categoryMentalHealth": "Salud mental",
     "categoryOther": "Otros",
     "daysSun": "Do",
     "daysMon": "Lu",
@@ -1223,6 +1227,7 @@
     "tomorrow": "Mañana",
     "asNeededMarker": "Según necesidad",
     "recordOnlyBadge": "Solo registro",
+    "courseEndedBadge": "Finalizado",
     "trackIntake": {
       "title": "Registro de tomas",
       "label": "Registrar tomas",
@@ -1563,6 +1568,11 @@
         "vitamin": "Vitaminas",
         "supplement": "Suplemento",
         "antibiotic": "Antibiótico",
+        "mentalHealth": "Salud mental",
+        "thyroid": "Tiroides",
+        "digestive": "Digestivo",
+        "skin": "Cuidado de la piel",
+        "sleepAid": "Para dormir",
         "other": "Otro"
       },
       "cadence": {
@@ -2258,6 +2268,8 @@
     "noData": "Sin datos en el periodo seleccionado",
     "bucketWeekly": "Media semanal",
     "bucketMonthly": "Media mensual",
+    "bucketWeeklyDaily": "Media diaria por semana",
+    "bucketMonthlyDaily": "Media diaria por mes",
     "days7Label": "7 d",
     "days7Title": "Últimos 7 días",
     "days30Label": "30 d",
@@ -7374,6 +7386,11 @@
         "restoreFailureDocument": "El archivo contiene documentos sin su contenido, como una exportación portátil. Usa una copia de recuperación ante desastres.",
         "restoreFailureTimeBudget": "Esta copia es demasiado grande para restaurarse dentro del límite de tiempo del proceso en segundo plano.",
         "restoreFailureTransaction": "La base de datos rechazó la restauración a mitad, así que se deshizo todo. El registro del servidor indica el error.",
+        "restoreFailureCauseTimeout": "La restauración tardó más de lo que permite la base de datos, así que se deshizo todo. Si el servidor de la base de datos estaba ocupado, vuelve a iniciarla cuando esté más tranquilo. El registro del servidor indica el paso.",
+        "restoreFailureCauseLock": "La restauración esperó a registros que otro proceso estaba modificando, así que se deshizo todo. Vuelve a iniciar la restauración.",
+        "restoreFailureCauseConstraint": "La base de datos rechazó un registro de la copia de seguridad, así que se deshizo todo. El registro del servidor indica la tabla y la regla.",
+        "restoreFailureCauseStorage": "La base de datos se quedó sin espacio en disco o sin memoria durante la restauración, así que se deshizo todo. Libera espacio en el servidor de la base de datos y vuelve a iniciar la restauración.",
+        "restoreFailureCauseConnection": "Se perdió la conexión con la base de datos durante la restauración, así que se deshizo todo. Comprueba que la base de datos está en marcha y vuelve a iniciar la restauración.",
         "restoreFailureInterrupted": "La restauración se detuvo al reiniciarse el servidor y se deshizo. Si vuelve a detenerse, probablemente al servidor le falta memoria.",
         "restoreFailureNotStarted": "El proceso en segundo plano no recogió la restauración. Comprueba que está en marcha.",
         "restoreFailureEnqueue": "No se pudo entregar la restauración al proceso en segundo plano. Comprueba que está en marcha.",
@@ -9480,7 +9497,184 @@
       "promptInjection": "He detectado instrucciones que intentan anular mis directrices. Soy el Coach de HealthLog y solo resumo tus propios datos de salud; reformula tu pregunta en esos términos, por favor.",
       "conversationPoisoned": "Un mensaje anterior de esta conversación contiene instrucciones que intentan anular mis directrices. Empieza una conversación nueva, por favor."
     },
-    "noRecordedData": "No tienes ninguna medición registrada sobre lo que preguntas, así que no puedo darte ninguna cifra. Cuando registres algo, vuelve a preguntarme y trabajaré con tus propios datos."
+    "noRecordedData": "No tienes ninguna medición registrada sobre lo que preguntas, así que no puedo darte ninguna cifra. Cuando registres algo, vuelve a preguntarme y trabajaré con tus propios datos.",
+    "step": {
+      "read": "Consultando: {domain}",
+      "readWindow": "Consultando: {domain}, {window}",
+      "snapshot": "Leyendo el resumen de tus datos",
+      "showResult": "Abriendo una tabla anterior",
+      "reuse": "Usando la tabla de antes",
+      "headerActive": "{label}…",
+      "headerDoneOne": "Consultó 1 fuente",
+      "headerDoneFew": "Consultó {count} fuentes",
+      "headerDoneOther": "Consultó {count} fuentes",
+      "listLabel": "Lo que consultó el Coach",
+      "toggleShow": "Mostrar lo que consultó el Coach",
+      "toggleHide": "Ocultar lo que consultó el Coach",
+      "announceDone": "Listo: {label}",
+      "readingsOne": "1 medición",
+      "readingsFew": "{count} mediciones",
+      "readingsOther": "{count} mediciones",
+      "rowsOne": "1 fila",
+      "rowsFew": "{count} filas",
+      "rowsOther": "{count} filas",
+      "metricsOne": "1 métrica",
+      "metricsFew": "{count} métricas",
+      "metricsOther": "{count} métricas",
+      "reason": {
+        "noData": "sin mediciones",
+        "outsideWindow": "sin mediciones en este periodo",
+        "moduleDisabled": "desactivado",
+        "retrievalFailed": "no se pudo leer",
+        "invalidArguments": "solicitud no entendida"
+      },
+      "domain": {
+        "labs": "Resultados de laboratorio",
+        "illness": "Enfermedad y recuperación",
+        "cycle": "Ciclo",
+        "correlations": "Relaciones entre métricas",
+        "snapshot": "Resumen de datos"
+      },
+      "window": {
+        "last7days": "últimos 7 días",
+        "last30days": "últimos 30 días",
+        "last90days": "últimos 90 días",
+        "lastYear": "últimos 12 meses",
+        "allTime": "todo el periodo"
+      },
+      "period": {
+        "current": "este periodo",
+        "previous": "el periodo anterior",
+        "yearAgo": "un año antes"
+      },
+      "granularity": {
+        "day": "por día",
+        "week": "por semana",
+        "month": "por mes"
+      }
+    },
+    "result": {
+      "title": {
+        "byDay": "{metric} por día",
+        "byWeek": "{metric} por semana",
+        "byMonth": "{metric} por mes",
+        "previousPeriod": "{metric}, periodo anterior",
+        "yearAgo": "{metric}, un año antes",
+        "workoutsBySport": "Entrenamientos por deporte",
+        "labsLatest": "Resultados de laboratorio más recientes",
+        "sleepByNight": "Sueño por noche",
+        "complianceByDay": "Adherencia a la medicación por día",
+        "distribution": "{metric}: con qué frecuencia apareció cada rango"
+      },
+      "column": {
+        "day": "Día",
+        "week": "Semana",
+        "month": "Mes",
+        "night": "Noche",
+        "sport": "Deporte",
+        "sessions": "Sesiones",
+        "analyte": "Prueba",
+        "value": "Valor",
+        "unit": "Unidad",
+        "date": "Fecha",
+        "referenceRange": "Rango de referencia",
+        "systolic": "Sistólica",
+        "diastolic": "Diastólica",
+        "mean": "Promedio",
+        "total": "Total",
+        "min": "Mínimo",
+        "max": "Máximo",
+        "readings": "Mediciones",
+        "rate": "Adherencia",
+        "duration": "Duración",
+        "range": "Rango",
+        "count": "Veces"
+      },
+      "other": "Otros",
+      "noReading": "sin medición",
+      "showAll": "Mostrar todo ({count})",
+      "showFewer": "Mostrar menos",
+      "copyMenu": "Copiar tabla",
+      "copyForSpreadsheet": "Copiar para hoja de cálculo",
+      "copyAsText": "Copiar como texto",
+      "copied": "Copiado",
+      "copyFailed": "No se pudo copiar la tabla",
+      "viewLabel": "Vista",
+      "viewChart": "Gráfico",
+      "viewTable": "Tabla",
+      "chartSummary": "{title}, mostrado como gráfico. La vista de tabla recoge cada valor.",
+      "dataUsed": "Datos usados ({count})",
+      "truncated": "Se muestran las últimas {shown} de {total} filas",
+      "withheld": {
+        "moduleDisabled": "Esta tabla está oculta porque su módulo está desactivado.",
+        "unavailable": "No se pudo cargar esta tabla."
+      },
+      "loading": "Cargando tabla…",
+      "loadFailed": "No se pudieron cargar las tablas.",
+      "reusedFrom": "De una respuesta anterior ({date})",
+      "reusedFromUndated": "De una respuesta anterior",
+      "histogramBin": "{from}–{to} {unit}"
+    },
+    "method": {
+      "label": "Cómo se obtuvo",
+      "entry": "{domain}, {window}: {detail}",
+      "entryNoWindow": "{domain}: {detail}",
+      "reused": "de una respuesta anterior",
+      "readingsOne": "1 medición",
+      "readingsFew": "{count} mediciones",
+      "readingsOther": "{count} mediciones",
+      "aggregation": {
+        "mean": "promedio",
+        "median": "mediana",
+        "latest": "última medición",
+        "sum": "suma",
+        "count": "recuento",
+        "rate": "tasa"
+      },
+      "averages": {
+        "day": "promedios diarios",
+        "week": "promedios semanales",
+        "month": "promedios mensuales"
+      },
+      "totals": {
+        "day": "totales diarios",
+        "week": "totales semanales",
+        "month": "totales mensuales"
+      },
+      "absent": {
+        "noData": "sin mediciones",
+        "outsideWindow": "sin mediciones en este periodo",
+        "moduleDisabled": "desactivado"
+      }
+    },
+    "followUp": {
+      "groupLabel": "Preguntas sugeridas",
+      "widenWindow": "Mirar más atrás",
+      "previousPeriod": "Comparar con el periodo anterior",
+      "yearAgo": "Comparar con un año antes",
+      "asChart": "Mostrar como gráfico",
+      "asTable": "Mostrar como tabla",
+      "relatedMetric": "Ver también: {metric}",
+      "continue": "Seguir buscando",
+      "settingLabel": "Sugerir preguntas de seguimiento",
+      "settingHint": "Muestra hasta tres sugerencias bajo la última respuesta del Coach."
+    },
+    "clarify": {
+      "cardLabel": "El Coach tiene una pregunta",
+      "choicesLabel": "Respuestas posibles",
+      "freeTextHint": "También puedes escribir tu propia respuesta.",
+      "contextHint": "Escribe tu respuesta abajo.",
+      "window": {
+        "last7days": "Últimos 7 días",
+        "last30days": "Últimos 30 días",
+        "last90days": "Últimos 90 días",
+        "lastYear": "Últimos 12 meses",
+        "allTime": "Todo el periodo"
+      }
+    },
+    "reuse": {
+      "caption": "Aquí están las mismas cifras de mi última respuesta, sin cambios."
+    }
   },
   "safety": {
     "floor": {

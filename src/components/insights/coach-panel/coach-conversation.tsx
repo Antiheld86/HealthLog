@@ -16,9 +16,14 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
+import { COACH_CLARIFY_UI_KEYS } from "@/lib/ai/coach/dialog-keys";
 import { randomId } from "@/lib/random-id";
 import { apiDelete, apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
-import type { CoachScope } from "@/lib/ai/coach/types";
+import type {
+  CoachClarificationChoice,
+  CoachFollowUp,
+  CoachScope,
+} from "@/lib/ai/coach/types";
 import type { CoachLaunchScope } from "@/lib/insights/coach-launch-context";
 import type { CoachSeededQuestionDTO } from "@/app/api/insights/coach/seeded-question/route";
 import type { InboundDocumentDetailDto } from "@/lib/validations/inbound-documents";
@@ -45,7 +50,12 @@ import {
   guidedReducer,
 } from "./guided-questions-machine";
 import { HistoryRail } from "./history-rail";
-import { MessageThread, type InterleavedThreadItem } from "./message-thread";
+import {
+  MessageThread,
+  latestClarification,
+  type InterleavedThreadItem,
+} from "./message-thread";
+import { CoachClarificationCard } from "./clarification-card";
 import { MobileRailTray } from "./mobile-rail-tray";
 import { SelfContextAdoptOffer } from "./self-context-adopt-offer";
 import { SourcesRail } from "./sources-rail";
@@ -606,6 +616,37 @@ export function CoachConversation({
     registerConversationIdGetter(() => conversationIdRef.current);
   }, [registerConversationIdGetter]);
 
+  // v1.39.4 — the open clarifying question, if the latest reply asked one.
+  // A typed message answers it; a chip on the card answers it with a choice.
+  const openClarification = fenced
+    ? null
+    : latestClarification(conversation?.messages ?? [], send.streaming);
+
+  // v1.39.4 — a follow-up chip: its label is the message, and the server
+  // resolves what it asks for from the message that offered it.
+  function handleFollowUp(followUp: CoachFollowUp, messageId: string) {
+    if (send.isStreaming || fenced || currentConversationId === null) return;
+    void send.send({
+      conversationId: currentConversationId,
+      message: followUp.label,
+      followUp: { messageId, id: followUp.id },
+    });
+  }
+
+  // v1.39.4 — a choice on the clarification card.
+  function handleClarificationChoice(choice: CoachClarificationChoice) {
+    if (send.isStreaming || !openClarification) return;
+    if (currentConversationId === null) return;
+    void send.send({
+      conversationId: currentConversationId,
+      message: choice.label,
+      clarification: {
+        messageId: openClarification.messageId,
+        choiceId: choice.id,
+      },
+    });
+  }
+
   async function handleSubmit(value: string) {
     const trimmed = value.trim();
     if (!trimmed || send.isStreaming) return;
@@ -654,6 +695,10 @@ export function CoachConversation({
       guidedQuestion: fenced ? undefined : (guidedQuestion ?? undefined),
       scope: fenced ? undefined : scope,
       workoutId: fenced ? undefined : workoutId,
+      // v1.39.4 — a typed message answers an open clarifying question.
+      clarification: openClarification
+        ? { messageId: openClarification.messageId }
+        : undefined,
       fenced,
       pendingAttachmentIds:
         currentConversationId === null ? pendingAttachmentIds : undefined,
@@ -816,6 +861,25 @@ export function CoachConversation({
         >
           {t("insights.coach.attach.indexingHint")}
         </p>
+      ) : null}
+      {/* v1.39.4 — mounted empty before any question, so the question is
+          announced when it arrives (a live region that mounts with its
+          content is not heard). Visually hidden, so it takes no room in the
+          stack; the card below carries the choices. */}
+      <div
+        data-slot="coach-clarification-live"
+        aria-live="polite"
+        className="sr-only"
+      >
+        {openClarification ? t(COACH_CLARIFY_UI_KEYS.cardLabel) : ""}
+      </div>
+      {openClarification ? (
+        <CoachClarificationCard
+          clarification={openClarification.clarification}
+          messageId={openClarification.messageId}
+          disabled={send.isStreaming}
+          onChoose={handleClarificationChoice}
+        />
       ) : null}
       <CoachInput
         value={inputValue}
@@ -1106,6 +1170,7 @@ export function CoachConversation({
                 optimisticUser={send.optimisticUser}
                 interleaved={interleaved}
                 onRegenerate={handleRegenerate}
+                onFollowUp={handleFollowUp}
               />
             </div>
             {/* Docked composer — the SAME centred, capped column as the
@@ -1220,6 +1285,7 @@ export function CoachConversation({
             optimisticUser={send.optimisticUser}
             interleaved={interleaved}
             onRegenerate={handleRegenerate}
+            onFollowUp={handleFollowUp}
           />
         }
         composer={composerStack}

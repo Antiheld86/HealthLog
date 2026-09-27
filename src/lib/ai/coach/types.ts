@@ -10,6 +10,7 @@ import { z } from "zod/v4";
 
 import type { AiUnavailableReason } from "@/lib/ai/capabilities/types";
 import type { CoachSuggestedAction } from "./suggest-action";
+import type { CoachToolName } from "./tools/definitions";
 
 /**
  * Chat-message role. Stored as a free-form string column server-side
@@ -157,6 +158,31 @@ export const coachChatRequestSchema = z.object({
    * turn, so per-turn work does not grow with conversation length.
    */
   workoutId: z.string().max(64).optional(),
+  /**
+   * v1.39.4 — the person tapped a follow-up chip. `messageId` is the
+   * assistant message that offered it and `id` the chip on that message
+   * (`f1`..`f3`). The server resolves the chip from what it persisted on
+   * the conversation's latest assistant message; the client never sends
+   * what the chip asks for, only which chip it was. A chip that is no
+   * longer current degrades to a plain message.
+   */
+  followUp: z
+    .object({
+      messageId: z.string().min(1).max(64),
+      id: z.string().min(1).max(8),
+    })
+    .optional(),
+  /**
+   * v1.39.4 — the person answered a clarifying question. `messageId` is
+   * the assistant message that asked it; `choiceId` the chip they tapped,
+   * absent when they typed their own answer instead.
+   */
+  clarification: z
+    .object({
+      messageId: z.string().min(1).max(64),
+      choiceId: z.string().min(1).max(8).optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -212,6 +238,21 @@ export interface CoachUsage {
  *     inside the thinking disclosure when a reasoning-capable provider
  *     emits a cheap reasoning summary. Providers without reasoning emit
  *     none, and the disclosure falls back to its elapsed-time label.
+ *
+ * v1.39.4 — four additive frames: `step` (live progress while the Coach
+ * reads the record), `result` (a table of the values it read, owner only),
+ * `followUps` (chips under the latest reply) and `clarification` (a
+ * question with choices). Frame order on a turn:
+ *
+ *   step* → token* → provenance → result* → suggestion? →
+ *   suggestedAction? → clarification? → followUps? → done
+ *
+ * No new frame carries a top-level key the older native client decodes
+ * (`token`, `conversationId`, `messageId`, `code`, `message`, `suggestion`,
+ * `metricSource`, `usage`), so an older client drops them whole.
+ * `src/__tests__/coach-stream-ios-compat.test.ts` holds that rule, and the
+ * Zod mirror in `stream-events.ts` is held equal to this union by a type
+ * test.
  */
 export type CoachStreamEvent =
   | { type: "token"; token: string }
@@ -238,7 +279,210 @@ export type CoachStreamEvent =
        * ignore it.
        */
       reason?: AiUnavailableReason;
+    }
+  | { type: "step"; step: CoachStep }
+  | { type: "result"; result: CoachResultTable }
+  | { type: "followUps"; followUps: CoachFollowUp[] }
+  | { type: "clarification"; clarification: CoachClarification };
+
+// ── Steps (v1.39.4) ─────────────────────────────────────────────────────
+// What the Coach is reading while a turn runs. Labels come from a closed
+// catalog; a step never carries free text, an analyte name, or a value.
+
+export type CoachStepStatus = "running" | "done" | "empty" | "failed";
+
+/**
+ * The data domain a step, result or chip is about. The measurement-backed
+ * scope sources plus the domains that are read as a whole.
+ */
+export type CoachStepDomain =
+  CoachScopeSource | "labs" | "illness" | "cycle" | "correlations" | "snapshot";
+
+/** Why a step or a method entry found nothing. */
+export type CoachStepReason =
+  | "no_data"
+  | "outside_window"
+  | "module_disabled"
+  | "retrieval_failed"
+  | "invalid_arguments";
+
+export interface CoachStep {
+  /** `s1`..`s12`, unique within a turn; frames upsert by id. */
+  id: string;
+  tool: CoachToolName | "show_result" | "snapshot";
+  /** Closed catalog key, e.g. `coach.step.read`. */
+  labelKey: string;
+  /** The label rendered on the server in the request locale; the fallback. */
+  label: string;
+  domain?: CoachStepDomain;
+  window?: CoachScopeWindow;
+  period?: CoachResultPeriod;
+  granularity?: CoachResultGranularity;
+  status: CoachStepStatus;
+  /** Readings or rows the server counted. Never a health value. */
+  count?: number;
+  reason?: CoachStepReason;
+  /** `r1` when the step produced a table. */
+  resultRef?: string;
+}
+
+// ── Results (v1.39.4) ───────────────────────────────────────────────────
+// A table of the values a turn read. The values are health data: encrypted
+// at rest (`coach_messages.results_encrypted`) and sent only to the owner.
+// The metadata alone rides the plaintext provenance.
+
+export type CoachResultGranularity = "day" | "week" | "month";
+export type CoachResultPeriod = "current" | "previous" | "yearAgo";
+export type CoachResultShape =
+  "timeSeries" | "categoryCounts" | "distribution" | "single";
+
+export interface CoachResultColumn {
+  key: string;
+  kind: "period" | "category" | "number" | "count";
+  labelKey: string;
+  label: string;
+  /** Display unit token (e.g. `mmHg`), never free text. */
+  unit?: string;
+  decimals?: number;
+}
+
+/** `null` is a period with no reading: absence stays explicit. */
+export type CoachResultCell = string | number | null;
+
+export type CoachChartSpec =
+  | { kind: "line"; x: string; series: string[] }
+  | {
+      kind: "bar";
+      x: string;
+      series: string[];
+      orientation: "vertical" | "horizontal";
+    }
+  | {
+      kind: "histogram";
+      column: string;
+      unit?: string;
+      bins: Array<{ from: number; to: number; count: number }>;
     };
+
+export interface CoachResultSource {
+  tool: CoachToolName;
+  domain: CoachStepDomain;
+  window: CoachScopeWindow;
+  period: CoachResultPeriod;
+  granularity?: CoachResultGranularity;
+}
+
+/** Plaintext; rides `metricSource.results`. */
+export interface CoachResultMeta {
+  /** `r1`..`r6`, per message. */
+  ref: string;
+  source: CoachResultSource;
+  shape: CoachResultShape;
+  titleKey: string;
+  title: string;
+  /** The full row count, before any trim. */
+  rowCount: number;
+  chartKind: CoachChartSpec["kind"] | null;
+  /** The answer referenced it (shown expanded) or it sits under "Data used". */
+  displayed: boolean;
+  /** Set when the table was copied from an earlier message of the thread. */
+  reusedFrom?: { messageId: string; ref: string };
+  /**
+   * v1.39.4 — `table` when the answer asked for the table view of a table
+   * that has a chart ("as a table"). The chart stays, so the other view is
+   * one tap away. Absent: the chart shows first when there is one.
+   */
+  view?: "table";
+}
+
+/** Encrypted at rest; on the wire only to the owner. */
+export interface CoachResultTable extends CoachResultMeta {
+  columns: CoachResultColumn[];
+  /** Row-major, at most 400 rows. */
+  rows: CoachResultCell[][];
+  /** True when `rowCount` exceeds `rows.length`. */
+  truncated: boolean;
+  chart: CoachChartSpec | null;
+}
+
+/**
+ * One entry of `GET …/messages/{messageId}/results`: the table, or the
+ * reason it is not served. `module_disabled` — the domain's module is now
+ * off for the record; `unavailable` — the stored tables could not be read.
+ */
+export type CoachResultEntry =
+  | CoachResultTable
+  | { ref: string; withheld: "module_disabled" | "unavailable" };
+
+// ── Method (v1.39.4) ────────────────────────────────────────────────────
+// How the answer was reached: sources, windows, counts, aggregation. Never
+// a health value.
+
+export interface CoachMethodEntry {
+  domain: CoachStepDomain;
+  window?: CoachScopeWindow;
+  period?: CoachResultPeriod;
+  granularity?: CoachResultGranularity;
+  count?: number;
+  aggregation?: "mean" | "median" | "latest" | "sum" | "count" | "rate";
+  absent?: "no_data" | "outside_window" | "module_disabled";
+}
+
+export interface CoachMethod {
+  entries: CoachMethodEntry[];
+  /** Rendered on the server in the request locale. */
+  text: string;
+}
+
+// ── Follow-ups (v1.39.4) ────────────────────────────────────────────────
+// Chips under the latest assistant reply. The label is always rendered by
+// the server from a catalog; the model may at most pick a kind and domain.
+
+export type CoachFollowUpKind =
+  | "widen_window"
+  | "previous_period"
+  | "year_ago"
+  | "as_chart"
+  | "as_table"
+  | "related_metric"
+  | "continue";
+
+export interface CoachFollowUp {
+  /** `f1`..`f3`. */
+  id: string;
+  kind: CoachFollowUpKind;
+  labelKey: string;
+  label: string;
+  anchor?: {
+    ref: string;
+    domain: CoachStepDomain;
+    window?: CoachScopeWindow;
+    granularity?: CoachResultGranularity;
+    period?: CoachResultPeriod;
+  };
+  /** True when the chip is answered from a stored table, without a model. */
+  reuse: boolean;
+  origin: "server" | "model";
+}
+
+// ── Clarification (v1.39.4) ─────────────────────────────────────────────
+// A question with choices. The question text is the assistant message
+// itself, encrypted like any reply; only the choices ride here.
+
+export interface CoachClarificationChoice {
+  id: string;
+  labelKey: string;
+  label: string;
+  value: { metric?: CoachScopeSource; window?: CoachScopeWindow };
+}
+
+export interface CoachClarification {
+  kind: "metric" | "window" | "context";
+  /** At most 4; metric choices are always ones the record holds. */
+  choices: CoachClarificationChoice[];
+  /** Whether a typed answer is welcome beside the choices. */
+  freeText: boolean;
+}
 
 /**
  * v1.4.22 — Zod schema for one entry inside the Coach's evidence
@@ -399,6 +643,35 @@ export interface CoachProvenance {
    * turn withheld nothing.
    */
   unverifiedFigures?: number;
+  /**
+   * v1.39.4 — what the Coach read on this turn, one entry per tool call (or
+   * one `snapshot` step on the no-tools path). Catalog labels, domains,
+   * windows and counts only.
+   */
+  steps?: CoachStep[];
+  /** v1.39.4 — how the answer was reached, as a server-rendered line. */
+  method?: CoachMethod;
+  /**
+   * v1.39.4 — the tables this turn produced, metadata only. The values are
+   * in `results_encrypted` and served by
+   * `GET /api/insights/chat/{id}/messages/{messageId}/results`.
+   */
+  results?: CoachResultMeta[];
+  /** v1.39.4 — the chips offered under this reply. */
+  followUps?: CoachFollowUp[];
+  /** v1.39.4 — the choices, when this reply is a clarifying question. */
+  clarification?: CoachClarification;
+  /**
+   * v1.39.4 — the tool loop hit its round cap while the model still wanted
+   * to read, so the answer was forced. Absent otherwise.
+   */
+  forcedFinal?: true;
+  /**
+   * v1.39.4 — this reply continues an answer that was forced at the round
+   * cap: the id of that earlier assistant message. A continuation offers no
+   * further "keep looking" chip, so an answer is continued at most once.
+   */
+  continuationOf?: string;
 }
 
 /**
@@ -491,6 +764,11 @@ export interface CoachConversationDetailDTO extends CoachConversationDTO {
    * `insights.coach.fence_drift` audit). Equal to `attachments.length`.
    */
   attachmentCount: number;
+  /**
+   * v1.39.4 — server-internal: the assistant messages older than the loaded
+   * window, when the turn asked for the count. Never sent to a client.
+   */
+  earlierAssistantMessages?: number;
 }
 
 /**

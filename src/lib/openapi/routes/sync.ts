@@ -257,7 +257,7 @@ export const syncChangesResponse = z
     cursorExpired: z
       .boolean()
       .describe(
-        "True when the supplied cursor predates tombstone retention — drop the cursor and do a clean initial sync.",
+        "True when the supplied cursor predates tombstone retention, or was issued before the account's data was last restored from a backup or deleted — drop the cursor and do a clean initial sync.",
       ),
     changes: z.object({
       measurements: z.object({

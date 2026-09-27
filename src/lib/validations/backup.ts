@@ -20,6 +20,7 @@
  * a useful summary for them.
  */
 import { z } from "zod/v4";
+import { RESULTS_MAX_BYTES } from "@/lib/ai/coach/results/refs";
 import {
   AllergyCategory,
   AllergySeverity,
@@ -357,6 +358,11 @@ const medicationSchema = z
     // v1.39.1 (#1033) — absent in a backup written before the field existed;
     // the restore defaults it to tracking on, the behaviour those had.
     trackIntake: z.boolean().optional(),
+    // v1.39.4 — the clinical category. Absent in older files. A string, not
+    // the enum: a file from a newer server may name a category this one does
+    // not know, and the restore reads that as OTHER rather than refusing the
+    // whole file.
+    category: z.string().max(64).optional(),
     deliveryForm: z.enum(MedicationDeliveryForm).optional(),
     trackInjectionSites: z.boolean().optional(),
     allowedInjectionSites: z.array(z.enum(InjectionSite)).optional(),
@@ -1109,6 +1115,9 @@ const practitionerBackupSchema = z
     practice: z.string().nullable().optional(),
     location: z.string().nullable().optional(),
     phone: z.string().nullable().optional(),
+    /// v1.39.4 — the address and phone ciphertext, DR payloads only.
+    locationEncrypted: base64BytesSchema.nullable().optional(),
+    phoneEncrypted: base64BytesSchema.nullable().optional(),
     noteEncrypted: base64BytesSchema.nullable().optional(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
@@ -1335,6 +1344,29 @@ const environmentTravelLocationBackupSchema = z
   .passthrough();
 
 /**
+ * A turn's stored tables, bounded at restore. The live path never stores more
+ * than `RESULTS_MAX_BYTES` of table JSON per turn (`fitResultsToStorage`), so
+ * a file this release writes always fits; a larger value is a damaged or
+ * crafted file, refused with the rest of it like any other malformed field
+ * rather than sealed into the database unbounded. The sealed form is the
+ * ciphertext of at most that much JSON, base64-encoded in the file: about
+ * 1.8 times the plaintext, so twice the plaintext bound caps it.
+ */
+const COACH_RESULTS_SEALED_MAX_CHARS = 2 * RESULTS_MAX_BYTES;
+
+const coachResultsJsonSchema = z
+  .string()
+  .refine(
+    (value) => new TextEncoder().encode(value).byteLength <= RESULTS_MAX_BYTES,
+    { message: `Coach result tables exceed ${RESULTS_MAX_BYTES} bytes` },
+  );
+
+const coachResultsSealedSchema = base64BytesSchema.refine(
+  (value) => value.length <= COACH_RESULTS_SEALED_MAX_CHARS,
+  { message: "Coach result tables exceed the stored size" },
+);
+
+/**
  * One Coach turn.
  *
  * `contentEncrypted` and `content` are the two ends of the same contract, so
@@ -1354,6 +1386,10 @@ const coachMessageBackupSchema = z
     promptVersion: z.string().nullable().optional(),
     tokensUsed: z.number().int().nullable().optional(),
     model: z.string().nullable().optional(),
+    // v1.39.4 — the turn's tables: ciphertext on a disaster-recovery file,
+    // readable JSON on a portable one, absent on every file written before.
+    resultsEncrypted: coachResultsSealedSchema.nullable().optional(),
+    resultsJson: coachResultsJsonSchema.nullable().optional(),
     createdAt: isoDateTime,
   })
   .passthrough();

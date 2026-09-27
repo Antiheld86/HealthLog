@@ -217,6 +217,8 @@ export const DATA_ROUTES: Readonly<Record<string, string>> = {
     "One stored conversation: read, rename, delete.",
   "src/app/api/insights/chat/messages/[id]/feedback/route.ts":
     "A rating on a message that already exists.",
+  "src/app/api/insights/chat/[id]/messages/[messageId]/results/route.ts":
+    "The stored tables of one message: the person's record, withheld per module, never per AI capability.",
   "src/app/api/insights/breathing-screening/route.ts":
     "Device breathing data, owned by the sleep module.",
   "src/app/api/insights/labs-changes/route.ts":

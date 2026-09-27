@@ -41,6 +41,9 @@ import { ReminderSuggestionCard } from "./reminder-suggestion-card";
 import { SuggestedActionCard } from "./suggested-action-card";
 import { StreamedProse } from "./streamed-prose";
 import { MessageTokenFooter } from "./message-token-footer";
+import { CoachTurnSteps } from "./turn-steps";
+import { CoachResults, countResultsInSection } from "./coach-results";
+import { CoachMethodLine } from "./method-line";
 import {
   COACH_ICON_BUTTON,
   ReadAloudButton,
@@ -201,10 +204,15 @@ const MAX_COACH_CHARTS = 2;
  * allowlist-parsed, intersected with the turn's grounded provenance topics,
  * de-duplicated by metric, and capped. Exported for unit tests so the
  * grounding contract is pinned without standing up the chart component.
+ *
+ * v1.39.4 — `shownDomains` are the domains of the result tables the answer
+ * shows under the prose; a token for one of them is dropped, since the
+ * turn's own table (and its chart) already shows that metric.
  */
 export function selectCoachChartTokens(
   content: string,
   metrics: readonly CoachProvenanceMetric[] | undefined,
+  shownDomains?: ReadonlySet<string>,
 ): ChartToken[] {
   const grounded = new Set(metrics ?? []);
   const out: ChartToken[] = [];
@@ -212,6 +220,7 @@ export function selectCoachChartTokens(
   for (const token of parseChartTokens(content)) {
     const topic = CHART_TOKEN_PROVENANCE[token];
     if (!topic || !grounded.has(topic)) continue;
+    if (shownDomains?.has(topic)) continue;
     const metric = tokenToMetric(token);
     if (seen.has(metric)) continue;
     seen.add(metric);
@@ -387,6 +396,18 @@ interface ChatBubbleProps {
    */
   suggestedAction?:
     import("@/lib/ai/coach/suggest-action").CoachSuggestedAction | null;
+  /**
+   * v1.39.4 — live steps from the streaming hook. Persisted messages carry
+   * them on `metricSource.steps`; the bubble falls back to that.
+   */
+  steps?: import("@/lib/ai/coach/types").CoachStep[];
+  /**
+   * v1.39.4 — live tables from the streaming hook. A persisted message
+   * lists their metadata on `metricSource.results` and the values are
+   * fetched lazily, which needs the conversation id.
+   */
+  results?: import("@/lib/ai/coach/types").CoachResultTable[];
+  conversationId?: string | null;
   providerType?: string | null;
   inProgress?: boolean;
   errorCode?: string | null;
@@ -464,6 +485,9 @@ export function areChatBubblePropsEqual(
     prev.metricSource === next.metricSource &&
     prev.suggestion === next.suggestion &&
     prev.suggestedAction === next.suggestedAction &&
+    prev.steps === next.steps &&
+    prev.results === next.results &&
+    prev.conversationId === next.conversationId &&
     prev.usage === next.usage &&
     // onRegenerate is a per-render closure — compare only whether it is present.
     (prev.onRegenerate === undefined) === (next.onRegenerate === undefined)
@@ -476,6 +500,9 @@ function ChatBubbleImpl({
   metricSource,
   suggestion,
   suggestedAction,
+  steps,
+  results,
+  conversationId,
   providerType,
   inProgress,
   errorCode,
@@ -654,16 +681,31 @@ function ChatBubbleImpl({
     !!metricSource &&
     ((metricSource.metrics?.length ?? 0) > 0 ||
       (metricSource.windows?.length ?? 0) > 0);
-  const hasProvenance = hasChips || keyValues.length > 0;
+  const method = metricSource?.method ?? null;
+  const hasEvidence = hasChips || keyValues.length > 0 || method !== null;
 
   // v1.22 (W5) — Coach charts Phase 1. Render an allowlisted, provenance-
   // grounded `metric:<TYPE>` chart under a SETTLED assistant turn. Skipped
   // while streaming / in-flight / errored / on a refusal; a no-op when no
   // grounded token is present (provider-agnostic — reads the inline token).
+  // v1.39.4 — the result tables this answer references and the ones it
+  // only used; the metadata is enough to place and count them.
+  const resultMetas = results?.length ? results : (metricSource?.results ?? []);
+  const shownDomains = new Set(
+    resultMetas
+      .filter((meta) => meta.displayed)
+      .map((meta) => meta.source.domain),
+  );
+  const hasResults = !inProgress && !errorCode && resultMetas.length > 0;
+  const dataUsedCount =
+    !inProgress && !errorCode
+      ? countResultsInSection(resultMetas, "dataUsed")
+      : 0;
   const chartTokens =
     !streaming && !inProgress && !errorCode && providerType !== "refusal"
-      ? selectCoachChartTokens(content, metricSource?.metrics)
+      ? selectCoachChartTokens(content, metricSource?.metrics, shownDomains)
       : [];
+  const hasProvenance = hasEvidence || dataUsedCount > 0;
 
   // v1.32.14 — quiet per-message notice: the grounding guard withheld ≥1 figure
   // from this reply (each rewritten to the `[…]` elision mark). Shown only on a
@@ -692,7 +734,21 @@ function ChatBubbleImpl({
           <Sparkles className="text-background size-3.5" />
         )}
       </div>
-      <div className="flex max-w-[calc(80%-2.625rem)] flex-col gap-2">
+      {/* A reply with tables takes the column's full width, so a table or
+          chart is as wide as the thread allows instead of as wide as the
+          prose above it. */}
+      <div
+        className={cn(
+          "flex max-w-[calc(80%-2.625rem)] flex-col gap-2",
+          hasResults && "w-full",
+        )}
+      >
+        {/* v1.39.4 — what the Coach read on this turn: live from the step
+            frames, restored from the provenance on reload. */}
+        <CoachTurnSteps
+          steps={steps ?? metricSource?.steps ?? []}
+          active={!!inProgress}
+        />
         {/* v1.19.1 (C3) — the live turn shows the classic typing animation
             (three pulsing dots) while it is still thinking with no prose
             yet, restoring the writing/typing indicator the maintainer
@@ -767,6 +823,18 @@ function ChatBubbleImpl({
               );
             })}
           </div>
+        )}
+        {/* v1.39.4 — the tables the turn read, on a settled turn only: live
+            from the result frames, or fetched lazily for a persisted
+            message whose provenance lists them. */}
+        {!inProgress && !errorCode && (
+          <CoachResults
+            conversationId={conversationId ?? null}
+            messageId={messageId ?? null}
+            metas={metricSource?.results ?? []}
+            live={results}
+            section="displayed"
+          />
         )}
         {/* v1.18.6 — a "no provider configured anywhere" turn is a
             setup gap, not a transient failure: surface a direct link to
@@ -873,6 +941,19 @@ function ChatBubbleImpl({
                     </li>
                   ))}
                 </ul>
+              )}
+              {/* v1.39.4 — how the answer was worked out, beside the key
+                  values it explains. */}
+              <CoachMethodLine method={method} />
+              {/* v1.39.4 — the tables the answer read but did not point at. */}
+              {dataUsedCount > 0 && (
+                <CoachResults
+                  conversationId={conversationId ?? null}
+                  messageId={messageId ?? null}
+                  metas={metricSource?.results ?? []}
+                  live={results}
+                  section="dataUsed"
+                />
               )}
             </div>
           </details>

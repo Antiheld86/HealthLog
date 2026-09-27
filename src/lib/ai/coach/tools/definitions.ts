@@ -20,6 +20,13 @@
  *   8. get_cycle                 — menstrual phase / prediction / correlation (v1.21.0, C2-1)
  *   9. get_correlations          — discovered FDR cross-metric drivers + the
  *                                  coincident-deviation flag (v1.21.0, C3)
+ *  10. get_metric_table          — one row per day / week / month for a metric,
+ *                                  the same numbers the app's charts draw
+ *                                  (v1.39.4)
+ *
+ * Beside the catalogue, `show_result` (v1.39.4) shows a table an earlier reply
+ * of the same conversation already read. It reads no health data of its own,
+ * so it is not a `CoachToolName` and no result table names it as its source.
  */
 import { z } from "zod/v4";
 
@@ -40,6 +47,7 @@ export const COACH_TOOL_NAMES = [
   "get_workouts",
   "get_cycle",
   "get_correlations",
+  "get_metric_table",
 ] as const;
 
 export type CoachToolName = (typeof COACH_TOOL_NAMES)[number];
@@ -47,6 +55,9 @@ export type CoachToolName = (typeof COACH_TOOL_NAMES)[number];
 export function isCoachToolName(name: string): name is CoachToolName {
   return (COACH_TOOL_NAMES as readonly string[]).includes(name);
 }
+
+/** v1.39.4 — shows a stored table again; offered beside the catalogue. */
+export const SHOW_RESULT_TOOL_NAME = "show_result";
 
 // ── Per-tool argument schemas ────────────────────────────────────────
 // Closed enums + optional windows only — no free-text, no host, no id. The
@@ -97,6 +108,80 @@ export const getWorkoutsArgsSchema = z
 export const getCycleArgsSchema = z.object({}).strict();
 
 export const getCorrelationsArgsSchema = z.object({}).strict();
+
+/** v1.39.4 — how a metric table groups its rows. */
+export const coachResultGranularitySchema = z.enum(["day", "week", "month"]);
+/** v1.39.4 — which stretch of time a metric table covers. */
+export const coachResultPeriodSchema = z.enum([
+  "current",
+  "previous",
+  "yearAgo",
+]);
+
+export const getMetricTableArgsSchema = z
+  .object({
+    metric: coachScopeSourceSchema,
+    window: coachScopeWindowSchema.optional(),
+    granularity: coachResultGranularitySchema.optional(),
+    period: coachResultPeriodSchema.optional(),
+  })
+  .strict();
+
+/**
+ * v1.39.4 — `m<k>.r<n>`, a table of an earlier reply as the context names
+ * it. The shape only; whether it exists in this conversation is decided by
+ * the executor against the conversation's own messages.
+ */
+export const showResultArgsSchema = z
+  .object({
+    ref: z.string().regex(/^m[1-9]\d{0,3}\.r[1-9]\d?$/),
+    view: z.enum(["table", "chart"]).optional(),
+  })
+  .strict();
+/**
+ * v1.39.4 — each tool's argument schema, keyed by name. The record type makes
+ * a new tool name fail to compile until its schema is listed here.
+ */
+const COACH_TOOL_ARG_SCHEMAS: Record<CoachToolName, z.ZodType> = {
+  get_metric_series: getMetricSeriesArgsSchema,
+  get_glucose_panel: getGlucosePanelArgsSchema,
+  get_sleep: getSleepArgsSchema,
+  get_medication_compliance: getMedicationComplianceArgsSchema,
+  get_labs: getLabsArgsSchema,
+  get_illness_recovery: getIllnessRecoveryArgsSchema,
+  get_workouts: getWorkoutsArgsSchema,
+  get_cycle: getCycleArgsSchema,
+  get_correlations: getCorrelationsArgsSchema,
+  get_metric_table: getMetricTableArgsSchema,
+};
+
+/**
+ * v1.39.4 — a call's arguments as its schema validates them (the catalogue
+ * and `show_result`), or undefined when the name is unknown, the JSON does not parse, or the schema refuses
+ * it. Only this validated form ever rides the tool trace; the model's raw
+ * argument string never does.
+ */
+export function parseCoachToolArgs(
+  name: string,
+  rawArguments: string,
+): Record<string, unknown> | undefined {
+  const schema =
+    name === SHOW_RESULT_TOOL_NAME
+      ? showResultArgsSchema
+      : isCoachToolName(name)
+        ? COACH_TOOL_ARG_SCHEMAS[name]
+        : undefined;
+  if (!schema) return undefined;
+  let raw: unknown;
+  try {
+    raw = rawArguments.trim() === "" ? {} : JSON.parse(rawArguments);
+  } catch {
+    return undefined;
+  }
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) return undefined;
+  return parsed.data as Record<string, unknown>;
+}
 
 /**
  * JSON-Schema parameter shapes handed to the provider. Kept hand-written
@@ -257,6 +342,62 @@ export const COACH_TOOL_DEFS: AiToolDef[] = [
       additionalProperties: false,
       required: [],
       properties: {},
+    },
+  },
+  {
+    name: "get_metric_table",
+    description:
+      "Fetch ONE metric as a table: one row per day, week or month, the same numbers the app's charts show, for the current window, the period before it, or the same window a year earlier. Use it for tables, ranges, comparisons with a previous period and 'every day / each week' questions. The result is a compact summary (count, mean, min, max, first and last period, up to 60 row values) plus the table's name (resultRef); the person sees the full table under your answer. Glucose, medication adherence and workouts have their own tools; sleep here is time asleep per night. Returns { present: false } with a reason when nothing came back, as get_metric_series does.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["metric"],
+      properties: {
+        metric: {
+          type: "string",
+          enum: coachScopeSourceSchema.options,
+          description: "The metric to tabulate.",
+        },
+        window: {
+          type: "string",
+          enum: WINDOW_ENUM,
+          description: "Analysis window. Defaults to the user's scope window.",
+        },
+        granularity: {
+          type: "string",
+          enum: coachResultGranularitySchema.options,
+          description:
+            "One row per day, week or month. Defaults to day up to 90 days, week for lastYear, month for allTime.",
+        },
+        period: {
+          type: "string",
+          enum: coachResultPeriodSchema.options,
+          description:
+            "current (default), previous (the window just before), or yearAgo (the same window a year earlier). An earlier period also returns `comparison`: the current window's figures and the change from this table to them; cite that change rather than subtracting figures yourself.",
+        },
+      },
+    },
+  },
+  {
+    name: SHOW_RESULT_TOOL_NAME,
+    description:
+      'Show a table an earlier answer of THIS conversation already fetched, by the name the EARLIER TABLES context gives it (m<k>.r<n>). Reads nothing new: use it when the person wants the same table again, or as a chart or table, and fetch anew only when the metric, window, period or granularity changes or they ask for fresh figures. Returns the table\'s summary and its new name (resultRef), or { present: false, reason: "unknown_result" } for a name the context does not list.',
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["ref"],
+      properties: {
+        ref: {
+          type: "string",
+          description: "The earlier table's name, e.g. 'm3.r1'.",
+        },
+        view: {
+          type: "string",
+          enum: ["table", "chart"],
+          description:
+            "How the person asked to see it, when they said. table: without a chart. chart: with one; an earlier table by day is shown as how often its values fell into each range.",
+        },
+      },
     },
   },
 ];

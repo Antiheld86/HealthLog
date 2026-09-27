@@ -31,6 +31,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 
+import { COACH_COMPOSER_ID } from "./composer-focus";
+
 /**
  * v1.4.20 phase B2b — Coach composer.
  *
@@ -172,7 +174,7 @@ export function CoachInput({
   onCancel,
   disabled = false,
   isStreaming = false,
-  inputId = "coach-composer-textarea",
+  inputId = COACH_COMPOSER_ID,
   autoFocusOnOpen = false,
   placeholder,
   showHub = false,
@@ -446,7 +448,11 @@ export function CoachInput({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder ?? t("insights.coach.composerPlaceholder")}
-          disabled={disabled}
+          // Read-only rather than disabled while a reply streams: a disabled
+          // field drops focus, and a follow-up chip or a clarification choice
+          // hands focus here right as the turn starts.
+          readOnly={disabled}
+          aria-disabled={disabled || undefined}
           enterKeyHint="send"
           autoCapitalize="sentences"
           rows={1}
@@ -455,7 +461,7 @@ export function CoachInput({
             "px-2 py-1.5",
             "max-h-[9.5rem] overflow-auto",
             "[scrollbar-width:thin] [scrollbar-color:color-mix(in_srgb,var(--primary)_35%,transparent)_transparent]",
-            "placeholder:text-muted-foreground disabled:opacity-60",
+            "placeholder:text-muted-foreground aria-disabled:opacity-60",
             "placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap",
           )}
         />

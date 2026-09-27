@@ -187,12 +187,20 @@ describe("extractExportXml", () => {
     const tmp = mkdtempSync(join(tmpdir(), "healthlog-unzip-"));
     const zipPath = join(tmp, "export.zip");
     writeFileSync(zipPath, zip);
-    const staged = () =>
-      readdirSync(tmpdir()).filter((n) => n.startsWith("healthlog-import-"));
-    const before = new Set(staged());
-
-    await expect(extractExportXml(zipPath)).rejects.toThrow(/zip bomb/);
-    expect(staged().filter((n) => !before.has(n))).toEqual([]);
+    // Staged into a directory of this test's own. The shared system tmpdir
+    // also holds whatever other test files extracting in parallel have
+    // staged at that moment, and a before/after diff over it failed on
+    // their files, not this one's.
+    const staging = mkdtempSync(join(tmpdir(), "healthlog-unzip-staging-"));
+    const previousTmpdir = process.env.TMPDIR;
+    process.env.TMPDIR = staging;
+    try {
+      await expect(extractExportXml(zipPath)).rejects.toThrow(/zip bomb/);
+    } finally {
+      if (previousTmpdir === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = previousTmpdir;
+    }
+    expect(readdirSync(staging)).toEqual([]);
     // Inflating past the 64 MiB floor takes a moment on a loaded runner.
   }, 60_000);
 

@@ -85,6 +85,8 @@ export interface DueDerivationMedication {
   asNeeded?: boolean;
   /** v1.39.1 (#1033) — false: kept as a record, never due, never in the set. */
   trackIntake?: boolean;
+  /** v1.39.4 (#1040) — false: no dose actions today (e.g. the course ended). */
+  intakeActionable?: boolean;
   schedules: DueDerivationSchedule[];
 }
 
@@ -155,7 +157,13 @@ export function deriveDueMedications(
     // compliance row for one must not pull it into the set.
     // A medication with intake tracking off is never due either; the list
     // already serves it with no schedules, this makes the rule explicit.
-    if (!m.active || m.pausedAt || m.asNeeded || m.trackIntake === false) {
+    if (
+      !m.active ||
+      m.pausedAt ||
+      m.asNeeded ||
+      m.trackIntake === false ||
+      m.intakeActionable === false
+    ) {
       continue;
     }
 

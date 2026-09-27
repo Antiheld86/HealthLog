@@ -19,7 +19,6 @@ import { prisma } from "@/lib/db";
 import { extractFeatures } from "@/lib/insights/features";
 import {
   parseCoachPrefs,
-  type CoachExcludeMetric,
   type CoachDataCluster,
 } from "@/lib/validations/coach-prefs";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/resolver";
@@ -52,8 +51,8 @@ import type { MeasurementType } from "@/generated/prisma/client";
 import { COACH_SOURCE_MEASUREMENT_TYPES } from "@/lib/ai/coach/source-measurement-types";
 import type { ReferenceMetric } from "@/lib/reference-ranges";
 import { isCycleAvailableForUser } from "@/lib/cycle/gate";
-import { resolveModuleMap, type ModuleKey } from "@/lib/modules/gate";
-import { MODULE_SCOPED_SOURCES } from "@/lib/modules/measurement-scope";
+import { resolveModuleMap } from "@/lib/modules/gate";
+import { admitCoachSources, coachExclusions } from "@/lib/ai/coach/scope-gate";
 import { SCHEDULE_COMPLIANCE_SELECT } from "@/lib/analytics/compliance";
 import type { BaselineProfile } from "@/lib/insights/derived";
 import { toProfileSex } from "@/lib/profile/sex";
@@ -193,50 +192,6 @@ const CORE_CLUSTERS: ReadonlySet<CoachDataCluster> = new Set<CoachDataCluster>([
   "cardio",
   "glucose",
 ]);
-
-/**
- * v1.18.0 — module enable/disable → coach-snapshot domain map.
- *
- * When a toggleable data-domain module is disabled for the account, the
- * domains it owns must never enter the coach context. We reuse the
- * existing `excludeMetrics` filtering path (the `excluded` set narrows
- * `sources` before any row is read) by folding the disabled modules into
- * a SYSTEM-side exclusion that unions with the user's `excludeMetrics`.
- *
- * Each toggleable data domain maps to the `CoachScopeSource` token(s)
- * its snapshot block(s) gate on:
- *   - `mood`      → the mood block (`mood` source).
- *   - `sleep`     → the per-night sleep block + the sleep-rhythm block
- *                   (both gate on the `sleep` source).
- *   - `glucose`   → the glucose per-context + clinical block.
- *   - `workouts`  → the workouts block.
- *   - `recovery`  → the recovery / strain composites. These are the
- *                   derived block (READINESS / RECOVERY_SCORE / STRAIN_SCORE
- *                   / …), the WHOOP-native dayStrain block, and the
- *                   trajectory block — all gated on `derivedActive`, which
- *                   reads HRV / resting-HR / VO₂max. Dropping those source
- *                   tokens drops the raw additive timelines too; the
- *                   composites are additionally gated below so they never
- *                   build off the sleep signal alone.
- *   - `environment` → the audio-exposure (env / headphone / event), daylight,
- *                   and skin-temperature blocks — the sources the opt-in
- *                   environment cluster owns (`CLUSTER_SOURCES.environment`).
- *
- * `cycle` is intentionally absent: its block already resolves through the
- * fully two-layer cycle gate (`isCycleAvailableForUser` — the per-user
- * toggle AND the operator server-wide kill-switch) below, exactly as the
- * W1 foundation prescribes. `coach` is the surface being narrated, not
- * a data domain. `labs` / `achievements` / `insights` / `doctorReport`
- * own no coach-snapshot data domain.
- *
- * v1.30.22 — the table itself moved to `@/lib/modules/measurement-scope` so
- * the reads that deliberately bypass this builder (the MCP rich reads) gate
- * off the SAME ownership map instead of inheriting nothing. The narrowing
- * below is unchanged; only the definition site moved.
- */
-const MODULE_EXCLUDED_SOURCES = MODULE_SCOPED_SOURCES as Partial<
-  Record<ModuleKey, CoachScopeSource[]>
->;
 
 /**
  * Build the Coach prompt snapshot for `userId`. Always uses
@@ -380,42 +335,14 @@ async function buildCoachSnapshotImpl(
   // before any row is read — the model never sees a disabled domain.
   const moduleMap = await moduleMapPromise;
   const recoveryDisabled = moduleMap.recovery === false;
-  const excluded = new Set<CoachExcludeMetric>(prefs.excludeMetrics);
-  for (const [key, srcs] of Object.entries(MODULE_EXCLUDED_SOURCES)) {
-    if (moduleMap[key as ModuleKey] === false) {
-      for (const src of srcs ?? []) {
-        // Every entry in MODULE_EXCLUDED_SOURCES is a CoachScopeSource that
-        // also exists in the CoachExcludeMetric enum overlap the
-        // source-narrowing loop checks against; the cast mirrors the one the
-        // loop already uses below.
-        excluded.add(src as unknown as CoachExcludeMetric);
-      }
-    }
-  }
+  const excluded = coachExclusions(prefs, moduleMap);
   // v1.4.36 W3 T2 — `medications` and `anthropometrics` are
   // exclude-only toggles (not in `CoachScopeSource`); they gate the
   // GLP-1 weeklyContext / compliance branch and the anthropometrics
-  // block respectively. The mapping below treats them as additive to
-  // the existing source-level exclusions.
+  // block respectively.
   const excludesMedications = excluded.has("medications");
   const excludesAnthropometrics = excluded.has("anthropometrics");
-  const sources = new Set<CoachScopeSource>();
-  for (const src of scopedSources) {
-    // The `excludeMetrics` enum is a superset of `CoachScopeSource` now
-    // (medications + anthropometrics live on the exclude-only side);
-    // the cast was safe before v1.4.36 because the enums matched 1:1,
-    // and the runtime `excluded.has` check still only catches the
-    // overlapping members.
-    if (!excluded.has(src as unknown as CoachExcludeMetric)) {
-      sources.add(src);
-    }
-  }
-  // `medications` exclusion also drops the compliance source so the
-  // intake-event branch below short-circuits — keeps the contract
-  // consistent (excluding medications == no medication data at all).
-  if (excludesMedications) {
-    sources.delete("compliance");
-  }
+  const sources = admitCoachSources(scopedSources, excluded);
 
   const windowDays = windowToDays(window);
   // v1.11.3 — kick the feature extraction off as a promise now and await

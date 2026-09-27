@@ -27,6 +27,7 @@ import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
+import type { RestoreFailureCause } from "@/lib/export/restore-failure-cause";
 import type {
   BackupRestoreFailureCode,
   BackupRestoreJobView,
@@ -72,6 +73,7 @@ function failureText(
   code: BackupRestoreFailureCode,
   t: ReturnType<typeof useTranslations>["t"],
   keyIds: readonly string[] = [],
+  cause?: RestoreFailureCause,
 ): string {
   switch (code) {
     case "backup_not_found":
@@ -101,7 +103,7 @@ function failureText(
     case "time_budget":
       return t("admin.section.backups.restoreFailureTimeBudget");
     case "transaction_failed":
-      return t("admin.section.backups.restoreFailureTransaction");
+      return transactionFailureText(cause, t);
     case "interrupted":
       return t("admin.section.backups.restoreFailureInterrupted");
     case "not_started":
@@ -114,6 +116,32 @@ function failureText(
       return t("admin.section.backups.restoreFailureUnexpected");
     default: {
       const unhandled: never = code;
+      return unhandled;
+    }
+  }
+}
+
+/** A rolled-back transaction, by what the database refused it over. */
+function transactionFailureText(
+  cause: RestoreFailureCause | undefined,
+  t: ReturnType<typeof useTranslations>["t"],
+): string {
+  switch (cause) {
+    case "timeout":
+      return t("admin.section.backups.restoreFailureCauseTimeout");
+    case "lock":
+      return t("admin.section.backups.restoreFailureCauseLock");
+    case "constraint":
+      return t("admin.section.backups.restoreFailureCauseConstraint");
+    case "storage":
+      return t("admin.section.backups.restoreFailureCauseStorage");
+    case "connection":
+      return t("admin.section.backups.restoreFailureCauseConnection");
+    case "other":
+    case undefined:
+      return t("admin.section.backups.restoreFailureTransaction");
+    default: {
+      const unhandled: never = cause;
       return unhandled;
     }
   }
@@ -297,7 +325,7 @@ export function RestoreJobStatus({
               {t("admin.section.backups.restoreJobFailedTitle", { username })}
             </p>
             <p className="text-xs">
-              {failureText(code, t, job.failure?.keyIds)}
+              {failureText(code, t, job.failure?.keyIds, job.failure?.cause)}
             </p>
             {changedNothing ? (
               <p className="text-muted-foreground mt-1 text-xs">

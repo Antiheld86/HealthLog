@@ -380,6 +380,9 @@
     "themeDark": "Scuro",
     "themeLight": "Chiaro",
     "collapseSidebar": "Riduci",
+    "expandSidebar": "Espandi",
+    "collapseSidebarLabel": "Riduci barra laterale",
+    "expandSidebarLabel": "Espandi barra laterale",
     "userMenu": "Menu utente",
     "accountSettings": "Impostazioni account",
     "mood": "Umore",
@@ -1209,6 +1212,7 @@
     "categorySleepAid": "Per dormire",
     "categoryDiabetes": "Diabetes",
     "categoryAntibiotic": "Antibiotico",
+    "categoryMentalHealth": "Salute mentale",
     "categoryOther": "Altro",
     "daysSun": "Dom",
     "daysMon": "Lun",
@@ -1223,6 +1227,7 @@
     "tomorrow": "Domani",
     "asNeededMarker": "Al bisogno",
     "recordOnlyBadge": "Solo annotato",
+    "courseEndedBadge": "Terminato",
     "trackIntake": {
       "title": "Registrazione assunzioni",
       "label": "Registra le assunzioni",
@@ -1563,6 +1568,11 @@
         "vitamin": "Vitamine",
         "supplement": "Integratore",
         "antibiotic": "Antibiotico",
+        "mentalHealth": "Salute mentale",
+        "thyroid": "Tiroide",
+        "digestive": "Digestivo",
+        "skin": "Cura della pelle",
+        "sleepAid": "Per dormire",
         "other": "Altro"
       },
       "cadence": {
@@ -2258,6 +2268,8 @@
     "noData": "Nessun dato nel periodo selezionato",
     "bucketWeekly": "Media settimanale",
     "bucketMonthly": "Media mensile",
+    "bucketWeeklyDaily": "Media giornaliera per settimana",
+    "bucketMonthlyDaily": "Media giornaliera per mese",
     "days7Label": "7 g",
     "days7Title": "Ultimi 7 giorni",
     "days30Label": "30 g",
@@ -7374,6 +7386,11 @@
         "restoreFailureDocument": "Il file contiene documenti senza il loro contenuto, come un'esportazione portabile. Usa un backup di disaster recovery.",
         "restoreFailureTimeBudget": "Questo backup è troppo grande per essere ripristinato entro il tempo concesso al processo in background.",
         "restoreFailureTransaction": "Il database ha rifiutato il ripristino a metà, quindi tutto è stato annullato. Il log del server indica l'errore.",
+        "restoreFailureCauseTimeout": "Il ripristino è durato più di quanto il database consente, quindi tutto è stato annullato. Se l'host del database era sotto carico, riavvialo quando è più tranquillo. Il log del server indica il passaggio.",
+        "restoreFailureCauseLock": "Il ripristino ha atteso record che un altro processo stava modificando, quindi tutto è stato annullato. Avvia di nuovo il ripristino.",
+        "restoreFailureCauseConstraint": "Il database ha rifiutato un record del backup, quindi tutto è stato annullato. Il log del server indica la tabella e la regola.",
+        "restoreFailureCauseStorage": "Il database ha esaurito lo spazio su disco o la memoria durante il ripristino, quindi tutto è stato annullato. Libera spazio sull'host del database, poi avvia di nuovo il ripristino.",
+        "restoreFailureCauseConnection": "La connessione al database si è interrotta durante il ripristino, quindi tutto è stato annullato. Controlla che il database sia in funzione, poi avvia di nuovo il ripristino.",
         "restoreFailureInterrupted": "Il ripristino si è interrotto al riavvio del server ed è stato annullato. Se si interrompe di nuovo, probabilmente al server manca memoria.",
         "restoreFailureNotStarted": "Il processo in background non ha preso in carico il ripristino. Controlla che sia in esecuzione.",
         "restoreFailureEnqueue": "Non è stato possibile passare il ripristino al processo in background. Controlla che sia in esecuzione.",
@@ -9480,7 +9497,184 @@
       "promptInjection": "Ho notato istruzioni che cercano di aggirare le mie direttive. Sono il Coach di HealthLog e riassumo soltanto i tuoi dati di salute — riformula la domanda in questi termini, per favore.",
       "conversationPoisoned": "Un messaggio precedente di questa conversazione contiene istruzioni che cercano di aggirare le mie direttive. Inizia una nuova conversazione, per favore."
     },
-    "noRecordedData": "Non hai misurazioni registrate su quello che chiedi, quindi non posso darti alcun valore. Appena ne inserisci qualcuna, richiedimelo e userò i tuoi dati."
+    "noRecordedData": "Non hai misurazioni registrate su quello che chiedi, quindi non posso darti alcun valore. Appena ne inserisci qualcuna, richiedimelo e userò i tuoi dati.",
+    "step": {
+      "read": "Lettura: {domain}",
+      "readWindow": "Lettura: {domain}, {window}",
+      "snapshot": "Lettura del riepilogo dei tuoi dati",
+      "showResult": "Apertura di una tabella precedente",
+      "reuse": "Uso della tabella di prima",
+      "headerActive": "{label}…",
+      "headerDoneOne": "1 fonte consultata",
+      "headerDoneFew": "{count} fonti consultate",
+      "headerDoneOther": "{count} fonti consultate",
+      "listLabel": "Cosa ha consultato il Coach",
+      "toggleShow": "Mostra cosa ha consultato il Coach",
+      "toggleHide": "Nascondi cosa ha consultato il Coach",
+      "announceDone": "Fatto: {label}",
+      "readingsOne": "1 misurazione",
+      "readingsFew": "{count} misurazioni",
+      "readingsOther": "{count} misurazioni",
+      "rowsOne": "1 riga",
+      "rowsFew": "{count} righe",
+      "rowsOther": "{count} righe",
+      "metricsOne": "1 parametro",
+      "metricsFew": "{count} parametri",
+      "metricsOther": "{count} parametri",
+      "reason": {
+        "noData": "nessuna misurazione",
+        "outsideWindow": "nessuna misurazione in questo periodo",
+        "moduleDisabled": "disattivato",
+        "retrievalFailed": "lettura non riuscita",
+        "invalidArguments": "richiesta non compresa"
+      },
+      "domain": {
+        "labs": "Esami di laboratorio",
+        "illness": "Malattia e recupero",
+        "cycle": "Ciclo",
+        "correlations": "Relazioni tra parametri",
+        "snapshot": "Riepilogo dei dati"
+      },
+      "window": {
+        "last7days": "ultimi 7 giorni",
+        "last30days": "ultimi 30 giorni",
+        "last90days": "ultimi 90 giorni",
+        "lastYear": "ultimi 12 mesi",
+        "allTime": "intero periodo"
+      },
+      "period": {
+        "current": "questo periodo",
+        "previous": "il periodo precedente",
+        "yearAgo": "un anno prima"
+      },
+      "granularity": {
+        "day": "per giorno",
+        "week": "per settimana",
+        "month": "per mese"
+      }
+    },
+    "result": {
+      "title": {
+        "byDay": "{metric} per giorno",
+        "byWeek": "{metric} per settimana",
+        "byMonth": "{metric} per mese",
+        "previousPeriod": "{metric}, periodo precedente",
+        "yearAgo": "{metric}, un anno prima",
+        "workoutsBySport": "Allenamenti per sport",
+        "labsLatest": "Esami di laboratorio più recenti",
+        "sleepByNight": "Sonno per notte",
+        "complianceByDay": "Aderenza ai farmaci per giorno",
+        "distribution": "{metric}: quanto spesso è comparso ogni intervallo"
+      },
+      "column": {
+        "day": "Giorno",
+        "week": "Settimana",
+        "month": "Mese",
+        "night": "Notte",
+        "sport": "Sport",
+        "sessions": "Sessioni",
+        "analyte": "Esame",
+        "value": "Valore",
+        "unit": "Unità",
+        "date": "Data",
+        "referenceRange": "Intervallo di riferimento",
+        "systolic": "Sistolica",
+        "diastolic": "Diastolica",
+        "mean": "Media",
+        "total": "Totale",
+        "min": "Minimo",
+        "max": "Massimo",
+        "readings": "Misurazioni",
+        "rate": "Aderenza",
+        "duration": "Durata",
+        "range": "Intervallo",
+        "count": "Volte"
+      },
+      "other": "Altro",
+      "noReading": "nessuna misurazione",
+      "showAll": "Mostra tutto ({count})",
+      "showFewer": "Mostra meno",
+      "copyMenu": "Copia tabella",
+      "copyForSpreadsheet": "Copia per foglio di calcolo",
+      "copyAsText": "Copia come testo",
+      "copied": "Copiato",
+      "copyFailed": "Impossibile copiare la tabella",
+      "viewLabel": "Vista",
+      "viewChart": "Grafico",
+      "viewTable": "Tabella",
+      "chartSummary": "{title}, mostrato come grafico. La vista tabella elenca ogni valore.",
+      "dataUsed": "Dati usati ({count})",
+      "truncated": "Ultime {shown} righe su {total}",
+      "withheld": {
+        "moduleDisabled": "Questa tabella è nascosta perché il suo modulo è disattivato.",
+        "unavailable": "Impossibile caricare questa tabella."
+      },
+      "loading": "Caricamento della tabella…",
+      "loadFailed": "Impossibile caricare le tabelle.",
+      "reusedFrom": "Da una risposta precedente ({date})",
+      "reusedFromUndated": "Da una risposta precedente",
+      "histogramBin": "{from}–{to} {unit}"
+    },
+    "method": {
+      "label": "Come è stato ricavato",
+      "entry": "{domain}, {window}: {detail}",
+      "entryNoWindow": "{domain}: {detail}",
+      "reused": "da una risposta precedente",
+      "readingsOne": "1 misurazione",
+      "readingsFew": "{count} misurazioni",
+      "readingsOther": "{count} misurazioni",
+      "aggregation": {
+        "mean": "media",
+        "median": "mediana",
+        "latest": "ultima misurazione",
+        "sum": "somma",
+        "count": "conteggio",
+        "rate": "tasso"
+      },
+      "averages": {
+        "day": "medie giornaliere",
+        "week": "medie settimanali",
+        "month": "medie mensili"
+      },
+      "totals": {
+        "day": "totali giornalieri",
+        "week": "totali settimanali",
+        "month": "totali mensili"
+      },
+      "absent": {
+        "noData": "nessuna misurazione",
+        "outsideWindow": "nessuna misurazione in questo periodo",
+        "moduleDisabled": "disattivato"
+      }
+    },
+    "followUp": {
+      "groupLabel": "Domande suggerite",
+      "widenWindow": "Guarda più indietro",
+      "previousPeriod": "Confronta con il periodo precedente",
+      "yearAgo": "Confronta con un anno prima",
+      "asChart": "Mostra come grafico",
+      "asTable": "Mostra come tabella",
+      "relatedMetric": "Vedi anche: {metric}",
+      "continue": "Continua a cercare",
+      "settingLabel": "Suggerisci domande di approfondimento",
+      "settingHint": "Mostra fino a tre suggerimenti sotto l'ultima risposta del Coach."
+    },
+    "clarify": {
+      "cardLabel": "Il Coach ha una domanda",
+      "choicesLabel": "Risposte possibili",
+      "freeTextHint": "Puoi anche scrivere una tua risposta.",
+      "contextHint": "Scrivi la tua risposta qui sotto.",
+      "window": {
+        "last7days": "Ultimi 7 giorni",
+        "last30days": "Ultimi 30 giorni",
+        "last90days": "Ultimi 90 giorni",
+        "lastYear": "Ultimi 12 mesi",
+        "allTime": "Intero periodo"
+      }
+    },
+    "reuse": {
+      "caption": "Ecco gli stessi valori della mia ultima risposta, invariati."
+    }
   },
   "safety": {
     "floor": {

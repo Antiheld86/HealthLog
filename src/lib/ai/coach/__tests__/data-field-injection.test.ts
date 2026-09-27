@@ -225,9 +225,11 @@ describe("fence escape — a data field cannot close its container", () => {
  * assemblies actually route through the fence.
  */
 describe("fence call sites", () => {
-  it("the Coach chat route delegates SNAPSHOT assembly to the fenced builder", () => {
+  it("the Coach chat turn delegates SNAPSHOT assembly to the fenced builder", () => {
+    // The chat route hands the turn to the pipeline under
+    // `src/lib/ai/coach/turn/`; the prompt is assembled in its context step.
     const source = readFileSync(
-      resolve(process.cwd(), "src/app/api/insights/chat/route.ts"),
+      resolve(process.cwd(), "src/lib/ai/coach/turn/context.ts"),
       "utf-8",
     );
     expect(source).toContain("buildCoachProviderPrompts({");

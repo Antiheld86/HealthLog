@@ -28,8 +28,18 @@
  * partial unique index enforces this: the COACH one is `WHERE origin = 'COACH'`
  * so ENCOUNTER rows do not inherit it, and a similar index here would break
  * anyone who books two appointments.
+ *
+ * ── The practice address is read, not copied ────────────────────────────────
+ *
+ * The practitioner's address is encrypted at rest (`locationEncrypted`), so
+ * the reminder row carries no copy of it: `MeasurementReminder.location` stays
+ * NULL on every ENCOUNTER row, and a re-anchor clears a copy an earlier release
+ * wrote. The tick resolves the address from the visit's practitioner when it
+ * builds the push ({@link appointmentReminderAddress}), which also means an
+ * edit of the address reaches a nudge that is already booked.
  */
 import type { Prisma } from "@/generated/prisma/client";
+import { readPractitionerContact } from "@/lib/practitioners/dto";
 import {
   computeReminderNextDueAt,
   type ReminderScheduleInput,
@@ -41,8 +51,6 @@ export interface AppointmentReminderInput {
   occurredAt: Date;
   /** Used as the label when present; the kind label is the fallback. */
   practitionerName: string | null;
-  /** Copied onto the reminder's free-text `location`. */
-  practitionerLocation: string | null;
   /** The fallback label when the visit names no practice. */
   kindLabel: string;
 }
@@ -90,7 +98,6 @@ export async function mintAppointmentReminder(
       anchorDate: input.occurredAt,
       origin: "ENCOUNTER",
       notifyHour: appointmentNotifyHour(input.occurredAt, timezone),
-      location: input.practitionerLocation,
       // Stamped directly: see the note at the top of this file on why the
       // cadence helper cannot produce a one-shot's first slot.
       nextDueAt: input.occurredAt,
@@ -119,7 +126,8 @@ export async function reanchorAppointmentReminder(
       label: reminderLabel(input),
       anchorDate: input.occurredAt,
       notifyHour: appointmentNotifyHour(input.occurredAt, timezone),
-      location: input.practitionerLocation,
+      // No readable copy of the address; clears one an earlier release wrote.
+      location: null,
       nextDueAt: input.occurredAt,
       enabled: true,
       deletedAt: null,
@@ -176,5 +184,65 @@ export function appointmentNextDueAfterFiring(
     { ...reminder, lastSatisfiedAt: null },
     timezone,
     now,
+  );
+}
+
+/**
+ * What the reminder tick reads beside an ENCOUNTER row to name the practice
+ * address: the practitioner of the live visit that owns it.
+ */
+export const APPOINTMENT_REMINDER_ADDRESS_INCLUDE = {
+  encounters: {
+    where: { deletedAt: null },
+    select: {
+      userId: true,
+      practitioner: {
+        select: {
+          userId: true,
+          deletedAt: true,
+          location: true,
+          locationEncrypted: true,
+        },
+      },
+    },
+    take: 1,
+  },
+} as const;
+
+/**
+ * The address a reminder's push names. A checkup's own free-text `location`;
+ * for an appointment, the owning visit's practitioner address, decrypted
+ * here. Null when the visit names no live practitioner of the same account.
+ */
+export function appointmentReminderAddress(reminder: {
+  userId: string;
+  origin: string;
+  location: string | null;
+  encounters?: ReadonlyArray<{
+    userId: string;
+    practitioner: {
+      userId: string;
+      deletedAt: Date | null;
+      location: string | null;
+      locationEncrypted: Uint8Array | null;
+    } | null;
+  }>;
+}): string | null {
+  if (reminder.origin !== "ENCOUNTER") return reminder.location;
+  const visit = reminder.encounters?.[0];
+  const practitioner = visit?.practitioner;
+  if (
+    !visit ||
+    !practitioner ||
+    visit.userId !== reminder.userId ||
+    practitioner.userId !== reminder.userId ||
+    practitioner.deletedAt !== null
+  ) {
+    return null;
+  }
+  return readPractitionerContact(
+    practitioner.locationEncrypted,
+    practitioner.location,
+    "location",
   );
 }

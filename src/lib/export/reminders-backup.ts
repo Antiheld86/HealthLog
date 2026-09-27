@@ -189,7 +189,9 @@ export async function buildRemindersBackupSection(
       endsOn: row.endsOn?.toISOString() ?? null,
       origin: row.origin,
       notifyHour: row.notifyHour,
-      location: row.location,
+      // An appointment's address lives encrypted on its practitioner; a
+      // readable copy the backfill has not cleared yet is not carried.
+      location: row.origin === "ENCOUNTER" ? null : row.location,
       nextDueAt: row.nextDueAt?.toISOString() ?? null,
       lastSatisfiedAt: row.lastSatisfiedAt?.toISOString() ?? null,
       enabled: row.enabled,
@@ -327,7 +329,11 @@ export async function restoreRemindersData(
         // the schema default is what those rows were living as.
         origin: entry.origin ?? "VORSORGE",
         notifyHour: entry.notifyHour ?? 9,
-        location: entry.location ?? null,
+        // An appointment reminder resolves its address from the practitioner
+        // when it fires; a file from before that must not plant a readable
+        // copy of it back.
+        location:
+          entry.origin === "ENCOUNTER" ? null : (entry.location ?? null),
         // Verbatim, not recomputed: `nextDueAt` is server-authoritative and
         // the exported value IS what the server had resolved. Recomputing
         // here would move a due date the person had already been shown.

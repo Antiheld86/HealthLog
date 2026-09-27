@@ -9,12 +9,24 @@ import { useTranslations } from "@/lib/i18n/context";
 
 import { PlanProposalCards } from "./plan-proposal-card";
 import { ChatBubble } from "./chat-bubble";
+import { CoachFollowUpChips } from "./follow-up-chips";
+import { CoachMessageDatesProvider } from "./coach-results";
+import {
+  EMPTY_LIVE_TURN_KEYS,
+  messageRenderKey,
+  nextLiveTurnKeys,
+  type LiveTurnKeys,
+} from "./live-turn-keys";
 import type {
   CoachConversationDetailDTO,
   CoachOptimisticUserMessage,
   CoachStreamingMessage,
 } from "./use-coach";
-import type { CoachMessageDTO } from "@/lib/ai/coach/types";
+import type {
+  CoachClarification,
+  CoachFollowUp,
+  CoachMessageDTO,
+} from "@/lib/ai/coach/types";
 
 // v1.28.26 file-size split (pure code motion): the bubble renderer +
 // per-message actions live in `chat-bubble.tsx`, the read-aloud stack in
@@ -72,6 +84,54 @@ export interface MessageThreadProps {
    * resubmits it as a fresh turn. Omitted → the regenerate action is hidden.
    */
   onRegenerate?: (userText: string) => void;
+  /**
+   * v1.39.4 — a follow-up chip was tapped. Omitted → no chips are shown.
+   */
+  onFollowUp?: (followUp: CoachFollowUp, messageId: string) => void;
+}
+
+/**
+ * v1.39.4 — the open clarifying question: the latest assistant turn's
+ * choices, whether it is the just-settled streamed turn or the last
+ * persisted message. None while a turn is in flight, and none once the
+ * person has answered (their message is then the last one).
+ */
+export function latestClarification(
+  messages: CoachMessageDTO[],
+  streaming: CoachStreamingMessage | undefined,
+): { messageId: string; clarification: CoachClarification } | null {
+  if (streaming?.inProgress) return null;
+  if (streaming?.messageId && streaming.clarification) {
+    return {
+      messageId: streaming.messageId,
+      clarification: streaming.clarification,
+    };
+  }
+  const last = messages[messages.length - 1];
+  if (streaming?.messageId && streaming.messageId !== last?.id) return null;
+  if (last?.role !== "assistant") return null;
+  const clarification = last.metricSource?.clarification;
+  return clarification ? { messageId: last.id, clarification } : null;
+}
+
+/**
+ * v1.39.4 — the chips to offer, and the message that offered them: the
+ * latest assistant turn only, whether it is the just-settled streamed turn
+ * or the last persisted message. None while a turn is in flight.
+ */
+export function latestFollowUps(
+  messages: CoachMessageDTO[],
+  streaming: CoachStreamingMessage | undefined,
+): { messageId: string; followUps: CoachFollowUp[] } | null {
+  if (streaming?.inProgress) return null;
+  if (streaming?.messageId && streaming.followUps.length > 0) {
+    return { messageId: streaming.messageId, followUps: streaming.followUps };
+  }
+  const last = messages[messages.length - 1];
+  if (streaming?.messageId && streaming.messageId !== last?.id) return null;
+  if (last?.role !== "assistant") return null;
+  const followUps = last.metricSource?.followUps ?? [];
+  return followUps.length > 0 ? { messageId: last.id, followUps } : null;
 }
 
 /**
@@ -156,6 +216,42 @@ export const COACH_SCROLLBAR = cn(
   "hover:[&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--primary)_45%,transparent)]",
 );
 
+/**
+ * The wrapper every assistant turn renders in, streaming or persisted, so a
+ * turn keeps one element through the swap. While it streams it is the live
+ * region: role=log + aria-live=polite so screen-reader users hear the prose
+ * as tokens land (aria-relevant=text limits announcements to the streamed
+ * content; additions covers the bubble-mount edge case), with a soft
+ * fade/slide-in so the hand-off from the thinking beat reads as one motion.
+ */
+function AssistantTurn({
+  turnKey,
+  live,
+  children,
+}: {
+  turnKey: string;
+  live: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      data-slot="coach-assistant-turn"
+      data-turn-key={turnKey}
+      {...(live
+        ? {
+            role: "log",
+            "aria-live": "polite" as const,
+            "aria-relevant": "additions text" as const,
+            className:
+              "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300",
+          }
+        : {})}
+    >
+      {children}
+    </div>
+  );
+}
+
 function isPinnedToBottom(el: HTMLElement, slack = 64): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= slack;
 }
@@ -167,6 +263,7 @@ export function MessageThread({
   emptyHint,
   interleaved,
   onRegenerate,
+  onFollowUp,
 }: MessageThreadProps) {
   const { t } = useTranslations();
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -184,45 +281,29 @@ export function MessageThread({
     () => conversation?.messages ?? [],
     [conversation?.messages],
   );
+  // v1.39.4 — when each message was written, so a table copied from an
+  // earlier answer can name that answer's date.
+  const messageDates = useMemo(
+    () => new Map(messages.map((m) => [m.id, m.createdAt])),
+    [messages],
+  );
   // v1.16.5 — locally-rendered guided bubbles (see `placeInterleaved`).
   const interleavedItems = interleaved ?? [];
-  // v1.4.20.1 — once the SSE stream emits `done`, the route's
-  // invalidate-then-refetch pulls the persisted assistant message into
-  // `conversation.messages`. The streaming bubble was still rendering
-  // because the hook keeps `streaming.content` populated to support
-  // the in-flight render path; the result was two assistant bubbles
-  // side by side until the next `send` reset the streaming state.
-  // Suppress the streaming bubble at render time as soon as the
-  // persisted twin lands — comparing on `messageId` keeps the
-  // transition seamless while never accidentally hiding an in-flight
-  // bubble (during streaming `messageId` is null).
-  // v1.4.22 W5 reconcile (Code-MED-3) — streaming/persisted-twin
-  // race. On slow connections SSE `done` fires before the
-  // invalidate-refetch resolves; the persisted twin lands while the
-  // streaming bubble is still painted, producing a 200-500ms
-  // duplicate render. Hide the persisted twin (matched on
-  // streaming.messageId) for a 150ms grace window after it first
-  // appears so the streaming bubble stays alone until the streaming
-  // state cleans up naturally on the next `send`.
-  const [graceWindow, setGraceWindow] = useState(false);
-  const lastPersistedIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    const persistedId = streaming?.messageId ?? null;
-    if (
-      persistedId &&
-      persistedId !== lastPersistedIdRef.current &&
-      messages.some((m) => m.id === persistedId)
-    ) {
-      lastPersistedIdRef.current = persistedId;
-      setGraceWindow(true);
-      const handle = setTimeout(() => setGraceWindow(false), 150);
-      return () => clearTimeout(handle);
-    }
-  }, [streaming?.messageId, messages]);
-  const suppressedTwinId = graceWindow ? streaming?.messageId : null;
+  // v1.39.4 — one key per turn from its first streamed frame to its
+  // persisted copy (`live-turn-keys.ts`). The persisted twin renders under
+  // the key the turn streamed under, in the same place and wrapper, so React
+  // keeps the one bubble and the reader's state in it. The streaming copy
+  // steps aside the moment the twin is in the history; with a shared key the
+  // two never render side by side.
+  // Derived from the previous render's keys (React's "store information
+  // from previous renders" pattern): the update is idempotent, so it settles
+  // after one extra render and never loops.
+  const [storedLiveKeys, setLiveKeys] =
+    useState<LiveTurnKeys>(EMPTY_LIVE_TURN_KEYS);
+  const liveKeys = nextLiveTurnKeys(storedLiveKeys, streaming);
+  if (liveKeys !== storedLiveKeys) setLiveKeys(liveKeys);
 
   const streamingPersisted =
-    !graceWindow &&
     streaming?.messageId != null &&
     messages.some((m) => m.id === streaming.messageId);
   const streamingActive =
@@ -252,6 +333,8 @@ export function MessageThread({
     messages,
     optimisticActive && optimisticUser ? optimisticUser.content : null,
   );
+
+  const chips = latestFollowUps(messages, streaming);
 
   // Track scroll position so we don't yank the viewport when the user
   // is browsing earlier turns.
@@ -333,132 +416,152 @@ export function MessageThread({
   }
 
   return (
-    <div
-      ref={scrollerRef}
-      data-slot="coach-message-thread"
-      className={cn(
-        // v1.18.6.1 — `min-h-0 flex-1` (not `h-full`) so the scroll region
-        // resolves its height from the flex parent rather than a 100%-of-auto
-        // chain that let the thread grow instead of scroll.
-        // v1.18.7 — calmer vertical rhythm (gap-6) and more generous top/
-        // bottom breathing room so the conversation reads like a document,
-        // not a chat log packed against the chrome.
-        "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 py-6 sm:px-6",
-        // v1.18.6 (CCH-01) / v1.18.7 — on the wide page surface an edge-to-
-        // edge thread sprawled the prose past a readable measure. Centre the
-        // content on a narrower, calmer Claude/ChatGPT-like column
-        // (`max-w-2xl`) via an `mx-auto` inner gutter; the scrollbar still
-        // rides the surface edge. The drawer surface is already narrow, so
-        // the cap only bites on the wide page surface.
-        "[&>*]:mx-auto [&>*]:w-full [&>*]:max-w-2xl",
-        "scroll-smooth",
-        // v1.18.7 — thin, rounded, subtle scrollbar (WebKit + Firefox),
-        // component-scoped via Tailwind arbitrary variants so globals.css
-        // stays untouched. Replaces the default boxy/angular track.
-        COACH_SCROLLBAR,
-      )}
-    >
-      {messages.map((m, idx) => {
-        // v1.4.22 W5 reconcile (Code-MED-3) — suppress the persisted
-        // twin during the 150ms grace window so the streaming bubble
-        // stays alone on slow connections.
-        if (m.id === suppressedTwinId) return null;
-        // v1.16.5 — a guided question renders directly above the user
-        // message that answered it.
-        const guidedBefore = placement.before.get(m.id);
-        // v1.22 — "Try again": resolve the user message that produced this
-        // assistant reply (the nearest preceding user turn) so the surface
-        // can resubmit it. Null when there is none → no regenerate action.
-        let precedingUserContent: string | null = null;
-        if (m.role === "assistant" && onRegenerate) {
-          for (let j = idx - 1; j >= 0; j--) {
-            if (messages[j].role === "user") {
-              precedingUserContent = messages[j].content;
-              break;
-            }
-          }
-        }
-        return (
-          <Fragment key={m.id}>
-            {guidedBefore?.node}
-            <ChatBubble
-              role={m.role}
-              content={m.content}
-              metricSource={m.metricSource}
-              providerType={m.providerType}
-              messageId={m.id}
-              tokensUsed={m.tokensUsed}
-              model={m.model}
-              createdAt={m.createdAt}
-              onRegenerate={
-                precedingUserContent !== null && onRegenerate
-                  ? () => onRegenerate(precedingUserContent as string)
-                  : undefined
+    <CoachMessageDatesProvider dates={messageDates}>
+      <div
+        ref={scrollerRef}
+        data-slot="coach-message-thread"
+        className={cn(
+          // v1.18.6.1 — `min-h-0 flex-1` (not `h-full`) so the scroll region
+          // resolves its height from the flex parent rather than a 100%-of-auto
+          // chain that let the thread grow instead of scroll.
+          // v1.18.7 — calmer vertical rhythm (gap-6) and more generous top/
+          // bottom breathing room so the conversation reads like a document,
+          // not a chat log packed against the chrome.
+          "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 py-6 sm:px-6",
+          // v1.18.6 (CCH-01) / v1.18.7 — on the wide page surface an edge-to-
+          // edge thread sprawled the prose past a readable measure. Centre the
+          // content on a narrower, calmer Claude/ChatGPT-like column
+          // (`max-w-2xl`) via an `mx-auto` inner gutter; the scrollbar still
+          // rides the surface edge. The drawer surface is already narrow, so
+          // the cap only bites on the wide page surface.
+          "[&>*]:mx-auto [&>*]:w-full [&>*]:max-w-2xl",
+          "scroll-smooth",
+          // v1.18.7 — thin, rounded, subtle scrollbar (WebKit + Firefox),
+          // component-scoped via Tailwind arbitrary variants so globals.css
+          // stays untouched. Replaces the default boxy/angular track.
+          COACH_SCROLLBAR,
+        )}
+      >
+        {[
+          ...messages.map((m, idx) => {
+            // v1.16.5 — a guided question renders directly above the user
+            // message that answered it.
+            const guidedBefore = placement.before.get(m.id);
+            // v1.22 — "Try again": resolve the user message that produced this
+            // assistant reply (the nearest preceding user turn) so the surface
+            // can resubmit it. Null when there is none → no regenerate action.
+            let precedingUserContent: string | null = null;
+            if (m.role === "assistant" && onRegenerate) {
+              for (let j = idx - 1; j >= 0; j--) {
+                if (messages[j].role === "user") {
+                  precedingUserContent = messages[j].content;
+                  break;
+                }
               }
+            }
+            const bubble = (
+              <ChatBubble
+                role={m.role}
+                content={m.content}
+                metricSource={m.metricSource}
+                conversationId={conversation?.id ?? null}
+                providerType={m.providerType}
+                messageId={m.id}
+                tokensUsed={m.tokensUsed}
+                model={m.model}
+                createdAt={m.createdAt}
+                // The turn that just streamed keeps its live tables, so the
+                // swap to the persisted copy does not refetch and remount them.
+                {...(m.id === streaming?.messageId &&
+                streaming.results.length > 0
+                  ? { results: streaming.results }
+                  : {})}
+                onRegenerate={
+                  precedingUserContent !== null && onRegenerate
+                    ? () => onRegenerate(precedingUserContent as string)
+                    : undefined
+                }
+              />
+            );
+            const key = messageRenderKey(liveKeys, m.id);
+            return (
+              <Fragment key={key}>
+                {guidedBefore?.node}
+                {m.role === "assistant" ? (
+                  <AssistantTurn turnKey={key} live={false}>
+                    {bubble}
+                  </AssistantTurn>
+                ) : (
+                  bubble
+                )}
+              </Fragment>
+            );
+          }),
+          // v1.16.5 — guided question whose answer is still optimistic-only.
+          ...placement.beforeOptimistic.map((i) => (
+            <Fragment key={i.key}>{i.node}</Fragment>
+          )),
+          // v1.4.25 W5 — the optimistic user bubble sits between the
+          // persisted history and the streaming assistant placeholder, so
+          // the visible order matches the person's mental model. The send
+          // hook drops it once the persisted twin lands.
+          optimisticActive && optimisticUser ? (
+            <ChatBubble
+              key={optimisticUser.localId}
+              role="user"
+              content={optimisticUser.content}
             />
-          </Fragment>
-        );
-      })}
-      {/* v1.4.25 W5 — optimistic user bubble surfaces between the
-          persisted history and the streaming assistant placeholder so
-          the visible order matches the user's mental model. The
-          send-hook drops it as soon as the SSE `done` frame fires +
-          the invalidate-refetch lands the persisted twin. */}
-      {/* v1.16.5 — guided question whose answer is still optimistic-only. */}
-      {placement.beforeOptimistic.map((i) => (
-        <Fragment key={i.key}>{i.node}</Fragment>
-      ))}
-      {optimisticActive && optimisticUser && (
-        <ChatBubble
-          key={optimisticUser.localId}
-          role="user"
-          content={optimisticUser.content}
-        />
-      )}
-      {streamingActive && streaming && (
-        // role=log + aria-live=polite so screen-reader users hear the
-        // assistant prose announce as tokens land. aria-relevant=text
-        // limits announcements to the streamed content; additions
-        // covers the bubble-mount edge case.
-        <div
-          role="log"
-          aria-live="polite"
-          aria-relevant="additions text"
-          // v1.18.7 — a soft fade/slide-in on the assistant turn so the
-          // hand-off from the thinking beat to the first streamed tokens
-          // reads as one continuous motion, not a hard swap. v1.18.9 — the
-          // per-word fade now lives in <StreamedProse>; this stays a light
-          // container fade for the disclosure → prose transition.
-          className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300"
-        >
-          <ChatBubble
-            role="assistant"
-            content={streaming.content}
-            metricSource={streaming.metricSource}
-            suggestion={streaming.suggestion}
-            suggestedAction={streaming.suggestedAction}
-            providerType={streaming.inProgress ? "streaming" : null}
-            inProgress={streaming.inProgress}
-            errorCode={streaming.errorCode}
-            // v1.18.9 — live word-fade + the just-landed token footer.
-            streaming
-            usage={streaming.usage}
+          ) : null,
+          streamingActive && streaming ? (
+            // Same key, fragment and wrapper as its persisted copy above.
+            <Fragment key={liveKeys.current ?? "coach-turn-live"}>
+              {null}
+              <AssistantTurn
+                turnKey={liveKeys.current ?? "coach-turn-live"}
+                live
+              >
+                <ChatBubble
+                  role="assistant"
+                  content={streaming.content}
+                  metricSource={streaming.metricSource}
+                  suggestion={streaming.suggestion}
+                  suggestedAction={streaming.suggestedAction}
+                  steps={streaming.steps}
+                  results={streaming.results}
+                  providerType={streaming.inProgress ? "streaming" : null}
+                  inProgress={streaming.inProgress}
+                  errorCode={streaming.errorCode}
+                  // v1.18.9 — live word-fade + the just-landed token footer.
+                  streaming
+                  usage={streaming.usage}
+                />
+              </AssistantTurn>
+            </Fragment>
+          ) : null,
+        ]}
+        {/* v1.39.4 — follow-up chips under the latest assistant turn only. */}
+        {onFollowUp && chips ? (
+          <CoachFollowUpChips
+            followUps={chips.followUps}
+            messageId={chips.messageId}
+            disabled={!!streaming?.inProgress}
+            onSelect={onFollowUp}
           />
-        </div>
-      )}
-      {/* v1.16.5 — thread tail: the current guided question and/or the
+        ) : null}
+        {/* v1.16.5 — thread tail: the current guided question and/or the
           closing summary follow the last completed turn. */}
-      {placement.tail.map((i) => (
-        <Fragment key={i.key}>{i.node}</Fragment>
-      ))}
-      {/* Plan-proposal confirm cards for THIS conversation. The extractor
+        {placement.tail.map((i) => (
+          <Fragment key={i.key}>{i.node}</Fragment>
+        ))}
+        {/* Plan-proposal confirm cards for THIS conversation. The extractor
           runs after the turn (memory-refresh worker), so the block appears at
           the thread tail once the proposal lands rather than under a specific
           bubble; the component itself slow-polls and renders nothing while
           the conversation has no open proposal. */}
-      {conversation ? (
-        <PlanProposalCards conversationId={conversation.id} />
-      ) : null}
-    </div>
+        {conversation ? (
+          <PlanProposalCards conversationId={conversation.id} />
+        ) : null}
+      </div>
+    </CoachMessageDatesProvider>
   );
 }

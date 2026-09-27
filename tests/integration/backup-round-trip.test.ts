@@ -63,6 +63,10 @@ import {
   encryptWaveformToBytes,
 } from "@/lib/withings/ecg-waveform-codec";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
+import {
+  getMedicationCategories,
+  setMedicationCategory,
+} from "@/lib/medication-category";
 import { UNREADABLE_EXPORT_MARKER } from "@/lib/export/unreadable-marker";
 import { decryptNoteFromBytes } from "@/lib/labs/store";
 import { decryptContextFromBytes } from "@/lib/labs/biomarker-store";
@@ -117,6 +121,46 @@ const METRIC_SEALED_NOTE = "right hand, rested";
 const COACH_USER_TURN = "my readings look higher this week, is that real?";
 const COACH_ASSISTANT_TURN =
   "the last seven mornings average 4 mmHg above the fortnight before";
+/** The table of values the assistant turn read: ciphertext at rest. */
+const COACH_RESULTS_JSON = JSON.stringify([
+  {
+    ref: "r1",
+    source: {
+      tool: "get_metric_series",
+      domain: "bp",
+      window: "last7days",
+      period: "current",
+      granularity: "day",
+    },
+    shape: "timeSeries",
+    titleKey: "coach.result.title.metricByPeriod",
+    title: "Blood pressure by day",
+    rowCount: 2,
+    chartKind: "line",
+    displayed: true,
+    columns: [
+      {
+        key: "period",
+        kind: "period",
+        labelKey: "coach.result.column.day",
+        label: "Day",
+      },
+      {
+        key: "sys",
+        kind: "number",
+        labelKey: "coach.result.column.systolic",
+        label: "Systolic",
+        unit: "mmHg",
+      },
+    ],
+    rows: [
+      ["2026-07-19", 131],
+      ["2026-07-20", null],
+    ],
+    truncated: false,
+    chart: { kind: "line", x: "period", series: ["sys"] },
+  },
+]);
 const DOSE_CHANGE_NOTE = "titration note, encrypted at rest";
 const EXTRACTED_FACT_SPAN = "Ferritin  91 ng/mL   (30 - 400)";
 const SIDE_EFFECT_NOTE = "nausea for two hours after the evening dose";
@@ -926,6 +970,7 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
           {
             role: "assistant",
             encryptedContent: encryptToBytes(COACH_ASSISTANT_TURN),
+            resultsEncrypted: encryptToBytes(COACH_RESULTS_JSON),
             providerType: "anthropic",
             model: "claude-opus-5",
             tokensUsed: 812,
@@ -1206,14 +1251,16 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
   // coordinates and different weather, and the trip day's reading only makes
   // sense next to the period that explains it: with the period gone, the next
   // refresh re-resolves 2026-06-15 to Berlin and upserts Berlin's weather over
-  // it. The assertion after the restore reads the two back TOGETHER.
+  // it. The assertion after the restore reads the two back TOGETHER. The
+  // coordinates are at 1 decimal, the precision the app stores since v1.39.4;
+  // a restore rounds anything finer, so finer values would not round-trip.
   await prisma.environmentTravelLocation.create({
     data: {
       userId: OWNER_ID,
       startDate: "2026-06-10",
       endDate: "2026-06-20",
-      lat: 41.3874,
-      lon: 2.1686,
+      lat: 41.4,
+      lon: 2.2,
       label: "Barcelona",
     },
   });
@@ -1222,8 +1269,8 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       {
         userId: OWNER_ID,
         date: "2026-06-15",
-        lat: 41.3874,
-        lon: 2.1686,
+        lat: 41.4,
+        lon: 2.2,
         locationLabel: "Barcelona",
         source: "TRAVEL",
         tempMin: 19.4,
@@ -1243,8 +1290,8 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       {
         userId: OWNER_ID,
         date: "2026-07-01",
-        lat: 52.52,
-        lon: 13.405,
+        lat: 52.5,
+        lon: 13.4,
         locationLabel: "Berlin",
         source: "HOME",
         tempMin: 13.1,
@@ -1578,6 +1625,9 @@ describe("every model the plan claims two-ended survives a real restore", () => 
           content: decryptFromBytes(message.encryptedContent),
           model: message.model,
           tokensUsed: message.tokensUsed,
+          results: message.resultsEncrypted
+            ? decryptFromBytes(message.resultsEncrypted)
+            : null,
         })),
         attachments: thread.attachments.map((a) => a.documentId),
       })),
@@ -1595,12 +1645,14 @@ describe("every model the plan claims two-ended survives a real restore", () => 
             content: COACH_USER_TURN,
             model: null,
             tokensUsed: null,
+            results: null,
           },
           {
             role: "assistant",
             content: COACH_ASSISTANT_TURN,
             model: "claude-opus-5",
             tokensUsed: 812,
+            results: COACH_RESULTS_JSON,
           },
         ],
         attachments: [],
@@ -1617,6 +1669,7 @@ describe("every model the plan claims two-ended survives a real restore", () => 
             content: "What does the ferritin mean?",
             model: null,
             tokensUsed: null,
+            results: null,
           },
         ],
         attachments: [vaultDocument.id],
@@ -2394,8 +2447,8 @@ describe("every model the plan claims two-ended survives a real restore", () => 
     ).toEqual([
       {
         date: "2026-06-15",
-        lat: 41.3874,
-        lon: 2.1686,
+        lat: 41.4,
+        lon: 2.2,
         locationLabel: "Barcelona",
         source: "TRAVEL",
         tempMean: 23.6,
@@ -2406,8 +2459,8 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       },
       {
         date: "2026-07-01",
-        lat: 52.52,
-        lon: 13.405,
+        lat: 52.5,
+        lon: 13.4,
         locationLabel: "Berlin",
         source: "HOME",
         tempMean: 17.9,
@@ -2697,6 +2750,143 @@ describe("every model the plan claims two-ended survives a real restore", () => 
    * side by side: a dropped row and a nulled pointer, each named in the report,
    * and a restore that still answers 200.
    */
+  /**
+   * The Coach's stored tables through a portable file.
+   *
+   * A disaster-recovery file carries them as ciphertext (the round trip at
+   * the top of this file). A portable file has to carry them readable, like
+   * the prose they sit beside, and the restore has to seal them again under
+   * the target's key. A restore that dropped the readable JSON would bring
+   * the thread back with every answer's table missing and nothing to say so.
+   */
+  it.each(["disaster-recovery", "portable-export"] as const)(
+    "carries each medication's category through a %s round trip",
+    async (purpose) => {
+      const prisma = getPrismaClient();
+      await seedAdminSession(prisma);
+      await createOwner(prisma);
+      const thyroid = await prisma.medication.create({
+        data: { userId: OWNER_ID, name: "Levothyroxine", dose: "50 µg" },
+      });
+      const mood = await prisma.medication.create({
+        data: { userId: OWNER_ID, name: "Sertraline", dose: "50 mg" },
+      });
+      await prisma.medication.create({
+        data: { userId: OWNER_ID, name: "Unfiled", dose: "1 tab" },
+      });
+      await setMedicationCategory(thyroid.id, "THYROID");
+      await setMedicationCategory(mood.id, "MENTAL_HEALTH");
+
+      const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
+        purpose,
+      });
+      const exported = Object.fromEntries(
+        (payload.medications as Array<{ name: string; category?: string }>).map(
+          (m) => [m.name, m.category],
+        ),
+      );
+      expect(exported).toEqual({
+        Levothyroxine: "THYROID",
+        Sertraline: "MENTAL_HEALTH",
+        Unfiled: "OTHER",
+      });
+
+      await prisma.user.delete({ where: { id: OWNER_ID } });
+      await createOwner(prisma);
+      const backup = await prisma.dataBackup.create({
+        data: {
+          userId: OWNER_ID,
+          type: "TWO_ENDED_ROUND_TRIP",
+          data: encrypt(JSON.stringify(payload)),
+        },
+      });
+      const response = await POST(
+        new Request(`http://localhost/api/admin/backups/${backup.id}/restore`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ confirm: "RESTORE" }),
+        }) as never,
+        { params: Promise.resolve({ id: backup.id }) },
+      );
+      expect(response.status, JSON.stringify(await response.json())).toBe(200);
+
+      const restored = await prisma.medication.findMany({
+        where: { userId: OWNER_ID },
+        select: { id: true, name: true },
+      });
+      const categories = await getMedicationCategories(
+        restored.map((m) => m.id),
+      );
+      expect(
+        Object.fromEntries(restored.map((m) => [m.name, categories[m.id]])),
+      ).toEqual({
+        Levothyroxine: "THYROID",
+        Sertraline: "MENTAL_HEALTH",
+        Unfiled: "OTHER",
+      });
+    },
+  );
+
+  it("carries a turn's tables readable in a portable file and seals them again on restore", async () => {
+    const prisma = getPrismaClient();
+    await seedAdminSession(prisma);
+    await createOwner(prisma);
+    await prisma.coachConversation.create({
+      data: {
+        userId: OWNER_ID,
+        titleEncrypted: encryptToBytes("How is my blood pressure trending?"),
+        documentScoped: false,
+        messages: {
+          create: [
+            {
+              role: "assistant",
+              encryptedContent: encryptToBytes(COACH_ASSISTANT_TURN),
+              resultsEncrypted: encryptToBytes(COACH_RESULTS_JSON),
+              createdAt: AT("2026-07-20T09:59:00.000Z"),
+            },
+          ],
+        },
+      },
+    });
+
+    const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
+      purpose: "portable-export",
+    });
+    const { coachConversations } = payload as {
+      coachConversations: Array<{ messages: Array<Record<string, unknown>> }>;
+    };
+    const [turn] = coachConversations[0].messages;
+    expect(turn).toMatchObject({ resultsJson: COACH_RESULTS_JSON });
+    expect(turn).not.toHaveProperty("resultsEncrypted");
+
+    await prisma.user.delete({ where: { id: OWNER_ID } });
+    await createOwner(prisma);
+    const backup = await prisma.dataBackup.create({
+      data: {
+        userId: OWNER_ID,
+        type: "TWO_ENDED_ROUND_TRIP",
+        data: encrypt(JSON.stringify(payload)),
+      },
+    });
+    const response = await POST(
+      new Request(`http://localhost/api/admin/backups/${backup.id}/restore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: "RESTORE" }),
+      }) as never,
+      { params: Promise.resolve({ id: backup.id }) },
+    );
+    expect(response.status, JSON.stringify(await response.json())).toBe(200);
+
+    const restored = await prisma.coachMessage.findFirstOrThrow({
+      where: { conversation: { userId: OWNER_ID } },
+    });
+    expect(restored.resultsEncrypted).not.toBeNull();
+    expect(decryptFromBytes(restored.resultsEncrypted!)).toBe(
+      COACH_RESULTS_JSON,
+    );
+  });
+
   it("drops and names a filing and a commitment a truncated file cannot resolve", async () => {
     const prisma = getPrismaClient();
     await seedAdminSession(prisma);

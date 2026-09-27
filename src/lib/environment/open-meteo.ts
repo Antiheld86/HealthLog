@@ -40,7 +40,7 @@ export const OPEN_METEO_ATTRIBUTION = "Weather data by Open-Meteo.com";
 
 /** One geocoding match — coarse city placement for the home-location picker. */
 export interface GeocodeResult {
-  /** Rounded coarse latitude (2 dp — ~1 km, the privacy floor). */
+  /** Rounded coarse latitude (1 dp, about 11 km, the privacy floor). */
   lat: number;
   /** Rounded coarse longitude (2 dp). */
   lon: number;
@@ -68,9 +68,16 @@ export interface DailyEnvironmentObservation {
   weatherCode: number | null;
 }
 
-/** Round a coordinate to 2 decimals (~1 km) — the coarse-location privacy floor. */
+/**
+ * Round a coordinate to 1 decimal, the coarse-location privacy floor: about
+ * 11 km north-south and 7 km east-west at 50° N, the size of a town or a
+ * city district rather than a street. The weather reanalysis behind the
+ * archive is gridded at 9 to 25 km, so a finer value buys no better weather.
+ * Every stored coordinate of this module goes through here (v1.39.4; it was
+ * 2 decimals, about 1 km, before).
+ */
 export function roundCoarse(value: number): number {
-  return Math.round(value * 100) / 100;
+  return Math.round(value * 10) / 10;
 }
 
 function firstNumber(value: unknown): number | null {

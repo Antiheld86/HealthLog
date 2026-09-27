@@ -3,12 +3,12 @@
 import { useMemo, useState } from "react";
 import {
   Bell,
-  ChevronsLeft,
-  ChevronsRight,
   LogOut,
   Monitor,
   Moon,
   MoreVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   Shield,
   Sun,
@@ -52,7 +52,29 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const STORAGE_KEY = "healthlog-sidebar-collapsed";
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "healthlog-sidebar-collapsed";
+
+/**
+ * The stored collapse choice: `true` / `false`, or `null` when this browser
+ * has none (or storage is unavailable), which lets the viewport default decide.
+ */
+export function readSidebarCollapsedPref(): boolean | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+    return stored === null ? null : stored === "true";
+  } catch {
+    return null;
+  }
+}
+
+export function writeSidebarCollapsedPref(collapsed: boolean): void {
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+  } catch {
+    // Private mode or blocked storage: the choice lasts for this page only.
+  }
+}
 
 function getInitials(name: string): string {
   return name
@@ -280,6 +302,57 @@ function SidebarUserSection({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+/**
+ * The sidebar's collapse / expand control, drawn as a footer nav row.
+ *
+ * It sits at the bottom of the sidebar, directly above the footer entries
+ * (Admin, then Settings), where the pointer already is when someone reaches
+ * for the account utilities. Expanded, the row shows its label beside the
+ * icon; collapsed, the label stays in the accessibility tree only and the
+ * rail tooltip names the action, like every other icon in the rail. The
+ * `aria-label` always names what a press does next.
+ */
+export function SidebarCollapseToggle({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslations();
+  const Icon = collapsed ? PanelLeftOpen : PanelLeftClose;
+  const actionLabel = t(
+    collapsed ? "nav.expandSidebarLabel" : "nav.collapseSidebarLabel",
+  );
+  const button = (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={actionLabel}
+      aria-expanded={!collapsed}
+      data-slot="sidebar-collapse-toggle"
+      className={cn(
+        "text-muted-foreground hover:text-foreground hover:bg-accent focus-visible:ring-ring/50 flex w-full items-center rounded-lg text-sm font-medium transition-colors outline-none focus-visible:ring-[3px]",
+        collapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5",
+      )}
+    >
+      <Icon aria-hidden="true" className="size-4 shrink-0" />
+      <span className={collapsed ? "sr-only" : undefined}>
+        {t(collapsed ? "nav.expandSidebar" : "nav.collapseSidebar")}
+      </span>
+    </button>
+  );
+  if (!collapsed) return button;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="right" sideOffset={8}>
+        {actionLabel}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function SidebarNav() {
   const pathname = usePathname();
   const { t } = useTranslations();
@@ -340,25 +413,15 @@ export function SidebarNav() {
   // mismatch, because the sidebar is only CSS-hidden below `md` and still
   // hydrates its DOM there.
   const tabletOrBelow = useIsMobile("lg");
-  const [collapsedPref, setCollapsedPref] = useState<boolean | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored === null ? null : stored === "true";
-    } catch {
-      return null;
-    }
-  });
+  const [collapsedPref, setCollapsedPref] = useState<boolean | null>(
+    readSidebarCollapsedPref,
+  );
   const collapsed = mounted ? (collapsedPref ?? tabletOrBelow) : false;
 
   function toggleCollapsed() {
     const next = !collapsed;
     setCollapsedPref(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, String(next));
-    } catch {
-      // Ignore storage errors
-    }
+    writeSidebarCollapsedPref(next);
   }
 
   // v1.17.1 (F-1 residue) — the sidebar footer utility links derive from
@@ -486,39 +549,12 @@ export function SidebarNav() {
     );
   }
 
-  function renderCollapseToggle(className?: string) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            onClick={toggleCollapsed}
-            className={cn(
-              "text-muted-foreground hover:text-foreground hover:bg-accent z-20 rounded-md p-1 transition-colors",
-              className,
-            )}
-            aria-label={t("nav.collapseSidebar")}
-            aria-expanded={!collapsed}
-          >
-            {collapsed ? (
-              <ChevronsRight className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronsLeft className="h-3.5 w-3.5" />
-            )}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="right" sideOffset={8}>
-          {t("nav.collapseSidebar")}
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
   return (
     <TooltipProvider delayDuration={0}>
       <aside
         aria-label={t("nav.sidebar")}
         className={cn(
-          "bg-sidebar border-sidebar-border relative hidden h-full flex-shrink-0 border-r transition-[width] duration-200 md:flex md:flex-col",
+          "bg-sidebar border-sidebar-border relative hidden h-full flex-shrink-0 border-r transition-[width] duration-200 motion-reduce:transition-none md:flex md:flex-col",
           collapsed ? "w-16" : "w-64",
         )}
       >
@@ -554,22 +590,6 @@ export function SidebarNav() {
           aria-label={t("nav.mainNavigation")}
           className={cn("flex-1 overflow-y-auto", collapsed ? "p-1.5" : "p-3")}
         >
-          {collapsed ? (
-            <div className="mb-1 flex justify-center">
-              {renderCollapseToggle()}
-            </div>
-          ) : (
-            // v1.4.33 IW7 — drop the "Home" group label. The sidebar
-            // has exactly one nav group, and the first entry is
-            // already "Dashboard" pointing to `/`, so the previous
-            // "HOME / Dashboard" pairing read as if there were two
-            // separate destinations for the homepage. The collapse
-            // toggle stays anchored to the top-right of the strip so
-            // the visual rhythm of the sidebar header is unchanged.
-            <div className="relative mb-1 flex h-5 items-center justify-end">
-              {renderCollapseToggle()}
-            </div>
-          )}
           <div className="space-y-1">
             {visibleNavItems.map((item) => {
               const isActive = isNavDestinationActive(
@@ -629,8 +649,14 @@ export function SidebarNav() {
 
         {/* Bottom utility links — the shared utility tail (minus
             Notifications, which lives in the avatar menu) with the
-            role-gated Admin entry inserted before Settings. */}
+            role-gated Admin entry inserted before Settings. The collapse
+            control heads the group, so it sits directly above Admin for an
+            administrator and directly above Settings for everyone else. */}
         <div className={cn("space-y-1 pb-1", collapsed ? "px-1.5" : "px-3")}>
+          <SidebarCollapseToggle
+            collapsed={collapsed}
+            onToggle={toggleCollapsed}
+          />
           {footerUtilityItems
             .filter((item) => !isSettingsUtilityDestination(item))
             .map((item) => renderUtilityLink(item))}

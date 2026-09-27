@@ -418,11 +418,21 @@ async function main() {
   }
 
   // ───── Coach (Bytes columns) ─────
-  // "encryptedContent" "summaryEncrypted" "titleEncrypted" "factEncrypted"
+  // "encryptedContent" "resultsEncrypted" "summaryEncrypted" "titleEncrypted"
+  // "factEncrypted"
   results.push(
     await rotateBytesColumn(
       "CoachMessage",
       "encryptedContent",
+      prisma.coachMessage,
+    ),
+  );
+  // v1.39.4 — the tables of values a turn read. NULL on every turn without a
+  // table, which `rotateBytesColumn` skips.
+  results.push(
+    await rotateBytesColumn(
+      "CoachMessage",
+      "resultsEncrypted",
       prisma.coachMessage,
     ),
   );
@@ -699,6 +709,34 @@ async function main() {
       "noteEncrypted",
       prisma.practitioner,
     ),
+  );
+  // v1.39.4 — the practice's phone number and address. NULL on a field the
+  // person left empty and on a row the free-text backfill has not reached
+  // yet; `rotateBytesColumn` skips both.
+  results.push(
+    await rotateBytesColumn(
+      "Practitioner",
+      "phoneEncrypted",
+      prisma.practitioner,
+    ),
+  );
+  results.push(
+    await rotateBytesColumn(
+      "Practitioner",
+      "locationEncrypted",
+      prisma.practitioner,
+    ),
+  );
+
+  // ───── v1.39.4 workout GPS track (Bytes, binary2, batched) ─────
+  // One sealed binary value per route, labelled for its purpose. Walked
+  // through the registry so the binary codec and the label are honoured, in
+  // id-cursor batches because a track can be close to a megabyte. NULL on a
+  // row the free-text backfill has not reached yet, which the walk skips.
+  results.push(
+    await rotateRegistryColumn("WorkoutRoute", "geometryEncrypted", {
+      workoutRoute: prisma.workoutRoute,
+    } as unknown as CorpusClient),
   );
 
   // ───── v1.39.3 custom-metric reading note (Bytes column) ─────

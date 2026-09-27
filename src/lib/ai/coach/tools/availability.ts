@@ -484,6 +484,7 @@ export function subjectForTool(
 ): CoachAvailabilitySubject | null {
   switch (tool) {
     case "get_metric_series":
+    case "get_metric_table":
       return metric ? subjectForMetricSource(metric) : null;
     case "get_glucose_panel":
       return subjectForMetricSource("glucose");

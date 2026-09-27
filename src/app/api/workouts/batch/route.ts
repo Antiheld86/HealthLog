@@ -85,6 +85,7 @@ import {
   type UnstableExternalIdShape,
 } from "@/lib/validations/external-id";
 import { dedupeWorkoutBatch } from "@/lib/workouts/canonical-rows";
+import { encryptRouteGeometry } from "@/lib/workouts/route-geometry-cipher";
 import { Prisma, type MeasurementSource } from "@/generated/prisma/client";
 
 // v1.4.25 W16c — push-suppression threshold for workout PRs. A batch
@@ -561,7 +562,9 @@ async function postBatch(request: NextRequest): Promise<Response> {
           if (p.route) {
             routesToInsert.push({
               workoutId: id,
-              geometry: p.route.geometry as Prisma.InputJsonValue,
+              // v1.39.4 — the GPS track is stored sealed only; the readable
+              // `geometry` column stays NULL.
+              geometryEncrypted: encryptRouteGeometry(p.route.geometry),
               sampleTimestamps:
                 p.route.sampleTimestamps === null
                   ? Prisma.JsonNull

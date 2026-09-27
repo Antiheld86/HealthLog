@@ -46,6 +46,13 @@ export type EncryptedColumnKind = "string" | "bytes";
  */
 export const BACKUP_CHUNK_AAD = "healthlog/data-backup-chunk/v1";
 
+/**
+ * The associated-data label a workout's GPS track is sealed with, so a value
+ * sealed for another purpose never opens as a route and a route never opens as
+ * anything else.
+ */
+export const WORKOUT_ROUTE_GEOMETRY_AAD = "healthlog/workout-route-geometry/v1";
+
 export interface EncryptedColumn {
   /** Prisma model name (PascalCase, as declared in schema.prisma). */
   readonly model: string;
@@ -215,6 +222,8 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
 
   // ───── Coach (Bytes columns) ─────
   { model: "CoachMessage", field: "encryptedContent", kind: "bytes" },
+  // v1.39.4 — the tables of values a turn read, JSON under the same codec.
+  { model: "CoachMessage", field: "resultsEncrypted", kind: "bytes" },
   { model: "CoachConversation", field: "summaryEncrypted", kind: "bytes" },
   // v1.39.3 — the title: the opening words of the first message, or a rename.
   { model: "CoachConversation", field: "titleEncrypted", kind: "bytes" },
@@ -354,6 +363,23 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
   // (`laterality`) stays plaintext: a side alone says nothing.
   { model: "Encounter", field: "bodySiteEncrypted", kind: "bytes" },
   { model: "Practitioner", field: "noteEncrypted", kind: "bytes" },
+  // v1.39.4 — the practice's phone number and address. The name and the
+  // specialty stay plaintext: the picker searches and sorts on them.
+  { model: "Practitioner", field: "phoneEncrypted", kind: "bytes" },
+  { model: "Practitioner", field: "locationEncrypted", kind: "bytes" },
+
+  // ───── v1.39.4 workout GPS track (Bytes, binary2) ─────
+  // The GeoJSON LineString of an outdoor workout. Its first and last points
+  // are usually the person's front door. Sealed as one binary value per route
+  // (`encryptBytes`, labelled), since a track of 20 000 points is a blob
+  // rather than a short string; the binary codec implies batched rotation.
+  {
+    model: "WorkoutRoute",
+    field: "geometryEncrypted",
+    kind: "bytes",
+    codec: "binary2",
+    aad: WORKOUT_ROUTE_GEOMETRY_AAD,
+  },
 
   // ───── v1.38.0 dose free text (Bytes column) ─────
   // What the person wrote about the dose — a reaction, a sore arm, why the

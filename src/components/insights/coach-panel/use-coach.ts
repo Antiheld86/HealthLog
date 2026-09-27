@@ -11,11 +11,15 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import type {
+  CoachClarification,
   CoachConversationAttachmentDTO,
   CoachConversationDetailDTO,
   CoachConversationsPage,
+  CoachFollowUp,
   CoachProvenance,
+  CoachResultTable,
   CoachScope,
+  CoachStep,
   CoachStreamEvent,
   CoachSuggestion,
   CoachUsage,
@@ -539,6 +543,21 @@ export interface CoachStreamingMessage {
    * on `metricSource.suggestedAction` instead. Null otherwise.
    */
   suggestedAction: CoachSuggestedAction | null;
+  /**
+   * v1.39.4 — the live steps from the additive `step` frames, upserted by
+   * id in first-seen order. Persisted messages carry them on
+   * `metricSource.steps`.
+   */
+  steps: CoachStep[];
+  /**
+   * v1.39.4 — the tables from the additive `result` frames. Persisted
+   * messages carry only their metadata; the values are fetched lazily.
+   */
+  results: CoachResultTable[];
+  /** v1.39.4 — the chips from the additive `followUps` frame. */
+  followUps: CoachFollowUp[];
+  /** v1.39.4 — the choices from the additive `clarification` frame. */
+  clarification: CoachClarification | null;
   /** True until the `done` frame closes the stream. */
   inProgress: boolean;
   /** Final messageId once `done` lands; null otherwise. */
@@ -617,11 +636,24 @@ const EMPTY_STREAMING: CoachStreamingMessage = {
   metricSource: null,
   suggestion: null,
   suggestedAction: null,
+  steps: [],
+  results: [],
+  followUps: [],
+  clarification: null,
   inProgress: false,
   messageId: null,
   errorCode: null,
   usage: null,
 };
+
+/** v1.39.4 — insert a step, or replace the one with the same id in place. */
+export function upsertStep(steps: CoachStep[], step: CoachStep): CoachStep[] {
+  const at = steps.findIndex((s) => s.id === step.id);
+  if (at === -1) return [...steps, step];
+  const next = [...steps];
+  next[at] = step;
+  return next;
+}
 
 export interface SendCoachMessageParams {
   conversationId?: string;
@@ -665,6 +697,18 @@ export interface SendCoachMessageParams {
    * client re-sent it.
    */
   workoutId?: string;
+  /**
+   * v1.39.4 — the follow-up chip this message came from: the assistant
+   * message that offered it and the chip's id. The server resolves the chip
+   * from what it persisted; the client never sends what the chip asks for.
+   * Tool route only.
+   */
+  followUp?: { messageId: string; id: string };
+  /**
+   * v1.39.4 — the clarifying question this message answers, and the chip
+   * tapped (absent when the person typed their own answer). Tool route only.
+   */
+  clarification?: { messageId: string; choiceId?: string };
 }
 
 /**
@@ -712,6 +756,8 @@ export function resolveCoachSendTarget(params: SendCoachMessageParams): {
       scope: params.scope,
       guidedQuestion: params.guidedQuestion,
       workoutId: params.workoutId,
+      followUp: params.followUp,
+      clarification: params.clarification,
     }),
   };
 }
@@ -857,14 +903,8 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
           conversationId: params.conversationId ?? null,
         });
         setStreaming({
-          content: "",
-          metricSource: null,
-          suggestion: null,
-          suggestedAction: null,
+          ...EMPTY_STREAMING,
           inProgress: true,
-          messageId: null,
-          errorCode: null,
-          usage: null,
         });
 
         // v1.4.47 W8 — pre-check navigator.onLine so an airplane-mode
@@ -872,14 +912,8 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
         // waiting for the fetch to fail with a generic network error.
         if (typeof navigator !== "undefined" && navigator.onLine === false) {
           setStreaming({
-            content: "",
-            metricSource: null,
-            suggestion: null,
-            suggestedAction: null,
-            inProgress: false,
-            messageId: null,
+            ...EMPTY_STREAMING,
             errorCode: "coach.network",
-            usage: null,
           });
           return null;
         }
@@ -905,28 +939,16 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
         } catch (err) {
           if ((err as Error).name === "AbortError") return null;
           setStreaming({
-            content: "",
-            metricSource: null,
-            suggestion: null,
-            suggestedAction: null,
-            inProgress: false,
-            messageId: null,
+            ...EMPTY_STREAMING,
             errorCode: "coach.network",
-            usage: null,
           });
           return null;
         }
 
         if (!response.body) {
           setStreaming({
-            content: "",
-            metricSource: null,
-            suggestion: null,
-            suggestedAction: null,
-            inProgress: false,
-            messageId: null,
+            ...EMPTY_STREAMING,
             errorCode: `coach.http.${response.status}`,
-            usage: null,
           });
           return null;
         }
@@ -963,14 +985,8 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
             // body was not JSON; fall through to the http-status fallback
           }
           setStreaming({
-            content: "",
-            metricSource: null,
-            suggestion: null,
-            suggestedAction: null,
-            inProgress: false,
-            messageId: null,
+            ...EMPTY_STREAMING,
             errorCode: structured ?? `coach.http.${response.status}`,
-            usage: null,
           });
           // v1.16.4 — KEEP the optimistic user bubble: a rejected turn
           // (budget gate, 4xx) has no persisted twin coming, and dropping
@@ -988,6 +1004,10 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
         let collectedProvenance: CoachProvenance | null = null;
         let collectedSuggestion: CoachSuggestion | null = null;
         let collectedSuggestedAction: CoachSuggestedAction | null = null;
+        let collectedSteps: CoachStep[] = [];
+        const collectedResults: CoachResultTable[] = [];
+        let collectedFollowUps: CoachFollowUp[] = [];
+        let collectedClarification: CoachClarification | null = null;
         let lastError: string | null = null;
         let messageId: string | null = null;
         let collectedUsage: CoachUsage | null = null;
@@ -1027,6 +1047,39 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
                   setStreaming((prev) => ({
                     ...prev,
                     suggestedAction: evt.suggestedAction,
+                  }));
+                  break;
+                case "step": {
+                  // v1.39.4 — live progress, upserted by step id.
+                  const step = evt.step;
+                  collectedSteps = upsertStep(collectedSteps, step);
+                  setStreaming((prev) => ({
+                    ...prev,
+                    steps: upsertStep(prev.steps, step),
+                  }));
+                  break;
+                }
+                case "result": {
+                  const result = evt.result;
+                  collectedResults.push(result);
+                  setStreaming((prev) => ({
+                    ...prev,
+                    results: [...prev.results, result],
+                  }));
+                  break;
+                }
+                case "followUps":
+                  collectedFollowUps = evt.followUps;
+                  setStreaming((prev) => ({
+                    ...prev,
+                    followUps: evt.followUps,
+                  }));
+                  break;
+                case "clarification":
+                  collectedClarification = evt.clarification;
+                  setStreaming((prev) => ({
+                    ...prev,
+                    clarification: evt.clarification,
                   }));
                   break;
                 case "reasoning":
@@ -1069,6 +1122,10 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
           metricSource: collectedProvenance,
           suggestion: collectedSuggestion,
           suggestedAction: collectedSuggestedAction,
+          steps: collectedSteps,
+          results: collectedResults,
+          followUps: collectedFollowUps,
+          clarification: collectedClarification,
           inProgress: false,
           messageId,
           errorCode: lastError,
@@ -1083,6 +1140,15 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
             queryKey: QUERY_KEYS.one(resolvedConversationId),
           });
           queryClient.invalidateQueries({ queryKey: QUERY_KEYS.list() });
+          // v1.39.4 — the tables this turn streamed are exactly what the
+          // persisted message stores, so seed its lazy read rather than
+          // decrypting them again on the server when the twin lands.
+          if (messageId && collectedResults.length > 0) {
+            queryClient.setQueryData(
+              queryKeys.coachMessageResults(resolvedConversationId, messageId),
+              collectedResults,
+            );
+          }
           optsRef.current.onDone?.(resolvedConversationId);
         }
         // v1.4.25 W5 — drop the optimistic user bubble; the persisted

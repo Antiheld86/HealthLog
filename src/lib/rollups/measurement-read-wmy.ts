@@ -285,6 +285,48 @@ export function pickRollupGranularityForWindow(
   return "DAY";
 }
 
+/**
+ * A tier bucket starts at UTC midnight, and a client names a row by the
+ * date its `measuredAt` falls on in the person's zone. West of UTC that
+ * midnight is still the evening before, so a March bucket read as February
+ * and every month of the chart's "All" range sat one month early. A row is
+ * therefore stamped at noon UTC of the bucket's first day: that instant falls
+ * inside the bucket's own week, month and year in every zone, and on the
+ * bucket's own day from UTC−12 to UTC+11.
+ */
+const TIER_ROW_ANCHOR_MS = 12 * 3_600_000;
+
+/**
+ * A cumulative type's tier row as the average day of its bucket: the bucket's
+ * total over the days that hold a reading. A day row is its own total, which
+ * is the same quantity. The chart folds its shorter ranges from day totals
+ * into the mean day of each week or month, and the live fallback serves day
+ * totals too; a WEEK or MONTH row carrying its whole total put a monthly sum
+ * where every other path puts a daily figure, so the "All" range read ~30
+ * times higher once a history was long enough to be served monthly, under a
+ * caption that said average.
+ */
+function dailyAverage(r: {
+  sumValue: number | null;
+  mean: number;
+  count: number;
+  days: number;
+}): number {
+  const total = r.sumValue ?? r.mean * r.count;
+  return r.days > 1 ? total / r.days : total;
+}
+
+/**
+ * A level type's tier row: the mean of its days' means. The count-weighted
+ * `mean` let a day with many readings outweigh the rest, while the chart's
+ * shorter ranges and the live fallback weigh each day once.
+ */
+function chartLevel(r: { mean: number; dayMean?: number }): number {
+  return typeof r.dayMean === "number" && Number.isFinite(r.dayMean)
+    ? r.dayMean
+    : r.mean;
+}
+
 /** DAY → WEEK → MONTH → YEAR, finest first. */
 const TIER_ORDER: RollupGranularity[] = ["DAY", "WEEK", "MONTH", "YEAR"];
 
@@ -306,8 +348,10 @@ const TIER_ORDER: RollupGranularity[] = ["DAY", "WEEK", "MONTH", "YEAR"];
  * the compositional contract above), so a 5-year window rendered as ~60
  * MONTH points carries the same trend as the ~1 800 DAY points would have
  * — minus the truncation. `minValue` / `maxValue` ride through for the
- * range band on spot metrics; cumulative metrics (steps, energy,
- * distance) surface the bucket's summed total and drop the spread.
+ * range band on spot metrics. The value is the average day of the bucket
+ * at every tier, as the chart's own fold of day points gives it: a level's
+ * days each weigh one, and a cumulative metric (steps, energy, distance)
+ * carries its total over the days that hold a reading, without a spread.
  *
  * Coverage handling: the tier is chosen from the span of the window's DAY
  * buckets and read folded from them. Returns `null` when the window holds no
@@ -398,8 +442,13 @@ export async function readTieredRollupSeries(opts: {
     granularity,
     rows: rows.map((r) => ({
       type,
-      value: useSum ? (r.sumValue ?? r.mean * r.count) : r.mean,
-      measuredAt: r.bucketStart.toISOString(),
+      // The chart's quantity at every tier: the average day of the bucket,
+      // each day weighing one, as its shorter ranges and the live fallback
+      // fold it.
+      value: useSum ? dailyAverage(r) : chartLevel(r),
+      measuredAt: new Date(
+        r.bucketStart.getTime() + TIER_ROW_ANCHOR_MS,
+      ).toISOString(),
       count: r.count,
       minValue: useSum ? undefined : r.minValue,
       maxValue: useSum ? undefined : r.maxValue,

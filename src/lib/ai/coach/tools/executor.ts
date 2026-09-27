@@ -42,8 +42,52 @@
 import { z } from "zod/v4";
 
 import { annotate } from "@/lib/logging/context";
+import type { Locale } from "@/lib/i18n/config";
+import { resolveUserTimezone } from "@/lib/tz/resolver";
+import { resolveModuleMap } from "@/lib/modules/gate";
 import { buildCoachSnapshot } from "@/lib/ai/coach/snapshot";
-import type { CoachScope, CoachScopeWindow } from "@/lib/ai/coach/types";
+import { admitCoachSources, coachExclusions } from "@/lib/ai/coach/scope-gate";
+import type { CoachPrefs } from "@/lib/validations/coach-prefs";
+import { readMessageResults } from "@/lib/ai/coach/persistence";
+import type {
+  CoachResultTable,
+  CoachScope,
+  CoachScopeSource,
+  CoachScopeWindow,
+  CoachStepDomain,
+} from "@/lib/ai/coach/types";
+import { COACH_SOURCE_MEASUREMENT_TYPES } from "@/lib/ai/coach/source-measurement-types";
+import {
+  METRIC_TABLE_EXCLUDED_SOURCES,
+  compareWithCurrent,
+  readMetricTable,
+  summariseTable,
+} from "@/lib/ai/coach/results/metric-table-tool";
+import {
+  projectCompliance,
+  projectLabs,
+  projectWorkouts,
+} from "@/lib/ai/coach/results/projections";
+import {
+  formatPriorResultRef,
+  resolvePriorResultRef,
+  type PriorResultTurn,
+  type ResultRefAllocator,
+} from "@/lib/ai/coach/results/refs";
+import { isCoachDomainWithheld } from "@/lib/ai/coach/results/domain-module";
+import {
+  COACH_RESULT_COLUMN_KEYS,
+  COACH_RESULT_TITLE_KEYS,
+  COACH_RESULT_UI_KEYS,
+  coachDomainLabelKey,
+} from "@/lib/ai/coach/dialog-keys";
+import {
+  buildDistributionTable,
+  deriveChartSpec,
+} from "@/lib/ai/coach/results/chart-spec";
+import { getServerTranslator } from "@/lib/i18n/server-translator";
+import { resolveIntlLocale } from "@/lib/format-locale";
+import { DEFAULT_WINDOW } from "@/lib/ai/coach/snapshot-cache";
 import {
   getMetricSeriesArgsSchema,
   getGlucosePanelArgsSchema,
@@ -54,7 +98,10 @@ import {
   getWorkoutsArgsSchema,
   getCycleArgsSchema,
   getCorrelationsArgsSchema,
+  getMetricTableArgsSchema,
   isCoachToolName,
+  showResultArgsSchema,
+  SHOW_RESULT_TOOL_NAME,
   type CoachToolName,
 } from "./definitions";
 import {
@@ -93,12 +140,45 @@ export interface CoachToolResult {
    * for the prose number-verifier exactly like a present result's payload.
    */
   available?: CoachDomainAvailability;
+  /**
+   * v1.39.4 — the name of the table this call produced (`r1`..`r6`), so the
+   * model can mark the prose that relies on it with `result:rN`. Only in a
+   * chat turn; absent when no table was made.
+   */
+  resultRef?: string;
+  /**
+   * v1.39.4 — the full table, for the person. NEVER serialised to the model:
+   * the loop strips it before the tool-result turn, and the model reads the
+   * compact summary in `data` instead. Only in a chat turn.
+   */
+  table?: CoachResultTable;
+}
+
+/**
+ * v1.39.4 — what a chat turn hands the executor so a call can produce a
+ * table and name it, and `show_result` can find an earlier one. Absent on
+ * every other caller (MCP), which then gets the plain result.
+ */
+export interface CoachToolTurnContext {
+  /** The conversation the turn belongs to, already narrowed to its owner. */
+  conversationId: string;
+  locale: Locale;
+  /** The earlier tables of THIS conversation, as the context named them. */
+  priorResults: ReadonlyArray<PriorResultTurn>;
+  refs: ResultRefAllocator;
+  now?: Date;
 }
 
 /** What the route persists onto provenance: which tools ran, did data exist. */
 export interface CoachToolTrace {
   name: string;
   present: boolean;
+  /**
+   * v1.39.4 — the call's arguments as their schema validated them; absent
+   * when they did not validate. Turn-internal (steps, method, chips): never
+   * persisted, the provenance keeps `{ name, present }` only.
+   */
+  args?: Record<string, unknown>;
 }
 
 function pickSection(
@@ -160,10 +240,13 @@ export async function executeCoachTool(args: {
    * already-built cache entry instead of rebuilding a single-source snapshot.
    */
   sharedScope?: CoachScope;
+  /** v1.39.4 — the chat turn, when the call runs inside one. */
+  turn?: CoachToolTurnContext;
 }): Promise<CoachToolResult> {
-  const { userId, name, rawArguments, fallbackWindow, sharedScope } = args;
+  const { userId, name, rawArguments, fallbackWindow, sharedScope, turn } =
+    args;
 
-  if (!isCoachToolName(name)) {
+  if (!isCoachToolName(name) && name !== SHOW_RESULT_TOOL_NAME) {
     annotate({
       action: { name: "coach.tool.unknown" },
       meta: { tool: name.slice(0, 48) },
@@ -183,13 +266,17 @@ export async function executeCoachTool(args: {
   }
 
   try {
-    const result = await dispatch(
-      name,
-      userId,
-      parsedArgs,
-      fallbackWindow,
-      sharedScope,
-    );
+    const result =
+      name === SHOW_RESULT_TOOL_NAME
+        ? await showResult(userId, parsedArgs, sharedScope, turn)
+        : await dispatch(
+            name as CoachToolName,
+            userId,
+            parsedArgs,
+            fallbackWindow,
+            sharedScope,
+            turn,
+          );
     annotate({
       action: { name: "coach.tool.executed" },
       meta: { tool: name, present: result.present },
@@ -215,6 +302,34 @@ async function dispatch(
   rawArgs: unknown,
   fallbackWindow: CoachScopeWindow | undefined,
   sharedScope: CoachScope | undefined,
+  turn: CoachToolTurnContext | undefined,
+): Promise<CoachToolResult> {
+  const result = await dispatchRead(
+    name,
+    userId,
+    rawArgs,
+    fallbackWindow,
+    sharedScope,
+    turn,
+  );
+  if (!turn || !result.present || result.table) return result;
+  return withProjectedTable(
+    name,
+    userId,
+    rawArgs,
+    fallbackWindow,
+    result,
+    turn,
+  );
+}
+
+async function dispatchRead(
+  name: CoachToolName,
+  userId: string,
+  rawArgs: unknown,
+  fallbackWindow: CoachScopeWindow | undefined,
+  sharedScope: CoachScope | undefined,
+  turn: CoachToolTurnContext | undefined,
 ): Promise<CoachToolResult> {
   switch (name) {
     case "get_metric_series":
@@ -240,6 +355,8 @@ async function dispatch(
       return getCycle(userId, rawArgs, sharedScope);
     case "get_correlations":
       return getCorrelations(userId, rawArgs);
+    case "get_metric_table":
+      return getMetricTable(userId, rawArgs, fallbackWindow, sharedScope, turn);
   }
 }
 
@@ -618,4 +735,371 @@ async function getCorrelations(
       windowDays: result.windowDays,
     },
   };
+}
+
+// ── v1.39.4: result tables ──────────────────────────────────────────────
+
+/**
+ * True when the snapshot builder admitted `metric` for this account: the
+ * resolved scope it pins on every snapshot is the source set left after the
+ * module switches and the person's own exclusions. The table tool reads
+ * rows the builder does not, so it asks the builder's gate first rather
+ * than keeping a second copy of it.
+ */
+export function scopeAdmits(
+  sections: Record<string, unknown>,
+  metric: CoachScopeSource,
+): boolean {
+  const scope = sections.scope as { sources?: unknown } | undefined;
+  return Array.isArray(scope?.sources) && scope.sources.includes(metric);
+}
+
+/**
+ * The earlier tables a turn may name and show again: those whose metric the
+ * same gate would read now. With a conversation scope that is the scope's
+ * sources less the person's exclusions and switched-off modules; without
+ * one, every metric not excluded. The exclusion is the snapshot's own
+ * (`coachExclusions`, `admitCoachSources`), so a metric the person excluded
+ * after a table was stored is neither listed for the model nor sent to it.
+ * Tables of other domains (labs) answer to their module when read.
+ */
+export async function admittedPriorResults(args: {
+  userId: string;
+  prefs: Pick<CoachPrefs, "excludeMetrics">;
+  scope: CoachScope | undefined;
+  prior: readonly PriorResultTurn[];
+}): Promise<PriorResultTurn[]> {
+  if (args.prior.length === 0) return [];
+  const excluded = coachExclusions(
+    args.prefs,
+    await resolveModuleMap(args.userId),
+  );
+  const scoped =
+    args.scope?.sources && args.scope.sources.length > 0
+      ? admitCoachSources(args.scope.sources, excluded)
+      : null;
+  const admits = (domain: CoachStepDomain) =>
+    !isCoachScopeSource(domain) ||
+    (scoped
+      ? scoped.has(domain)
+      : admitCoachSources([domain], excluded).size > 0);
+  return args.prior
+    .map((turn) => ({
+      ...turn,
+      results: turn.results.filter((meta) => admits(meta.source.domain)),
+    }))
+    .filter((turn) => turn.results.length > 0);
+}
+
+/** True for a step domain the snapshot scope gates (a metric, not labs). */
+export function isCoachScopeSource(
+  domain: CoachStepDomain,
+): domain is CoachScopeSource {
+  return Object.hasOwn(COACH_SOURCE_MEASUREMENT_TYPES, domain);
+}
+
+async function getMetricTable(
+  userId: string,
+  rawArgs: unknown,
+  fallbackWindow: CoachScopeWindow | undefined,
+  sharedScope: CoachScope | undefined,
+  turn: CoachToolTurnContext | undefined,
+): Promise<CoachToolResult> {
+  const parsed = getMetricTableArgsSchema.safeParse(rawArgs);
+  if (!parsed.success) return badArgs("get_metric_table", parsed.error);
+  const { metric, granularity } = parsed.data;
+  const window = parsed.data.window ?? fallbackWindow ?? DEFAULT_WINDOW;
+  const period =
+    window === "allTime" ? "current" : (parsed.data.period ?? "current");
+
+  const excluded = METRIC_TABLE_EXCLUDED_SOURCES[metric];
+  if (excluded) return { present: false, reason: excluded };
+
+  // Same gate as every other read: a module switched off, or a metric the
+  // person excluded from the Coach, is not read here either.
+  const gate = await buildCoachSnapshot(
+    userId,
+    sharedScope ?? { sources: [metric], window: fallbackWindow },
+  );
+  if (!scopeAdmits(gate.sections, metric)) {
+    return {
+      present: false,
+      reason: "unavailable_in_scope",
+      searchedWindow: window,
+    };
+  }
+
+  const timeZone = await resolveUserTimezone(userId);
+  const table = await readMetricTable({
+    userId,
+    metric,
+    window,
+    period,
+    granularity,
+    timeZone,
+    locale: turn?.locale ?? "en",
+    ref: "r0",
+    now: turn?.now,
+  });
+  if (!table) {
+    return emptyRead(
+      userId,
+      metric,
+      subjectForTool("get_metric_table", metric),
+      window,
+    );
+  }
+  // An earlier window is read to be compared: read the current one too and
+  // hand the model both, and the change between them, in one summary.
+  let comparison: Record<string, unknown> | null = null;
+  if (period !== "current") {
+    const current = await readMetricTable({
+      userId,
+      metric,
+      window,
+      period: "current",
+      granularity,
+      timeZone,
+      locale: turn?.locale ?? "en",
+      ref: "r0",
+      now: turn?.now,
+    });
+    comparison = current ? compareWithCurrent(table, current) : null;
+  }
+  const summarise = (t: CoachResultTable) => ({
+    ...summariseTable(t),
+    ...(comparison ? { comparison } : {}),
+  });
+  const ref = turn?.refs.next() ?? null;
+  if (!ref) {
+    // Outside a chat turn, or past the sixth table: the model still gets
+    // the figures, there is just no table to name.
+    return { present: true, data: summarise(table) };
+  }
+  const named = { ...table, ref };
+  return {
+    present: true,
+    resultRef: ref,
+    data: summarise(named),
+    table: named,
+  };
+}
+
+/**
+ * A table shown again, with the chart its `view` asks for. No view: the chart
+ * the server picks for any table. `table`: no chart. `chart`: a day table
+ * becomes how often each range came up (a histogram); any other table, or a
+ * day table with too few values, keeps the chart the server picks. The model
+ * then reads the summary of what is shown.
+ */
+function withResultView(
+  shown: CoachResultTable,
+  view: "table" | "chart" | undefined,
+  locale: Locale,
+): CoachResultTable {
+  // The view is this showing's alone, never the stored copy's.
+  const { view: _stored, ...table } = shown;
+  if (view === "table") {
+    // The table shows first; the chart stays for the toggle and the chip
+    // back to it.
+    const chart = deriveChartSpec(table);
+    return chart
+      ? { ...table, chart, chartKind: chart.kind, view: "table" }
+      : { ...table, chart: null, chartKind: null };
+  }
+  if (view === "chart") {
+    const { t } = getServerTranslator(locale);
+    const distribution = buildDistributionTable(table, {
+      localeTag: resolveIntlLocale(locale),
+      title: t(COACH_RESULT_TITLE_KEYS.distribution, {
+        metric: t(coachDomainLabelKey(table.source.domain)),
+      }),
+      range: t(COACH_RESULT_COLUMN_KEYS.range),
+      count: t(COACH_RESULT_COLUMN_KEYS.count),
+      bin: (from, to, unit) =>
+        t(COACH_RESULT_UI_KEYS.histogramBin, { from, to, unit }),
+    });
+    if (distribution) return distribution;
+  }
+  const chart = deriveChartSpec(table);
+  return { ...table, chart, chartKind: chart?.kind ?? null };
+}
+
+/**
+ * `show_result` — an earlier table of THIS conversation, shown again. The
+ * name resolves only against the tables the turn's own conversation holds
+ * (`turn.priorResults`), and the values come through the owner- and
+ * conversation-narrowed read, so a name from anywhere else is an unknown
+ * result, never a lookup.
+ */
+async function showResult(
+  userId: string,
+  rawArgs: unknown,
+  sharedScope: CoachScope | undefined,
+  turn: CoachToolTurnContext | undefined,
+): Promise<CoachToolResult> {
+  const parsed = showResultArgsSchema.safeParse(rawArgs);
+  if (!parsed.success) return badArgs(SHOW_RESULT_TOOL_NAME, parsed.error);
+  const target = turn
+    ? resolvePriorResultRef(parsed.data.ref, turn.priorResults)
+    : null;
+  if (!turn || !target) {
+    annotate({
+      action: { name: "coach.result.unknown_ref" },
+      meta: { inTurn: turn !== undefined },
+    });
+    return { present: false, reason: "unknown_result" };
+  }
+
+  // The same gate a fresh read passes, before anything is decrypted: a
+  // metric the person has since excluded from the Coach, or left out of
+  // this conversation's scope, is not sent to the model again either.
+  const domain = target.meta.source.domain;
+  if (isCoachScopeSource(domain)) {
+    const gate = await buildCoachSnapshot(
+      userId,
+      sharedScope ?? { sources: [domain], window: target.meta.source.window },
+    );
+    if (!scopeAdmits(gate.sections, domain)) {
+      return { present: false, reason: "unavailable_in_scope" };
+    }
+  }
+
+  const modules = await resolveModuleMap(userId);
+  const entries = await readMessageResults(
+    userId,
+    turn.conversationId,
+    target.messageId,
+    (domain) => isCoachDomainWithheld(domain, modules),
+  );
+  const entry = entries?.find((candidate) => candidate.ref === target.ref);
+  if (!entry) return { present: false, reason: "unknown_result" };
+  if ("withheld" in entry) {
+    return {
+      present: false,
+      reason:
+        entry.withheld === "module_disabled"
+          ? "module_disabled"
+          : "result_unavailable",
+    };
+  }
+  const ref = turn.refs.next();
+  if (!ref) return { present: false, reason: "result_limit" };
+  const table = withResultView(
+    {
+      ...entry,
+      ref,
+      displayed: false,
+      reusedFrom: { messageId: target.messageId, ref: target.ref },
+    },
+    parsed.data.view,
+    turn.locale,
+  );
+  return {
+    present: true,
+    resultRef: ref,
+    data: {
+      shownAgain: formatPriorResultRef(
+        turn.priorResults.find((p) => p.messageId === target.messageId)
+          ?.turnIndex ?? 0,
+        target.ref,
+      ),
+      ...summariseTable(table),
+    },
+    table,
+  };
+}
+
+/**
+ * The table an older tool's present result projects to, named with the
+ * turn's next ref. A projection that fails leaves the answer as it was: the
+ * table is a view of the result, never a condition for it.
+ */
+async function withProjectedTable(
+  name: CoachToolName,
+  userId: string,
+  rawArgs: unknown,
+  fallbackWindow: CoachScopeWindow | undefined,
+  result: CoachToolResult,
+  turn: CoachToolTurnContext,
+): Promise<CoachToolResult> {
+  const argWindow =
+    rawArgs !== null &&
+    typeof rawArgs === "object" &&
+    typeof (rawArgs as { window?: unknown }).window === "string"
+      ? ((rawArgs as { window: CoachScopeWindow }).window as CoachScopeWindow)
+      : undefined;
+  const window = argWindow ?? fallbackWindow ?? DEFAULT_WINDOW;
+  try {
+    let table: CoachResultTable | null = null;
+    switch (name) {
+      case "get_workouts":
+        table = projectWorkouts(result.data, {
+          ref: "r0",
+          locale: turn.locale,
+          window,
+          timeZone: "UTC",
+        });
+        break;
+      case "get_medication_compliance":
+        table = projectCompliance(result.data, {
+          ref: "r0",
+          locale: turn.locale,
+          window,
+          timeZone: "UTC",
+        });
+        break;
+      case "get_labs":
+        table = projectLabs(result.data, {
+          ref: "r0",
+          locale: turn.locale,
+          window,
+          timeZone: await resolveUserTimezone(userId),
+        });
+        break;
+      case "get_sleep": {
+        const read = await readMetricTable({
+          userId,
+          metric: "sleep",
+          window,
+          period: "current",
+          granularity: "day",
+          timeZone: await resolveUserTimezone(userId),
+          locale: turn.locale,
+          ref: "r0",
+          now: turn.now,
+        });
+        table =
+          read && read.source.granularity === "day"
+            ? {
+                ...read,
+                source: { ...read.source, tool: "get_sleep" },
+                titleKey: COACH_RESULT_TITLE_KEYS.sleepByNight,
+                title: getServerTranslator(turn.locale).t(
+                  COACH_RESULT_TITLE_KEYS.sleepByNight,
+                ),
+              }
+            : read && {
+                ...read,
+                source: { ...read.source, tool: "get_sleep" },
+              };
+        break;
+      }
+      default:
+        return result;
+    }
+    if (!table) return result;
+    const ref = turn.refs.next();
+    if (!ref) return result;
+    return { ...result, resultRef: ref, table: { ...table, ref } };
+  } catch (err) {
+    annotate({
+      action: { name: "coach.result.projection_failed" },
+      meta: {
+        tool: name,
+        reason: err instanceof Error ? err.name : "unknown",
+      },
+    });
+    return result;
+  }
 }

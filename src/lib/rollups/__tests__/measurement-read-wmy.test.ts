@@ -53,7 +53,7 @@ import {
   readTieredRollupSeries,
   type RollupBucketRow,
 } from "../measurement-read-wmy";
-import { pickBucket } from "@/lib/charts/bucket-time-series";
+import { bucketTimeSeries, pickBucket } from "@/lib/charts/bucket-time-series";
 
 const { findMany, aggregate, queryRaw } = mocks;
 const DAY_MS = 86_400_000;
@@ -122,9 +122,18 @@ function folded(
     sumY += value;
   }
   const values = readings.map(([, v]) => v);
+  const byDay = new Map<string, number[]>();
+  for (const [day, value] of readings) {
+    byDay.set(day, [...(byDay.get(day) ?? []), value]);
+  }
+  const dayMeans = [...byDay.values()].map(
+    (v) => v.reduce((s, x) => s + x, 0) / v.length,
+  );
   return {
     bucket_start: new Date(bucketStart),
     count: readings.length,
+    days: byDay.size,
+    sum_day_mean: dayMeans.reduce((s, x) => s + x, 0),
     sum_y: sumY,
     min_value: Math.min(...values),
     max_value: Math.max(...values),
@@ -459,7 +468,7 @@ describe("readTieredRollupSeries", () => {
 
     expect(result?.granularity).toBe("MONTH");
     expect(sqlOf(queryRaw.mock.calls[0])).toContain("'month'");
-    expect(result?.rows[0].measuredAt).toBe("2017-01-01T00:00:00.000Z");
+    expect(result?.rows[0].measuredAt).toBe("2017-01-01T12:00:00.000Z");
     expect(result?.rows).toHaveLength(2);
   });
 
@@ -475,27 +484,115 @@ describe("readTieredRollupSeries", () => {
     });
   });
 
-  it("serves the summed total for step-like metrics and drops the spread", async () => {
-    aggregate.mockResolvedValueOnce(
-      spanOf("2024-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z"),
-    );
-    queryRaw.mockResolvedValueOnce([
-      folded(
-        "2024-01-01T00:00:00.000Z",
-        Array.from({ length: 30 }, (_, i): [string, number] => [
-          `2024-01-${String(i + 1).padStart(2, "0")}`,
-          8000,
-        ]),
-      ),
+  // The chart folds its shorter ranges (and the live fallback) from day
+  // points into the average day of each week or month. A tier row must be the
+  // same quantity, whichever tier the history's length selects.
+  describe("the average day at every tier", () => {
+    // January 2026: steps on 20 of its days, from 4 000 to 13 500.
+    const JAN = Array.from({ length: 20 }, (_, i): [string, number] => [
+      `2026-01-${String(i + 1).padStart(2, "0")}`,
+      4_000 + i * 500,
     ]);
-    const result = await readTieredRollupSeries({
-      userId: "u",
-      type: "ACTIVITY_STEPS",
-      ...win(3650),
+    const averageDay = JAN.reduce((s, [, v]) => s + v, 0) / JAN.length;
+
+    /** How the chart folds a tier's rows into the month on screen. */
+    function chartMonth(rows: Array<{ measuredAt: string; value: number }>) {
+      return bucketTimeSeries(
+        rows.map((row) => ({
+          timestamp: new Date(row.measuredAt),
+          values: { v: row.value },
+        })),
+        { bucket: "month", timeZone: "Europe/Berlin" },
+      ).points.map((p) => p.values.v);
+    }
+
+    it("serves a MONTH row of a long history as its average day", async () => {
+      aggregate.mockResolvedValueOnce(
+        spanOf("2023-01-01T00:00:00.000Z", "2026-01-20T00:00:00.000Z"),
+      );
+      queryRaw.mockResolvedValueOnce([folded("2026-01-01T00:00:00.000Z", JAN)]);
+      const result = await readTieredRollupSeries({
+        userId: "u",
+        type: "ACTIVITY_STEPS",
+        ...win(3650),
+      });
+      expect(result?.granularity).toBe("MONTH");
+      expect(result?.rows[0].value).toBe(averageDay);
+      expect(result?.rows[0].count).toBe(JAN.length);
+      expect(result?.rows[0].minValue).toBeUndefined();
+      expect(result?.rows[0].maxValue).toBeUndefined();
     });
-    expect(result?.rows[0].value).toBe(240_000);
-    expect(result?.rows[0].minValue).toBeUndefined();
-    expect(result?.rows[0].maxValue).toBeUndefined();
+
+    it("gives the same month for a short history served by days", async () => {
+      aggregate.mockResolvedValueOnce(
+        spanOf("2026-01-01T00:00:00.000Z", "2026-01-20T00:00:00.000Z"),
+      );
+      findMany.mockResolvedValueOnce(
+        JAN.map(([day, value]) => dayRow(day, "APPLE_HEALTH", 1, value)),
+      );
+      const result = await readTieredRollupSeries({
+        userId: "u",
+        type: "ACTIVITY_STEPS",
+        ...win(3650),
+      });
+      expect(result?.granularity).toBe("DAY");
+      expect(chartMonth(result!.rows)).toEqual([averageDay]);
+    });
+
+    it("gives each WEEK row of a middle-length history its own average day", async () => {
+      aggregate.mockResolvedValueOnce(
+        spanOf("2025-01-01T00:00:00.000Z", "2026-01-20T00:00:00.000Z"),
+      );
+      const week = JAN.slice(4, 11); // Monday 5 to Sunday 11 January
+      queryRaw.mockResolvedValueOnce([
+        folded("2026-01-05T00:00:00.000Z", week),
+      ]);
+      const result = await readTieredRollupSeries({
+        userId: "u",
+        type: "ACTIVITY_STEPS",
+        ...win(3650),
+      });
+      expect(result?.granularity).toBe("WEEK");
+      expect(result?.rows[0].value).toBe(
+        week.reduce((s, [, v]) => s + v, 0) / week.length,
+      );
+    });
+
+    it("weighs each day once for a level, as the chart's own fold does", async () => {
+      // Two readings on the 3rd (120, 130), one on the 4th (100): the
+      // average day is 112.5, while every reading weighing one gives 116.7.
+      const readings: Array<[string, number]> = [
+        ["2026-01-03", 120],
+        ["2026-01-03", 130],
+        ["2026-01-04", 100],
+      ];
+      aggregate.mockResolvedValueOnce(
+        spanOf("2023-01-01T00:00:00.000Z", "2026-01-04T00:00:00.000Z"),
+      );
+      queryRaw.mockResolvedValueOnce([
+        folded("2026-01-01T00:00:00.000Z", readings),
+      ]);
+      const monthly = await readTieredRollupSeries({
+        userId: "u",
+        type: "BLOOD_PRESSURE_SYS",
+        ...win(3650),
+      });
+      expect(monthly?.rows[0].value).toBe(112.5);
+
+      aggregate.mockResolvedValueOnce(
+        spanOf("2026-01-03T00:00:00.000Z", "2026-01-04T00:00:00.000Z"),
+      );
+      findMany.mockResolvedValueOnce([
+        dayRow("2026-01-03", "MANUAL", 2, 125),
+        dayRow("2026-01-04", "MANUAL", 1, 100),
+      ]);
+      const daily = await readTieredRollupSeries({
+        userId: "u",
+        type: "BLOOD_PRESSURE_SYS",
+        ...win(3650),
+      });
+      expect(chartMonth(daily!.rows)).toEqual([112.5]);
+    });
   });
 
   // v1.37.29 — the tier keys off the ACTUAL data span, not the requested
@@ -516,7 +613,7 @@ describe("readTieredRollupSeries", () => {
       });
       expect(result?.granularity).toBe("DAY");
       expect(queryRaw).not.toHaveBeenCalled();
-      expect(result?.rows[0].measuredAt).toBe("2026-02-03T00:00:00.000Z");
+      expect(result?.rows[0].measuredAt).toBe("2026-02-03T12:00:00.000Z");
     });
 
     it("serves WEEK buckets for a span between one and two years", async () => {
@@ -533,6 +630,74 @@ describe("readTieredRollupSeries", () => {
       });
       expect(result?.granularity).toBe("WEEK");
       expect(sqlOf(queryRaw.mock.calls[0])).toContain("'week'");
+    });
+  });
+
+  // The chart names a row by the date its `measuredAt` falls on in the
+  // person's zone and folds it into that week or month. A bucket stamped at
+  // UTC midnight read as the day before west of UTC, so every month of the
+  // "All" range sat one month early there.
+  describe("row stamp", () => {
+    const ZONES = [
+      "Pacific/Pago_Pago",
+      "America/Los_Angeles",
+      "UTC",
+      "Europe/Berlin",
+      "Pacific/Auckland",
+      "Pacific/Kiritimati",
+    ];
+
+    it("puts each month in its own month in every zone", async () => {
+      aggregate.mockResolvedValueOnce(
+        spanOf("2023-01-01T00:00:00.000Z", "2026-03-01T00:00:00.000Z"),
+      );
+      queryRaw.mockResolvedValueOnce([
+        folded("2026-01-01T00:00:00.000Z", [["2026-01-01", 80]]),
+        folded("2026-02-01T00:00:00.000Z", [["2026-02-01", 81]]),
+        folded("2026-03-01T00:00:00.000Z", [["2026-03-01", 82]]),
+      ]);
+      const result = await readTieredRollupSeries({
+        userId: "u",
+        type: "WEIGHT",
+        ...win(3650),
+      });
+      expect(result?.granularity).toBe("MONTH");
+      for (const timeZone of ZONES) {
+        const months = bucketTimeSeries(
+          result!.rows.map((row) => ({
+            timestamp: new Date(row.measuredAt),
+            values: { v: row.value },
+          })),
+          { bucket: "month", timeZone },
+        ).points.map((p) => new Date(p.timestamp).toISOString().slice(0, 7));
+        expect(months, timeZone).toEqual(["2026-01", "2026-02", "2026-03"]);
+      }
+    });
+
+    it("puts each week in its own ISO week in every zone", async () => {
+      aggregate.mockResolvedValueOnce(
+        spanOf("2025-01-01T00:00:00.000Z", "2026-05-01T00:00:00.000Z"),
+      );
+      queryRaw.mockResolvedValueOnce([
+        folded("2025-12-29T00:00:00.000Z", [["2025-12-29", 80]]),
+        folded("2026-01-05T00:00:00.000Z", [["2026-01-05", 81]]),
+      ]);
+      const result = await readTieredRollupSeries({
+        userId: "u",
+        type: "WEIGHT",
+        ...win(3650),
+      });
+      expect(result?.granularity).toBe("WEEK");
+      for (const timeZone of ZONES) {
+        const weeks = bucketTimeSeries(
+          result!.rows.map((row) => ({
+            timestamp: new Date(row.measuredAt),
+            values: { v: row.value },
+          })),
+          { bucket: "week", timeZone },
+        ).points.map((p) => new Date(p.timestamp).toISOString().slice(0, 10));
+        expect(weeks, timeZone).toEqual(["2025-12-29", "2026-01-05"]);
+      }
     });
   });
 });

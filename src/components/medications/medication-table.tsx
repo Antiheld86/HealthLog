@@ -98,6 +98,12 @@ export interface TableMedication {
    * cell names that, the compliance and action cells show "–".
    */
   trackIntake?: boolean;
+  /**
+   * v1.39.4 (#1040) — server-resolved: the action cell offers taken / skip
+   * only when true; an ended course shows "Ended" where next-due sits.
+   */
+  intakeActionable?: boolean;
+  courseStatus?: "UPCOMING" | "CURRENT" | "ENDED";
   /** v1.16.10 — dose-derived stock from the list payload; null = inventory tracking off. */
   stockDosesRemaining?: number | null;
   /** v1.37.19 — server-resolved slot-aware runway (days); null = off/no cadence. */
@@ -478,10 +484,11 @@ function MedicationTableRowItem({
   // column with no neighbouring last-intake context. Order here:
   // last-dose context outranks the overdue escalation, which outranks
   // the window pill.
+  const canAct = medication.active && medication.intakeActionable !== false;
   const overdueLabel =
-    medication.active && doseStatus === "missed"
+    canAct && doseStatus === "missed"
       ? t("medications.veryOverdue")
-      : medication.active && doseStatus === "overdue"
+      : canAct && doseStatus === "overdue"
         ? t("medications.overdue")
         : null;
 
@@ -526,6 +533,16 @@ function MedicationTableRowItem({
         data-slot="medication-table-record-only-marker"
       >
         {t("medications.recordOnlyBadge")}
+      </span>
+    );
+  } else if (medication.courseStatus === "ENDED") {
+    // v1.39.4 (#1040) — the course is over: nothing is due any more.
+    nextCell = (
+      <span
+        className="text-muted-foreground"
+        data-slot="medication-table-course-ended-marker"
+      >
+        {t("medications.courseEndedBadge")}
       </span>
     );
   } else if (medication.asNeeded) {
@@ -713,7 +730,7 @@ function MedicationTableRowItem({
       </TableCell>
       <TableCell className="text-sm">{stockCell}</TableCell>
       <TableCell>
-        {medication.active && canAddIntake && !recordOnly ? (
+        {canAct && canAddIntake && !recordOnly ? (
           <div className="flex gap-1.5">
             <Button
               size="icon"

@@ -380,6 +380,9 @@
     "themeDark": "다크",
     "themeLight": "라이트",
     "collapseSidebar": "접기",
+    "expandSidebar": "펼치기",
+    "collapseSidebarLabel": "사이드바 접기",
+    "expandSidebarLabel": "사이드바 펼치기",
     "userMenu": "사용자 메뉴",
     "accountSettings": "계정 설정",
     "mood": "기분",
@@ -1209,6 +1212,7 @@
     "categorySleepAid": "수면 보조",
     "categoryDiabetes": "당뇨",
     "categoryAntibiotic": "항생제",
+    "categoryMentalHealth": "정신 건강",
     "categoryOther": "기타",
     "daysSun": "일",
     "daysMon": "월",
@@ -1223,6 +1227,7 @@
     "tomorrow": "내일",
     "asNeededMarker": "필요시",
     "recordOnlyBadge": "기록만",
+    "courseEndedBadge": "종료됨",
     "trackIntake": {
       "title": "복용 기록",
       "label": "복용 기록하기",
@@ -1563,6 +1568,11 @@
         "vitamin": "비타민",
         "supplement": "보충제",
         "antibiotic": "항생제",
+        "mentalHealth": "정신 건강",
+        "thyroid": "갑상선",
+        "digestive": "소화기",
+        "skin": "피부",
+        "sleepAid": "수면 보조",
         "other": "기타"
       },
       "cadence": {
@@ -2258,6 +2268,8 @@
     "noData": "선택한 기간에 데이터가 없어요",
     "bucketWeekly": "주 평균",
     "bucketMonthly": "월 평균",
+    "bucketWeeklyDaily": "주별 일평균",
+    "bucketMonthlyDaily": "월별 일평균",
     "systolic": "수축기",
     "diastolic": "이완기",
     "bodyWater": "체수분",
@@ -7353,6 +7365,11 @@
         "restoreFailureDocument": "휴대용 내보내기처럼 내용 없이 문서만 담긴 파일이에요. 재해 복구용 백업을 사용해 주세요.",
         "restoreFailureTimeBudget": "이 백업은 너무 커서 백그라운드 작업의 시간 제한 안에 복원할 수 없어요.",
         "restoreFailureTransaction": "데이터베이스가 복원 도중에 거부해서 모든 변경을 되돌렸어요. 서버 로그에 오류가 나와 있어요.",
+        "restoreFailureCauseTimeout": "복원이 데이터베이스가 허용하는 시간보다 오래 걸려서 모든 변경을 되돌렸어요. 데이터베이스 호스트가 바빴다면 한가할 때 다시 시작하세요. 서버 로그에 해당 단계가 나와 있어요.",
+        "restoreFailureCauseLock": "다른 작업이 변경 중인 기록을 기다리다가 모든 변경을 되돌렸어요. 복원을 다시 시작하세요.",
+        "restoreFailureCauseConstraint": "데이터베이스가 백업의 기록 하나를 거부해서 모든 변경을 되돌렸어요. 서버 로그에 테이블과 규칙이 나와 있어요.",
+        "restoreFailureCauseStorage": "복원 중에 데이터베이스의 디스크 공간이나 메모리가 부족해서 모든 변경을 되돌렸어요. 데이터베이스 호스트의 공간을 확보한 뒤 복원을 다시 시작하세요.",
+        "restoreFailureCauseConnection": "복원 중에 데이터베이스 연결이 끊겨서 모든 변경을 되돌렸어요. 데이터베이스가 실행 중인지 확인한 뒤 복원을 다시 시작하세요.",
         "restoreFailureInterrupted": "서버가 다시 시작되면서 복원이 멈췄고 되돌려졌어요. 또 멈춘다면 서버 메모리가 부족할 가능성이 커요.",
         "restoreFailureNotStarted": "백그라운드 작업자가 복원을 가져가지 않았어요. 작업자가 실행 중인지 확인해 주세요.",
         "restoreFailureEnqueue": "복원을 백그라운드 작업자에게 넘기지 못했어요. 작업자가 실행 중인지 확인해 주세요.",
@@ -9480,7 +9497,184 @@
       "promptInjection": "제 지침을 무시하게 만들려는 표현이 보였어요. 저는 HealthLog 코치이고 본인의 건강 데이터만 정리해 드려요 — 그 범위에 맞게 다시 질문해 주세요.",
       "conversationPoisoned": "이 대화의 앞선 메시지에 제 지침을 무시하게 만드는 표현이 있어요. 새 대화를 시작해 주세요."
     },
-    "noRecordedData": "물어보신 내용에 대해 기록된 측정값이 없어서 수치를 알려드릴 수 없어요. 기록을 남기신 뒤에 다시 물어보시면 본인 수치로 답해 드릴게요."
+    "noRecordedData": "물어보신 내용에 대해 기록된 측정값이 없어서 수치를 알려드릴 수 없어요. 기록을 남기신 뒤에 다시 물어보시면 본인 수치로 답해 드릴게요.",
+    "step": {
+      "read": "확인 중: {domain}",
+      "readWindow": "확인 중: {domain}, {window}",
+      "snapshot": "기록 요약 확인 중",
+      "showResult": "이전 표 여는 중",
+      "reuse": "앞서 만든 표 사용 중",
+      "headerActive": "{label}…",
+      "headerDoneOne": "출처 1개 확인함",
+      "headerDoneFew": "출처 {count}개 확인함",
+      "headerDoneOther": "출처 {count}개 확인함",
+      "listLabel": "코치가 확인한 내용",
+      "toggleShow": "코치가 확인한 내용 보기",
+      "toggleHide": "코치가 확인한 내용 숨기기",
+      "announceDone": "완료: {label}",
+      "readingsOne": "측정값 1개",
+      "readingsFew": "측정값 {count}개",
+      "readingsOther": "측정값 {count}개",
+      "rowsOne": "1행",
+      "rowsFew": "{count}행",
+      "rowsOther": "{count}행",
+      "metricsOne": "지표 1개",
+      "metricsFew": "지표 {count}개",
+      "metricsOther": "지표 {count}개",
+      "reason": {
+        "noData": "측정값 없음",
+        "outsideWindow": "이 기간에는 측정값 없음",
+        "moduleDisabled": "꺼져 있음",
+        "retrievalFailed": "읽지 못함",
+        "invalidArguments": "요청을 이해하지 못함"
+      },
+      "domain": {
+        "labs": "검사 결과",
+        "illness": "질병과 회복",
+        "cycle": "생리 주기",
+        "correlations": "지표 간 연관성",
+        "snapshot": "기록 요약"
+      },
+      "window": {
+        "last7days": "최근 7일",
+        "last30days": "최근 30일",
+        "last90days": "최근 90일",
+        "lastYear": "최근 12개월",
+        "allTime": "전체 기간"
+      },
+      "period": {
+        "current": "이번 기간",
+        "previous": "이전 기간",
+        "yearAgo": "1년 전"
+      },
+      "granularity": {
+        "day": "일별",
+        "week": "주별",
+        "month": "월별"
+      }
+    },
+    "result": {
+      "title": {
+        "byDay": "일별 {metric}",
+        "byWeek": "주별 {metric}",
+        "byMonth": "월별 {metric}",
+        "previousPeriod": "{metric}, 이전 기간",
+        "yearAgo": "{metric}, 1년 전",
+        "workoutsBySport": "종목별 운동",
+        "labsLatest": "최근 검사 결과",
+        "sleepByNight": "밤별 수면",
+        "complianceByDay": "일별 복약 순응도",
+        "distribution": "{metric}: 구간별 빈도"
+      },
+      "column": {
+        "day": "날짜",
+        "week": "주",
+        "month": "월",
+        "night": "밤",
+        "sport": "종목",
+        "sessions": "횟수",
+        "analyte": "검사 항목",
+        "value": "값",
+        "unit": "단위",
+        "date": "일자",
+        "referenceRange": "참고 범위",
+        "systolic": "수축기",
+        "diastolic": "이완기",
+        "mean": "평균",
+        "total": "합계",
+        "min": "최저",
+        "max": "최고",
+        "readings": "측정 횟수",
+        "rate": "순응도",
+        "duration": "시간",
+        "range": "구간",
+        "count": "빈도"
+      },
+      "other": "기타",
+      "noReading": "측정값 없음",
+      "showAll": "모두 보기 ({count})",
+      "showFewer": "간단히 보기",
+      "copyMenu": "표 복사",
+      "copyForSpreadsheet": "스프레드시트용으로 복사",
+      "copyAsText": "텍스트로 복사",
+      "copied": "복사됨",
+      "copyFailed": "표를 복사하지 못했어요",
+      "viewLabel": "보기 방식",
+      "viewChart": "차트",
+      "viewTable": "표",
+      "chartSummary": "{title}을(를) 차트로 표시해요. 표 보기에서 모든 값을 확인할 수 있어요.",
+      "dataUsed": "사용한 데이터 ({count})",
+      "truncated": "전체 {total}행 중 최근 {shown}행 표시",
+      "withheld": {
+        "moduleDisabled": "해당 모듈이 꺼져 있어 이 표를 숨겼어요.",
+        "unavailable": "이 표를 불러오지 못했어요."
+      },
+      "loading": "표 불러오는 중…",
+      "loadFailed": "표를 불러오지 못했어요.",
+      "reusedFrom": "이전 답변에서 ({date})",
+      "reusedFromUndated": "이전 답변에서",
+      "histogramBin": "{from}–{to} {unit}"
+    },
+    "method": {
+      "label": "산출 방법",
+      "entry": "{domain}, {window}: {detail}",
+      "entryNoWindow": "{domain}: {detail}",
+      "reused": "이전 답변에서",
+      "readingsOne": "측정값 1개",
+      "readingsFew": "측정값 {count}개",
+      "readingsOther": "측정값 {count}개",
+      "aggregation": {
+        "mean": "평균",
+        "median": "중앙값",
+        "latest": "최근 측정값",
+        "sum": "합계",
+        "count": "개수",
+        "rate": "비율"
+      },
+      "averages": {
+        "day": "일 평균",
+        "week": "주 평균",
+        "month": "월 평균"
+      },
+      "totals": {
+        "day": "일 합계",
+        "week": "주 합계",
+        "month": "월 합계"
+      },
+      "absent": {
+        "noData": "측정값 없음",
+        "outsideWindow": "이 기간에는 측정값 없음",
+        "moduleDisabled": "꺼져 있음"
+      }
+    },
+    "followUp": {
+      "groupLabel": "추천 후속 질문",
+      "widenWindow": "더 이전까지 보기",
+      "previousPeriod": "이전 기간과 비교",
+      "yearAgo": "1년 전과 비교",
+      "asChart": "차트로 보기",
+      "asTable": "표로 보기",
+      "relatedMetric": "함께 보기: {metric}",
+      "continue": "계속 찾아보기",
+      "settingLabel": "후속 질문 추천",
+      "settingHint": "코치의 가장 최근 답변 아래에 후속 질문을 최대 세 개까지 보여줘요."
+    },
+    "clarify": {
+      "cardLabel": "코치가 질문이 있어요",
+      "choicesLabel": "선택할 수 있는 답변",
+      "freeTextHint": "직접 답을 입력해도 돼요.",
+      "contextHint": "아래에 답을 입력해 주세요.",
+      "window": {
+        "last7days": "최근 7일",
+        "last30days": "최근 30일",
+        "last90days": "최근 90일",
+        "lastYear": "최근 12개월",
+        "allTime": "전체 기간"
+      }
+    },
+    "reuse": {
+      "caption": "지난 답변과 같은 수치를 그대로 보여드릴게요."
+    }
   },
   "safety": {
     "floor": {

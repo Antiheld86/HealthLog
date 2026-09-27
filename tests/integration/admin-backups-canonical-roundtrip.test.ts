@@ -182,7 +182,11 @@ describe("canonical disaster-recovery backup round-trip", () => {
         source: "MANUAL",
       },
     });
-    const tombstoneDeletedAt = new Date("2026-07-01T12:00:00.000Z");
+    // Recent, so the restore writes it back: a tombstone older than the
+    // tombstone retention is left out, as the nightly purge would drop it.
+    const tombstoneDeletedAt = new Date(
+      Math.floor(Date.now() / 1000) * 1000 - 86_400_000,
+    );
     const deletedMeasurement = await prisma.measurement.create({
       data: {
         id: "measurement-deleted-dr",
@@ -919,7 +923,11 @@ describe("canonical disaster-recovery backup round-trip", () => {
       source: "IMPORT" as const,
       externalId: `external-${index}`,
       syncVersion: 3,
-      deletedAt: index % 10 === 0 ? "2026-07-11T00:00:00.000Z" : null,
+      // Recent: a tombstone past the retention is not written back.
+      deletedAt:
+        index % 10 === 0
+          ? new Date(Date.now() - 86_400_000).toISOString()
+          : null,
     }));
     const payload = backupPayloadSchema.parse({
       schemaVersion: "2",

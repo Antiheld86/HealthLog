@@ -49,6 +49,20 @@ export const coachKeys = {
   coachAttachmentMutation: (conversationId: string) =>
     ["coachConversation", conversationId, "attachments"] as const,
   /**
+   * v1.39.4 — the stored tables of one assistant message
+   * (`GET /api/insights/chat/{id}/messages/{messageId}/results`). Nested under
+   * the conversation key so deleting or invalidating the conversation reaches
+   * every message's tables with the existing prefix match.
+   */
+  coachMessageResults: (conversationId: string, messageId: string) =>
+    [
+      "coachConversation",
+      conversationId,
+      "messages",
+      messageId,
+      "results",
+    ] as const,
+  /**
    * v1.21.2 (A3) — today's most notable derived signal, resolved into the
    * Coach hero's pre-seeded relevance opener
    * (`GET /api/insights/coach/seeded-question`).

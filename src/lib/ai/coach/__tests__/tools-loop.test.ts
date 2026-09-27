@@ -88,7 +88,7 @@ describe("runCoachToolLoop", () => {
     expect(out.result.content).toBe("Your BP looks steady.");
     expect(out.totalTokens).toBe(50); // summed across both rounds
     expect(out.toolTrace).toEqual([
-      { name: "get_metric_series", present: true },
+      { name: "get_metric_series", present: true, args: { metric: "bp" } },
     ]);
     // v1.21.0 (P6) — the present result's payload is retained for the prose
     // number-verifier.
@@ -278,7 +278,7 @@ describe("shared snapshot scope threading (D5-1)", () => {
     expect(out.toolResults).toHaveLength(1);
     expect(out.toolResults[0].available).toMatchObject({ count: 1597 });
     expect(out.toolTrace).toEqual([
-      { name: "get_glucose_panel", present: false },
+      { name: "get_glucose_panel", present: false, args: {} },
     ]);
   });
 

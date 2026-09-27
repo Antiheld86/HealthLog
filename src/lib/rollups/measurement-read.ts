@@ -462,6 +462,13 @@ export function utcBucketEnd(at: Date, granularity: RollupGranularity): Date {
 export interface CanonicalRollupBucket {
   bucketStart: Date;
   count: number;
+  /** Days of the bucket that hold a reading (1 for a DAY bucket). */
+  days: number;
+  /**
+   * The mean of the bucket's daily means, each day weighing one: what the
+   * chart's own fold of day points gives. `mean` weighs every reading.
+   */
+  dayMean: number;
   mean: number;
   minValue: number;
   maxValue: number;
@@ -483,6 +490,10 @@ export interface CanonicalRollupBucket {
 interface FoldedBucketRow {
   bucket_start: Date;
   count: number;
+  /** Canonical DAY rows folded into the bucket: its days with a reading. */
+  days: number;
+  /** The days' own means added up (each day weighs one). */
+  sum_day_mean: number;
   sum_y: number;
   min_value: number;
   max_value: number;
@@ -528,6 +539,8 @@ function composeFoldedBucket(row: FoldedBucketRow): CanonicalRollupBucket {
   return {
     bucketStart: new Date(row.bucket_start),
     count,
+    days: Number(row.days),
+    dayMean: Number(row.sum_day_mean) / Number(row.days),
     mean,
     minValue: Number(row.min_value),
     maxValue: Number(row.max_value),
@@ -616,7 +629,7 @@ export async function readCanonicalRollupBuckets(opts: {
         ? opts.userPriorityJson
         : await loadUserSourcePriority(userId);
     return collapseRollupRowsBySource(dayRows, type, priority).map(
-      ({ source: _source, ...day }) => day,
+      ({ source: _source, ...day }) => ({ ...day, days: 1, dayMean: day.mean }),
     );
   }
 
@@ -653,6 +666,8 @@ export async function readCanonicalRollupBuckets(opts: {
       date_trunc(${unit}, c."bucket_start" AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
                                                              AS bucket_start,
       SUM(c."count")::int                                    AS count,
+      COUNT(*)::int                                          AS days,
+      SUM(c."mean")::double precision                        AS sum_day_mean,
       SUM(COALESCE(c."sum_value", c."count" * c."mean"))::double precision
                                                              AS sum_y,
       MIN(c."min_value")::double precision                   AS min_value,

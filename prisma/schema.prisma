@@ -81,10 +81,13 @@ model User {
   timezone    String    @default("Europe/Berlin")
 
   // v1.25 (W-ENV) — opt-in environmental-context module home location. A coarse,
-  // user-set city (rounded lat/lon, ~city granularity — never a GPS track) the
-  // nightly weather fetch resolves against when no travel override covers the
-  // day. City-level granularity is the privacy floor: the weather model only
-  // needs ~10–25 km. All nullable — an account without the module enabled (or
+  // user-set city (never a GPS track) the nightly weather fetch resolves
+  // against when no travel override covers the day. Stored rounded to 1
+  // decimal (`roundCoarse`): about 11 km north-south and 7 km east-west at
+  // 50° N, a town or a city district. That is the privacy floor, and the
+  // weather reanalysis is gridded at 9 to 25 km, so nothing finer is needed.
+  // Up to v1.39.3 the rounding was 2 decimals (about 1 km, a neighbourhood);
+  // migration 0361 rounded the existing rows. All nullable — an account without the module enabled (or
   // without a home set) simply has no environment rows. `homeTimezone` anchors
   // the day-key an observation is stored under (it can differ from the display
   // `timezone` above for an account that tracks weather for another locale).
@@ -499,6 +502,14 @@ model User {
   // writes nothing, so the checkpoint can only trail a real sync
   // instead of running ahead of one.
   lastSyncedAt DateTime? @map("last_synced_at")
+
+  // When the account's record was last replaced wholesale: a backup restore
+  // committed, or the person deleted all their data. `/api/sync/changes`
+  // answers `cursorExpired` to any cursor issued before it, because such a
+  // cursor can no longer be caught up incrementally: a restore writes rows
+  // back with their original `updatedAt` and removes rows without leaving a
+  // tombstone, so the delta from an old cursor would miss both.
+  syncResetAt DateTime? @map("sync_reset_at")
 
   // v0.5.4 ios-coord — daily mood-reminder opt-in.
   //
@@ -1055,8 +1066,8 @@ model EnvironmentContext {
   /// YYYY-MM-DD anchored to the resolved location's timezone.
   date String
 
-  /// Coarse resolved location for the day (rounded lat/lon + label + the source
-  /// that won precedence).
+  /// Coarse resolved location for the day (lat/lon rounded to 1 decimal, about
+  /// 11 km, + label + the source that won precedence).
   lat           Float
   lon           Float
   /// @internal: human-readable label of the resolved location, stored as
@@ -2046,6 +2057,9 @@ model EcgRecording {
   // makes the convergence a guarantee instead of a convention.
   @@unique([userId, source, recordedAt, samplingFrequency], map: "ecg_recordings_user_source_recorded_at_freq_key")
   @@index([userId, recordedAt(sort: Desc)])
+  // The foreign key's own lookup: deleting a reading checks this column once
+  // per deleted row (migration 0362).
+  @@index([measurementId])
   @@map("ecg_recordings")
 }
 
@@ -2272,22 +2286,35 @@ model Workout {
 }
 
 model WorkoutRoute {
-  id               String   @id @default(cuid())
-  workoutId        String   @unique @map("workout_id")
+  id                String   @id @default(cuid())
+  workoutId         String   @unique @map("workout_id")
   /// GeoJSON LineString — `{ "type": "LineString", coordinates:
   /// [[lon, lat, alt?], ...] }`. JSONB rather than PostGIS so the
   /// Coolify Postgres template stays extension-free (same decision
   /// v1.4.20 made for correlations); GPX import + Leaflet / MapLibre
   /// consume GeoJSON natively.
-  geometry         Json
+  /// @internal: legacy readable track, read only as a fallback for rows the
+  /// free-text encryption backfill has not reached yet (v1.39.4). Every write
+  /// since then goes to `geometryEncrypted` and leaves this NULL; the backfill
+  /// nulls it on the old rows. DROP this column in a later release, once the
+  /// backfill reports zero remaining rows on every instance.
+  geometry          Json?
+  /// v1.39.4 — the same GeoJSON LineString, JSON text sealed as one binary
+  /// AES-256-GCM value (`encryptBytes`, labelled per purpose). Read through
+  /// `readRouteGeometry` in `src/lib/workouts/route-geometry-cipher.ts`.
+  geometryEncrypted Bytes?   @map("geometry_encrypted")
   /// Optional per-sample timestamps (ISO strings) and speeds —
   /// parallel array to `geometry.coordinates`. NULL when the source
   /// only ships static GPX (e.g. Withings).
-  sampleTimestamps Json?    @map("sample_timestamps")
-  createdAt        DateTime @default(now()) @map("created_at")
+  sampleTimestamps  Json?    @map("sample_timestamps")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   workout Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
 
+  // `workout_routes_geometry_backfill_idx` is a partial index over
+  // `(workout_id) WHERE geometry IS NOT NULL` — see migration 0361 for the
+  // encryption backfill's discovery scan. Raw SQL only (partial predicate not
+  // expressible in Prisma).
   @@map("workout_routes")
 }
 
@@ -2492,6 +2519,9 @@ model PersonalRecord {
   /// ORDER BY value DESC LIMIT 1 (MAX direction) /
   /// ASC LIMIT 1 (MIN direction). Index covers both.
   @@index([userId, metricType, value])
+  // The foreign key's own lookup: deleting a reading checks this column once
+  // per deleted row (migration 0362).
+  @@index([sourceMeasurementId])
   @@map("personal_records")
 }
 
@@ -5497,7 +5527,16 @@ model MeasurementReminder {
   /// Local hour (0–23) to fire the nudge, mirroring the mood-reminder hour.
   /// DST-safe windowing is applied at the cron via the existing TZ helpers.
   notifyHour         Int              @default(9) @map("notify_hour")
-  /// Free-text "wo": "Hausarzt", "Labor Dr. X". Optional.
+  /// Free-text "wo": "Hausarzt", "Labor Dr. X". Optional. A checkup's own
+  /// words, readable like its label.
+  ///
+  /// Always NULL on an ENCOUNTER row: an appointment's address is the
+  /// practitioner's, encrypted there (`Practitioner.locationEncrypted`), and
+  /// the reminder tick resolves it from the owning visit when it builds the
+  /// push (`appointmentReminderAddress`). Earlier releases copied it here in
+  /// the clear; `free-text-encryption-backfill` clears those copies, a
+  /// re-anchor clears the row's own, and the backup neither writes nor
+  /// restores one.
   location           String?
   /// Server-computed canonical next-due instant (server-authoritative).
   nextDueAt          DateTime?        @map("next_due_at")
@@ -6221,6 +6260,12 @@ model CoachMessage {
   // nullable: user turns, refusals, and pre-feature rows carry NULL.
   tokensUsed       Int?     @map("tokens_used")
   model            String?
+  // v1.39.4 — the tables of values this turn read (JSON `CoachResultTable[]`,
+  // at most 128 KB), AES-256-GCM encrypted like `encryptedContent`. Health
+  // values, so they never ride the plaintext `metricSourceJson`, which holds
+  // only the tables' metadata. Read through `readMessageResults` by the
+  // owner-narrowed results endpoint; NULL on every turn without a table.
+  resultsEncrypted Bytes?   @map("results_encrypted")
   createdAt        DateTime @default(now()) @map("created_at")
 
   conversation CoachConversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -8637,33 +8682,49 @@ enum Laterality {
 /// instance share a namespace. There is no uniqueness across accounts of
 /// any kind here.
 model Practitioner {
-  id            String    @id @default(cuid())
-  userId        String    @map("user_id")
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
   /// "Dr. med. …" or a practice name — whichever the person thinks of
   /// first. Plaintext and bounded, so the picker can ILIKE-search and
   /// ORDER BY in SQL (the `InboundDocument.title` tradeoff).
-  name          String
+  name              String
   /// Free-text specialty, NOT an enum: German practice signage does not
   /// fit a closed list, and an enum here would force a migration per
   /// specialty for no reader that needs the closed set.
-  specialty     String?
+  specialty         String?
   /// Practice or clinic name when it differs from `name`.
-  practice      String?
-  /// Free-text address / "wo", the `MeasurementReminder.location` shape.
-  location      String?
-  phone         String?
+  practice          String?
+  /// @internal: legacy readable address, read only as a fallback for rows the
+  /// free-text encryption backfill has not reached yet (v1.39.4). Every write
+  /// since then goes to `locationEncrypted` and leaves this NULL; the backfill
+  /// nulls it on the old rows. DROP this column in a later release, once the
+  /// backfill reports zero remaining rows on every instance.
+  location          String?
+  /// @internal: legacy readable phone number, same status as `location`
+  /// above. DROP this column in a later release, once the backfill reports
+  /// zero remaining rows on every instance.
+  phone             String?
+  /// v1.39.4 — AES-256-GCM ciphertext of the free-text address / "wo". Same
+  /// Bytes codec as the note below.
+  locationEncrypted Bytes?    @map("location_encrypted")
+  /// v1.39.4 — AES-256-GCM ciphertext of the phone number.
+  phoneEncrypted    Bytes?    @map("phone_encrypted")
   /// Free-text note (encrypted): parking, which entrance, who to ask for.
-  noteEncrypted Bytes?    @map("note_encrypted")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  noteEncrypted     Bytes?    @map("note_encrypted")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
   /// Soft-delete tombstone. NULL = live; non-NULL = deleted at the instant.
-  deletedAt     DateTime? @map("deleted_at")
+  deletedAt         DateTime? @map("deleted_at")
 
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   encounters   Encounter[]
   vaccinations VaccinationRecord[]
 
   @@index([userId, deletedAt, name])
+  // `practitioners_contact_backfill_idx` is a partial index over
+  // `(user_id) WHERE phone IS NOT NULL OR location IS NOT NULL` — see
+  // migration 0361 for the encryption backfill's discovery scan. Raw SQL only
+  // (partial predicate not expressible in Prisma).
   @@map("practitioners")
 }
 

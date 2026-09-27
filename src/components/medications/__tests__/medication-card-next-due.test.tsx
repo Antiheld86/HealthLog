@@ -367,3 +367,62 @@ describe("<MedicationCard> — as-needed marker (v1.16.11, #316)", () => {
     expect(html).toContain("Taken");
   });
 });
+
+/**
+ * v1.39.4 (#1040) — a medication whose course has ended keeps its card
+ * (history, adherence) but offers no taken / skip and names the state.
+ */
+describe("<MedicationCard> — ended course (#1040)", () => {
+  function makeMed(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "med-course-1",
+      name: "Amoxicillin",
+      dose: "500 mg",
+      category: "ANTIBIOTIC",
+      treatmentClass: undefined as string | undefined,
+      active: true,
+      notificationsEnabled: true,
+      pausedAt: null,
+      lastTakenAt: null,
+      todayEventCount: 0,
+      nextDueAt: null,
+      nextDueOverdue: false,
+      schedules: [{ id: "s1", ...pastWindow }],
+      ...overrides,
+    };
+  }
+
+  it("drops the action row and shows the Ended badge once the course is over", () => {
+    const client = makeClient();
+    seedCompliance(client, "med-course-1");
+    const html = render(
+      <MedicationCard
+        medication={makeMed({ courseStatus: "ENDED", intakeActionable: false })}
+        onEdit={() => {}}
+        onOpenHistory={() => {}}
+      />,
+      client,
+    );
+    expect(html).not.toContain('data-slot="medication-intake-take"');
+    expect(html).not.toContain('data-slot="medication-intake-skip"');
+    expect(html).toContain('data-slot="medication-course-ended-badge"');
+  });
+
+  it("keeps the action row on the last course day", () => {
+    const client = makeClient();
+    seedCompliance(client, "med-course-1");
+    const html = render(
+      <MedicationCard
+        medication={makeMed({
+          courseStatus: "CURRENT",
+          intakeActionable: true,
+        })}
+        onEdit={() => {}}
+        onOpenHistory={() => {}}
+      />,
+      client,
+    );
+    expect(html).toContain('data-slot="medication-intake-take"');
+    expect(html).not.toContain('data-slot="medication-course-ended-badge"');
+  });
+});

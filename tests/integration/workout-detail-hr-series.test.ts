@@ -23,6 +23,7 @@
  * rather than only in a count.
  */
 import { NextRequest } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
@@ -275,5 +276,20 @@ describe("GET /api/workouts/{id} — reconstructed heart-rate curve", () => {
       params: Promise.resolve({ id: foreign.id }),
     });
     expect(response.status).toBe(404);
+  });
+});
+
+describe("GET /api/workouts/{id} — a route whose track cannot be read", () => {
+  it("reports no route at all instead of a route with a null geometry", async () => {
+    const id = await createWorkout();
+    // Neither the sealed column nor the legacy readable one holds a track:
+    // the shape an unreadable or JSON-null row resolves to.
+    await getPrismaClient().workoutRoute.create({
+      data: { workoutId: id, geometry: Prisma.JsonNull },
+    });
+    const body = (await fetchDetail(id)) as unknown as {
+      data: { route: unknown };
+    };
+    expect(body.data.route).toBeNull();
   });
 });

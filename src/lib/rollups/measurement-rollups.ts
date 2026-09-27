@@ -187,6 +187,17 @@ export async function recomputeUserRollups(
     granularities?: RollupGranularity[];
     from?: Date;
     to?: Date;
+    /**
+     * Run every statement of the fold under this limit instead of the
+     * per-connection request limit (`src/lib/db.ts`, 60 s by default).
+     * For callers that fold a whole account outside a request: the restore
+     * rebuilds five years of buckets right after writing up to millions of
+     * readings, and on a slow disk one granularity's aggregate can run past
+     * the request limit, which left the account's charts empty until the
+     * next boot backfill (#1031). Scoped with SET LOCAL to a transaction per
+     * statement group, so it ends with it.
+     */
+    statementTimeoutMs?: number;
   } = {},
 ): Promise<{ rowsUpserted: number; durationMs: number }> {
   const startedAt = Date.now();
@@ -218,22 +229,34 @@ export async function recomputeUserRollups(
       to > alignedFrom
         ? bucketSpan(new Date(to.getTime() - 1), granularity).to
         : bucketSpan(from, granularity).to;
-    const rows = await runRollupAggregate({
+    const aggregateInput = {
       userId,
       types: opts.types,
       granularity,
       from: alignedFrom,
       to: alignedTo,
-    });
+    };
+    const budget = opts.statementTimeoutMs;
+    const rows = budget
+      ? await prisma.$transaction(
+          async (tx) => {
+            await applyStatementBudget(tx, budget);
+            return runRollupAggregate(aggregateInput, tx);
+          },
+          { maxWait: 10_000, timeout: budget + 30_000 },
+        )
+      : await runRollupAggregate(aggregateInput);
     // No `continue` on an empty aggregate: an empty result is a STATEMENT —
     // this window holds no readings any more — and the prune below is what
     // acts on it. Skipping the write here is what let a bucket outlive its
     // source rows.
-    rowsUpserted += await persistRollupRows(userId, granularity, rows, {
-      from: alignedFrom,
-      to: alignedTo,
-      types: opts.types,
-    });
+    rowsUpserted += await persistRollupRows(
+      userId,
+      granularity,
+      rows,
+      { from: alignedFrom, to: alignedTo, types: opts.types },
+      opts.statementTimeoutMs,
+    );
   }
 
   return { rowsUpserted, durationMs: Date.now() - startedAt };
@@ -412,13 +435,25 @@ export async function readRollupBuckets(
  * (epoch / 86400) so the slope is in "units per day", matching the
  * comprehensive-aggregator + summaries-slice convention.
  */
-async function runRollupAggregate(input: {
-  userId: string;
-  types: MeasurementType[] | undefined;
-  granularity: RollupGranularity;
-  from: Date;
-  to: Date;
-}): Promise<RollupRow[]> {
+/** Give the statements of a transaction their own limit (SET LOCAL). */
+async function applyStatementBudget(
+  tx: Pick<typeof prisma, "$executeRaw">,
+  ms: number,
+): Promise<void> {
+  const value = String(Math.max(1, Math.ceil(ms)));
+  await tx.$executeRaw`SELECT set_config('statement_timeout', ${value}, true), set_config('idle_in_transaction_session_timeout', ${value}, true)`;
+}
+
+async function runRollupAggregate(
+  input: {
+    userId: string;
+    types: MeasurementType[] | undefined;
+    granularity: RollupGranularity;
+    from: Date;
+    to: Date;
+  },
+  db: Pick<typeof prisma, "$queryRawUnsafe"> = prisma,
+): Promise<RollupRow[]> {
   if (input.types && input.types.length === 0) return [];
 
   // Postgres rejects `date_trunc($1::text, m."measured_at")` in a
@@ -491,7 +526,7 @@ async function runRollupAggregate(input: {
         AND m."deleted_at" IS NULL
       GROUP BY m."type", m."source", ${dateTrunc}
     `;
-    return prisma.$queryRawUnsafe<RollupRow[]>(
+    return db.$queryRawUnsafe<RollupRow[]>(
       sql,
       input.userId,
       input.from,
@@ -534,7 +569,7 @@ async function runRollupAggregate(input: {
       AND m."deleted_at" IS NULL
     GROUP BY m."type", m."source", ${dateTrunc}
   `;
-  return prisma.$queryRawUnsafe<RollupRow[]>(
+  return db.$queryRawUnsafe<RollupRow[]>(
     sql,
     input.userId,
     input.from,
@@ -598,6 +633,7 @@ async function persistRollupRows(
   granularity: RollupGranularity,
   rows: RollupRow[],
   prune: PruneScope | null,
+  statementTimeoutMs?: number,
 ): Promise<number> {
   // v1.11.1 — rows are now minted per source. Delete-then-upsert the affected
   // (type, bucket) partitions across ALL sources before writing, so a source
@@ -696,6 +732,8 @@ async function persistRollupRows(
   let touched = 0;
   await prisma.$transaction(
     async (tx) => {
+      if (statementTimeoutMs)
+        await applyStatementBudget(tx, statementTimeoutMs);
       await tx.measurementRollup.deleteMany({ where: deleteWhere });
       for (let i = 0; i < ordered.length; i += CHUNK) {
         const slice = ordered.slice(i, i + CHUNK);
@@ -703,7 +741,10 @@ async function persistRollupRows(
         touched += await tx.$executeRawUnsafe(sql, ...params);
       }
     },
-    { maxWait: 10_000, timeout: 120_000 },
+    {
+      maxWait: 10_000,
+      timeout: Math.max(120_000, (statementTimeoutMs ?? 0) + 30_000),
+    },
   );
   return touched;
 }

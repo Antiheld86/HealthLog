@@ -69,7 +69,7 @@ const TOOL_ROUTE = resolve(SRC, "app/api/insights/chat/route.ts");
 // Modules that constitute the tool loop / health snapshot — forbidden in the
 // fenced graph.
 const TOOL_MODULES = [
-  resolve(SRC, "lib/ai/coach/tools.ts"),
+  resolve(SRC, "lib/ai/coach/tools/index.ts"),
   resolve(SRC, "lib/ai/coach/snapshot.ts"),
 ];
 
@@ -98,6 +98,39 @@ describe("fenced-chat module graph — the fence is structural", () => {
         reachable.has(forbidden),
         `Tool route must NOT import ${forbidden}`,
       ).toBe(false);
+    }
+  });
+
+  it("the Coach turn's wire modules reach neither the tool registry nor the snapshot builder", () => {
+    // `turn/sse.ts` (framing, refusal and error streams) and `turn/errors.ts`
+    // (provider-error classification) are the parts of the Coach turn a fenced
+    // pipeline could share. They stay usable there only while they are
+    // tool-free.
+    const reachable = reachableFrom([
+      resolve(SRC, "lib/ai/coach/turn/sse.ts"),
+      resolve(SRC, "lib/ai/coach/turn/errors.ts"),
+    ]);
+    for (const forbidden of TOOL_MODULES) {
+      expect(
+        reachable.has(forbidden),
+        `Coach turn wire modules must NOT import ${forbidden}`,
+      ).toBe(false);
+    }
+    // Sanity: the walk actually left the entry files.
+    expect(reachable.has(resolve(SRC, "lib/ai/coach/turn/types.ts"))).toBe(
+      true,
+    );
+  });
+
+  it("sanity: the tool route DOES reach the tool registry through the turn pipeline", () => {
+    const reachable = reachableFrom([TOOL_ROUTE]);
+    // Without this the negative checks above would pass against a path that
+    // no longer exists — which is how `tools.ts` (now `tools/index.ts`) sat
+    // here unmatched after the tool registry became a directory.
+    for (const target of TOOL_MODULES) {
+      expect(reachable.has(target), `Tool route must reach ${target}`).toBe(
+        true,
+      );
     }
   });
 

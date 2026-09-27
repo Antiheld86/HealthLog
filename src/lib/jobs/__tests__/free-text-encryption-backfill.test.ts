@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readNote } from "@/lib/crypto/note-cipher";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import {
+  decryptRouteGeometry,
+  encryptRouteGeometry,
+} from "@/lib/workouts/route-geometry-cipher";
 
 // ── in-memory store backing a minimal prisma mock ──────────────────────────
 interface ConversationRow {
@@ -15,10 +19,27 @@ interface EntryRow {
   note: string | null;
   noteEncrypted: Uint8Array | null;
 }
+interface PractitionerRow {
+  id: string;
+  userId: string;
+  phone: string | null;
+  location: string | null;
+  phoneEncrypted: Uint8Array | null;
+  locationEncrypted: Uint8Array | null;
+}
+interface RouteRow {
+  id: string;
+  /** The owning workout's user; the real table reaches it through the join. */
+  userId: string;
+  geometry: unknown;
+  geometryEncrypted: Uint8Array | null;
+}
 
 const store = vi.hoisted(() => ({
   conversations: [] as ConversationRow[],
   entries: [] as EntryRow[],
+  practitioners: [] as PractitionerRow[],
+  routes: [] as RouteRow[],
 }));
 
 vi.mock("@/lib/jobs/boss-instance", () => ({ getGlobalBoss: () => null }));
@@ -27,40 +48,73 @@ vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
 vi.mock("@/lib/db", () => {
   function delegate<R extends { id: string; userId: string }>(
     rows: () => R[],
-    readable: keyof R,
+    readable: Array<keyof R>,
   ) {
     return {
-      // The handler pages on `{ userId, <readable>: { not: null } }`.
-      findMany: async (args: { where: { userId: string }; take: number }) =>
-        rows()
-          .filter((r) => r.userId === args.where.userId && r[readable] !== null)
+      // The handler pages on the owner plus "a readable column is set": the
+      // user id directly, or through the workout for a route.
+      findMany: async (args: {
+        where: { userId?: string; workout?: { userId: string } };
+        take: number;
+      }) => {
+        const userId = args.where.userId ?? args.where.workout?.userId;
+        return rows()
+          .filter(
+            (r) => r.userId === userId && readable.some((k) => r[k] !== null),
+          )
           .slice(0, args.take)
-          .map((r) => ({ id: r.id })),
+          .map((r) => ({ id: r.id }));
+      },
       findUnique: async (args: { where: { id: string } }) =>
         rows().find((x) => x.id === args.where.id) ?? null,
       update: async (args: { where: { id: string }; data: Partial<R> }) => {
         const r = rows().find((x) => x.id === args.where.id)!;
-        Object.assign(r, args.data);
+        // Prisma's DbNull sentinel stores SQL NULL.
+        const data = Object.fromEntries(
+          Object.entries(args.data).map(([k, v]) => [
+            k,
+            v !== null && typeof v === "object" && !(v instanceof Uint8Array)
+              ? null
+              : v,
+          ]),
+        );
+        Object.assign(r, data);
         return r;
       },
     };
   }
   const delegates = {
-    coachConversation: delegate(() => store.conversations, "title"),
-    customMetricEntry: delegate(() => store.entries, "note"),
+    coachConversation: delegate(() => store.conversations, ["title"]),
+    customMetricEntry: delegate(() => store.entries, ["note"]),
+    practitioner: delegate(() => store.practitioners, ["phone", "location"]),
+    workoutRoute: delegate(() => store.routes, ["geometry"]),
   };
   return {
     prisma: {
       ...delegates,
+      // Nothing to clear or scrub in this in-memory store; the real-Postgres
+      // test covers both.
+      measurementReminder: { updateMany: async () => ({ count: 0 }) },
+      auditLog: { findMany: async () => [] },
       $transaction: async (fn: (tx: typeof delegates) => unknown) =>
         fn(delegates),
     },
   };
 });
 
-import { runFreeTextEncryptionBackfillForUser } from "@/lib/jobs/free-text-encryption-backfill";
+import {
+  runFreeTextEncryptionBackfillForUser,
+  scrubContactAuditDetails,
+} from "@/lib/jobs/free-text-encryption-backfill";
 
 const KEY = "a".repeat(64);
+const TRACK = {
+  type: "LineString",
+  coordinates: [
+    [13.4012, 52.5201],
+    [13.4051, 52.5233],
+  ],
+};
 
 beforeEach(() => {
   vi.stubEnv("ENCRYPTION_KEYS", "");
@@ -94,6 +148,52 @@ beforeEach(() => {
     { id: "e3", userId: "u1", note: "", noteEncrypted: null },
     { id: "e4", userId: "u2", note: "other user", noteEncrypted: null },
   ];
+  store.practitioners = [
+    {
+      id: "p1",
+      userId: "u1",
+      phone: "+49 30 1234567",
+      location: "Hauptstr. 1, Berlin",
+      phoneEncrypted: null,
+      locationEncrypted: null,
+    },
+    // Only an address: the phone ciphertext column stays as it was.
+    {
+      id: "p2",
+      userId: "u1",
+      phone: null,
+      location: "Am Markt 3",
+      phoneEncrypted: null,
+      locationEncrypted: null,
+    },
+    // Already sealed, nothing readable.
+    {
+      id: "p3",
+      userId: "u1",
+      phone: null,
+      location: null,
+      phoneEncrypted: encryptToBytes("+49 40 7654321"),
+      locationEncrypted: null,
+    },
+    {
+      id: "p4",
+      userId: "u2",
+      phone: "other user",
+      location: null,
+      phoneEncrypted: null,
+      locationEncrypted: null,
+    },
+  ];
+  store.routes = [
+    { id: "r1", userId: "u1", geometry: TRACK, geometryEncrypted: null },
+    {
+      id: "r2",
+      userId: "u1",
+      geometry: null,
+      geometryEncrypted: encryptRouteGeometry(TRACK),
+    },
+    { id: "r3", userId: "u2", geometry: TRACK, geometryEncrypted: null },
+  ];
 });
 
 afterEach(() => {
@@ -107,6 +207,10 @@ describe("runFreeTextEncryptionBackfillForUser", () => {
     expect(summary).toEqual({
       conversationTitlesMigrated: 1,
       metricNotesMigrated: 2,
+      practitionerContactsMigrated: 2,
+      routeGeometriesMigrated: 1,
+      appointmentAddressesCleared: 0,
+      contactAuditRowsScrubbed: 0,
     });
 
     const c1 = store.conversations.find((r) => r.id === "c1")!;
@@ -157,6 +261,43 @@ describe("runFreeTextEncryptionBackfillForUser", () => {
     });
   });
 
+  it("seals practitioner phone numbers and addresses and nulls the readable columns", async () => {
+    await runFreeTextEncryptionBackfillForUser("u1");
+    const p1 = store.practitioners.find((r) => r.id === "p1")!;
+    expect(p1).toMatchObject({ phone: null, location: null });
+    expect(readNote(p1.phoneEncrypted, null)).toBe("+49 30 1234567");
+    expect(readNote(p1.locationEncrypted, null)).toBe("Hauptstr. 1, Berlin");
+    const p2 = store.practitioners.find((r) => r.id === "p2")!;
+    expect(p2.location).toBeNull();
+    expect(p2.phoneEncrypted).toBeNull();
+    expect(readNote(p2.locationEncrypted, null)).toBe("Am Markt 3");
+    const p3Before = store.practitioners.find(
+      (r) => r.id === "p3",
+    )!.phoneEncrypted;
+    expect(store.practitioners.find((r) => r.id === "p3")!.phoneEncrypted).toBe(
+      p3Before,
+    );
+    expect(store.practitioners.find((r) => r.id === "p4")).toMatchObject({
+      phone: "other user",
+      phoneEncrypted: null,
+    });
+  });
+
+  it("seals workout GPS tracks through the workout's owner and nulls the readable column", async () => {
+    const r2Before = store.routes.find((r) => r.id === "r2")!.geometryEncrypted;
+    await runFreeTextEncryptionBackfillForUser("u1");
+    const r1 = store.routes.find((r) => r.id === "r1")!;
+    expect(r1.geometry).toBeNull();
+    expect(decryptRouteGeometry(r1.geometryEncrypted!)).toEqual(TRACK);
+    expect(store.routes.find((r) => r.id === "r2")!.geometryEncrypted).toBe(
+      r2Before,
+    );
+    expect(store.routes.find((r) => r.id === "r3")).toMatchObject({
+      geometry: TRACK,
+      geometryEncrypted: null,
+    });
+  });
+
   it("is idempotent: a second run changes nothing", async () => {
     await runFreeTextEncryptionBackfillForUser("u1");
     const sealed = store.conversations.find(
@@ -166,6 +307,10 @@ describe("runFreeTextEncryptionBackfillForUser", () => {
     expect(second).toEqual({
       conversationTitlesMigrated: 0,
       metricNotesMigrated: 0,
+      practitionerContactsMigrated: 0,
+      routeGeometriesMigrated: 0,
+      appointmentAddressesCleared: 0,
+      contactAuditRowsScrubbed: 0,
     });
     expect(store.conversations.find((r) => r.id === "c1")!.titleEncrypted).toBe(
       sealed,
@@ -180,5 +325,32 @@ describe("runFreeTextEncryptionBackfillForUser", () => {
       title: "Why is my pressure up after the new tablets?",
       titleEncrypted: null,
     });
+  });
+});
+
+describe("scrubContactAuditDetails", () => {
+  it("removes the phone number and address from previous and keeps them named", () => {
+    const out = scrubContactAuditDetails(
+      JSON.stringify({
+        practitionerId: "p1",
+        fields: ["location", "name"],
+        previous: { location: "Hauptstr. 1", name: "Alt", phone: "+49 30 1" },
+      }),
+    );
+    expect(JSON.parse(out!)).toEqual({
+      practitionerId: "p1",
+      fields: ["location", "name", "phone"],
+      previous: { name: "Alt" },
+    });
+  });
+
+  it("leaves a row without contact values, or that is not this JSON, alone", () => {
+    expect(
+      scrubContactAuditDetails(
+        JSON.stringify({ fields: ["location"], previous: {} }),
+      ),
+    ).toBeNull();
+    expect(scrubContactAuditDetails("not json")).toBeNull();
+    expect(scrubContactAuditDetails(null)).toBeNull();
   });
 });

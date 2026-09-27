@@ -41,6 +41,8 @@ import type {
   Laterality,
 } from "@/generated/prisma/client";
 
+import { encryptNote } from "@/lib/crypto/note-cipher";
+import { readPractitionerContact } from "@/lib/practitioners/dto";
 import {
   recordUnknownKeys,
   type RestoreSkipLog,
@@ -58,8 +60,17 @@ export interface PractitionerBackupEntry {
   name: string;
   specialty: string | null;
   practice: string | null;
+  /**
+   * v1.39.4 — the address and phone number are encrypted at rest. A portable
+   * export carries them readable here; a disaster-recovery payload leaves
+   * these null and carries the ciphertext in the two fields below.
+   */
   location: string | null;
   phone: string | null;
+  /** Base64 ciphertext of the address, disaster-recovery payloads only. */
+  locationEncrypted?: string | null;
+  /** Base64 ciphertext of the phone number, disaster-recovery payloads only. */
+  phoneEncrypted?: string | null;
   /** Base64 ciphertext, carried verbatim — never decrypted into the file. */
   noteEncrypted: string | null;
   createdAt: string;
@@ -134,6 +145,8 @@ const PRACTITIONER_BACKUP_SELECT = {
   practice: true,
   location: true,
   phone: true,
+  locationEncrypted: true,
+  phoneEncrypted: true,
   noteEncrypted: true,
   createdAt: true,
   updatedAt: true,
@@ -236,8 +249,32 @@ export async function buildVisitsBackupSection(
       name: row.name,
       specialty: row.specialty,
       practice: row.practice,
-      location: row.location,
-      phone: row.phone,
+      // v1.39.4 — a disaster-recovery file carries the contact fields as
+      // ciphertext only, sealing a row the backfill has not reached yet on
+      // the way out; a portable export carries them readable.
+      ...(disasterRecovery
+        ? {
+            location: null,
+            phone: null,
+            locationEncrypted: encodeCiphertext(
+              row.locationEncrypted ?? encryptNote(row.location),
+            ),
+            phoneEncrypted: encodeCiphertext(
+              row.phoneEncrypted ?? encryptNote(row.phone),
+            ),
+          }
+        : {
+            location: readPractitionerContact(
+              row.locationEncrypted,
+              row.location,
+              "location",
+            ),
+            phone: readPractitionerContact(
+              row.phoneEncrypted,
+              row.phone,
+              "phone",
+            ),
+          }),
       noteEncrypted: encodeCiphertext(row.noteEncrypted),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
@@ -336,7 +373,13 @@ export type RestoredPractitioner = Pick<
   OptionalNullable<
     Pick<
       PractitionerBackupEntry,
-      "specialty" | "practice" | "location" | "phone" | "noteEncrypted"
+      | "specialty"
+      | "practice"
+      | "location"
+      | "phone"
+      | "locationEncrypted"
+      | "phoneEncrypted"
+      | "noteEncrypted"
     >
   > & { deletedAt?: string | null };
 
@@ -405,8 +448,17 @@ export async function restoreVisitsData(
         name: entry.name,
         specialty: entry.specialty ?? null,
         practice: entry.practice ?? null,
-        location: entry.location ?? null,
-        phone: entry.phone ?? null,
+        // v1.39.4 — ciphertext wins when a disaster-recovery file carried it;
+        // a portable file's (or an older file's) readable value is sealed
+        // under this instance's key. The readable columns are never written.
+        locationEncrypted:
+          entry.locationEncrypted != null
+            ? decodeCiphertext(entry.locationEncrypted)
+            : encryptNote(entry.location),
+        phoneEncrypted:
+          entry.phoneEncrypted != null
+            ? decodeCiphertext(entry.phoneEncrypted)
+            : encryptNote(entry.phone),
         noteEncrypted:
           entry.noteEncrypted == null
             ? null

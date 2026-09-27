@@ -32,7 +32,12 @@ export interface MedicationDetailSummaryProps {
   name: string;
   dose: string;
   active: boolean;
-  endsOn?: string | null;
+  /**
+   * v1.39.4 (#1040) — the server's course position. "Ended" follows it, so
+   * the last course day reads as active on the user's clock instead of
+   * flipping at UTC midnight of the end date.
+   */
+  courseStatus?: "UPCOMING" | "CURRENT" | "ENDED";
   /** Wizard payload used to derive the plain-language cadence line. */
   payload: MedicationPayload;
   oneShot: boolean;
@@ -45,13 +50,11 @@ export interface MedicationDetailSummaryProps {
 
 type Status = "active" | "paused" | "ended";
 
-function resolveStatus(active: boolean, endsOn?: string | null): Status {
-  if (endsOn) {
-    const end = new Date(endsOn);
-    if (!Number.isNaN(end.getTime()) && end.getTime() <= Date.now()) {
-      return "ended";
-    }
-  }
+function resolveStatus(
+  active: boolean,
+  courseStatus?: "UPCOMING" | "CURRENT" | "ENDED",
+): Status {
+  if (courseStatus === "ENDED") return "ended";
   return active ? "active" : "paused";
 }
 
@@ -59,7 +62,7 @@ export function MedicationDetailSummary({
   name,
   dose,
   active,
-  endsOn,
+  courseStatus,
   payload,
   oneShot,
   asNeeded = false,
@@ -69,7 +72,7 @@ export function MedicationDetailSummary({
   const { t, locale } = useTranslations();
   const formatters = useFormatters();
   const dateFormatPref = useDateFormatPreference();
-  const status = resolveStatus(active, endsOn);
+  const status = resolveStatus(active, courseStatus);
 
   const statusLabel =
     status === "active"

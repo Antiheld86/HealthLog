@@ -101,7 +101,17 @@ import { restoreAwardsData } from "@/lib/export/awards-backup";
 import { restoreEnvironmentData } from "@/lib/export/environment-backup";
 import { restoreEcgData } from "@/lib/export/ecg-backup";
 import { restoredMedicationCreatedAt } from "@/lib/export/medication-created-at";
+import {
+  ensureMedicationCategoryTable,
+  setMedicationCategory,
+} from "@/lib/medication-category";
 import { invalidateUserData } from "@/lib/cache/invalidate";
+import { TOMBSTONE_RETENTION_DAYS } from "@/lib/auth/native-client";
+import { stampSyncReset } from "@/lib/sync/reset";
+import {
+  classifyRestoreFailure,
+  RESTORE_FAILURE_CAUSE_MESSAGES,
+} from "@/lib/export/restore-failure-cause";
 import { foldLegacyCoachAvailability } from "@/lib/modules/operator-availability";
 
 export interface RestoreResponse {
@@ -167,16 +177,29 @@ export interface RestoreResponse {
 }
 
 /**
- * How long the restore transaction may run. Two minutes was the whole budget
- * when a record was a few hundred thousand rows; deleting and rewriting 1.25
- * million measurements in one transaction takes longer than that (#1031). On
- * the test host the whole restore of that account, reading the file twice
- * included, took 94 s. The budget grows by a second per 5 000 measurements,
- * which gives that account six minutes, about four times what it needed, and
- * never drops below the old two minutes.
+ * How long the restore transaction may run, and with it every statement
+ * inside it (`SET LOCAL statement_timeout`, see the transaction below).
+ *
+ * The work is deleting the readings the account holds now and writing the
+ * ones the file carries. Both count: an account whose readings were folded
+ * into hourly averages still holds the originals as deleted rows until the
+ * nightly purge removes them, and the restore deletes and rewrites those too
+ * (#1031). Writing is the slow half, since every reading goes into thirteen
+ * indexes. The budget is two minutes, plus a second per 1 000 readings in the
+ * file and per 10 000 in the account. A seeded account of 1.89 million
+ * readings restored in 196 s on a fast host and in 19 min on a database held
+ * to half a CPU and 40 MB/s of writes, where its transaction ran 16 min of a
+ * 37 min budget.
  */
-function restoreTransactionTimeoutMs(measurementCount: number): number {
-  return 120_000 + Math.ceil(measurementCount / 5);
+export function restoreTransactionTimeoutMs(
+  fileMeasurements: number,
+  currentMeasurements: number,
+): number {
+  return 120_000 + fileMeasurements + Math.ceil(currentMeasurements / 10);
+}
+
+function readingsPhrase(count: number): string {
+  return `${count} ${count === 1 ? "reading" : "readings"}`;
 }
 
 function decodeEncryptedBytes(encoded: string): Uint8Array<ArrayBuffer> {
@@ -296,7 +319,7 @@ export type RestoreBackupOutcome =
  * Time kept free after the transaction for the rollup folds and the audit row,
  * when the restore checks it fits the caller's deadline.
  */
-const AFTER_TRANSACTION_ALLOWANCE_MS = 10 * 60 * 1000;
+export const RESTORE_AFTER_TRANSACTION_ALLOWANCE_MS = 10 * 60 * 1000;
 
 function refused(
   status: number,
@@ -612,12 +635,18 @@ export async function restoreBackup(
   // has a deadline of its own (the background job's time budget) and that
   // limit would run past it, the restore is refused here, above the first
   // delete, rather than started and cut off by the queue.
+  // Counted here, before the transaction, because the delete costs time in
+  // proportion to what the account holds, deleted rows included.
+  const currentMeasurements = await prisma.measurement.count({
+    where: { userId: ownerId },
+  });
   const transactionTimeoutMs = restoreTransactionTimeoutMs(
     streamed.measurementCount,
+    currentMeasurements,
   );
   if (
     input.deadline !== undefined &&
-    Date.now() + transactionTimeoutMs + AFTER_TRANSACTION_ALLOWANCE_MS >
+    Date.now() + transactionTimeoutMs + RESTORE_AFTER_TRANSACTION_ALLOWANCE_MS >
       input.deadline
   ) {
     await auditLog("admin.backups.restore.failed", {
@@ -628,19 +657,28 @@ export async function restoreBackup(
         ownerId,
         reason: "time_budget",
         measurements: streamed.measurementCount,
+        currentMeasurements,
       },
     });
+    // Both counts, because both cost time: the account's readings are deleted
+    // (removed ones included, until the nightly clean-up purges them) before
+    // the file's are written.
     return refused(
       503,
       "time_budget",
-      `A backup of ${streamed.measurementCount} readings needs more time than the restore job allows. Nothing was changed.`,
+      `Restoring ${readingsPhrase(streamed.measurementCount)} in the backup over the ${readingsPhrase(currentMeasurements)} this account holds now (removed readings count until the nightly clean-up) needs more time than the restore job allows. Nothing was changed.`,
     );
   }
 
   let outcome: {
+    expiredTombstonesSkipped: number;
     cleared: RestoreResponse["cleared"];
     skipped: RestoreSkipSummary;
   };
+  // The category side table is created lazily. Doing that here, before the
+  // transaction, keeps its DDL (which takes a table lock) out of a
+  // transaction that already holds row locks on the same table.
+  await ensureMedicationCategoryTable();
   try {
     report("clearing");
     outcome = await prisma.$transaction(
@@ -651,6 +689,14 @@ export async function restoreBackup(
         // still writing. A second transaction waits here for the first to
         // commit or roll back, then replaces the account again from its own
         // file, which is what it was asked to do.
+        // Every connection carries the request limits from `src/lib/db.ts`
+        // (60 s per statement, 60 s idle inside a transaction). A restore is
+        // not a request: deleting two million readings is one statement, and
+        // on a slow disk it ran past 60 s, was cancelled, and the whole
+        // restore rolled back in its clearing step (#1031). The transaction
+        // has its own limit; SET LOCAL gives each statement the same one, and
+        // ends with the transaction.
+        await tx.$executeRaw`SELECT set_config('statement_timeout', ${String(transactionTimeoutMs)}, true), set_config('idle_in_transaction_session_timeout', ${String(transactionTimeoutMs)}, true)`;
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`backup-restore:${ownerId}`}))`;
         // Every reference this restore writes stays inside the account: the
         // references that leave it are counted now and again after the last
@@ -890,10 +936,42 @@ export async function restoreBackup(
         }
         const writtenReferencedIds = new Set<string>();
         const measurementBatchSize = 1_000;
+        // Deleted readings the file carries are restored as deleted rows
+        // (tombstones), with one exception: a tombstone deleted longer ago
+        // than `TOMBSTONE_RETENTION_DAYS` is not written at all.
+        //
+        // Such a row is exactly what the nightly tombstone purge
+        // (`measurement-tombstone-cleanup.ts`) hard-deletes, so writing it
+        // costs the restore a row in thirteen indexes for a row that is gone
+        // by the next morning. Nothing reads it in between: the delta feed
+        // answers `cursorExpired` for every cursor older than the same
+        // horizon, so no client that would still be served this tombstone
+        // exists; the step-consolidation repair and the hourly rebuild only
+        // look inside the horizon; and the undo of a delete is offered for
+        // what the purge has not removed yet, which this row would not
+        // survive either.
+        //
+        // Younger tombstones are written. They still have readers: a paired
+        // client that has not yet drained that deletion from the delta feed,
+        // the undo of a recent delete, the consolidation repairs that rebuild
+        // from folded samples, and the unique `(user, type, source,
+        // externalId)` key that stops a device from uploading a folded
+        // sample again. The backup file itself is unchanged and keeps every
+        // row.
+        const tombstoneHorizonMs =
+          Date.now() - TOMBSTONE_RETENTION_DAYS * 86_400_000;
+        const isExpiredTombstone = (measurement: BackupMeasurement) =>
+          measurement.deletedAt != null &&
+          new Date(measurement.deletedAt).getTime() < tombstoneHorizonMs;
+        let expiredTombstonesSkipped = 0;
         report("measurements");
         await streamed.forEachMeasurementBatch(
           measurementBatchSize,
-          async (batch) => {
+          async (fileBatch) => {
+            const batch = fileBatch.filter(
+              (measurement) => !isExpiredTombstone(measurement),
+            );
+            expiredTombstonesSkipped += fileBatch.length - batch.length;
             const stableRows = batch.flatMap(
               (measurement): MeasurementInsertRow[] =>
                 measurement.id
@@ -909,7 +987,8 @@ export async function restoreBackup(
             // One statement per batch, not `createMany`: see
             // `insertMeasurementRows` for what the latter cost here.
             await insertMeasurementRows(tx, stableRows);
-            progress.measurementsWritten += batch.length;
+            // Counted through the file, so the bar ends at the file's total.
+            progress.measurementsWritten += fileBatch.length;
             report("measurements");
             for (const row of stableRows) {
               if (referencedMeasurementIds.has(row.id)) {
@@ -1174,6 +1253,12 @@ export async function restoreBackup(
           });
           restoredMedicationIds.add(created.id);
           if (!medByName.has(m.name)) medByName.set(m.name, created.id);
+          // v1.39.4 — the clinical category lives in a side table keyed on the
+          // medication id, so it is written after the row exists and inside the
+          // same transaction. OTHER is what a missing row already reads as.
+          if (m.category && m.category !== "OTHER") {
+            await setMedicationCategory(created.id, m.category, tx);
+          }
 
           // ── The archived schedule eras, in two passes ────────────────
           //
@@ -2350,9 +2435,18 @@ export async function restoreBackup(
           foreignBefore,
           await countForeignReferences(tx, ownerId, tenantEdges),
         );
+        // Paired clients' delta cursors are no longer valid (see
+        // `User.syncResetAt`). Stamped as the last write, so it commits with
+        // the data, and stamped again right after the commit below to cover
+        // a cursor issued while this transaction was still running.
+        await stampSyncReset(tx, ownerId);
         progress.sectionsDone = RESTORE_SECTION_STEPS.length;
         report("sections", true);
-        return { cleared, skipped: summarizeRestoreSkips(skips) };
+        return {
+          cleared,
+          skipped: summarizeRestoreSkips(skips),
+          expiredTombstonesSkipped,
+        };
       },
       {
         maxWait: 10_000,
@@ -2367,6 +2461,7 @@ export async function restoreBackup(
     // lands in the audit row (admin-readable) and the Wide Event
     // (operator-readable), so root-cause investigation is unaffected.
     const verbose = err instanceof Error ? err.message : String(err);
+    const classified = classifyRestoreFailure(err);
     await auditLog("admin.backups.restore.failed", {
       userId: input.actorUserId,
       ipAddress: input.ipAddress,
@@ -2374,10 +2469,19 @@ export async function restoreBackup(
         backupId: backup.id,
         ownerId,
         reason: "transaction_failed",
+        cause: classified.cause,
+        code: classified.code,
         message: verbose,
       },
     });
-    annotate({ meta: { restoreFailReason: verbose } });
+    annotate({
+      meta: {
+        restoreFailReason: verbose,
+        restoreFailCause: classified.cause,
+        restoreFailCode: classified.code,
+        restoreTransactionTimeoutMs: transactionTimeoutMs,
+      },
+    });
     if (err instanceof ForeignReferenceError) {
       return refused(422, "backup.foreign_reference", err.message, {
         errorCode: "backup.foreign_reference",
@@ -2392,14 +2496,39 @@ export async function restoreBackup(
         errorCode: refusal.code,
       });
     }
+    // The wide event and the audit row carry the whole error. The job's row
+    // is read by whoever started the restore, so it names the cause, never
+    // the database's message, which can quote the rows involved.
     return refused(
       500,
       "transaction_failed",
-      "The restore could not be written and was rolled back. Nothing was changed.",
+      RESTORE_FAILURE_CAUSE_MESSAGES[classified.cause],
+      { cause: classified.cause },
     );
   }
 
-  const { cleared, skipped } = outcome;
+  // A pull that started before the commit read the pre-restore rows and may
+  // have been issued a cursor after the stamp inside the transaction. The
+  // second stamp expires that one too; it can only expire more cursors, so a
+  // failure here costs a client at most one extra incremental page.
+  try {
+    await stampSyncReset(prisma, ownerId);
+  } catch (err) {
+    annotate({
+      meta: {
+        restore_sync_reset_failed: true,
+        restore_sync_reset_error:
+          err instanceof Error ? err.message : String(err),
+      },
+    });
+  }
+
+  const { cleared, skipped, expiredTombstonesSkipped } = outcome;
+  const measurementsRestored =
+    streamed.measurementCount - expiredTombstonesSkipped;
+  annotate({
+    meta: { restore_expired_tombstones_skipped: expiredTombstonesSkipped },
+  });
   report("rebuilding", true);
   await input.onCommitted?.();
 
@@ -2423,9 +2552,17 @@ export async function restoreBackup(
   // outside the transaction (the 5-year fold would otherwise hold a
   // long write lock) and is best-effort so a populator hiccup never
   // undoes the restore. The boot-time backfill is the safety net.
-  if (streamed.measurementCount > 0) {
+  //
+  // The fold covers five years of the account in a handful of statements,
+  // right after the restore wrote every reading. On a slow disk one of them
+  // ran past the per-request statement limit, the fold was dropped, and the
+  // account's charts stayed empty until the next boot (#1031). It gets the
+  // time the deadline check above keeps free for it instead.
+  if (measurementsRestored > 0) {
     try {
-      await recomputeUserRollups(ownerId);
+      await recomputeUserRollups(ownerId, {
+        statementTimeoutMs: RESTORE_AFTER_TRANSACTION_ALLOWANCE_MS,
+      });
     } catch (err) {
       annotate({
         meta: {
@@ -2485,7 +2622,7 @@ export async function restoreBackup(
 
   const summary = {
     ...summarizeBackup(payload),
-    measurements: streamed.measurementCount,
+    measurements: measurementsRestored,
   };
 
   await auditLog("admin.backups.restore", {

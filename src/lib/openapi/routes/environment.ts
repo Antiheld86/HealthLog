@@ -11,7 +11,7 @@
  * the `environment` module off, every one of the six paths answers 403
  * `module.disabled` before it does anything else.
  *
- * Coordinates are rounded to ~city granularity (2 dp) on the way in, as a
+ * Coordinates are rounded to 1 decimal (about 11 km) on the way in, as a
  * floor under whatever precision a client sends. That rounding is why the
  * geocode results and the stored home read back coarser than they were
  * picked.
@@ -58,8 +58,10 @@ const geocodeQuery = geocodeQuerySchema.meta({
 
 const environmentHome = z
   .object({
-    lat: z.number().describe("Coarse latitude, rounded to 2 dp (~1 km)."),
-    lon: z.number().describe("Coarse longitude, rounded to 2 dp."),
+    lat: z
+      .number()
+      .describe("Coarse latitude, rounded to 1 decimal (about 11 km)."),
+    lon: z.number().describe("Coarse longitude, rounded to 1 decimal."),
     label: z.string().nullable(),
     timezone: z
       .string()
@@ -142,8 +144,8 @@ const environmentOverview = z
 
 const geocodeResult = z
   .object({
-    lat: z.number().describe("Coarse latitude, rounded to 2 dp."),
-    lon: z.number().describe("Coarse longitude, rounded to 2 dp."),
+    lat: z.number().describe("Coarse latitude, rounded to 1 decimal."),
+    lon: z.number().describe("Coarse longitude, rounded to 1 decimal."),
     label: z
       .string()
       .describe(
@@ -186,7 +188,7 @@ export const environmentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Environment"],
       summary: "Set the coarse home location",
       description:
-        "Stores the picked city and stamps the effective-from instant. Coordinates are rounded to 2 dp server-side regardless of what was sent.\n\nRe-stamping is the part worth knowing: EVERY write moves `since` to now, including one that changes only the label. Days before the new `since` stop resolving against this home, so a correction to an existing home un-attributes the history that home used to cover.\n\nOn success a lookback fetch is enqueued so recent days populate without waiting for the nightly tick. That enqueue is best-effort — it no-ops cleanly when no worker is bound and the response is a 200 either way.\n\nBody cap 4 KiB. Module-gated.",
+        "Stores the picked city and stamps the effective-from instant. Coordinates are rounded to 1 decimal (about 11 km) server-side regardless of what was sent.\n\nRe-stamping is the part worth knowing: EVERY write moves `since` to now, including one that changes only the label. Days before the new `since` stop resolving against this home, so a correction to an existing home un-attributes the history that home used to cover.\n\nOn success a lookback fetch is enqueued so recent days populate without waiting for the nightly tick. That enqueue is best-effort — it no-ops cleanly when no worker is bound and the response is a 200 either way.\n\nBody cap 4 KiB. Module-gated.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: homeLocationRequest } },
@@ -309,7 +311,7 @@ export const environmentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Environment"],
       summary: "Add a travel override",
       description:
-        "Declares that the account was somewhere other than home for an inclusive date range; the days it covers resolve against this location instead. Coordinates are rounded to 2 dp server-side.\n\nAdding one enqueues a refresh over exactly the declared window so its days re-resolve. Nothing checks for overlap with an existing override — two ranges covering the same day are accepted, and the worker picks between them.\n\nBody cap 4 KiB. Module-gated.",
+        "Declares that the account was somewhere other than home for an inclusive date range; the days it covers resolve against this location instead. Coordinates are rounded to 1 decimal (about 11 km) server-side.\n\nAdding one enqueues a refresh over exactly the declared window so its days re-resolve. Nothing checks for overlap with an existing override — two ranges covering the same day are accepted, and the worker picks between them.\n\nBody cap 4 KiB. Module-gated.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: travelLocationRequest } },

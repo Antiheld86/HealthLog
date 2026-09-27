@@ -112,6 +112,10 @@ interface Medication {
    * and left out of the take-all and log-dose flows.
    */
   trackIntake?: boolean;
+  /** v1.39.4 (#1040) — server-resolved: taken / skip are offered today. */
+  intakeActionable?: boolean;
+  /** v1.39.4 (#1040) — where today sits in the course. */
+  courseStatus?: "UPCOMING" | "CURRENT" | "ENDED";
   /** v1.9.0 — optional WHO ATC classification code for the FHIR export. */
   atcCode?: string | null;
   /** v1.9.0 — optional RxNorm RxCUI (secondary FHIR coding). */

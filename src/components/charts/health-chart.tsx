@@ -59,6 +59,7 @@ import type {
   ComparisonBaseline,
 } from "@/lib/dashboard-layout";
 import { CUMULATIVE_HK_TYPES } from "@/lib/measurements/apple-health-mapping";
+import { bucketCaptionKey } from "@/lib/charts/bucket-caption";
 import type { MeasurementType } from "@/generated/prisma/client";
 import { ChartOverlayControls } from "./chart-overlay-controls";
 import { ChartDataTable, type ChartDataTableColumn } from "./chart-data-table";
@@ -1018,8 +1019,9 @@ export function HealthChart({
             // v1.4.29.1 — cumulative HealthKit types (steps, active energy,
             // distance, flights, daylight) must reduce with sum, not the
             // per-sample average. The server already returns one row per
-            // day; a day that arrives as several rows (the coarser tiers
-            // of the "All" range) must still add up rather than average.
+            // day (or, for the coarser tiers of the "All" range, one row per
+            // week or month carrying its average day); a day that arrives
+            // as several rows must still add up rather than average.
             const isCumulative = CUMULATIVE_HK_TYPES.has(
               type as MeasurementType,
             );
@@ -1339,6 +1341,10 @@ export function HealthChart({
   // the decision separately" drift the visibleSlice doc-comment warns
   // about, and the two had already diverged on the windowing semantics.
   const activeBucket: ChartBucketType = visibleSlice?.bucketType ?? "day";
+  // What a folded point is: the average day of its week or month (a daily
+  // total's average for steps and the like). Named on the caption chip and
+  // in the tooltip.
+  const bucketCaption = bucketCaptionKey(activeBucket, types);
 
   const yDomain = useMemo<[number, number] | undefined>(() => {
     if (!chartDataWithCompare?.length) return undefined;
@@ -1730,13 +1736,12 @@ export function HealthChart({
             ) : (
               <h2 className="text-sm font-semibold">{title}</h2>
             )}
-            {activeBucket !== "day" && (
-              <span className="bg-muted/40 text-muted-foreground text-2xs hidden rounded-md px-1.5 py-0.5 font-medium tracking-wide uppercase sm:inline-flex">
-                {t(
-                  activeBucket === "week"
-                    ? "charts.bucketWeekly"
-                    : "charts.bucketMonthly",
-                )}
+            {bucketCaption && (
+              <span
+                data-slot="chart-bucket-caption"
+                className="bg-muted/40 text-muted-foreground text-2xs hidden rounded-md px-1.5 py-0.5 font-medium tracking-wide uppercase sm:inline-flex"
+              >
+                {t(bucketCaption)}
               </span>
             )}
             {/* v1.4.16 phase B8 — comparison caption. Inline with the
@@ -2260,7 +2265,11 @@ export function HealthChart({
                       return (
                         <RichChartTooltip
                           active
-                          label={dateLabel}
+                          label={
+                            bucketCaption
+                              ? `${dateLabel} · ${t(bucketCaption)}`
+                              : dateLabel
+                          }
                           rows={rows}
                         />
                       );

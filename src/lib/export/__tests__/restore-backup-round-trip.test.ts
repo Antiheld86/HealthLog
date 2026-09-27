@@ -31,10 +31,18 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
 }));
 
+// The category side table is raw SQL on the shared client; the round trip
+// through it is proven in tests/integration/backup-round-trip.test.ts.
+vi.mock("@/lib/medication-category", () => ({
+  ensureMedicationCategoryTable: vi.fn(async () => {}),
+  getMedicationCategories: vi.fn(async () => ({})),
+  setMedicationCategory: vi.fn(async () => "OTHER"),
+}));
 vi.mock("@/lib/db", () => ({
   prisma: {
     dataBackup: { findUnique: vi.fn() },
     user: { findUnique: vi.fn() },
+    measurement: { count: vi.fn().mockResolvedValue(0) },
     $transaction: mocks.transaction,
   },
   toJson: <T>(value: T) => value,
@@ -758,7 +766,10 @@ describe("backup round trip — export, wire schema, restore", () => {
       });
 
       const userUpdate = written.find(
-        (w) => w.model === "user" && w.op === "update",
+        (w) =>
+          w.model === "user" &&
+          w.op === "update" &&
+          "insightsCachedText" in w.data,
       );
       expect(
         userUpdate,
@@ -797,8 +808,13 @@ describe("backup round trip — export, wire schema, restore", () => {
       // whether the restore over-invalidates on a genuine no-op.
       const { written: writtenUnchanged } = await roundTrip(liveSeed, payload);
 
+      // The restore also stamps the account's sync reset; only an update
+      // that touches the cached briefing is what this asks about.
       const userUpdate = writtenUnchanged.find(
-        (w) => w.model === "user" && w.op === "update",
+        (w) =>
+          w.model === "user" &&
+          w.op === "update" &&
+          "insightsCachedText" in w.data,
       );
       expect(
         userUpdate,

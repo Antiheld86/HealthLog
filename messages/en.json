@@ -380,6 +380,9 @@
     "themeDark": "Dark",
     "themeLight": "Light",
     "collapseSidebar": "Collapse",
+    "expandSidebar": "Expand",
+    "collapseSidebarLabel": "Collapse sidebar",
+    "expandSidebarLabel": "Expand sidebar",
     "userMenu": "User menu",
     "accountSettings": "Account settings",
     "mood": "Mood",
@@ -1209,6 +1212,7 @@
     "categorySleepAid": "Sleep Aid",
     "categoryDiabetes": "Diabetes",
     "categoryAntibiotic": "Antibiotic",
+    "categoryMentalHealth": "Mental health",
     "categoryOther": "Other",
     "daysSun": "Sun",
     "daysMon": "Mon",
@@ -1223,6 +1227,7 @@
     "tomorrow": "Tomorrow",
     "asNeededMarker": "As needed",
     "recordOnlyBadge": "Record only",
+    "courseEndedBadge": "Ended",
     "trackIntake": {
       "title": "Intake tracking",
       "label": "Track intake",
@@ -1563,6 +1568,11 @@
         "vitamin": "Vitamins",
         "supplement": "Supplement",
         "antibiotic": "Antibiotic",
+        "mentalHealth": "Mental health",
+        "thyroid": "Thyroid",
+        "digestive": "Gastrointestinal",
+        "skin": "Skincare",
+        "sleepAid": "Sleep aid",
         "other": "Other"
       },
       "cadence": {
@@ -2258,6 +2268,8 @@
     "noData": "No data in selected time range",
     "bucketWeekly": "Weekly avg",
     "bucketMonthly": "Monthly avg",
+    "bucketWeeklyDaily": "Daily avg per week",
+    "bucketMonthlyDaily": "Daily avg per month",
     "days7Label": "7d",
     "days7Title": "Last 7 days",
     "days30Label": "30d",
@@ -7374,6 +7386,11 @@
         "restoreFailureDocument": "The file carries documents without their content, as a portable export does. Use a disaster-recovery backup.",
         "restoreFailureTimeBudget": "This backup is too large to restore within the background job's time limit.",
         "restoreFailureTransaction": "The database refused the restore part-way, so everything was rolled back. The server log names the error.",
+        "restoreFailureCauseTimeout": "The restore ran longer than the database allowed, so everything was rolled back. If the database host was busy, start the restore again when it is quieter. The server log names the step.",
+        "restoreFailureCauseLock": "The restore waited on records another process was changing, so everything was rolled back. Start the restore again.",
+        "restoreFailureCauseConstraint": "The database rejected a record in the backup, so everything was rolled back. The server log names the table and the rule.",
+        "restoreFailureCauseStorage": "The database ran out of disk space or memory during the restore, so everything was rolled back. Free up space on the database host, then start the restore again.",
+        "restoreFailureCauseConnection": "The connection to the database was lost during the restore, so everything was rolled back. Check that the database is running, then start the restore again.",
         "restoreFailureInterrupted": "The restore stopped when the server restarted, and was rolled back. If it stops again, the server is likely running out of memory.",
         "restoreFailureNotStarted": "The background worker did not pick the restore up. Check that the worker is running.",
         "restoreFailureEnqueue": "The restore could not be handed to the background worker. Check that the worker is running.",
@@ -9480,7 +9497,184 @@
       "promptInjection": "I noticed wording that tries to override my instructions. I am the HealthLog Coach and only summarise your own health data — please rephrase your question in those terms.",
       "conversationPoisoned": "An earlier message in this conversation contains wording that overrides my instructions. Please start a new conversation."
     },
-    "noRecordedData": "I don't have any recorded readings for what you asked about, so there is nothing I can give you a figure from. Once you log some, ask me again and I'll work from your own numbers."
+    "noRecordedData": "I don't have any recorded readings for what you asked about, so there is nothing I can give you a figure from. Once you log some, ask me again and I'll work from your own numbers.",
+    "step": {
+      "read": "Checking: {domain}",
+      "readWindow": "Checking: {domain}, {window}",
+      "snapshot": "Reading your record summary",
+      "showResult": "Opening an earlier table",
+      "reuse": "Using the table from before",
+      "headerActive": "{label}…",
+      "headerDoneOne": "Looked at 1 source",
+      "headerDoneFew": "Looked at {count} sources",
+      "headerDoneOther": "Looked at {count} sources",
+      "listLabel": "What the Coach looked at",
+      "toggleShow": "Show what the Coach looked at",
+      "toggleHide": "Hide what the Coach looked at",
+      "announceDone": "Done: {label}",
+      "readingsOne": "1 reading",
+      "readingsFew": "{count} readings",
+      "readingsOther": "{count} readings",
+      "rowsOne": "1 row",
+      "rowsFew": "{count} rows",
+      "rowsOther": "{count} rows",
+      "metricsOne": "1 metric",
+      "metricsFew": "{count} metrics",
+      "metricsOther": "{count} metrics",
+      "reason": {
+        "noData": "no readings",
+        "outsideWindow": "no readings in this window",
+        "moduleDisabled": "switched off",
+        "retrievalFailed": "couldn't be read",
+        "invalidArguments": "request not understood"
+      },
+      "domain": {
+        "labs": "Lab results",
+        "illness": "Illness and recovery",
+        "cycle": "Cycle",
+        "correlations": "Connections between metrics",
+        "snapshot": "Record summary"
+      },
+      "window": {
+        "last7days": "last 7 days",
+        "last30days": "last 30 days",
+        "last90days": "last 90 days",
+        "lastYear": "last 12 months",
+        "allTime": "all time"
+      },
+      "period": {
+        "current": "this period",
+        "previous": "the period before",
+        "yearAgo": "a year earlier"
+      },
+      "granularity": {
+        "day": "by day",
+        "week": "by week",
+        "month": "by month"
+      }
+    },
+    "result": {
+      "title": {
+        "byDay": "{metric} by day",
+        "byWeek": "{metric} by week",
+        "byMonth": "{metric} by month",
+        "previousPeriod": "{metric}, the period before",
+        "yearAgo": "{metric}, a year earlier",
+        "workoutsBySport": "Workouts by sport",
+        "labsLatest": "Latest lab results",
+        "sleepByNight": "Sleep by night",
+        "complianceByDay": "Medication adherence by day",
+        "distribution": "{metric}: how often each range came up"
+      },
+      "column": {
+        "day": "Day",
+        "week": "Week",
+        "month": "Month",
+        "night": "Night",
+        "sport": "Sport",
+        "sessions": "Sessions",
+        "analyte": "Test",
+        "value": "Value",
+        "unit": "Unit",
+        "date": "Date",
+        "referenceRange": "Reference range",
+        "systolic": "Systolic",
+        "diastolic": "Diastolic",
+        "mean": "Average",
+        "total": "Total",
+        "min": "Lowest",
+        "max": "Highest",
+        "readings": "Readings",
+        "rate": "Adherence",
+        "duration": "Duration",
+        "range": "Range",
+        "count": "Times"
+      },
+      "other": "Other",
+      "noReading": "no reading",
+      "showAll": "Show all ({count})",
+      "showFewer": "Show fewer",
+      "copyMenu": "Copy table",
+      "copyForSpreadsheet": "Copy for spreadsheet",
+      "copyAsText": "Copy as text",
+      "copied": "Copied",
+      "copyFailed": "Couldn't copy the table",
+      "viewLabel": "View",
+      "viewChart": "Chart",
+      "viewTable": "Table",
+      "chartSummary": "{title}, shown as a chart. The table view lists every value.",
+      "dataUsed": "Data used ({count})",
+      "truncated": "Showing the latest {shown} of {total} rows",
+      "withheld": {
+        "moduleDisabled": "This table is hidden because its module is switched off.",
+        "unavailable": "This table couldn't be loaded."
+      },
+      "loading": "Loading table…",
+      "loadFailed": "Couldn't load the tables.",
+      "reusedFrom": "From an earlier answer ({date})",
+      "reusedFromUndated": "From an earlier answer",
+      "histogramBin": "{from}–{to} {unit}"
+    },
+    "method": {
+      "label": "How this was worked out",
+      "entry": "{domain}, {window}: {detail}",
+      "entryNoWindow": "{domain}: {detail}",
+      "reused": "from an earlier answer",
+      "readingsOne": "1 reading",
+      "readingsFew": "{count} readings",
+      "readingsOther": "{count} readings",
+      "aggregation": {
+        "mean": "average",
+        "median": "median",
+        "latest": "latest reading",
+        "sum": "total",
+        "count": "count",
+        "rate": "rate"
+      },
+      "averages": {
+        "day": "daily averages",
+        "week": "weekly averages",
+        "month": "monthly averages"
+      },
+      "totals": {
+        "day": "daily totals",
+        "week": "weekly totals",
+        "month": "monthly totals"
+      },
+      "absent": {
+        "noData": "no readings",
+        "outsideWindow": "no readings in this window",
+        "moduleDisabled": "switched off"
+      }
+    },
+    "followUp": {
+      "groupLabel": "Suggested follow-ups",
+      "widenWindow": "Look further back",
+      "previousPeriod": "Compare with the period before",
+      "yearAgo": "Compare with a year earlier",
+      "asChart": "Show as a chart",
+      "asTable": "Show as a table",
+      "relatedMetric": "See also: {metric}",
+      "continue": "Keep looking",
+      "settingLabel": "Suggest follow-up questions",
+      "settingHint": "Show up to three follow-up suggestions under the Coach's latest answer."
+    },
+    "clarify": {
+      "cardLabel": "The Coach has a question",
+      "choicesLabel": "Possible answers",
+      "freeTextHint": "You can also type your own answer.",
+      "contextHint": "Type your answer below.",
+      "window": {
+        "last7days": "Last 7 days",
+        "last30days": "Last 30 days",
+        "last90days": "Last 90 days",
+        "lastYear": "Last 12 months",
+        "allTime": "All time"
+      }
+    },
+    "reuse": {
+      "caption": "Here are the same figures from my last answer, unchanged."
+    }
   },
   "safety": {
     "floor": {
