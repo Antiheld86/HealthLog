@@ -37,6 +37,7 @@ import type {
   CoachResultTable,
 } from "@/lib/ai/coach/types";
 import { makeBucketLabelFormatters } from "@/lib/charts/bucket-label";
+import { niceAxis } from "@/lib/charts/nice-axis";
 import { prefersReducedMotion } from "@/lib/charts/reduced-motion";
 import { useDateFormatPreference, useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
@@ -219,6 +220,13 @@ function SeriesChart({
   const colorOf = (key: string) =>
     SERIES_COLORS[spec.series.indexOf(key) % SERIES_COLORS.length];
   const visible = spec.series.filter((key) => !hidden.has(key));
+  // Evenly stepped ticks over what is shown; bars start at the baseline.
+  const yAxis = niceAxis(
+    points.flatMap((point) =>
+      visible.map((key) => point[key] as number | null),
+    ),
+    { zero: spec.kind === "bar" },
+  );
 
   const tooltip = (props: {
     active?: boolean;
@@ -263,7 +271,11 @@ function SeriesChart({
         axisLine={false}
         tickLine={false}
         width={40}
-        domain={spec.kind === "bar" ? [0, "auto"] : ["auto", "auto"]}
+        {...(yAxis
+          ? { domain: yAxis.domain, ticks: yAxis.ticks, interval: 0 }
+          : {
+              domain: spec.kind === "bar" ? [0, "auto"] : ["auto", "auto"],
+            })}
       />
       <Tooltip content={tooltip} cursor={{ fill: "var(--muted)" }} />
     </>

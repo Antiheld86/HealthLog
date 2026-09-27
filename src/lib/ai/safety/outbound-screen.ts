@@ -75,6 +75,14 @@ const DOSE_UNIT =
  * "NIGDY nie zalecać konkretnej wartości") plus the standard clinical
  * titration verbs of each language.
  */
+/**
+ * The object a German change verb may carry before its target ("erhöhe
+ * deine Dosis auf 2,4 mg"). English allows "your dose" in the same slot;
+ * without it the German imperative with an object slipped through.
+ */
+const DE_DOSE_OBJECT =
+  "(?:\\s+(?:(?:deine|die|ihre|eure|seine)\\s+)?(?:dosis|dosierung|medikation|wochendosis|tagesdosis))?";
+
 const DOSE_PATTERNS: Record<Locale, readonly RegExp[]> = {
   en: [
     // step/move/increase/raise/bump/titrate/go up to|by N unit
@@ -99,11 +107,11 @@ const DOSE_PATTERNS: Record<Locale, readonly RegExp[]> = {
   ],
   de: [
     new RegExp(
-      `\\b(?:erhöh\\w*|steiger\\w*|setz\\w*\\s+(?:hoch|rauf)|geh\\w*\\s+(?:hoch|rauf))\\s+(?:auf|um)\\s+[\\d.,]+\\s*${DOSE_UNIT}\\b`,
+      `\\b(?:erhöh\\w*|steiger\\w*|setz\\w*\\s+(?:hoch|rauf)|geh\\w*\\s+(?:hoch|rauf))${DE_DOSE_OBJECT}\\s+(?:auf|um)\\s+[\\d.,]+\\s*${DOSE_UNIT}\\b`,
       "i",
     ),
     new RegExp(
-      `\\b(?:reduzier\\w*|senk\\w*|verringer\\w*|nimm\\s+(?:weniger|runter))\\s+(?:auf|um)\\s+[\\d.,]+\\s*${DOSE_UNIT}\\b`,
+      `\\b(?:reduzier\\w*|senk\\w*|verringer\\w*|nimm\\s+(?:weniger|runter))${DE_DOSE_OBJECT}\\s+(?:auf|um)\\s+[\\d.,]+\\s*${DOSE_UNIT}\\b`,
       "i",
     ),
     new RegExp(

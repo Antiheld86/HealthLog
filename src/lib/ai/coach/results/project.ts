@@ -37,7 +37,7 @@ function refNumber(ref: string): number {
 /**
  * Tables for this turn, in ref order (`r1`..), at most six, each trimmed to
  * `RESULT_TABLE_MAX_ROWS`. `chart` and `chartKind` are left for
- * `deriveChartSpec` to fill.
+ * `deriveChartSpec` to fill, except on a table shown again.
  */
 export function projectResults(args: {
   calls: SettledToolCall[];
@@ -56,8 +56,12 @@ export function projectResults(args: {
       rowCount: Math.max(table.rowCount, rows.length),
       truncated: table.truncated || rows.length < table.rows.length,
       displayed: false,
-      chart: null,
-      chartKind: null,
+      // A table shown again keeps the view `show_result` chose for it (a
+      // chart, a histogram, or none); `withChart` leaves it as it is. Every
+      // other table gets its chart from `deriveChartSpec`.
+      ...(table.reusedFrom
+        ? { chart: table.chart, chartKind: table.chartKind }
+        : { chart: null, chartKind: null }),
     });
   }
   return tables
