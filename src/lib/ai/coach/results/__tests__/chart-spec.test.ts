@@ -249,7 +249,7 @@ describe("deriveChartSpec: time series", () => {
 
   it("draws at most two series, the first compatible pair", () => {
     const table = timeSeries({
-      domain: "hrv",
+      domain: "pulse",
       columns: [
         DAY,
         valueColumn("sdnn", "ms"),
@@ -269,7 +269,25 @@ describe("deriveChartSpec: time series", () => {
     });
   });
 
-  it("leaves the reading count off the chart", () => {
+  it("draws one HRV estimator, not SDNN and RMSSD as a pair", () => {
+    // The two columns are alternative estimators of one quantity; drawn
+    // together they read as a comparison they are not.
+    const table = timeSeries({
+      domain: "hrv",
+      columns: [DAY, valueColumn("rmssd", "ms"), valueColumn("sdnn", "ms")],
+      rows: [
+        [dayKey(0), 40, 55],
+        [dayKey(1), 42, 57],
+      ],
+    });
+    expect(deriveChartSpec(table)).toEqual({
+      kind: "line",
+      x: "day",
+      series: ["rmssd"],
+    });
+  });
+
+    it("leaves the reading count off the chart", () => {
     const spec = deriveChartSpec(daySeries("pulse", [60, 62], "bpm"));
     expect(spec && "series" in spec ? spec.series : []).not.toContain(
       "readings",
