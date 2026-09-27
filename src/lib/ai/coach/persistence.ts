@@ -325,6 +325,12 @@ function provenanceFromJson(raw: string | null): CoachProvenance | null {
     const followUps = restoreFollowUps(parsed.followUps);
     const clarification = restoreClarification(parsed.clarification);
     const forcedFinal = parsed.forcedFinal === true;
+    const continuationOf =
+      typeof parsed.continuationOf === "string" &&
+      parsed.continuationOf.length > 0 &&
+      parsed.continuationOf.length <= 64
+        ? parsed.continuationOf
+        : undefined;
     return {
       windows,
       metrics,
@@ -341,6 +347,7 @@ function provenanceFromJson(raw: string | null): CoachProvenance | null {
       ...(followUps ? { followUps } : {}),
       ...(clarification ? { clarification } : {}),
       ...(forcedFinal ? { forcedFinal: true as const } : {}),
+      ...(continuationOf ? { continuationOf } : {}),
     };
   } catch {
     return null;

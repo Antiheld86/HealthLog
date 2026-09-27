@@ -660,6 +660,12 @@ export interface CoachProvenance {
    * to read, so the answer was forced. Absent otherwise.
    */
   forcedFinal?: true;
+  /**
+   * v1.39.4 — this reply continues an answer that was forced at the round
+   * cap: the id of that earlier assistant message. A continuation offers no
+   * further "keep looking" chip, so an answer is continued at most once.
+   */
+  continuationOf?: string;
 }
 
 /**

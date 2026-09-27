@@ -138,6 +138,7 @@ const FULL: CoachProvenance = {
     freeText: true,
   },
   forcedFinal: true,
+  continuationOf: "m0",
 };
 
 function stubEchoCreate(overrideJson?: string): void {
@@ -161,7 +162,7 @@ beforeEach(() => {
 });
 
 describe("appendMessage — the dialog fields", () => {
-  it("restores steps, method, table metadata, chips, clarification and the forced marker", async () => {
+  it("restores steps, method, table metadata, chips, clarification, the forced marker and the continuation", async () => {
     stubEchoCreate();
     const out = await appendMessage({
       conversationId: "c1",
@@ -183,6 +184,7 @@ describe("appendMessage — the dialog fields", () => {
         method: { entries: "nope", text: "x" },
         clarification: { kind: "metric", choices: [], freeText: "yes" },
         forcedFinal: "true",
+        continuationOf: 42,
       }),
     );
     const out = await appendMessage({

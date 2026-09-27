@@ -22,6 +22,7 @@ import { handleProducerFailure } from "./errors";
 import { resolveClarificationAnswer } from "@/lib/ai/coach/clarify";
 import { resolveFollowUp } from "@/lib/ai/coach/follow-ups/resolve";
 import { readFollowUpHistory } from "@/lib/ai/coach/follow-ups/derive";
+import { resolveContinuation } from "@/lib/ai/coach/follow-ups/continue";
 
 import { runTurnModel } from "./model";
 import { persistAssistantReply } from "./persist";
@@ -72,8 +73,17 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
     conversationId: input.conversationId,
     clarification: input.clarification,
   });
+  // v1.39.4 — "keep looking": the unfinished question and what the forced
+  // turn already read, so the continued turn does not fetch it again.
+  const continuation = await resolveContinuation({
+    userId,
+    conversationId: input.conversationId,
+    followUp: input.followUp,
+    priorResults: conversation.priorResults ?? [],
+  });
   const turnHints = [
     ...(resolvedFollowUp?.contextHint ? [resolvedFollowUp.contextHint] : []),
+    ...(continuation ? [continuation.contextHint] : []),
     ...(clarifiedLine ? [clarifiedLine] : []),
   ];
 
@@ -170,6 +180,7 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
       prefs: ctx.coachPrefs,
       locale,
       history,
+      continuationOf: continuation?.sourceMessageId,
     });
     const provenance = buildTurnProvenance({
       snapshotProvenance: ctx.snapshot.provenance,
@@ -180,6 +191,7 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
       steps: model.steps,
       dialog,
       forcedFinal: model.forcedFinal,
+      continuationOf: continuation?.sourceMessageId,
     });
     const { messageId } = await persistAssistantReply({
       conversationId: workingConversationId,

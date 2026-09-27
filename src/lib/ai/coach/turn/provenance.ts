@@ -70,6 +70,8 @@ export function assembleTurnDialog(args: {
   locale: Locale;
   /** The record's history for the tables' metrics, for the history chips. */
   history?: FollowUpHistory;
+  /** The forced reply this turn continues, if it does. */
+  continuationOf?: string;
 }): TurnDialog {
   const { model, reply, prefs, locale } = args;
   const blocked = reply.outboundBlocked;
@@ -87,7 +89,11 @@ export function assembleTurnDialog(args: {
   const offerChips =
     !blocked && followUpChipsEnabled(prefs) && reply.clarification === null;
   const continueChip = offerChips
-    ? buildContinueFollowUp({ forcedFinal: model.forcedFinal, locale })
+    ? buildContinueFollowUp({
+        forcedFinal: model.forcedFinal,
+        continuationOf: args.continuationOf,
+        locale,
+      })
     : null;
   const followUps = offerChips
     ? numberFollowUps([
@@ -123,6 +129,8 @@ export function buildTurnProvenance(args: {
   steps: CoachStep[];
   dialog: TurnDialog;
   forcedFinal: boolean;
+  /** v1.39.4 — the forced reply this turn continues, if it does. */
+  continuationOf?: string;
 }): CoachProvenance {
   const { snapshotProvenance, reply, toolTrace, steps, dialog } = args;
   const surfacedSuggestion = args.suggestion;
@@ -174,6 +182,7 @@ export function buildTurnProvenance(args: {
     ...(dialog.followUps.length > 0 ? { followUps: dialog.followUps } : {}),
     ...(dialog.clarification ? { clarification: dialog.clarification } : {}),
     ...(args.forcedFinal ? { forcedFinal: true as const } : {}),
+    ...(args.continuationOf ? { continuationOf: args.continuationOf } : {}),
   };
   if (sentinel.malformed) {
     // Graceful degrade: log so ops can spot a provider whose
