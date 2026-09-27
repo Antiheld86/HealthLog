@@ -185,11 +185,15 @@ export interface RestoreResponse {
  * to half a CPU and 40 MB/s of writes, where its transaction ran 16 min of a
  * 37 min budget.
  */
-function restoreTransactionTimeoutMs(
+export function restoreTransactionTimeoutMs(
   fileMeasurements: number,
   currentMeasurements: number,
 ): number {
   return 120_000 + fileMeasurements + Math.ceil(currentMeasurements / 10);
+}
+
+function readingsPhrase(count: number): string {
+  return `${count} ${count === 1 ? "reading" : "readings"}`;
 }
 
 function decodeEncryptedBytes(encoded: string): Uint8Array<ArrayBuffer> {
@@ -309,7 +313,7 @@ export type RestoreBackupOutcome =
  * Time kept free after the transaction for the rollup folds and the audit row,
  * when the restore checks it fits the caller's deadline.
  */
-const AFTER_TRANSACTION_ALLOWANCE_MS = 10 * 60 * 1000;
+export const RESTORE_AFTER_TRANSACTION_ALLOWANCE_MS = 10 * 60 * 1000;
 
 function refused(
   status: number,
@@ -636,7 +640,7 @@ export async function restoreBackup(
   );
   if (
     input.deadline !== undefined &&
-    Date.now() + transactionTimeoutMs + AFTER_TRANSACTION_ALLOWANCE_MS >
+    Date.now() + transactionTimeoutMs + RESTORE_AFTER_TRANSACTION_ALLOWANCE_MS >
       input.deadline
   ) {
     await auditLog("admin.backups.restore.failed", {
@@ -647,12 +651,16 @@ export async function restoreBackup(
         ownerId,
         reason: "time_budget",
         measurements: streamed.measurementCount,
+        currentMeasurements,
       },
     });
+    // Both counts, because both cost time: the account's readings are deleted
+    // (removed ones included, until the nightly clean-up purges them) before
+    // the file's are written.
     return refused(
       503,
       "time_budget",
-      `A backup of ${streamed.measurementCount} readings needs more time than the restore job allows. Nothing was changed.`,
+      `Restoring ${readingsPhrase(streamed.measurementCount)} in the backup over the ${readingsPhrase(currentMeasurements)} this account holds now (removed readings count until the nightly clean-up) needs more time than the restore job allows. Nothing was changed.`,
     );
   }
 
