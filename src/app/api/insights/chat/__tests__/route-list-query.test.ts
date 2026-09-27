@@ -53,7 +53,8 @@ vi.mock("@/lib/ai/provider", () => ({
 }));
 vi.mock("@/lib/ai/consent-guard", () => ({ assertConsentForChain: vi.fn() }));
 vi.mock("@/lib/ai/prompts/insight-generator", () => ({ PROMPT_VERSION: "x" }));
-vi.mock("@/lib/ai/coach/types", () => ({
+vi.mock("@/lib/ai/coach/types", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/coach/types")>()),
   coachChatRequestSchema: { safeParse: () => ({ success: false }) },
 }));
 vi.mock("@/lib/ai/coach/tools", () => ({
