@@ -173,7 +173,7 @@ describe("deriveFollowUps — the rules", () => {
     const chips = derive({ steps, correlations: pairs });
     const related = chips.find((c) => c.kind === "related_metric");
     expect(related).toMatchObject({
-      label: "Look at Sleep too",
+      label: "See also: Sleep",
       anchor: { domain: "sleep" },
     });
     const without = derive({
