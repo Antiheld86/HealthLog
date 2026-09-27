@@ -51,11 +51,23 @@ export const coachStepDomainSchema = z
 const coachResultGranularitySchema = z.enum(["day", "week", "month"]);
 const coachResultPeriodSchema = z.enum(["current", "previous", "yearAgo"]);
 
+// The ids and names below are restored from stored provenance and some of
+// them are written back into the model's context (`m<k>.r<n>` lines, the
+// "keep looking" fetched list). Each is held to its exact server-minted
+// shape, so a stored row edited by hand cannot carry text into a prompt.
+/** A table of a message: `r1`..`r6`. */
+const resultRefSchema = z.string().regex(/^r[1-6]$/);
+/** A server-minted row id (cuid). */
+const messageIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
+
 // ── Steps ─────────────────────────────────────────────────────────────────
 
 export const coachStepSchema = z
   .object({
-    id: z.string().describe("`s1`..`s12`, unique within a turn."),
+    id: z
+      .string()
+      .regex(/^s[1-9]\d{0,2}$/)
+      .describe("`s1`..`s12`, unique within a turn."),
     tool: z.enum([...COACH_TOOL_NAMES, "show_result", "snapshot"]),
     labelKey: z
       .string()
@@ -84,8 +96,7 @@ export const coachStepSchema = z
         "invalid_arguments",
       ])
       .optional(),
-    resultRef: z
-      .string()
+    resultRef: resultRefSchema
       .optional()
       .describe("The table this step produced (`r1`..), when it produced one."),
   })
@@ -140,7 +151,7 @@ const coachResultSourceSchema = z.object({
 });
 
 const coachResultMetaShape = {
-  ref: z.string().describe("`r1`..`r6`, unique within a message."),
+  ref: resultRefSchema.describe("`r1`..`r6`, unique within a message."),
   source: coachResultSourceSchema,
   shape: z.enum(["timeSeries", "categoryCounts", "distribution", "single"]),
   titleKey: z.string(),
@@ -153,7 +164,7 @@ const coachResultMetaShape = {
       "True when the answer referenced the table (shown expanded); false when it sits under the data-used disclosure.",
     ),
   reusedFrom: z
-    .object({ messageId: z.string(), ref: z.string() })
+    .object({ messageId: messageIdSchema, ref: resultRefSchema })
     .optional()
     .describe("Set when the table was copied from an earlier message."),
 };
@@ -185,7 +196,7 @@ export const coachResultTableSchema = z
   });
 
 const coachResultWithheldSchema = z.object({
-  ref: z.string(),
+  ref: resultRefSchema,
   withheld: z
     .enum(["module_disabled", "unavailable"])
     .describe(
@@ -232,7 +243,10 @@ export const coachMethodSchema = z
 
 export const coachFollowUpSchema = z
   .object({
-    id: z.string().describe("`f1`..`f3`."),
+    id: z
+      .string()
+      .regex(/^f[1-3]$/)
+      .describe("`f1`..`f3`."),
     kind: z.enum([
       "widen_window",
       "previous_period",
@@ -248,7 +262,8 @@ export const coachFollowUpSchema = z
       .describe("Rendered on the server from a catalog; never model text."),
     anchor: z
       .object({
-        ref: z.string(),
+        // Empty for a related metric read without a table of its own.
+        ref: z.string().regex(/^(?:r[1-6])?$/),
         domain: coachStepDomainSchema,
         window: coachWindowEnum.optional(),
         granularity: coachResultGranularitySchema.optional(),
@@ -276,7 +291,7 @@ export const coachClarificationSchema = z
     choices: z
       .array(
         z.object({
-          id: z.string(),
+          id: z.string().regex(/^c[1-4]$/),
           labelKey: z.string(),
           label: z.string(),
           value: z.object({

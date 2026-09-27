@@ -50492,6 +50492,7 @@ components:
       properties:
         id:
           type: string
+          pattern: ^s[1-9]\d{0,2}$
           description: "`s1`..`s12`, unique within a turn."
         tool:
           type: string
@@ -50560,6 +50561,7 @@ components:
         resultRef:
           description: The table this step produced (`r1`..), when it produced one.
           type: string
+          pattern: ^r[1-6]$
       required:
         - id
         - tool
@@ -50685,6 +50687,7 @@ components:
       properties:
         ref:
           type: string
+          pattern: ^r[1-6]$
           description: "`r1`..`r6`, unique within a message."
         source:
           type: object
@@ -50764,8 +50767,10 @@ components:
           properties:
             messageId:
               type: string
+              pattern: ^[A-Za-z0-9_-]{1,64}$
             ref:
               type: string
+              pattern: ^r[1-6]$
           required:
             - messageId
             - ref
@@ -50787,6 +50792,7 @@ components:
       properties:
         id:
           type: string
+          pattern: ^f[1-3]$
           description: "`f1`..`f3`."
         kind:
           type: string
@@ -50808,6 +50814,7 @@ components:
           properties:
             ref:
               type: string
+              pattern: ^(?:r[1-6])?$
             domain:
               $ref: "#/components/schemas/CoachStepDomain"
             window:
@@ -50868,6 +50875,7 @@ components:
             properties:
               id:
                 type: string
+                pattern: ^c[1-4]$
               labelKey:
                 type: string
               label:
@@ -50978,6 +50986,7 @@ components:
       properties:
         ref:
           type: string
+          pattern: ^r[1-6]$
           description: "`r1`..`r6`, unique within a message."
         source:
           type: object
@@ -51057,8 +51066,10 @@ components:
           properties:
             messageId:
               type: string
+              pattern: ^[A-Za-z0-9_-]{1,64}$
             ref:
               type: string
+              pattern: ^r[1-6]$
           required:
             - messageId
             - ref
@@ -51231,6 +51242,7 @@ components:
           properties:
             ref:
               type: string
+              pattern: ^r[1-6]$
             withheld:
               type: string
               enum:
