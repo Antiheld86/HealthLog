@@ -44,6 +44,7 @@
  * production standalone image strips `tsx`. Modelled on the
  * `rollup-full-backfill` boot-time converging-backfill pattern.
  */
+import { holdAccountAgainstRestore } from "@/lib/export/restore-lock";
 import type {
   MeasurementSource,
   PrismaClient,
@@ -318,6 +319,8 @@ export async function consolidateLegacySteps(
       try {
         let removed = 0;
         await pc.$transaction(async (tx) => {
+          // First, before any reading is touched: see `restore-lock.ts`.
+          await holdAccountAgainstRestore(tx, userId);
           if (shouldMint) {
             // Mint the canonical daily-total row. The unique index
             // (userId, type, source, externalId) makes the upsert

@@ -45,6 +45,7 @@
  * production standalone image strips `tsx`. Modelled on the
  * `step-consolidation` boot-time converging-backfill pattern.
  */
+import { holdAccountAgainstRestore } from "@/lib/export/restore-lock";
 import type {
   MeasurementType,
   Prisma,
@@ -273,6 +274,8 @@ export async function consolidateDailyMean(
       const unit = dayRows[0]?.unit ?? "unknown";
       let removed = 0;
       await pc.$transaction(async (tx) => {
+        // First, before any reading is touched: see `restore-lock.ts`.
+        await holdAccountAgainstRestore(tx, userId);
         // The upsert below arbiters on (userId, type, source, externalId),
         // but the Measurement model carries a SECOND full unique —
         // (userId, type, measuredAt, source, sleepStage), NULLS NOT
