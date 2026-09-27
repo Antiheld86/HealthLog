@@ -55,7 +55,10 @@ vi.mock("@/lib/medication-category", () => ({
   getMedicationCategories: vi.fn().mockResolvedValue({}),
   setMedicationCategory: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/tz/local-day", () => ({
+vi.mock("@/lib/tz/local-day", async (importOriginal) => ({
+  // The schedule engine reads the real local-day helpers; only the today
+  // bounds are pinned per test.
+  ...(await importOriginal<typeof import("@/lib/tz/local-day")>()),
   getUserTodayBounds: vi
     .fn()
     .mockReturnValue({ start: new Date(), end: new Date() }),
@@ -914,5 +917,115 @@ describe("GET /api/medications — provenance echo (v1.32.25)", () => {
     const native = body.data.find((m) => m.id === "med-native");
     expect(mirror?.externalSource).toBe("APPLE_HEALTH");
     expect(native?.externalSource).toBeNull();
+  });
+});
+
+describe("GET /api/medications — intake actions follow the course (#1040)", () => {
+  function wireEmptyReads() {
+    vi.mocked(cachedSwr).mockImplementation((async (
+      _c: unknown,
+      _k: string,
+      f: () => Promise<unknown>,
+    ) => f()) as never);
+    vi.mocked(getUserTodayBounds).mockReturnValue({
+      start: new Date("2026-09-27T00:00:00Z"),
+      end: new Date("2026-09-27T23:59:59Z"),
+    } as never);
+    vi.mocked(prisma.medicationIntakeEvent.groupBy).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.medicationScheduleRevision.groupBy).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.medicationInventoryItem.groupBy).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(getMedicationCategories).mockResolvedValue({} as never);
+  }
+
+  function med(id: string, over: Record<string, unknown>) {
+    return {
+      id,
+      userId: "user-1",
+      name: id,
+      dose: "10 mg",
+      treatmentClass: "GENERIC",
+      unitsPerDose: 1,
+      active: true,
+      trackIntake: true,
+      asNeeded: false,
+      oneShot: false,
+      pausedAt: null,
+      startsOn: new Date("2026-09-01T00:00:00Z"),
+      endsOn: null,
+      createdAt: new Date("2026-09-01T08:00:00Z"),
+      schedules: [
+        {
+          id: `${id}-s`,
+          medicationId: id,
+          windowStart: "08:00",
+          windowEnd: "09:00",
+          timesOfDay: ["08:00"],
+          daysOfWeek: null,
+          rrule: "FREQ=DAILY",
+          rollingIntervalDays: null,
+          reminderGraceMinutes: null,
+          cyclicOnWeeks: null,
+          cyclicOffWeeks: null,
+          scheduleType: "SCHEDULED",
+          unitsPerDose: null,
+          doseWindows: null,
+          label: null,
+          dose: null,
+        },
+      ],
+      ...over,
+    };
+  }
+
+  it("withholds the dose actions from a course that ended yesterday and keeps them on its last day", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 10:00 in Berlin (the default zone) on 2026-09-27.
+    vi.setSystemTime(new Date("2026-09-27T08:00:00Z"));
+    try {
+      wireEmptyReads();
+      vi.mocked(prisma.medication.findMany).mockResolvedValue([
+        med("ended", { endsOn: new Date("2026-09-26T00:00:00Z") }),
+        med("last-day", { endsOn: new Date("2026-09-27T00:00:00Z") }),
+        med("upcoming", { startsOn: new Date("2026-09-28T00:00:00Z") }),
+        med("chronic", {}),
+        med("record-only", { trackIntake: false }),
+      ] as never);
+
+      const res = await (
+        GET as unknown as (req: NextRequest) => Promise<Response>
+      )(new NextRequest("http://localhost/api/medications"));
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        data: Array<{
+          id: string;
+          courseStatus: string;
+          intakeActionable: boolean;
+        }>;
+      };
+      const byId = Object.fromEntries(
+        body.data.map((m) => [
+          m.id,
+          [m.courseStatus, m.intakeActionable] as const,
+        ]),
+      );
+      expect(byId).toEqual({
+        ended: ["ENDED", false],
+        "last-day": ["CURRENT", true],
+        upcoming: ["UPCOMING", false],
+        chronic: ["CURRENT", true],
+        "record-only": ["CURRENT", false],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

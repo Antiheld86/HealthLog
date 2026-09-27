@@ -142,6 +142,13 @@ export interface MedicationCardBodyProps {
   recordOnly?: boolean;
 
   /**
+   * v1.39.4 (#1040) — the server's `intakeActionable`: false once the course
+   * has ended (or before it starts), so the card offers no take / skip and
+   * raises no overdue escalation for a dose that is no longer part of it.
+   */
+  intakeActionable?: boolean;
+
+  /**
    * v1.16.11 — projected supply runway in whole days, set ONLY while it
    * sits below the user's low-stock threshold (the variants gate it).
    * Non-null renders the muted warning-toned "Vorrat: ≈ N Tage" notice on
@@ -191,6 +198,7 @@ export function MedicationCardBody({
   currentCycle,
   asNeeded = false,
   recordOnly = false,
+  intakeActionable = true,
   lowStockRunwayDays = null,
   intakeLoading,
   onRecordIntake,
@@ -203,10 +211,11 @@ export function MedicationCardBody({
   // past the clinical miss cutoff) reads "Stark überfällig"; the still-takeable
   // `overdue` tail reads the calmer "Überfällig". Both use the destructive
   // tone so the urgency is unmistakable; suppressed on an inactive med.
+  const canAct = active && intakeActionable;
   const overdueLabel =
-    active && doseStatus === "missed"
+    canAct && doseStatus === "missed"
       ? t("medications.veryOverdue")
-      : active && doseStatus === "overdue"
+      : canAct && doseStatus === "overdue"
         ? t("medications.overdue")
         : null;
 
@@ -352,7 +361,7 @@ export function MedicationCardBody({
 
         {/* Quick actions — bottom-pinned so the action rows align across a
             grid row regardless of how much content sits above. */}
-        {active && !recordOnly && (
+        {canAct && !recordOnly && (
           <div className="mt-auto pt-0">
             <MedicationIntakeActions
               intakeLoading={intakeLoading}

@@ -262,6 +262,16 @@ export const medicationListEntry = medicationResource
     // even though the shared base leaves them optional for the write paths.
     nextDueAt: z.iso.datetime({ offset: true }).nullable(),
     nextDueOverdue: z.boolean(),
+    courseStatus: z
+      .enum(["UPCOMING", "CURRENT", "ENDED"])
+      .describe(
+        "v1.39.4 — where today (on the user's clock) sits in the course: UPCOMING before `startsOn`, ENDED after `endsOn`, CURRENT otherwise. Calendar days, both ends inclusive, so a course that ends today is CURRENT all day. Read-only — computed, not stored.",
+      ),
+    intakeActionable: z
+      .boolean()
+      .describe(
+        "v1.39.4 — whether the medication offers taken / skip today: true only when it is `active`, its intake is tracked (`trackIntake`) and `courseStatus` is CURRENT. Clients render the dose actions from this and do not re-derive it. Logging a past dose from the history is not gated by it. Read-only — computed, not stored.",
+      ),
     lastTakenAt: z.iso
       .datetime({ offset: true })
       .nullable()
@@ -305,6 +315,16 @@ export const medicationListEntry = medicationResource
 export const medicationDetailEntry = medicationResource
   .extend({
     category: medicationCategoryEnum,
+    courseStatus: z
+      .enum(["UPCOMING", "CURRENT", "ENDED"])
+      .describe(
+        "v1.39.4 — where today (on the user's clock) sits in the course: UPCOMING before `startsOn`, ENDED after `endsOn`, CURRENT otherwise. Calendar days, both ends inclusive, so a course that ends today is CURRENT all day. Read-only — computed, not stored.",
+      ),
+    intakeActionable: z
+      .boolean()
+      .describe(
+        "v1.39.4 — whether the medication offers taken / skip today: true only when it is `active`, its intake is tracked (`trackIntake`) and `courseStatus` is CURRENT. Clients render the dose actions from this and do not re-derive it. Logging a past dose from the history is not gated by it. Read-only — computed, not stored.",
+      ),
     stockUnitsRemaining: z
       .number()
       .nullable()

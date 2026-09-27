@@ -1226,6 +1226,7 @@
     "tomorrow": "Tomorrow",
     "asNeededMarker": "As needed",
     "recordOnlyBadge": "Record only",
+    "courseEndedBadge": "Ended",
     "trackIntake": {
       "title": "Intake tracking",
       "label": "Track intake",

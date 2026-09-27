@@ -35,6 +35,7 @@ import {
 } from "@/lib/medications/intake-tracking";
 import { liveEraStartsByMedication } from "@/lib/medications/scheduling/live-era";
 import { floorWhole } from "@/lib/medications/units-per-dose";
+import { resolveIntakeActionability } from "@/lib/medications/intake-actionable";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
 export type MedicationsListResult = Array<Record<string, unknown>>;
@@ -312,6 +313,10 @@ export async function buildMedicationsList(
       nextDueAt: display ? display.at.toISOString() : null,
       nextDueOverdue: display?.overdue ?? false,
       nextDueScheduleId: display?.scheduleId ?? null,
+      // v1.39.4 (#1040) — whether the card offers taken / skip today, and
+      // the course position it derives from. Resolved here so no client
+      // re-derives the calendar-day rule.
+      ...resolveIntakeActionability(m, now, userTz),
       stockUnitsRemaining,
       stockDosesRemaining,
       runwayDays,

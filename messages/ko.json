@@ -1226,6 +1226,7 @@
     "tomorrow": "내일",
     "asNeededMarker": "필요시",
     "recordOnlyBadge": "기록만",
+    "courseEndedBadge": "종료됨",
     "trackIntake": {
       "title": "복용 기록",
       "label": "복용 기록하기",

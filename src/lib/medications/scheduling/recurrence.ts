@@ -183,6 +183,31 @@ const ONE_MINUTE_MS = 60_000;
 // ────────────────────────────────────────────────────────────────────
 
 /**
+ * Where `now` sits relative to a medication's course, in calendar days on
+ * the user's clock. `startsOn` / `endsOn` are calendar dates and are read as
+ * such (never shifted through `timeZone`); only `now` is converted to the
+ * local day it falls on. Both ends are inclusive: a course that ends today
+ * is CURRENT for the whole of today, one that starts today is CURRENT from
+ * local midnight.
+ */
+export type CourseStatus = "UPCOMING" | "CURRENT" | "ENDED";
+
+export function courseStatusAt(
+  course: { startsOn: Date | null; endsOn: Date | null },
+  now: Date,
+  timeZone: string,
+): CourseStatus {
+  const today = civilDayOfInstant(now, timeZone).getTime();
+  if (course.startsOn && today < civilDayOfDate(course.startsOn).getTime()) {
+    return "UPCOMING";
+  }
+  if (course.endsOn && today > civilDayOfDate(course.endsOn).getTime()) {
+    return "ENDED";
+  }
+  return "CURRENT";
+}
+
+/**
  * Emit every occurrence in `[from, to]` (inclusive of both ends) in
  * chronological order. Pure: no DB access, no side effects.
  */

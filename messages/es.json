@@ -1226,6 +1226,7 @@
     "tomorrow": "Mañana",
     "asNeededMarker": "Según necesidad",
     "recordOnlyBadge": "Solo registro",
+    "courseEndedBadge": "Finalizado",
     "trackIntake": {
       "title": "Registro de tomas",
       "label": "Registrar tomas",

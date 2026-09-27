@@ -8,6 +8,8 @@ interface MedicationStateBadgesProps {
   pausedAt: string | null;
   /** v1.39.1 (#1033) — intake tracking off: kept as a record only. */
   recordOnly?: boolean;
+  /** v1.39.4 (#1040) — the course's end date has passed. */
+  courseEnded?: boolean;
 }
 
 /**
@@ -21,6 +23,7 @@ export function MedicationStateBadges({
   active,
   pausedAt,
   recordOnly = false,
+  courseEnded = false,
 }: MedicationStateBadgesProps) {
   const { t } = useTranslations();
 
@@ -35,7 +38,16 @@ export function MedicationStateBadges({
           {t("medications.recordOnlyBadge")}
         </Badge>
       )}
-      {!notificationsEnabled && !recordOnly && (
+      {courseEnded && (
+        <Badge
+          variant="secondary"
+          className="text-xs"
+          data-slot="medication-course-ended-badge"
+        >
+          {t("medications.courseEndedBadge")}
+        </Badge>
+      )}
+      {!notificationsEnabled && !recordOnly && !courseEnded && (
         <Badge variant="secondary" className="text-xs">
           {t("medications.withoutNotification")}
         </Badge>
