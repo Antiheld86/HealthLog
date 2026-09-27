@@ -8,7 +8,6 @@
  */
 export { COACH_TOOL_DEFS, parseCoachToolArgs } from "./definitions";
 export type { CoachToolTrace } from "./executor";
-export { admittedPriorResults } from "./executor";
 export {
   buildCoachDataInventory,
   renderDataInventory,

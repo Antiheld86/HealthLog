@@ -22,7 +22,6 @@ import {
 } from "@/lib/ai/coach/chat-request-builder";
 import {
   COACH_TOOL_DEFS,
-  admittedPriorResults,
   buildCoachDataInventory,
   renderDataInventory,
   renderFocusHint,
@@ -31,6 +30,7 @@ import {
   runCoachToolLoop,
   type CoachToolTrace,
 } from "@/lib/ai/coach/tools";
+import { admittedPriorResults } from "@/lib/ai/coach/tools/executor";
 import type { InventoryEntry } from "@/lib/ai/coach/tools/inventory";
 import type { CoachResultTable, CoachStep } from "@/lib/ai/coach/types";
 import {
