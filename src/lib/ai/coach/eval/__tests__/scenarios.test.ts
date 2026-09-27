@@ -465,11 +465,15 @@ describe.each(["de", "en"] as const)("in %s", (lang) => {
       ([args]) => args as { from: Date; to: Date },
     );
     expect(reads.length).toBeGreaterThan(0);
-    // The range ends about a year before now, not now.
-    for (const read of reads) {
-      const daysBack = (h.NOW.getTime() - read.to.getTime()) / 86_400_000;
-      expect(daysBack).toBeGreaterThan(360);
-      expect(daysBack).toBeLessThan(370);
+    // The table's range ends about a year before now. The only other read
+    // is the current window, which the summary compares it with.
+    const daysBack = reads.map(
+      (read) => (h.NOW.getTime() - read.to.getTime()) / 86_400_000,
+    );
+    const yearAgo = daysBack.filter((d) => d > 360 && d < 370);
+    expect(yearAgo.length).toBeGreaterThan(0);
+    for (const d of daysBack) {
+      if (!(d > 360 && d < 370)) expect(d).toBeLessThan(1);
     }
 
     const broken = await run(scenario, {
