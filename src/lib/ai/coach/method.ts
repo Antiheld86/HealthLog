@@ -18,7 +18,6 @@ import type {
   CoachMethodEntry,
   CoachResultMeta,
   CoachStep,
-  CoachStepDomain,
 } from "@/lib/ai/coach/types";
 import {
   COACH_METHOD_ABSENT_KEYS,
