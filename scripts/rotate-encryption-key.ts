@@ -700,6 +700,35 @@ async function main() {
       prisma.practitioner,
     ),
   );
+  // v1.39.4 — the practice's phone number and address. NULL on a field the
+  // person left empty and on a row the free-text backfill has not reached
+  // yet; `rotateBytesColumn` skips both.
+  // "phoneEncrypted" "locationEncrypted"
+  results.push(
+    await rotateBytesColumn(
+      "Practitioner",
+      "phoneEncrypted",
+      prisma.practitioner,
+    ),
+  );
+  results.push(
+    await rotateBytesColumn(
+      "Practitioner",
+      "locationEncrypted",
+      prisma.practitioner,
+    ),
+  );
+
+  // ───── v1.39.4 workout GPS track (Bytes, binary2, batched) ─────
+  // One sealed binary value per route, labelled for its purpose. Walked
+  // through the registry so the binary codec and the label are honoured, in
+  // id-cursor batches because a track can be close to a megabyte. NULL on a
+  // row the free-text backfill has not reached yet, which the walk skips.
+  results.push(
+    await rotateRegistryColumn("WorkoutRoute", "geometryEncrypted", {
+      workoutRoute: prisma.workoutRoute,
+    } as unknown as CorpusClient),
+  );
 
   // ───── v1.39.3 custom-metric reading note (Bytes column) ─────
   // NULL on a reading without a note, and on a row the free-text backfill has

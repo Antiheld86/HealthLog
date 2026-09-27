@@ -42,6 +42,7 @@ import {
 import { computeSplits } from "@/lib/workouts/splits";
 import { buildSportContext } from "@/lib/workouts/sport-context";
 import type { RouteCoordinate } from "@/lib/workouts/route-svg";
+import { readRouteGeometry } from "@/lib/workouts/route-geometry-cipher";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { userDayKey } from "@/lib/tz/format";
 
@@ -74,6 +75,7 @@ export const GET = apiHandler(
           select: {
             id: true,
             geometry: true,
+            geometryEncrypted: true,
             sampleTimestamps: true,
             createdAt: true,
           },
@@ -193,14 +195,14 @@ export const GET = apiHandler(
     // so the web client keeps dropping the raw timestamp blob under
     // `compact=1` while still rendering splits (server-authoritative
     // parity — iOS gets the same resolved figures).
+    // v1.39.4 — the track is stored sealed; the legacy readable column is
+    // read only for a row the backfill has not reached yet.
+    const routeGeometry = row.route ? readRouteGeometry(row.route) : null;
     const geometryCoords =
-      row.route &&
-      row.route.geometry &&
-      typeof row.route.geometry === "object" &&
-      Array.isArray(
-        (row.route.geometry as { coordinates?: unknown }).coordinates,
-      )
-        ? (row.route.geometry as { coordinates: RouteCoordinate[] }).coordinates
+      routeGeometry &&
+      typeof routeGeometry === "object" &&
+      Array.isArray((routeGeometry as { coordinates?: unknown }).coordinates)
+        ? (routeGeometry as { coordinates: RouteCoordinate[] }).coordinates
         : null;
     const splits =
       geometryCoords && Array.isArray(row.route?.sampleTimestamps)
@@ -259,7 +261,7 @@ export const GET = apiHandler(
 
     const route = row.route
       ? {
-          geometry: row.route.geometry,
+          geometry: routeGeometry,
           // `compact=1` drops the (up to 20k-entry) timestamp array; the
           // SVG needs geometry, not the per-sample timestamps, and the
           // splits above are already derived from them server-side.

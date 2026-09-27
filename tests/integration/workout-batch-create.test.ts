@@ -197,6 +197,23 @@ describe("POST /api/workouts/batch (real Postgres)", () => {
     expect(workouts[0]?.totalDistanceM).toBe(7800);
     expect(workouts[0]?.route).not.toBeNull();
     expect(workouts[0]?.durationSec).toBe(45 * 60);
+
+    // v1.39.4 — the track is on disk sealed only. The readable column is SQL
+    // NULL, the ciphertext does not contain a coordinate, and it opens to the
+    // exact geometry the client sent.
+    const onDisk = await getPrismaClient().$queryRaw<
+      { readable_is_null: boolean; leaks: boolean }[]
+    >`
+      SELECT geometry IS NULL AS readable_is_null,
+             position(convert_to('49.452', 'UTF8') IN geometry_encrypted) > 0
+               AS leaks
+      FROM workout_routes WHERE workout_id = ${workouts[0]!.id}`;
+    expect(onDisk).toEqual([{ readable_is_null: true, leaks: false }]);
+    const { decryptRouteGeometry } =
+      await import("@/lib/workouts/route-geometry-cipher");
+    expect(
+      decryptRouteGeometry(workouts[0]!.route!.geometryEncrypted!),
+    ).toEqual(body.workouts[0]!.route!.geometry);
   });
 
   it("persists a route-independent HR series for an indoor workout (v1.10.0)", async () => {
