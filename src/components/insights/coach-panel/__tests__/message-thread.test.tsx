@@ -57,12 +57,31 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
+// v1.39.4 — the stored tables of a message, served by the lazy read. Empty
+// unless a test hands some in.
+const storedResults: { value: CoachResultEntry[] | undefined } = {
+  value: undefined,
+};
+vi.mock("@/hooks/use-coach-message-results", () => ({
+  useCoachMessageResults: () => ({
+    ref: () => {},
+    results: storedResults.value,
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
+
 import {
   MessageThread,
   placeInterleaved,
   type InterleavedThreadItem,
 } from "../message-thread";
-import type { CoachConversationDetailDTO } from "@/lib/ai/coach/types";
+import type {
+  CoachConversationDetailDTO,
+  CoachResultEntry,
+  CoachResultTable,
+} from "@/lib/ai/coach/types";
 import type { CoachStreamingMessage } from "../use-coach";
 
 // v1.18.9 — `CoachStreamingMessage` gained a `usage` field for the
@@ -135,6 +154,70 @@ const baseConversation: CoachConversationDetailDTO = {
 };
 
 describe("<MessageThread>", () => {
+  it("dates a table copied from an earlier answer by that answer, and widens the reply for it", () => {
+    const reused: CoachResultTable = {
+      ref: "r1",
+      source: {
+        tool: "get_metric_table",
+        domain: "bp",
+        window: "last30days",
+        period: "current",
+        granularity: "day",
+      },
+      shape: "timeSeries",
+      titleKey: "coach.result.title.byDay",
+      title: "Blood pressure by day",
+      rowCount: 1,
+      chartKind: null,
+      displayed: true,
+      reusedFrom: { messageId: "m2", ref: "r1" },
+      columns: [
+        {
+          key: "day",
+          kind: "period",
+          labelKey: "coach.result.column.day",
+          label: "Day",
+        },
+      ],
+      rows: [["2026-05-09"]],
+      truncated: false,
+      chart: null,
+    };
+    const {
+      columns: _c,
+      rows: _r,
+      truncated: _t,
+      chart: _ch,
+      ...meta
+    } = reused;
+    storedResults.value = [reused];
+    try {
+      const html = render(
+        <MessageThread
+          conversation={{
+            ...baseConversation,
+            messages: [
+              ...baseConversation.messages,
+              {
+                ...baseConversation.messages[1],
+                id: "m3",
+                createdAt: "2026-05-12T09:00:00.000Z",
+                metricSource: { windows: [], metrics: [], results: [meta] },
+              },
+            ],
+          }}
+        />,
+      );
+      // m2 was written on 10 May; the copy in m3 names that day.
+      expect(html).toMatch(/From an earlier answer \([^)]*10[^)]*\)/);
+      expect(html).toMatch(
+        /<div class="flex max-w-\[calc\(80%-2\.625rem\)\] flex-col gap-2 w-full">/,
+      );
+    } finally {
+      storedResults.value = undefined;
+    }
+  });
+
   it("shows the empty hint when no conversation and no streaming", () => {
     const html = render(<MessageThread conversation={null} />);
     expect(html).toContain('data-slot="coach-message-thread"');
@@ -303,6 +386,35 @@ describe("<MessageThread>", () => {
     // The persisted text shows; the older streaming sketch does not
     // appear as a separate bubble.
     expect(html).toContain("fresh persisted");
+  });
+
+  it("renders a streaming turn and a persisted one in the same wrapper", () => {
+    // The persisted copy replaces the streamed one under the same key; for
+    // React to keep the bubble, both must sit in the same element chain.
+    const live = render(
+      <MessageThread
+        conversation={baseConversation}
+        streaming={streaming({
+          content: "Looking at your data ",
+          metricSource: null,
+          suggestion: null,
+          inProgress: true,
+          messageId: null,
+          errorCode: null,
+        })}
+      />,
+    );
+    const liveTurn = live.match(
+      /<div data-slot="coach-assistant-turn" data-turn-key="coach-turn-1"[^>]*>/,
+    )?.[0];
+    expect(liveTurn).toContain('role="log"');
+    expect(liveTurn).toContain('aria-live="polite"');
+    const persisted = render(<MessageThread conversation={baseConversation} />);
+    const turns =
+      persisted.match(/<div data-slot="coach-assistant-turn"[^>]*>/g) ?? [];
+    expect(turns.length).toBeGreaterThan(0);
+    // Settled, the wrapper is no longer a live region.
+    for (const turn of turns) expect(turn).not.toContain("aria-live");
   });
 
   it("still renders the streaming bubble while inProgress and id is null", () => {

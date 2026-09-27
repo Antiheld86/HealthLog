@@ -70,7 +70,6 @@ export const POST = apiHandler(
                 userId: user.id,
                 occurredAt: existing.occurredAt,
                 practitionerName: existing.practitioner?.name ?? null,
-                practitionerLocation: existing.practitioner?.location ?? null,
                 kindLabel: encounterKindLabel(existing.kind, locale),
               },
               timezone,

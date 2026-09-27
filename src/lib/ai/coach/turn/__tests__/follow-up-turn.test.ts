@@ -27,6 +27,7 @@ const m = vi.hoisted(() => ({
   surfaceCards: vi.fn(),
   persistAssistantReply: vi.fn(),
   resolveModuleMap: vi.fn(),
+  readFollowUpHistory: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -55,6 +56,12 @@ vi.mock("../budget", () => ({
   settleReservation: m.settleReservation,
 }));
 vi.mock("../model", () => ({ runTurnModel: m.runTurnModel }));
+// The record reaches back years, so the history chips have something to
+// offer; the chip rules themselves are pinned in derive.test.ts.
+vi.mock("@/lib/ai/coach/follow-ups/derive", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  readFollowUpHistory: m.readFollowUpHistory,
+}));
 vi.mock("../reply-guards", () => ({ guardReply: m.guardReply }));
 vi.mock("../cards", () => ({ surfaceCards: m.surfaceCards }));
 vi.mock("../persist", () => ({
@@ -229,6 +236,10 @@ function modelPath(prefs = DEFAULT_COACH_PREFS) {
 
 beforeEach(() => {
   for (const fn of Object.values(m)) fn.mockReset();
+  m.readFollowUpHistory.mockResolvedValue({
+    today: "2026-09-27",
+    firstDate: { bp: "2024-01-01" },
+  });
   m.resolveTurnConversation.mockResolvedValue({
     conversation: {
       conversationId: "c1",
@@ -316,16 +327,21 @@ describe("a reuse chip", () => {
     expect(annotated("coach.followUp.reused")).toHaveLength(1);
   });
 
-  it("drops the chart on 'as a table'", async () => {
+  it("shows the table first on 'as a table' and offers the chart back", async () => {
     const asTable = { ...AS_CHART, kind: "as_table" as const };
     m.findMany.mockResolvedValue(latestReply([asTable]));
     m.readMessageResults.mockResolvedValue([STORED]);
     const out = await frames(await runCoachTurn(input()));
     const result = out.find((f) => f.type === "result");
-    expect(result?.type === "result" && result.result.chart).toBeNull();
-    expect(result?.type === "result" && result.result.rows).toEqual(
-      STORED.rows,
-    );
+    expect(result?.type === "result" && result.result).toMatchObject({
+      view: "table",
+      chart: STORED.chart,
+      rows: STORED.rows,
+    });
+    const chips = out.find((f) => f.type === "followUps");
+    expect(
+      chips?.type === "followUps" && chips.followUps.map((c) => c.kind),
+    ).toEqual(["as_chart"]);
   });
 
   it("goes to the model with the chip's hint when the table is withheld", async () => {

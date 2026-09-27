@@ -169,7 +169,7 @@ describe("POST /api/insights/chat — fence guard", () => {
     expect(fetchConversationWithMessages).toHaveBeenCalledWith(
       "u1",
       "fenced-conv",
-      { documentScoped: false },
+      { documentScoped: false, countEarlierAssistant: true },
     );
     expect(auditLog).not.toHaveBeenCalled();
   });

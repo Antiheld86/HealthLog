@@ -19,8 +19,14 @@ describe("clarifyAddendum", () => {
     }
   });
 
-  it("uses English for the other locales", () => {
+  it("uses English for every locale, like the other addenda", () => {
     expect(clarifyAddendum("fr")).toBe(clarifyAddendum("en"));
+    expect(clarifyAddendum("de")).toBe(clarifyAddendum("en"));
+  });
+
+  it("stays short: it rides every tool-mode round", () => {
+    // About 250 tokens at four characters a token.
+    expect(clarifyAddendum("en").length).toBeLessThan(1_000);
   });
 
   it("teaches a block the parser accepts", () => {

@@ -7,7 +7,7 @@
  *     in the tool result it cites from.
  *   - `m<k>.r<n>` — table `r<n>` of an earlier assistant message of the same
  *     conversation, `k` being that message's 1-based position among the
- *     assistant messages the turn loaded. The names are drawn once per turn
+ *     conversation's assistant messages (stable however many are loaded). The names are drawn once per turn
  *     from the conversation the turn already read (owner-narrowed), and
  *     `show_result` resolves only against that same list, so a name can never
  *     reach a table of another conversation or another account.
@@ -17,7 +17,7 @@
  *
  * Pure: no database, no provider. The reply guards import this module.
  */
-import type { CoachResultMeta } from "@/lib/ai/coach/types";
+import type { CoachResultMeta, CoachResultTable } from "@/lib/ai/coach/types";
 
 /** At most this many tables per message (`r1`..`r6`). */
 export const MAX_RESULTS_PER_TURN = 6;
@@ -52,7 +52,7 @@ export function createResultRefAllocator(): ResultRefAllocator {
 /** One earlier assistant message that holds tables. */
 export interface PriorResultTurn {
   messageId: string;
-  /** 1-based position among the conversation's loaded assistant messages. */
+  /** 1-based position among the conversation's assistant messages. */
   turnIndex: number;
   results: CoachResultMeta[];
 }
@@ -70,9 +70,15 @@ interface LoadedMessage {
  */
 export function collectPriorResults(
   messages: ReadonlyArray<LoadedMessage>,
+  /**
+   * Assistant messages written before the first loaded one, so an index is
+   * the message's position in the whole conversation, not in the window the
+   * turn happened to load.
+   */
+  earlierAssistantMessages = 0,
 ): PriorResultTurn[] {
   const out: PriorResultTurn[] = [];
-  let turnIndex = 0;
+  let turnIndex = earlierAssistantMessages;
   for (const message of messages) {
     if (message.role !== "assistant") continue;
     turnIndex += 1;
@@ -165,4 +171,34 @@ export function stripResultRefs(prose: string): {
       .trim(),
     referenced,
   };
+}
+
+// ── What a message keeps ──────────────────────────────────────────────────
+
+/**
+ * The at-rest ceiling for one message's tables, as JSON before encryption.
+ * Tables arrive trimmed to 400 rows; a message whose tables still exceed
+ * this keeps the leading tables that fit.
+ */
+export const RESULTS_MAX_BYTES = 128 * 1024;
+
+/**
+ * The tables a message keeps: the leading ones whose JSON fits
+ * `RESULTS_MAX_BYTES`, whole tables dropped from the end. Applied once,
+ * before the turn streams them, so the tables the person sees live are the
+ * tables a reload reads back, and the metadata never names a table the
+ * ciphertext does not hold.
+ */
+export function fitResultsToStorage(
+  results: readonly CoachResultTable[],
+): CoachResultTable[] {
+  const kept = results.slice(0, MAX_RESULTS_PER_TURN);
+  while (
+    kept.length > 0 &&
+    new TextEncoder().encode(JSON.stringify(kept)).byteLength >
+      RESULTS_MAX_BYTES
+  ) {
+    kept.pop();
+  }
+  return kept;
 }

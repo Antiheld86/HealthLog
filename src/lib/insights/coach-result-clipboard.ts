@@ -6,8 +6,9 @@
  * The cells arrive already formatted the way the table shows them. Two
  * things are done to them on the way out:
  *
- *   - Formula injection. A cell that starts with `=`, `+`, `-` or `@` (or a
- *     tab / carriage return) is read by a spreadsheet as a formula, and a
+ *   - Formula injection. A cell that starts with `=`, `+`, `-`, `@` or `|`
+ *     (their fullwidth forms too, and behind leading whitespace, which some
+ *     spreadsheets skip) is read as a formula or a command, and a
  *     table can carry text the person did not type — a lab analyte read off
  *     an uploaded report. Such a cell gets a leading `'`, which spreadsheets
  *     treat as "this is text". A plain negative number is left alone.
@@ -28,8 +29,8 @@ export interface ClipboardGrid {
   alignRight?: ReadonlyArray<boolean>;
 }
 
-const FORMULA_START = /^[=+\-@\t\r]/;
-const NEGATIVE_NUMBER = /^-\s?\d[\d\s.,  ]*$/;
+const FORMULA_START = /^\s*[=+\-@|＝＋－＠]/;
+const NEGATIVE_NUMBER = /^\s*-\s?\d[\d\s.,  ]*$/;
 
 /** A cell with its separators flattened and a formula start neutralised. */
 export function sanitiseCell(value: string | null): string {

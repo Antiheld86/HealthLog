@@ -205,8 +205,10 @@ describe("the continued turn", () => {
     expect(m.reserveTurnBudget).toHaveBeenCalledTimes(1);
     const { turnHints } = m.runTurnModel.mock.calls[0][0];
     expect(turnHints).toEqual([
-      expect.stringContaining('Unfinished answer for: "Why is my pulse up?"'),
+      expect.stringContaining("The unfinished question is their message"),
     ]);
+    // The question itself stays in the transcript, never in the hint.
+    expect(turnHints[0]).not.toContain("Why is my pulse up?");
     expect(persistedProvenance().continuationOf).toBe("m-forced");
   });
 

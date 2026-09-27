@@ -16,6 +16,7 @@ import {
 import { detectRefusal } from "@/lib/ai/coach/refusal";
 import type { CoachTurn } from "@/lib/ai/coach/chat-request-builder";
 import { collectPriorResults } from "@/lib/ai/coach/results/refs";
+import { latestMessagesOnce } from "@/lib/ai/coach/latest-messages";
 
 import { streamRefusal } from "./sse";
 import type { TurnConversation } from "./types";
@@ -57,6 +58,7 @@ export async function resolveTurnConversation(args: {
   // instruction against the coach's write tools. Do not relax.
   const existing = await fetchConversationWithMessages(userId, conversationId, {
     documentScoped: false,
+    countEarlierAssistant: true,
   });
   if (!existing) {
     // 404, not 403 — never reveal cross-user / cross-mode existence
@@ -141,7 +143,15 @@ export async function resolveTurnConversation(args: {
       priorToolFigures,
       priorSummary: existing.summary ?? null,
       // v1.39.4 — the tables earlier replies hold, named for the context.
-      priorResults: collectPriorResults(existing.messages),
+      // Named by their place in the whole conversation: counting from the
+      // first loaded message gave an older table a new `m<k>` name every turn
+      // once the conversation outgrew the window, so a name the model had
+      // read earlier pointed somewhere else.
+      priorResults: collectPriorResults(
+        existing.messages,
+        existing.earlierAssistantMessages ?? 0,
+      ),
+      latestMessages: latestMessagesOnce(userId, existing.id),
     },
   };
 }

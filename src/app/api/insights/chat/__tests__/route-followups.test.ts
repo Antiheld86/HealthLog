@@ -205,11 +205,18 @@ describe("a reuse chip", () => {
       "result",
     ).map((f) => f.result);
     expect(result.rows).toEqual(world.storedTables[0].rows);
-    expect(result.chart).toBeNull();
+    // The table shows first; the chart stays, so the chart is offered back.
+    expect(result.view).toBe("table");
+    expect(result.chart).toEqual(world.storedTables[0].chart);
     expect(result.reusedFrom).toEqual({
       messageId: h.LAST_ASSISTANT_ID,
       ref: "r1",
     });
+    const [chips] = framesOf<{ followUps: CoachFollowUp[] }>(
+      run.frames,
+      "followUps",
+    );
+    expect(chips.followUps.map((c) => c.kind)).toEqual(["as_chart"]);
     expect(m.appendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ role: "assistant", providerType: "reuse" }),
     );
@@ -314,7 +321,7 @@ describe("a model chip", () => {
     ]);
   });
 
-  it("continues a forced reply with the question it left unfinished", async () => {
+  it("continues a forced reply, pointing at the question it left unfinished", async () => {
     conversationWithChips();
     world.storedFollowUps = [{ ...chip("f1", "continue"), anchor: undefined }];
     world.storedProvenance = {
@@ -340,8 +347,11 @@ describe("a model chip", () => {
     await tap("f1");
     const system = providerCalls[0].system;
     expect(system).toContain(
-      'CONTINUE: the person asked you to keep looking. Unfinished answer for: "How was my blood pressure last month?"',
+      "CONTINUE: the person asked you to keep looking. The unfinished question is their message before that request, in CONVERSATION.",
     );
+    // The question stays the person's own turn; it never reaches the
+    // system role.
+    expect(system).not.toContain("How was my blood pressure last month?");
     expect(system).toContain(
       "Already fetched: get_metric_table(bp, last30days, week) → m1.r1",
     );

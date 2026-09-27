@@ -18,7 +18,6 @@ import type {
   CoachMethodEntry,
   CoachResultMeta,
   CoachStep,
-  CoachStepDomain,
 } from "@/lib/ai/coach/types";
 import {
   COACH_METHOD_ABSENT_KEYS,
@@ -31,24 +30,13 @@ import {
   methodReadingsKey,
   methodTotalsKey,
 } from "@/lib/ai/coach/dialog-keys";
+import { aggregationKind } from "@/lib/ai/coach/results/chart-spec";
 
 /** More than this and the line stops being a line. */
 export const METHOD_MAX_ENTRIES = 6;
 
 type Aggregation = NonNullable<CoachMethodEntry["aggregation"]>;
 type Absent = NonNullable<CoachMethodEntry["absent"]>;
-
-/**
- * Metrics whose buckets are totals (a week of steps is summed, not
- * averaged). Every other time series is a level, and its buckets are means.
- */
-const TOTAL_METRICS: ReadonlySet<CoachStepDomain> = new Set<CoachStepDomain>([
-  "steps",
-  "active_energy",
-  "flights",
-  "distance",
-  "daylight",
-]);
 
 const ABSENT_REASONS: ReadonlySet<string> = new Set<Absent>([
   "no_data",
@@ -70,7 +58,7 @@ function aggregationFor(result: CoachResultMeta): Aggregation | undefined {
       if (domain === "sleep" && result.source.granularity === "day") {
         return undefined;
       }
-      return TOTAL_METRICS.has(domain) ? "sum" : "mean";
+      return aggregationKind(domain) === "total" ? "sum" : "mean";
     }
   }
 }

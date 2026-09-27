@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Buffer } from "node:buffer";
 
+const addWarning = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/logging/context", () => ({
+  getEvent: () => ({ addWarning }),
+}));
+
 import { _resetCryptoCacheForTests, encryptBytes } from "@/lib/crypto";
 import {
   decryptRouteGeometry,
@@ -56,11 +61,16 @@ describe("route geometry cipher", () => {
     expect(() => decryptRouteGeometry(new Uint8Array(other))).toThrow();
   });
 
-  it("throws on a ciphertext that does not open instead of using the legacy column", () => {
+  it("reads a ciphertext that does not open as no track, with a warning, never the legacy column", () => {
+    addWarning.mockClear();
     const sealed = encryptRouteGeometry(TRACK);
     sealed[sealed.byteLength - 1] ^= 0xff;
-    expect(() =>
+    expect(
       readRouteGeometry({ geometry: TRACK, geometryEncrypted: sealed }),
-    ).toThrow();
+    ).toBeNull();
+    expect(addWarning).toHaveBeenCalledTimes(1);
+    expect(String(addWarning.mock.calls[0][0])).toContain(
+      "workout route decrypt failed",
+    );
   });
 });

@@ -31,7 +31,7 @@
  *   - One restore per account at a time. The job table's partial unique index
  *     refuses a second queued or running row for the same account, and the
  *     route answers that with 409.
- *   - A time budget. The job's expiry is two hours; `restoreBackup` refuses,
+ *   - A time budget. The job's expiry is six hours; `restoreBackup` refuses,
  *     before deleting anything, a file whose transaction limit would run past
  *     three quarters of it (`jobDeadline`), the same share the other long
  *     passes stop at. pg-boss does not retry the job (`retryLimit: 0`): a
@@ -84,12 +84,22 @@ export const BACKUP_RESTORE_QUEUE = "backup-restore";
 export const BACKUP_RESTORE_ACTIVE_CODE = "backup.restore.active";
 
 /**
- * Two hours. The restore of 1.25 million readings took a minute and a half;
- * the limit is sized so a record many times that still fits, while a job whose
- * worker died does not keep its pg-boss row active for longer than an operator
- * would wait.
+ * Six hours. The expiry is what bounds the size of a restore: `restoreBackup`
+ * refuses a file whose transaction limit (`restoreTransactionTimeoutMs`, two
+ * minutes plus a second per 1 000 readings in the file and per 10 000 in the
+ * account) would run past three quarters of it. At two hours that refused a
+ * same-size replacement of about four million readings, which a long-running
+ * Apple Health sync reaches; six hours admits ten million over ten million
+ * (`backup-restore-budget.test.ts`). The transaction limit is itself about
+ * twice the slowest restore measured (1.89 million readings in 16 minutes on
+ * a database held to half a CPU), so the real work finishes well inside it.
+ *
+ * The expiry is not what frees an account whose worker died: once its
+ * heartbeat is older than {@link BACKUP_RESTORE_STALE_AFTER_MS}, the next
+ * restore request's admission check and the sweep fail or re-queue it, so a
+ * longer expiry does not keep an account locked longer. pg-boss refuses an expiry of 24 hours or more.
  */
-export const BACKUP_RESTORE_EXPIRE_SECONDS = 2 * 60 * 60;
+export const BACKUP_RESTORE_EXPIRE_SECONDS = 6 * 60 * 60;
 
 export const BACKUP_RESTORE_SEND_OPTIONS = {
   retryLimit: 0,

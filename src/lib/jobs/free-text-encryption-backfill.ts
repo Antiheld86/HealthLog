@@ -13,6 +13,15 @@
  * track of an outdoor workout, sealed as one binary value). A route row has no
  * user id of its own; it is found through its workout.
  *
+ * The same pass removes the two readable copies of a practitioner's contact
+ * details that outlived the sealing: the address an appointment reminder used
+ * to copy onto `MeasurementReminder.location` (the tick now resolves it from
+ * the practitioner when it fires), and the old phone number and address an
+ * edit's audit row recorded in `previous` before the contact fields were
+ * sealed (the row keeps the changed-field names). A route whose readable
+ * column holds a JSON null rather than SQL NULL has nothing to seal; it is set
+ * to SQL NULL so discovery stops finding it.
+ *
  * Modelled on `med-notes-encryption-backfill.ts`: a discovery query enqueues
  * one job per user still holding an un-migrated row, the per-user handler walks
  * that user's rows, and the pass is idempotent across reboots — once a row is
@@ -76,6 +85,93 @@ export interface FreeTextEncryptionBackfillSummary {
   practitionerContactsMigrated: number;
   /** v1.39.4 — workout GPS tracks sealed. */
   routeGeometriesMigrated: number;
+  /** v1.39.4 — appointment reminders whose readable address copy was cleared. */
+  appointmentAddressesCleared: number;
+  /** v1.39.4 — edit audit rows whose old phone number / address was removed. */
+  contactAuditRowsScrubbed: number;
+}
+
+/** The audit action whose older rows carried contact values. */
+const CONTACT_AUDIT_ACTION = "practitioner.contact.update";
+
+/** The sealed contact fields an audit row may name but never carry. */
+const SEALED_CONTACT_FIELDS = ["location", "phone"] as const;
+
+/**
+ * An edit audit row's `details` without the sealed contact values: the keys
+ * leave `previous` and stay named in `fields`. Returns null when there is
+ * nothing to remove (or the value is not the JSON this action writes), so the
+ * caller leaves the row alone.
+ */
+export function scrubContactAuditDetails(
+  details: string | null,
+): string | null {
+  if (!details) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(details);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+  const record = parsed as Record<string, unknown>;
+  const previous = record.previous;
+  if (!previous || typeof previous !== "object" || Array.isArray(previous)) {
+    return null;
+  }
+  const carried = SEALED_CONTACT_FIELDS.filter((field) =>
+    Object.prototype.hasOwnProperty.call(previous, field),
+  );
+  if (carried.length === 0) return null;
+  const kept = { ...(previous as Record<string, unknown>) };
+  for (const field of carried) delete kept[field];
+  const fields = new Set(
+    Array.isArray(record.fields)
+      ? record.fields.filter((f): f is string => typeof f === "string")
+      : [],
+  );
+  for (const field of carried) fields.add(field);
+  return JSON.stringify({
+    ...record,
+    fields: [...fields].sort(),
+    previous: kept,
+  });
+}
+
+/** Rewrite one audit row's details without its contact values. */
+async function scrubContactAuditRow(id: string): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const fresh = await tx.auditLog.findUnique({
+      where: { id },
+      select: { details: true },
+    });
+    const scrubbed = scrubContactAuditDetails(fresh?.details ?? null);
+    if (scrubbed === null) return false;
+    await tx.auditLog.update({ where: { id }, data: { details: scrubbed } });
+    return true;
+  });
+}
+
+/**
+ * Audit rows of this action that may still carry a contact value in
+ * `previous`. The text match is a prefilter only (a key is followed by a
+ * colon, a field name in `fields` is not); the row is parsed before it is
+ * rewritten.
+ */
+function contactAuditCandidates(userId: string | null) {
+  return prisma.auditLog.findMany({
+    where: {
+      userId,
+      action: CONTACT_AUDIT_ACTION,
+      OR: SEALED_CONTACT_FIELDS.map((field) => ({
+        details: { contains: `"${field}":` },
+      })),
+    },
+    select: { id: true },
+    take: PAGE_SIZE,
+  });
 }
 
 /**
@@ -158,7 +254,17 @@ async function migrateRouteGeometry(id: string): Promise<boolean> {
       where: { id },
       select: { geometry: true },
     });
-    if (!fresh || fresh.geometry === null) return false;
+    if (!fresh) return false;
+    if (fresh.geometry === null) {
+      // The page only lists rows whose readable column is set, so a null here
+      // is a JSON null (or a racing pass's SQL NULL). Nothing to seal; set it
+      // to SQL NULL so the row leaves discovery.
+      await tx.workoutRoute.update({
+        where: { id },
+        data: { geometry: Prisma.DbNull },
+      });
+      return true;
+    }
     await tx.workoutRoute.update({
       where: { id },
       data: {
@@ -264,6 +370,20 @@ export async function runFreeTextEncryptionBackfillForUser(
     once,
   );
 
+  // An appointment reminder's address is resolved from the practitioner when
+  // it fires; the readable copy earlier releases wrote here goes.
+  const appointmentAddressesCleared = (
+    await prisma.measurementReminder.updateMany({
+      where: { userId, origin: "ENCOUNTER", location: { not: null } },
+      data: { location: null },
+    })
+  ).count;
+  const contactAuditRowsScrubbed = await drain(
+    () => contactAuditCandidates(userId),
+    scrubContactAuditRow,
+    once,
+  );
+
   annotate({
     action: {
       name: "free_text.encryption.backfill",
@@ -272,6 +392,8 @@ export async function runFreeTextEncryptionBackfillForUser(
         metric_notes_migrated: metricNotesMigrated,
         practitioner_contacts_migrated: practitionerContactsMigrated,
         route_geometries_migrated: routeGeometriesMigrated,
+        appointment_addresses_cleared: appointmentAddressesCleared,
+        contact_audit_rows_scrubbed: contactAuditRowsScrubbed,
       },
     },
   });
@@ -281,13 +403,18 @@ export async function runFreeTextEncryptionBackfillForUser(
     metricNotesMigrated,
     practitionerContactsMigrated,
     routeGeometriesMigrated,
+    appointmentAddressesCleared,
+    contactAuditRowsScrubbed,
   };
 }
 
 /**
  * Discovery. Finds every user still holding a readable value in any of the
  * columns above and enqueues one backfill job per account. The 0357 and 0361
- * partial indexes match the predicates, so the scan is index-only and converges to empty. pg-boss
+ * partial indexes match the predicates, so the scan is index-only and converges to empty.
+ * The appointment-address and audit predicates have no partial index: the
+ * first scans the reminder table, the second reads one action through the
+ * `(action, created_at)` index; both converge to empty the same way. pg-boss
  * `singletonKey` coalesces duplicate sends. Best-effort: errors come back
  * through the result value so worker boot never fails on a miss.
  */
@@ -301,6 +428,15 @@ export async function enqueueBootTimeFreeTextEncryptionBackfill(
   }
 
   try {
+    // Audit rows of an account deleted since have no owner, so no per-user
+    // job reaches them: they are scrubbed here. The set is bounded by the
+    // audit retention and converges to empty.
+    await drain(
+      () => contactAuditCandidates(null),
+      scrubContactAuditRow,
+      () => {},
+    );
+
     const found = await Promise.all([
       prisma.$queryRaw<{ user_id: string }[]>`
         SELECT DISTINCT user_id FROM coach_conversations
@@ -315,6 +451,14 @@ export async function enqueueBootTimeFreeTextEncryptionBackfill(
         SELECT DISTINCT w.user_id FROM workout_routes r
         JOIN workouts w ON w.id = r.workout_id
         WHERE r.geometry IS NOT NULL`,
+      prisma.$queryRaw<{ user_id: string }[]>`
+        SELECT DISTINCT user_id FROM measurement_reminders
+        WHERE origin = 'ENCOUNTER' AND location IS NOT NULL`,
+      prisma.$queryRaw<{ user_id: string }[]>`
+        SELECT DISTINCT user_id FROM audit_logs
+        WHERE action = ${CONTACT_AUDIT_ACTION}
+          AND user_id IS NOT NULL
+          AND (details LIKE '%"location":%' OR details LIKE '%"phone":%')`,
     ]);
 
     const userIds = new Set<string>();

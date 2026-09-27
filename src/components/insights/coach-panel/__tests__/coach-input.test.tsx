@@ -111,6 +111,23 @@ describe("<CoachInput>", () => {
     expect(html).toContain("animate-spin");
   });
 
+  it("keeps the textarea focusable while a reply streams: read-only, not disabled", () => {
+    const html = render(
+      <CoachInput
+        value=""
+        onChange={() => {}}
+        onSubmit={() => {}}
+        disabled
+        isStreaming
+      />,
+    );
+    const textarea = html.match(/<textarea[^>]*>/)?.[0];
+    expect(textarea).toContain('id="coach-composer-textarea"');
+    expect(textarea).toMatch(/\sreadonly(=""|\s|>)/i);
+    expect(textarea).toContain('aria-disabled="true"');
+    expect(textarea).not.toMatch(/\sdisabled(=""|\s|>)/);
+  });
+
   it("swaps the send button for a Stop control while streaming with onCancel", () => {
     // v1.11.3 D1 — while a reply streams the composer must surface a
     // visible Stop affordance bound to the abort handler so the user

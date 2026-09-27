@@ -9490,8 +9490,8 @@
     },
     "noRecordedData": "No tienes ninguna medición registrada sobre lo que preguntas, así que no puedo darte ninguna cifra. Cuando registres algo, vuelve a preguntarme y trabajaré con tus propios datos.",
     "step": {
-      "read": "Leyendo {domain}",
-      "readWindow": "Leyendo {domain}, {window}",
+      "read": "Consultando: {domain}",
+      "readWindow": "Consultando: {domain}, {window}",
       "snapshot": "Leyendo el resumen de tus datos",
       "showResult": "Abriendo una tabla anterior",
       "reuse": "Usando la tabla de antes",
@@ -9572,6 +9572,7 @@
         "systolic": "Sistólica",
         "diastolic": "Diastólica",
         "mean": "Promedio",
+        "total": "Total",
         "min": "Mínimo",
         "max": "Máximo",
         "readings": "Mediciones",
@@ -9594,13 +9595,15 @@
       "viewTable": "Tabla",
       "chartSummary": "{title}, mostrado como gráfico. La vista de tabla recoge cada valor.",
       "dataUsed": "Datos usados ({count})",
-      "truncated": "Se muestran las primeras {shown} de {total} filas",
+      "truncated": "Se muestran las últimas {shown} de {total} filas",
       "withheld": {
         "moduleDisabled": "Esta tabla está oculta porque su módulo está desactivado.",
         "unavailable": "No se pudo cargar esta tabla."
       },
       "loading": "Cargando tabla…",
       "loadFailed": "No se pudieron cargar las tablas.",
+      "reusedFrom": "De una respuesta anterior ({date})",
+      "reusedFromUndated": "De una respuesta anterior",
       "histogramBin": "{from}–{to} {unit}"
     },
     "method": {
@@ -9642,7 +9645,7 @@
       "yearAgo": "Comparar con un año antes",
       "asChart": "Mostrar como gráfico",
       "asTable": "Mostrar como tabla",
-      "relatedMetric": "Ver también {metric}",
+      "relatedMetric": "Ver también: {metric}",
       "continue": "Seguir buscando",
       "settingLabel": "Sugerir preguntas de seguimiento",
       "settingHint": "Muestra hasta tres sugerencias bajo la última respuesta del Coach."

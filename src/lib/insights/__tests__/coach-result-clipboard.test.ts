@@ -39,13 +39,27 @@ describe("sanitiseCell", () => {
     expect(sanitiseCell(input)).toBe(expected);
   });
 
-  it("turns a leading tab into a space, which no spreadsheet reads as a formula", () => {
-    expect(sanitiseCell("\t=1")).toBe(" =1");
-  });
+  it.each([
+    ["\t=1", "' =1"],
+    ["  =1+1", "'  =1+1"],
+    ["\u00a0@SUM(A1)", "'\u00a0@SUM(A1)"],
+    ["\uff1d1+1", "'\uff1d1+1"],
+    ["\uff0b1", "'\uff0b1"],
+    ["\uff0d1+1", "'\uff0d1+1"],
+    ["\uff20SUM(A1)", "'\uff20SUM(A1)"],
+    ["|cmd", "'|cmd"],
+    [" |cmd", "' |cmd"],
+  ])(
+    "neutralises a formula start behind whitespace or in fullwidth: %j",
+    (input, expected) => {
+      expect(sanitiseCell(input)).toBe(expected);
+    },
+  );
 
   it("leaves plain negatives and ordinary text alone", () => {
     expect(sanitiseCell("-4.5")).toBe("-4.5");
     expect(sanitiseCell("-1 234,5")).toBe("-1 234,5");
+    expect(sanitiseCell(" -4.5")).toBe(" -4.5");
     expect(sanitiseCell("LDL")).toBe("LDL");
     expect(sanitiseCell(null)).toBe("");
   });

@@ -23,6 +23,7 @@ import {
   coachStepSchema,
 } from "./stream-events";
 import { COACH_CONVERSATION_TITLE_MAX } from "./types";
+import { RESULTS_MAX_BYTES, fitResultsToStorage } from "./results/refs";
 import {
   isCheckupIntervalId,
   isSuggestedActionType,
@@ -392,31 +393,19 @@ export interface AppendMessageParams {
   results?: CoachResultTable[];
 }
 
-/**
- * v1.39.4 — the at-rest ceiling for one message's tables, as JSON before
- * encryption. Tables arrive trimmed to 400 rows; a message whose tables still
- * exceed this keeps the leading tables that fit, and a reader is told the
- * rest are unavailable rather than handed a partial table.
- */
-export const RESULTS_MAX_BYTES = 128 * 1024;
+export { RESULTS_MAX_BYTES };
 
 /**
  * Serialise a turn's tables for the ciphertext column, or null when there are
- * none. Drops whole tables from the end until the JSON fits the ceiling.
+ * none. The turn already fitted them (`fitResultsToStorage`, before it
+ * streamed them); fitting again here only guards a caller that did not.
  */
 function resultsToBytes(
   results: CoachResultTable[] | undefined,
 ): Uint8Array<ArrayBuffer> | null {
   if (!results || results.length === 0) return null;
-  const kept = results.slice(0, MAX_RESULTS_PER_MESSAGE);
-  while (kept.length > 0) {
-    const json = JSON.stringify(kept);
-    if (Buffer.byteLength(json, "utf8") <= RESULTS_MAX_BYTES) {
-      return encryptToBytes(json);
-    }
-    kept.pop();
-  }
-  return null;
+  const kept = fitResultsToStorage(results.slice(0, MAX_RESULTS_PER_MESSAGE));
+  return kept.length > 0 ? encryptToBytes(JSON.stringify(kept)) : null;
 }
 
 /**
@@ -647,7 +636,17 @@ export async function fetchConversationWithMessages(
    *     the path id so it can only ever load a conversation that actually holds
    *     that document. Never combined with `documentScoped`.
    */
-  opts?: { documentScoped?: boolean; attachedDocumentId?: string },
+  opts?: {
+    documentScoped?: boolean;
+    attachedDocumentId?: string;
+    /**
+     * v1.39.4 — also count the assistant messages older than the loaded
+     * window (`earlierAssistantMessages`), so a turn names earlier tables by
+     * their place in the whole conversation. One count, read only when the
+     * window is full.
+     */
+    countEarlierAssistant?: boolean;
+  },
 ): Promise<CoachConversationDetailDTO | null> {
   const row = await prisma.coachConversation.findFirst({
     where: {
@@ -712,6 +711,19 @@ export async function fetchConversationWithMessages(
   }
 
   const attachments = mapAttachments(row.attachments);
+  const oldestLoaded = orderedMessages[0];
+  const earlierAssistantMessages =
+    opts?.countEarlierAssistant &&
+    oldestLoaded &&
+    row.messages.length >= CONVERSATION_MESSAGE_DETAIL_CAP
+      ? await prisma.coachMessage.count({
+          where: {
+            conversationId: row.id,
+            role: "assistant",
+            createdAt: { lt: oldestLoaded.createdAt },
+          },
+        })
+      : undefined;
   return {
     id: row.id,
     title: readConversationTitle(row),
@@ -724,6 +736,9 @@ export async function fetchConversationWithMessages(
     attachments,
     attachmentCount: attachments.length,
     documentTitle: attachments[0]?.title ?? null,
+    ...(earlierAssistantMessages !== undefined
+      ? { earlierAssistantMessages }
+      : {}),
   };
 }
 

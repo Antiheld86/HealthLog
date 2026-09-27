@@ -46,15 +46,20 @@ import type { Locale } from "@/lib/i18n/config";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { resolveModuleMap } from "@/lib/modules/gate";
 import { buildCoachSnapshot } from "@/lib/ai/coach/snapshot";
+import { admitCoachSources, coachExclusions } from "@/lib/ai/coach/scope-gate";
+import type { CoachPrefs } from "@/lib/validations/coach-prefs";
 import { readMessageResults } from "@/lib/ai/coach/persistence";
 import type {
   CoachResultTable,
   CoachScope,
   CoachScopeSource,
   CoachScopeWindow,
+  CoachStepDomain,
 } from "@/lib/ai/coach/types";
+import { COACH_SOURCE_MEASUREMENT_TYPES } from "@/lib/ai/coach/source-measurement-types";
 import {
   METRIC_TABLE_EXCLUDED_SOURCES,
+  compareWithCurrent,
   readMetricTable,
   summariseTable,
 } from "@/lib/ai/coach/results/metric-table-tool";
@@ -263,7 +268,7 @@ export async function executeCoachTool(args: {
   try {
     const result =
       name === SHOW_RESULT_TOOL_NAME
-        ? await showResult(userId, parsedArgs, turn)
+        ? await showResult(userId, parsedArgs, sharedScope, turn)
         : await dispatch(
             name as CoachToolName,
             userId,
@@ -741,12 +746,56 @@ async function getCorrelations(
  * rows the builder does not, so it asks the builder's gate first rather
  * than keeping a second copy of it.
  */
-function scopeAdmits(
+export function scopeAdmits(
   sections: Record<string, unknown>,
   metric: CoachScopeSource,
 ): boolean {
   const scope = sections.scope as { sources?: unknown } | undefined;
   return Array.isArray(scope?.sources) && scope.sources.includes(metric);
+}
+
+/**
+ * The earlier tables a turn may name and show again: those whose metric the
+ * same gate would read now. With a conversation scope that is the scope's
+ * sources less the person's exclusions and switched-off modules; without
+ * one, every metric not excluded. The exclusion is the snapshot's own
+ * (`coachExclusions`, `admitCoachSources`), so a metric the person excluded
+ * after a table was stored is neither listed for the model nor sent to it.
+ * Tables of other domains (labs) answer to their module when read.
+ */
+export async function admittedPriorResults(args: {
+  userId: string;
+  prefs: Pick<CoachPrefs, "excludeMetrics">;
+  scope: CoachScope | undefined;
+  prior: readonly PriorResultTurn[];
+}): Promise<PriorResultTurn[]> {
+  if (args.prior.length === 0) return [];
+  const excluded = coachExclusions(
+    args.prefs,
+    await resolveModuleMap(args.userId),
+  );
+  const scoped =
+    args.scope?.sources && args.scope.sources.length > 0
+      ? admitCoachSources(args.scope.sources, excluded)
+      : null;
+  const admits = (domain: CoachStepDomain) =>
+    !isCoachScopeSource(domain) ||
+    (scoped
+      ? scoped.has(domain)
+      : admitCoachSources([domain], excluded).size > 0);
+  return args.prior
+    .map((turn) => ({
+      ...turn,
+      results: turn.results.filter((meta) => admits(meta.source.domain)),
+    }))
+    .filter((turn) => turn.results.length > 0);
+}
+
+/** True for a step domain the snapshot scope gates (a metric, not labs). */
+export function isCoachScopeSource(
+  domain: CoachStepDomain,
+): domain is CoachScopeSource {
+  return Object.hasOwn(COACH_SOURCE_MEASUREMENT_TYPES, domain);
 }
 
 async function getMetricTable(
@@ -800,17 +849,38 @@ async function getMetricTable(
       window,
     );
   }
+  // An earlier window is read to be compared: read the current one too and
+  // hand the model both, and the change between them, in one summary.
+  let comparison: Record<string, unknown> | null = null;
+  if (period !== "current") {
+    const current = await readMetricTable({
+      userId,
+      metric,
+      window,
+      period: "current",
+      granularity,
+      timeZone,
+      locale: turn?.locale ?? "en",
+      ref: "r0",
+      now: turn?.now,
+    });
+    comparison = current ? compareWithCurrent(table, current) : null;
+  }
+  const summarise = (t: CoachResultTable) => ({
+    ...summariseTable(t),
+    ...(comparison ? { comparison } : {}),
+  });
   const ref = turn?.refs.next() ?? null;
   if (!ref) {
     // Outside a chat turn, or past the sixth table: the model still gets
     // the figures, there is just no table to name.
-    return { present: true, data: summariseTable(table) };
+    return { present: true, data: summarise(table) };
   }
   const named = { ...table, ref };
   return {
     present: true,
     resultRef: ref,
-    data: summariseTable(named),
+    data: summarise(named),
     table: named,
   };
 }
@@ -823,11 +893,20 @@ async function getMetricTable(
  * then reads the summary of what is shown.
  */
 function withResultView(
-  table: CoachResultTable,
+  shown: CoachResultTable,
   view: "table" | "chart" | undefined,
   locale: Locale,
 ): CoachResultTable {
-  if (view === "table") return { ...table, chart: null, chartKind: null };
+  // The view is this showing's alone, never the stored copy's.
+  const { view: _stored, ...table } = shown;
+  if (view === "table") {
+    // The table shows first; the chart stays for the toggle and the chip
+    // back to it.
+    const chart = deriveChartSpec(table);
+    return chart
+      ? { ...table, chart, chartKind: chart.kind, view: "table" }
+      : { ...table, chart: null, chartKind: null };
+  }
   if (view === "chart") {
     const { t } = getServerTranslator(locale);
     const distribution = buildDistributionTable(table, {
@@ -856,6 +935,7 @@ function withResultView(
 async function showResult(
   userId: string,
   rawArgs: unknown,
+  sharedScope: CoachScope | undefined,
   turn: CoachToolTurnContext | undefined,
 ): Promise<CoachToolResult> {
   const parsed = showResultArgsSchema.safeParse(rawArgs);
@@ -869,6 +949,20 @@ async function showResult(
       meta: { inTurn: turn !== undefined },
     });
     return { present: false, reason: "unknown_result" };
+  }
+
+  // The same gate a fresh read passes, before anything is decrypted: a
+  // metric the person has since excluded from the Coach, or left out of
+  // this conversation's scope, is not sent to the model again either.
+  const domain = target.meta.source.domain;
+  if (isCoachScopeSource(domain)) {
+    const gate = await buildCoachSnapshot(
+      userId,
+      sharedScope ?? { sources: [domain], window: target.meta.source.window },
+    );
+    if (!scopeAdmits(gate.sections, domain)) {
+      return { present: false, reason: "unavailable_in_scope" };
+    }
   }
 
   const modules = await resolveModuleMap(userId);

@@ -167,9 +167,12 @@ export function deriveFollowUps(args: {
       period: source.period,
     };
     if (meta.chartKind !== null) {
+      // The other view of what the answer shows: a table shown as a table
+      // offers its chart, a shown chart offers its table.
+      const showsChart = meta.displayed && meta.view !== "table";
       candidates.push(
         buildFollowUp({
-          kind: meta.displayed ? "as_table" : "as_chart",
+          kind: showsChart ? "as_table" : "as_chart",
           anchor,
           origin: "server",
           locale,
@@ -191,21 +194,29 @@ export function deriveFollowUps(args: {
       ...(source.granularity ? { granularity: source.granularity } : {}),
       period: source.period,
     };
-    candidates.push(
-      buildFollowUp({
-        kind: "previous_period",
-        anchor,
-        origin: "server",
-        locale,
-      }),
-    );
+    const windowDays = WINDOW_DAYS[source.window];
+    // The period before exists only when the record reaches back past the
+    // window's start; all time has no period before it at all (the table
+    // tool reads it as the current period whatever it is asked).
+    if (
+      windowDays !== undefined &&
+      historyBefore(args.history, domain, windowDays)
+    ) {
+      candidates.push(
+        buildFollowUp({
+          kind: "previous_period",
+          anchor,
+          origin: "server",
+          locale,
+        }),
+      );
+    }
     const shortDays = SHORT_WINDOW_DAYS[source.window];
     if (shortDays !== undefined && historyBefore(args.history, domain, 365)) {
       candidates.push(
         buildFollowUp({ kind: "year_ago", anchor, origin: "server", locale }),
       );
     }
-    const windowDays = WINDOW_DAYS[source.window];
     if (
       windowDays !== undefined &&
       readingsFor(meta, steps) > 0 &&

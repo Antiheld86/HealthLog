@@ -195,8 +195,7 @@ async function postEncounter(request: NextRequest): Promise<Response> {
     // A practitioner the caller does not own is a refusal rather than a
     // silently dropped field: the person named a practice and would otherwise
     // see the visit save without it.
-    let practitioner:
-      { id: string; name: string; location: string | null } | undefined;
+    let practitioner: { id: string; name: string } | undefined;
     if (entry.practitionerId) {
       practitioner = await resolveOwnedPractitioner(
         tx,
@@ -241,7 +240,6 @@ async function postEncounter(request: NextRequest): Promise<Response> {
           userId: user.id,
           occurredAt,
           practitionerName: practitioner?.name ?? null,
-          practitionerLocation: practitioner?.location ?? null,
           kindLabel: encounterKindLabel(entry.kind, locale),
           status: entry.status,
           existingReminderId: null,

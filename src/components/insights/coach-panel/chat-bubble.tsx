@@ -696,6 +696,7 @@ function ChatBubbleImpl({
       .filter((meta) => meta.displayed)
       .map((meta) => meta.source.domain),
   );
+  const hasResults = !inProgress && !errorCode && resultMetas.length > 0;
   const dataUsedCount =
     !inProgress && !errorCode
       ? countResultsInSection(resultMetas, "dataUsed")
@@ -733,7 +734,15 @@ function ChatBubbleImpl({
           <Sparkles className="text-background size-3.5" />
         )}
       </div>
-      <div className="flex max-w-[calc(80%-2.625rem)] flex-col gap-2">
+      {/* A reply with tables takes the column's full width, so a table or
+          chart is as wide as the thread allows instead of as wide as the
+          prose above it. */}
+      <div
+        className={cn(
+          "flex max-w-[calc(80%-2.625rem)] flex-col gap-2",
+          hasResults && "w-full",
+        )}
+      >
         {/* v1.39.4 — what the Coach read on this turn: live from the step
             frames, restored from the provenance on reload. */}
         <CoachTurnSteps

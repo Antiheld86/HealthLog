@@ -9490,8 +9490,8 @@
     },
     "noRecordedData": "Zu deiner Frage sind bei dir keine Messwerte erfasst, also kann ich dir dazu keine Zahl nennen. Sobald du etwas eingetragen hast, frag mich noch einmal — dann rechne ich mit deinen eigenen Werten.",
     "step": {
-      "read": "Lese {domain}",
-      "readWindow": "Lese {domain}, {window}",
+      "read": "Prüfe: {domain}",
+      "readWindow": "Prüfe: {domain}, {window}",
       "snapshot": "Lese die Übersicht deiner Daten",
       "showResult": "Öffne eine frühere Tabelle",
       "reuse": "Nutze die Tabelle von vorhin",
@@ -9572,6 +9572,7 @@
         "systolic": "Systolisch",
         "diastolic": "Diastolisch",
         "mean": "Durchschnitt",
+        "total": "Summe",
         "min": "Niedrigster",
         "max": "Höchster",
         "readings": "Messwerte",
@@ -9594,13 +9595,15 @@
       "viewTable": "Tabelle",
       "chartSummary": "{title} als Diagramm. Die Tabellenansicht listet jeden Wert auf.",
       "dataUsed": "Verwendete Daten ({count})",
-      "truncated": "Die ersten {shown} von {total} Zeilen",
+      "truncated": "Die letzten {shown} von {total} Zeilen",
       "withheld": {
         "moduleDisabled": "Diese Tabelle ist ausgeblendet, weil ihr Modul ausgeschaltet ist.",
         "unavailable": "Diese Tabelle konnte nicht geladen werden."
       },
       "loading": "Tabelle wird geladen…",
       "loadFailed": "Die Tabellen konnten nicht geladen werden.",
+      "reusedFrom": "Aus einer früheren Antwort ({date})",
+      "reusedFromUndated": "Aus einer früheren Antwort",
       "histogramBin": "{from}–{to} {unit}"
     },
     "method": {
@@ -9642,7 +9645,7 @@
       "yearAgo": "Mit dem Vorjahr vergleichen",
       "asChart": "Als Diagramm zeigen",
       "asTable": "Als Tabelle zeigen",
-      "relatedMetric": "Auch {metric} ansehen",
+      "relatedMetric": "Siehe auch: {metric}",
       "continue": "Weitersuchen",
       "settingLabel": "Anschlussfragen vorschlagen",
       "settingHint": "Zeigt unter der letzten Antwort des Coaches bis zu drei Vorschläge für die nächste Frage."

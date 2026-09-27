@@ -40749,7 +40749,9 @@ components:
                   type: string
                   format: date-time
                   pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                  description: Day-bucket start (ISO-8601).
+                  description: "Day-bucket start (ISO-8601): the user's local midnight. A window longer than the daily cap is served from
+                    a coarser tier (a UTC day, week or month); its rows are stamped at noon UTC of the bucket's first
+                    day, which falls inside the bucket's own week or month in every zone."
                 count:
                   description: Underlying raw-row count for the bucket.
                   type: integer
@@ -50491,6 +50493,7 @@ components:
       properties:
         id:
           type: string
+          pattern: ^s[1-9]\d{0,2}$
           description: "`s1`..`s12`, unique within a turn."
         tool:
           type: string
@@ -50559,6 +50562,7 @@ components:
         resultRef:
           description: The table this step produced (`r1`..), when it produced one.
           type: string
+          pattern: ^r[1-6]$
       required:
         - id
         - tool
@@ -50684,6 +50688,7 @@ components:
       properties:
         ref:
           type: string
+          pattern: ^r[1-6]$
           description: "`r1`..`r6`, unique within a message."
         source:
           type: object
@@ -50763,12 +50768,19 @@ components:
           properties:
             messageId:
               type: string
+              pattern: ^[A-Za-z0-9_-]{1,64}$
             ref:
               type: string
+              pattern: ^r[1-6]$
           required:
             - messageId
             - ref
           additionalProperties: false
+        view:
+          description: "`table` when the answer asked for the table view of a table that has a chart; the chart stays for the
+            toggle. Absent: the chart shows first when there is one."
+          type: string
+          const: table
       required:
         - ref
         - source
@@ -50786,6 +50798,7 @@ components:
       properties:
         id:
           type: string
+          pattern: ^f[1-3]$
           description: "`f1`..`f3`."
         kind:
           type: string
@@ -50807,6 +50820,7 @@ components:
           properties:
             ref:
               type: string
+              pattern: ^(?:r[1-6])?$
             domain:
               $ref: "#/components/schemas/CoachStepDomain"
             window:
@@ -50867,6 +50881,7 @@ components:
             properties:
               id:
                 type: string
+                pattern: ^c[1-4]$
               labelKey:
                 type: string
               label:
@@ -50977,6 +50992,7 @@ components:
       properties:
         ref:
           type: string
+          pattern: ^r[1-6]$
           description: "`r1`..`r6`, unique within a message."
         source:
           type: object
@@ -51056,12 +51072,19 @@ components:
           properties:
             messageId:
               type: string
+              pattern: ^[A-Za-z0-9_-]{1,64}$
             ref:
               type: string
+              pattern: ^r[1-6]$
           required:
             - messageId
             - ref
           additionalProperties: false
+        view:
+          description: "`table` when the answer asked for the table view of a table that has a chart; the chart stays for the
+            toggle. Absent: the chart shows first when there is one."
+          type: string
+          const: table
         columns:
           type: array
           items:
@@ -51230,6 +51253,7 @@ components:
           properties:
             ref:
               type: string
+              pattern: ^r[1-6]$
             withheld:
               type: string
               enum:

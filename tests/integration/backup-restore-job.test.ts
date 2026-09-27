@@ -648,6 +648,10 @@ describe("backup restore as a background job", () => {
     const job = await readBackupRestoreJob(data.jobId);
     expect(job?.status).toBe("failed");
     expect(job?.failure?.code).toBe("time_budget");
+    // Both halves of the work are named: what the file carries and what the
+    // account holds now, since the clearing of the latter costs time too.
+    expect(job?.failure?.message).toContain("1 reading in the backup");
+    expect(job?.failure?.message).toContain("1 reading this account holds now");
     expect(await measurementIdsOf(admin.id)).toEqual(["live-1"]);
   });
 });

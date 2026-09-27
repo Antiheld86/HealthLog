@@ -16,6 +16,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { Prisma } from "@/generated/prisma/client";
+
 import { setGlobalBoss } from "@/lib/jobs/boss-instance";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { readNote } from "@/lib/crypto/note-cipher";
@@ -122,12 +124,16 @@ describe("free-text encryption backfill (real Postgres)", () => {
       metricNotesMigrated: 0,
       practitionerContactsMigrated: 0,
       routeGeometriesMigrated: 0,
+      appointmentAddressesCleared: 0,
+      contactAuditRowsScrubbed: 0,
     });
     expect(await runFreeTextEncryptionBackfillForUser("ft-b")).toEqual({
       conversationTitlesMigrated: 0,
       metricNotesMigrated: 1,
       practitionerContactsMigrated: 0,
       routeGeometriesMigrated: 0,
+      appointmentAddressesCleared: 0,
+      contactAuditRowsScrubbed: 0,
     });
 
     const conversations = await prisma.coachConversation.findMany({
@@ -171,6 +177,8 @@ describe("free-text encryption backfill (real Postgres)", () => {
       metricNotesMigrated: 0,
       practitionerContactsMigrated: 0,
       routeGeometriesMigrated: 0,
+      appointmentAddressesCleared: 0,
+      contactAuditRowsScrubbed: 0,
     });
   });
 
@@ -253,12 +261,16 @@ describe("free-text encryption backfill (real Postgres)", () => {
       metricNotesMigrated: 0,
       practitionerContactsMigrated: 2,
       routeGeometriesMigrated: 0,
+      appointmentAddressesCleared: 0,
+      contactAuditRowsScrubbed: 0,
     });
     expect(await runFreeTextEncryptionBackfillForUser("pc-b")).toEqual({
       conversationTitlesMigrated: 0,
       metricNotesMigrated: 0,
       practitionerContactsMigrated: 0,
       routeGeometriesMigrated: 1,
+      appointmentAddressesCleared: 0,
+      contactAuditRowsScrubbed: 0,
     });
 
     const practitioners = await prisma.practitioner.findMany({
@@ -317,7 +329,150 @@ describe("free-text encryption backfill (real Postgres)", () => {
       metricNotesMigrated: 0,
       practitionerContactsMigrated: 0,
       routeGeometriesMigrated: 0,
+      appointmentAddressesCleared: 0,
+      contactAuditRowsScrubbed: 0,
     });
+  });
+
+  it("clears appointment address copies, scrubs old contact audit rows, and settles a JSON-null track", async () => {
+    const prisma = getPrismaClient();
+    await Promise.all([seedUser("ad-a"), seedUser("ad-b")]);
+
+    // ad-a: an appointment reminder holding a readable copy of the address,
+    // and a checkup whose own location is the person's words and stays.
+    await prisma.measurementReminder.create({
+      data: {
+        id: "rem-appt",
+        userId: "ad-a",
+        label: "Praxis Nord",
+        origin: "ENCOUNTER",
+        location: "Hauptstr. 1, Berlin",
+      },
+    });
+    await prisma.measurementReminder.create({
+      data: {
+        id: "rem-checkup",
+        userId: "ad-a",
+        label: "Blood panel",
+        location: "Labor Mitte",
+      },
+    });
+    // ad-a: an edit's audit row from before the contact fields were sealed,
+    // carrying the old address and phone number, and a current-shape row.
+    await prisma.auditLog.create({
+      data: {
+        id: "audit-old",
+        userId: "ad-a",
+        action: "practitioner.contact.update",
+        details: JSON.stringify({
+          practitionerId: "pr-x",
+          fields: ["location", "name", "phone"],
+          previous: {
+            location: "Hauptstr. 1, Berlin",
+            name: "Praxis Alt",
+            phone: "+49 30 1234567",
+          },
+        }),
+      },
+    });
+    const currentDetails = JSON.stringify({
+      practitionerId: "pr-x",
+      fields: ["location"],
+      previous: {},
+    });
+    await prisma.auditLog.create({
+      data: {
+        id: "audit-current",
+        userId: "ad-a",
+        action: "practitioner.contact.update",
+        details: currentDetails,
+      },
+    });
+    // An account deleted since: the row lost its owner and no per-user job
+    // reaches it, so discovery scrubs it itself.
+    await prisma.auditLog.create({
+      data: {
+        id: "audit-orphan",
+        userId: null,
+        action: "practitioner.contact.update",
+        details: JSON.stringify({
+          practitionerId: "pr-y",
+          fields: ["phone"],
+          previous: { phone: "+49 40 7654321" },
+        }),
+      },
+    });
+    // ad-b: a route whose readable column is a JSON null rather than SQL
+    // NULL. Nothing to seal, but discovery must not find it every night.
+    const startedAt = new Date("2026-09-01T06:00:00.000Z");
+    await prisma.workout.create({
+      data: {
+        id: "wk-jsonnull",
+        userId: "ad-b",
+        sportType: "running",
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + 30 * 60_000),
+        durationSec: 1800,
+        route: { create: { id: "rt-jsonnull", geometry: Prisma.JsonNull } },
+      },
+    });
+
+    const first = makeCapturingBoss();
+    setGlobalBoss(first.boss as never);
+    expect(
+      (await enqueueBootTimeFreeTextEncryptionBackfill()).error,
+    ).toBeNull();
+    expect(first.sent.map((s) => s.userId).sort()).toEqual(["ad-a", "ad-b"]);
+
+    const summaryA = await runFreeTextEncryptionBackfillForUser("ad-a");
+    expect(summaryA).toMatchObject({
+      appointmentAddressesCleared: 1,
+      contactAuditRowsScrubbed: 1,
+    });
+    await runFreeTextEncryptionBackfillForUser("ad-b");
+
+    const reminders = await prisma.measurementReminder.findMany({
+      where: { userId: "ad-a" },
+      orderBy: { id: "asc" },
+    });
+    expect(reminders.map((r) => [r.id, r.location])).toEqual([
+      ["rem-appt", null],
+      ["rem-checkup", "Labor Mitte"],
+    ]);
+
+    const audits = await prisma.auditLog.findMany({
+      where: { action: "practitioner.contact.update" },
+      orderBy: { id: "asc" },
+    });
+    const byId = Object.fromEntries(audits.map((a) => [a.id, a.details]));
+    expect(JSON.parse(byId["audit-old"]!)).toEqual({
+      practitionerId: "pr-x",
+      fields: ["location", "name", "phone"],
+      previous: { name: "Praxis Alt" },
+    });
+    expect(byId["audit-current"]).toBe(currentDetails);
+    expect(JSON.parse(byId["audit-orphan"]!)).toEqual({
+      practitionerId: "pr-y",
+      fields: ["phone"],
+      previous: {},
+    });
+    for (const details of Object.values(byId)) {
+      expect(details).not.toContain("Hauptstr");
+      expect(details).not.toContain("+49");
+    }
+
+    const onDisk = await prisma.$queryRaw<{ readable_is_null: boolean }[]>`
+      SELECT geometry IS NULL AS readable_is_null
+      FROM workout_routes WHERE id = 'rt-jsonnull'`;
+    expect(onDisk).toEqual([{ readable_is_null: true }]);
+
+    // Converged: the next discovery finds nobody.
+    const second = makeCapturingBoss();
+    setGlobalBoss(second.boss as never);
+    expect(
+      (await enqueueBootTimeFreeTextEncryptionBackfill()).error,
+    ).toBeNull();
+    expect(second.sent).toEqual([]);
   });
 
   it("has the partial indexes migration 0361 adds", async () => {

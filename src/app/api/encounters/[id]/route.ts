@@ -130,7 +130,6 @@ export const PATCH = apiHandler(
       const visible = await actingDomainVisibility(tx, grantId);
       let practitionerId = existing.practitionerId;
       let practitionerName: string | null = null;
-      let practitionerLocation: string | null = null;
 
       if (entry.practitionerId !== undefined) {
         if (entry.practitionerId === null) {
@@ -144,7 +143,6 @@ export const PATCH = apiHandler(
           if (!resolved) return "unknown-practitioner" as const;
           practitionerId = resolved.id;
           practitionerName = resolved.name;
-          practitionerLocation = resolved.location;
         }
       } else if (practitionerId) {
         const resolved = await resolveOwnedPractitioner(
@@ -153,7 +151,6 @@ export const PATCH = apiHandler(
           practitionerId,
         );
         practitionerName = resolved?.name ?? null;
-        practitionerLocation = resolved?.location ?? null;
       }
 
       const data: Prisma.EncounterUpdateInput = {};
@@ -206,7 +203,6 @@ export const PATCH = apiHandler(
             userId: user.id,
             occurredAt: nextOccurredAt,
             practitionerName,
-            practitionerLocation,
             kindLabel: encounterKindLabel(entry.kind ?? existing.kind, locale),
             status: nextStatus,
             existingReminderId: ownAppointmentReminderId,
@@ -222,7 +218,6 @@ export const PATCH = apiHandler(
             userId: user.id,
             occurredAt: nextOccurredAt,
             practitionerName,
-            practitionerLocation,
             kindLabel: encounterKindLabel(entry.kind ?? existing.kind, locale),
             status: nextStatus,
             existingReminderId: ownAppointmentReminderId,

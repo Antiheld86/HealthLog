@@ -763,7 +763,9 @@ const seriesBatchRowSchema = z.object({
   value: z.number().describe("Daily mean (spot metrics) or SUM (cumulative)."),
   measuredAt: z.iso
     .datetime({ offset: true })
-    .describe("Day-bucket start (ISO-8601)."),
+    .describe(
+      "Day-bucket start (ISO-8601): the user's local midnight. A window longer than the daily cap is served from a coarser tier (a UTC day, week or month); its rows are stamped at noon UTC of the bucket's first day, which falls inside the bucket's own week or month in every zone.",
+    ),
   count: z
     .number()
     .int()

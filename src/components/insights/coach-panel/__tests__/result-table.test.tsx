@@ -1,7 +1,7 @@
 /**
  * v1.39.4 — the result table's anatomy: caption with title and method,
  * column headers scoped, numbers right-aligned in tabular figures, absence
- * shown as a dash and announced, and the first twelve rows before
+ * shown as a dash and announced, and the latest twelve rows before
  * "Show all". SSR harness, like the other Coach panel tests; the toggle
  * itself is exercised in the browser suite.
  */
@@ -93,7 +93,45 @@ describe("CoachResultTable", () => {
     expect(html).not.toMatch(/>0<\/td>/);
   });
 
-  it("shows the first twelve rows and offers the rest", () => {
+  it("previews the latest twelve periods of a time series, oldest first", () => {
+    const html = render(<CoachResultTable result={table(20)} />);
+    // Row i holds 120.4 + i, shown without decimals: the latest twelve of
+    // twenty are rows 8..19, values 128..139.
+    expect(html).not.toMatch(/>120<\/td>/);
+    expect(html).not.toMatch(/>127<\/td>/);
+    expect(html).toMatch(/>128<\/td>/);
+    expect(html).toMatch(/>139<\/td>/);
+    expect(html.indexOf(">128</td>")).toBeLessThan(html.indexOf(">139</td>"));
+  });
+
+  it("previews the first twelve rows of a table that is not a time series", () => {
+    const html = render(
+      <CoachResultTable result={{ ...table(20), shape: "categoryCounts" }} />,
+    );
+    expect(html).toMatch(/>120<\/td>/);
+    expect(html).not.toMatch(/>139<\/td>/);
+  });
+
+  it("keeps the title, copy and view controls above the scrolling table", () => {
+    const html = render(
+      <CoachResultTable
+        result={table(20)}
+        method="From an earlier answer"
+        toolbar={<span data-slot="test-toolbar" />}
+      />,
+    );
+    const header = html.indexOf('data-slot="coach-result-table-header"');
+    const scroller = html.indexOf('data-slot="coach-result-table-scroll"');
+    expect(header).toBeGreaterThan(-1);
+    expect(scroller).toBeGreaterThan(header);
+    expect(html.indexOf('data-slot="test-toolbar"')).toBeLessThan(scroller);
+    expect(html).toMatch(/<caption class="sr-only">/);
+    expect(html).toMatch(
+      /data-slot="coach-result-table"[^>]*class="[^"]*\bw-full\b/,
+    );
+  });
+
+  it("shows twelve rows and offers the rest", () => {
     const html = render(<CoachResultTable result={table(20)} />);
     expect(html.match(/<tr[^>]*data-slot="table-row"/g)).toHaveLength(
       RESULT_TABLE_PREVIEW_ROWS + 1,

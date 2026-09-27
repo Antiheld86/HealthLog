@@ -475,22 +475,25 @@ export async function retireAppointmentReminderForVisit(
  *
  * Returns `undefined` when the id names nothing this account owns, which the
  * routes turn into a 404 — the same refusal shape a foreign encounter id gets.
+ *
+ * The address is deliberately not read here: it is encrypted on the
+ * practitioner, and the appointment reminder resolves it when it fires
+ * rather than keeping a copy (see `appointment-reminder.ts`).
  */
 export async function resolveOwnedPractitioner(
   tx: Prisma.TransactionClient,
   userId: string,
   practitionerId: string,
-): Promise<{ id: string; name: string; location: string | null } | undefined> {
+): Promise<{ id: string; name: string } | undefined> {
   const row = await tx.practitioner.findUnique({
     where: { id: practitionerId },
     select: {
       id: true,
       name: true,
-      location: true,
       userId: true,
       deletedAt: true,
     },
   });
   if (!row || row.userId !== userId || row.deletedAt !== null) return undefined;
-  return { id: row.id, name: row.name, location: row.location };
+  return { id: row.id, name: row.name };
 }

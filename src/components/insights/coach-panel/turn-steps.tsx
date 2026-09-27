@@ -119,6 +119,15 @@ function rowText(step: CoachStep, t: Translate, tCount: TranslateCount) {
 }
 
 /**
+ * How many sources the turn looked at: one per domain (a step without one,
+ * the snapshot, counts by its tool). A second read of the same domain, for
+ * the period before or a retry, is not a new source.
+ */
+export function countSources(steps: readonly CoachStep[]): number {
+  return new Set(steps.map((step) => step.domain ?? step.tool)).size;
+}
+
+/**
  * The step the active header names: the latest one still running, else the
  * latest one overall (between two rounds nothing is running).
  */
@@ -336,7 +345,7 @@ export function CoachTurnSteps({ steps, active }: CoachTurnStepsProps) {
           </span>
         ) : (
           <span data-slot="coach-turn-steps-done" className="min-w-0 truncate">
-            {tCount("coach.step.headerDone", steps.length)}
+            {tCount("coach.step.headerDone", countSources(steps))}
           </span>
         )}
       </button>

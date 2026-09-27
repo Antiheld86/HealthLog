@@ -4,11 +4,20 @@
  *
  * The numbers are the app's chart numbers, read the way the charts read
  * them: `readDailySeries` cuts the user's own local days and collapses
- * overlapping sources to the ladder-canonical one, and weeks and months are
- * folded from those days by `bucketTimeSeries` in the user's zone. Mood is
- * the mean score of each local day (the key its entries were written under);
- * sleep is time asleep per night, the wake-day key `reconstructSleepNights`
- * gives every other sleep surface.
+ * overlapping sources to the ladder-canonical one. Mood is the mean score of
+ * each local day (the key its entries were written under); sleep is time
+ * asleep per night, the wake-day key `reconstructSleepNights` gives every
+ * other sleep surface.
+ *
+ * A week or month means one thing per metric, whatever serves it. A total
+ * (steps, energy, distance, daylight, loud-sound events: `aggregationKind`)
+ * is the sum of its days, labelled as a total; a level is the mean of its
+ * days, folded by `bucketTimeSeries` in the user's zone as the chart folds
+ * it. All time is read as calendar months straight from the MONTH fold of
+ * the rollup tier (or the same fold of the live table when the tier has no
+ * rows), keyed by the UTC month the bucket starts in: the tier's buckets are
+ * UTC months, and re-reading their start in a zone west of UTC named the
+ * month before.
  *
  * Every period of the range gets a row. A period without a reading carries
  * `null`, never a zero, so absence stays explicit in the table and in the
@@ -26,8 +35,16 @@ import type { Locale } from "@/lib/i18n/config";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import { shiftDateKey, userDayKey } from "@/lib/tz/format";
 import { startOfLocalDayKey } from "@/lib/tz/local-day";
-import { readDailySeries } from "@/lib/measurements/daily-series-read";
-import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
+import {
+  readDailySeries,
+  readLiveBuckets,
+} from "@/lib/measurements/daily-series-read";
+import { CUMULATIVE_HK_TYPES } from "@/lib/measurements/apple-health-mapping";
+import {
+  loadUserSourcePriority,
+  readCanonicalRollupBuckets,
+} from "@/lib/rollups/measurement-read";
+import { annotate } from "@/lib/logging/context";
 import { bucketTimeSeries } from "@/lib/charts/bucket-time-series";
 import { reconstructSleepNights } from "@/lib/analytics/sleep-night";
 import { getUnitForType } from "@/lib/validations/measurement";
@@ -47,6 +64,7 @@ import type {
   CoachScopeWindow,
 } from "@/lib/ai/coach/types";
 
+import { aggregationKind } from "./chart-spec";
 import { RESULT_TABLE_MAX_ROWS } from "./project";
 
 /**
@@ -197,6 +215,8 @@ interface DaySeries {
   column: Omit<CoachResultColumn, "label">;
   /** Local day key → the day's value. */
   byDay: Map<string, number>;
+  /** How days fold into a week or month: a total sums, a level averages. */
+  fold: "sum" | "mean";
 }
 
 /** Per-day values and reading counts for a metric, before bucketing. */
@@ -210,6 +230,22 @@ const UNIT_TOKENS: Readonly<Record<string, string>> = {
   minutes: "min",
   celsius: "°C",
 };
+
+/**
+ * Decimals for the types whose unit alone decides wrongly: a step length of
+ * 0.72 m is not 1 m, a walking speed of 1.35 m/s is not 1.4, and a count of
+ * loud-sound events has no fraction.
+ */
+const DECIMALS_BY_TYPE: Readonly<Partial<Record<MeasurementType, number>>> = {
+  WALKING_STEP_LENGTH: 2,
+  WALKING_SPEED: 2,
+  AUDIO_EXPOSURE_EVENT: 0,
+};
+
+/** Decimals a value is shown with: the type's own, else by unit. */
+function decimalsForType(type: MeasurementType, unit: string): number {
+  return DECIMALS_BY_TYPE[type] ?? decimalsFor(unit);
+}
 
 /** Decimals a value is shown with, by unit. */
 function decimalsFor(unit: string): number {
@@ -243,11 +279,31 @@ const SERIES_SUFFIX: Readonly<Partial<Record<MeasurementType, string>>> = {
   HRV_RMSSD: "RMSSD",
 };
 
+type MeasurementColumn = DaySeries["column"] & {
+  type: MeasurementType;
+  suffix?: string;
+};
+
+/**
+ * A type's value for one day (or month) from a series row. The daily reader
+ * sums the cumulative types and averages every other one; a total the reader
+ * averages (loud-sound events, each row one event) is its mean times its
+ * readings.
+ */
+function totalOrLevel(
+  type: MeasurementType,
+  total: boolean,
+  value: number,
+  count: number,
+): number {
+  return total && !CUMULATIVE_HK_TYPES.has(type) ? value * count : value;
+}
+
 function measurementColumns(
   metric: CoachScopeSource,
   types: readonly MeasurementType[],
   granularity: CoachResultGranularity,
-): Array<DaySeries["column"] & { type: MeasurementType; suffix?: string }> {
+): MeasurementColumn[] {
   if (metric === "bp") {
     return [
       {
@@ -271,7 +327,9 @@ function measurementColumns(
   const labelKey =
     granularity === "day"
       ? COACH_RESULT_COLUMN_KEYS.value
-      : COACH_RESULT_COLUMN_KEYS.mean;
+      : aggregationKind(metric) === "total"
+        ? COACH_RESULT_COLUMN_KEYS.total
+        : COACH_RESULT_COLUMN_KEYS.mean;
   return types.map((type) => {
     const unit = unitTokenFor(type);
     const suffix = types.length > 1 ? (SERIES_SUFFIX[type] ?? type) : undefined;
@@ -280,11 +338,35 @@ function measurementColumns(
       kind: "number" as const,
       labelKey,
       ...(unit ? { unit } : {}),
-      decimals: decimalsFor(unit ?? ""),
+      decimals: decimalsForType(type, unit ?? ""),
       type,
       ...(suffix ? { suffix } : {}),
     };
   });
+}
+
+/**
+ * Put the series with the most readings first and count each period's
+ * readings from the first series that has it. Blood pressure's two sides are
+ * one reading and keep their order (systolic first); HRV's two estimators
+ * are alternatives, so the one the person mostly has leads the table and
+ * the chart, and a night measured by both is one night, not two.
+ */
+function orderAndCount(
+  metric: CoachScopeSource,
+  series: Array<DaySeries & { counts: Map<string, number> }>,
+): { ordered: DaySeries[]; counts: Map<string, number> } {
+  const total = (s: { counts: Map<string, number> }) =>
+    [...s.counts.values()].reduce((sum, v) => sum + v, 0);
+  const ordered =
+    metric === "bp" ? series : [...series].sort((a, b) => total(b) - total(a));
+  const counts = new Map<string, number>();
+  for (const s of ordered) {
+    for (const [key, count] of s.counts) {
+      if (!counts.has(key)) counts.set(key, count);
+    }
+  }
+  return { ordered: ordered.map(({ counts: _c, ...rest }) => rest), counts };
 }
 
 async function readMeasurementDays(args: {
@@ -310,23 +392,148 @@ async function readMeasurementDays(args: {
       }),
     ),
   );
-  const counts = new Map<string, number>();
+  const total = aggregationKind(metric) === "total";
   const suffixes = new Map<string, string>();
-  const series: DaySeries[] = columns.map((column, index) => {
+  const read = columns.map((column, index) => {
     const byDay = new Map<string, number>();
+    const counts = new Map<string, number>();
     for (const row of rowsByType[index]) {
       const day = userDayKey(new Date(row.measuredAt), timeZone);
-      byDay.set(day, row.value);
-      // Paired readings count once: blood pressure counts its systolic side.
-      if (metric !== "bp" || index === 0) {
-        counts.set(day, (counts.get(day) ?? 0) + (row.count ?? 1));
-      }
+      const count = row.count ?? 1;
+      byDay.set(day, totalOrLevel(column.type, total, row.value, count));
+      counts.set(day, (counts.get(day) ?? 0) + count);
     }
     if (column.suffix) suffixes.set(column.key, column.suffix);
     const { type: _type, suffix: _suffix, ...rest } = column;
-    return { column: rest, byDay };
+    return {
+      column: rest,
+      byDay,
+      fold: total ? ("sum" as const) : ("mean" as const),
+      counts,
+    };
   });
-  return { series, counts, suffixes };
+  const { ordered, counts } = orderAndCount(metric, read);
+  return { series: ordered, counts, suffixes };
+}
+
+/** `YYYY-MM-DD` of an instant in UTC. */
+function utcDayKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/** Folded periods: period key → one value per series, and readings. */
+interface PeriodValues {
+  values: Map<string, Array<number | undefined>>;
+  counts: Map<string, number>;
+}
+
+/**
+ * All time for a measurement metric: one row per UTC calendar month, a total
+ * summed and a level averaged over every reading of the month's canonical
+ * days. The rollup tier's MONTH fold serves it; when the tier holds nothing
+ * for the type (a backfill not caught up, a read that failed), the live table
+ * is folded into the same UTC months the same way. Either path gives the
+ * same number for the same month, so the table no longer depends on how
+ * long the history is or which tier the chart would pick for it.
+ */
+async function readMeasurementMonths(args: {
+  userId: string;
+  metric: CoachScopeSource;
+  range: TableRange;
+}): Promise<{
+  series: DaySeries[];
+  periods: PeriodValues;
+  suffixes: Map<string, string>;
+}> {
+  const { userId, metric, range } = args;
+  const types = COACH_SOURCE_MEASUREMENT_TYPES[metric];
+  const columns = measurementColumns(metric, types, "month");
+  const total = aggregationKind(metric) === "total";
+  const priorityJson = await loadUserSourcePriority(userId);
+  // The first whole UTC month of the range: a bucket that starts before
+  // `from` is left out of the tier's fold.
+  const from = new Date(`${utcDayKey(range.from).slice(0, 7)}-01T00:00:00Z`);
+  const byType = await Promise.all(
+    columns.map(async (column) => {
+      const months = new Map<string, { value: number; count: number }>();
+      try {
+        const buckets = await readCanonicalRollupBuckets({
+          userId,
+          type: column.type,
+          granularity: "MONTH",
+          from,
+          to: range.to,
+          toInclusive: true,
+          userPriorityJson: priorityJson,
+        });
+        for (const b of buckets) {
+          // The fold's sum is every reading's value added up, which is the
+          // total for a cumulative type and for an event count alike.
+          months.set(utcDayKey(b.bucketStart).slice(0, 7), {
+            value: total ? (b.sumValue ?? b.mean * b.count) : b.mean,
+            count: b.count,
+          });
+        }
+      } catch (err) {
+        annotate({
+          meta: {
+            coach_table_rollup_read_threw: true,
+            type: column.type,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
+      }
+      if (months.size === 0) {
+        const rows = await readLiveBuckets({
+          userId,
+          type: column.type,
+          from,
+          to: range.to,
+          cap: 1_000,
+          priorityJson,
+          grain: "monthly",
+          timeZone: "UTC",
+        });
+        for (const row of rows) {
+          const count = row.count ?? 1;
+          months.set(row.measuredAt.slice(0, 7), {
+            value: totalOrLevel(column.type, total, row.value, count),
+            count,
+          });
+        }
+      }
+      return months;
+    }),
+  );
+
+  const suffixes = new Map<string, string>();
+  const read = columns.map((column, index) => {
+    if (column.suffix) suffixes.set(column.key, column.suffix);
+    const { type: _type, suffix: _suffix, ...rest } = column;
+    const byDay = new Map<string, number>();
+    const counts = new Map<string, number>();
+    for (const [month, { value, count }] of byType[index]) {
+      byDay.set(month, value);
+      counts.set(month, count);
+    }
+    return {
+      column: rest,
+      byDay,
+      fold: total ? ("sum" as const) : ("mean" as const),
+      counts,
+    };
+  });
+  const { ordered, counts } = orderAndCount(metric, read);
+  const values = new Map<string, Array<number | undefined>>();
+  for (const s of ordered) {
+    for (const month of s.byDay.keys()) {
+      values.set(
+        month,
+        ordered.map((x) => x.byDay.get(month)),
+      );
+    }
+  }
+  return { series: ordered, periods: { values, counts }, suffixes };
 }
 
 async function readMoodDays(args: {
@@ -362,6 +569,7 @@ async function readMoodDays(args: {
           decimals: 1,
         },
         byDay,
+        fold: "mean",
       },
     ],
     counts,
@@ -415,6 +623,7 @@ async function readSleepDays(args: {
           decimals: 0,
         },
         byDay,
+        fold: "mean",
       },
     ],
     counts,
@@ -424,18 +633,16 @@ async function readSleepDays(args: {
 // ── Bucketing ───────────────────────────────────────────────────────────
 
 /**
- * Fold per-day values into the table's periods. Days stay as they are;
- * weeks and months go through `bucketTimeSeries` in the user's zone — the
- * chart's own fold, so a weekly mean here is the chart's weekly point.
+ * Fold per-day values into the table's periods. Days stay as they are. A
+ * level's weeks and months go through `bucketTimeSeries` in the user's zone
+ * — the chart's own fold, so a weekly mean here is the chart's weekly point;
+ * a total's are the sum of its local days.
  */
 function foldIntoPeriods(args: {
   days: MetricDays;
   granularity: CoachResultGranularity;
   timeZone: string;
-}): {
-  values: Map<string, Array<number | undefined>>;
-  counts: Map<string, number>;
-} {
+}): PeriodValues {
   const { days, granularity, timeZone } = args;
   const values = new Map<string, Array<number | undefined>>();
   const counts = new Map<string, number>();
@@ -455,8 +662,18 @@ function foldIntoPeriods(args: {
     }
     return { values, counts };
   }
+  const sums = new Map<string, Map<number, number>>();
   const points = new Map<string, Record<string, number | undefined>>();
   days.series.forEach((s, index) => {
+    if (s.fold === "sum") {
+      for (const [day, value] of s.byDay) {
+        const key = periodKeyOf(day, granularity);
+        const slot = sums.get(key) ?? new Map<number, number>();
+        slot.set(index, (slot.get(index) ?? 0) + value);
+        sums.set(key, slot);
+      }
+      return;
+    }
     for (const [day, value] of s.byDay) {
       const point = points.get(day) ?? {};
       point[String(index)] = value;
@@ -470,12 +687,22 @@ function foldIntoPeriods(args: {
     })),
     { bucket: granularity, timeZone },
   );
+  const levels = new Map<string, Record<string, number>>();
   for (const point of bucketed.points) {
     const dayKey = dayKeyOfUtc(point.timestamp);
-    const key = granularity === "month" ? monthKeyOf(dayKey) : dayKey;
+    levels.set(
+      granularity === "month" ? monthKeyOf(dayKey) : dayKey,
+      point.values,
+    );
+  }
+  for (const key of new Set([...levels.keys(), ...sums.keys()])) {
     values.set(
       key,
-      days.series.map((_, index) => point.values[String(index)]),
+      days.series.map((s, index) =>
+        s.fold === "sum"
+          ? sums.get(key)?.get(index)
+          : levels.get(key)?.[String(index)],
+      ),
     );
   }
   return { values, counts };
@@ -522,11 +749,24 @@ export async function readMetricTable(args: {
   const range = resolveTableRange({ window, period, timeZone, now });
 
   let suffixes = new Map<string, string>();
-  let days: MetricDays;
-  if (metric === "mood") {
-    days = await readMoodDays({ userId, range });
-  } else if (metric === "sleep") {
-    days = await readSleepDays({ userId, range, timeZone });
+  let series: DaySeries[];
+  let folded: PeriodValues;
+  // All time of a measurement metric is keyed by UTC month (the tier's own
+  // buckets); every other table by the user's local days.
+  let keyRange: [string, string] = [range.fromKey, range.toKey];
+  if (metric === "mood" || metric === "sleep") {
+    const days =
+      metric === "mood"
+        ? await readMoodDays({ userId, range })
+        : await readSleepDays({ userId, range, timeZone });
+    series = days.series;
+    folded = foldIntoPeriods({ days, granularity, timeZone });
+  } else if (window === "allTime") {
+    const read = await readMeasurementMonths({ userId, metric, range });
+    series = read.series;
+    folded = read.periods;
+    suffixes = read.suffixes;
+    keyRange = [utcDayKey(range.from), utcDayKey(range.to)];
   } else {
     const read = await readMeasurementDays({
       userId,
@@ -535,16 +775,17 @@ export async function readMetricTable(args: {
       range,
       timeZone,
     });
-    days = read;
+    series = read.series;
+    folded = foldIntoPeriods({ days: read, granularity, timeZone });
     suffixes = read.suffixes;
   }
 
-  const { values, counts } = foldIntoPeriods({ days, granularity, timeZone });
+  const { values, counts } = folded;
   if (values.size === 0) return null;
 
   // All time starts at the first period that holds a reading, not ten
   // years of empty months before it.
-  const keys = periodKeys(range.fromKey, range.toKey, granularity);
+  const keys = periodKeys(keyRange[0], keyRange[1], granularity);
   const firstWithData =
     window === "allTime" ? keys.findIndex((key) => values.has(key)) : 0;
   const periods = keys.slice(Math.max(0, firstWithData));
@@ -566,7 +807,7 @@ export async function readMetricTable(args: {
           : PERIOD_COLUMN_KEYS[granularity],
       ),
     },
-    ...days.series.map((s) => {
+    ...series.map((s) => {
       const base = t(s.column.labelKey);
       const suffix = suffixes.get(s.column.key);
       return { ...s.column, label: suffix ? `${base} (${suffix})` : base };
@@ -582,7 +823,7 @@ export async function readMetricTable(args: {
     const cells = values.get(key);
     return [
       key,
-      ...days.series.map((_, index) => {
+      ...series.map((_, index) => {
         const value = cells?.[index];
         return value === undefined || !Number.isFinite(value) ? null : value;
       }),
@@ -659,6 +900,19 @@ export function summariseTable(
       : valueIndexes.some((index) => typeof row[index] === "number"),
   );
 
+  // What a week's or month's value is: a total of its days or their mean.
+  // Without it a monthly figure of 240 000 steps reads as a daily count.
+  const valuesAre: Record<string, string> = {};
+  for (const { column } of numeric) {
+    if (column.kind !== "number") continue;
+    const per = table.source.granularity ?? "day";
+    if (column.labelKey === COACH_RESULT_COLUMN_KEYS.total) {
+      valuesAre[column.key] = `total per ${per}`;
+    } else if (column.labelKey === COACH_RESULT_COLUMN_KEYS.mean) {
+      valuesAre[column.key] = `average per ${per}`;
+    }
+  }
+
   const stats: Record<string, unknown> = {};
   for (const { column, index } of numeric) {
     const cells = table.rows
@@ -670,11 +924,16 @@ export function summariseTable(
       stats[column.key] = { total: cells.reduce((s, v) => s + v, 0) };
       continue;
     }
+    const sum = cells.reduce((s, v) => s + v, 0);
     stats[column.key] = {
       n: cells.length,
-      mean: round(cells.reduce((s, v) => s + v, 0) / cells.length, decimals),
+      mean: round(sum / cells.length, decimals),
       min: round(Math.min(...cells), decimals),
       max: round(Math.max(...cells), decimals),
+      // A total's periods add up to the range's total; a level's do not.
+      ...(column.labelKey === COACH_RESULT_COLUMN_KEYS.total
+        ? { total: round(sum, decimals) }
+        : {}),
     };
   }
 
@@ -684,6 +943,7 @@ export function summariseTable(
     source: table.source,
     shape: table.shape,
     columns: table.columns.map(columnName),
+    ...(Object.keys(valuesAre).length > 0 ? { valuesAre } : {}),
     periods: table.rowCount,
     periodsWithReadings: withValues.length,
     ...(withValues.length > 0
@@ -714,4 +974,92 @@ export function summariseTable(
     view = build();
   }
   return view;
+}
+
+// ── Comparison with the current window ──────────────────────────────────
+
+function numericCells(table: CoachResultTable, key: string): number[] {
+  const index = table.columns.findIndex((column) => column.key === key);
+  if (index < 0) return [];
+  return table.rows
+    .map((row) => row[index])
+    .filter(
+      (cell): cell is number =>
+        typeof cell === "number" && Number.isFinite(cell),
+    );
+}
+
+function change(
+  earlier: number,
+  current: number,
+  decimals: number,
+): { delta: number; pctChange?: number } {
+  const delta = round(current - earlier, decimals);
+  return earlier === 0
+    ? { delta }
+    : {
+        delta,
+        pctChange: round(((current - earlier) / Math.abs(earlier)) * 100, 1),
+      };
+}
+
+/**
+ * How an earlier window (the period before, or the same window a year ago)
+ * compares with the current one, for the model's summary of the earlier
+ * table. The grounding ledger derives differences only between figures of
+ * one payload, so a correct "down 4 mmHg from last month" drawn from two
+ * separate reads was withheld as unverified; with the current figures and
+ * the change computed here, beside the earlier ones, the reply's delta is a
+ * figure the model was shown, and a wrong one still is not.
+ *
+ * `delta` is the current value minus the earlier one; `pctChange` is that
+ * change relative to the earlier value, omitted when the earlier value is 0.
+ */
+export function compareWithCurrent(
+  earlier: CoachResultTable,
+  current: CoachResultTable,
+): Record<string, unknown> | null {
+  const currentStats: Record<string, Record<string, number>> = {};
+  const changes: Record<string, Record<string, unknown>> = {};
+  for (const column of earlier.columns) {
+    if (column.kind !== "number") continue;
+    const before = numericCells(earlier, column.key);
+    const now = numericCells(current, column.key);
+    if (before.length === 0 || now.length === 0) continue;
+    const decimals = column.decimals ?? 1;
+    const sumBefore = before.reduce((s, v) => s + v, 0);
+    const sumNow = now.reduce((s, v) => s + v, 0);
+    const meanBefore = sumBefore / before.length;
+    const meanNow = sumNow / now.length;
+    const isTotal = column.labelKey === COACH_RESULT_COLUMN_KEYS.total;
+    currentStats[column.key] = {
+      mean: round(meanNow, decimals),
+      ...(isTotal ? { total: round(sumNow, decimals) } : {}),
+    };
+    changes[column.key] = {
+      mean: change(meanBefore, meanNow, decimals),
+      ...(isTotal ? { total: change(sumBefore, sumNow, decimals) } : {}),
+    };
+  }
+  if (Object.keys(changes).length === 0) return null;
+  const periodIndex = current.columns.findIndex((c) => c.kind === "period");
+  const withValues = current.rows.filter((row) =>
+    row.some(
+      (cell, index) => index !== periodIndex && typeof cell === "number",
+    ),
+  );
+  return {
+    with: { window: current.source.window, period: "current" },
+    current: {
+      ...(withValues.length > 0
+        ? {
+            first: withValues[0][periodIndex],
+            last: withValues[withValues.length - 1][periodIndex],
+          }
+        : {}),
+      stats: currentStats,
+    },
+    change: changes,
+    changeIs: "current minus this table; pctChange relative to this table",
+  };
 }

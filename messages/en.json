@@ -9572,6 +9572,7 @@
         "systolic": "Systolic",
         "diastolic": "Diastolic",
         "mean": "Average",
+        "total": "Total",
         "min": "Lowest",
         "max": "Highest",
         "readings": "Readings",
@@ -9594,13 +9595,15 @@
       "viewTable": "Table",
       "chartSummary": "{title}, shown as a chart. The table view lists every value.",
       "dataUsed": "Data used ({count})",
-      "truncated": "Showing the first {shown} of {total} rows",
+      "truncated": "Showing the latest {shown} of {total} rows",
       "withheld": {
         "moduleDisabled": "This table is hidden because its module is switched off.",
         "unavailable": "This table couldn't be loaded."
       },
       "loading": "Loading table…",
       "loadFailed": "Couldn't load the tables.",
+      "reusedFrom": "From an earlier answer ({date})",
+      "reusedFromUndated": "From an earlier answer",
       "histogramBin": "{from}–{to} {unit}"
     },
     "method": {
@@ -9642,7 +9645,7 @@
       "yearAgo": "Compare with a year earlier",
       "asChart": "Show as a chart",
       "asTable": "Show as a table",
-      "relatedMetric": "Look at {metric} too",
+      "relatedMetric": "See also: {metric}",
       "continue": "Keep looking",
       "settingLabel": "Suggest follow-up questions",
       "settingHint": "Show up to three follow-up suggestions under the Coach's latest answer."

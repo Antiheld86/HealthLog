@@ -30,6 +30,7 @@ import {
   runCoachToolLoop,
   type CoachToolTrace,
 } from "@/lib/ai/coach/tools";
+import { admittedPriorResults } from "@/lib/ai/coach/tools/executor";
 import type { InventoryEntry } from "@/lib/ai/coach/tools/inventory";
 import type { CoachResultTable, CoachStep } from "@/lib/ai/coach/types";
 import {
@@ -152,6 +153,30 @@ function withChart(table: CoachResultTable): CoachResultTable {
   return { ...table, chart, chartKind: chart?.kind ?? null };
 }
 
+/**
+ * The tables a settled turn shows. Built outside the provider's failure
+ * path: the model has already answered and its tokens are billed, so a
+ * projection defect must not refund them or drop the reply. It costs the
+ * turn its tables, which the annotation records, and nothing else.
+ */
+export function buildTurnResults(
+  calls: Parameters<typeof projectResults>[0]["calls"],
+  locale: Locale,
+): CoachResultTable[] {
+  try {
+    return projectResults({ calls, locale }).map(withChart);
+  } catch (err) {
+    annotate({
+      action: { name: "coach.results.project_failed" },
+      meta: {
+        error: err instanceof Error ? err.name : "unknown",
+        calls: calls.length,
+      },
+    });
+    return [];
+  }
+}
+
 /** v1.39.4 — server-authored lines appended to the system prompt. */
 function appendBlocks(base: string, blocks: string[]): string {
   const extra = blocks.filter((block) => block.length > 0);
@@ -193,20 +218,36 @@ export async function runTurnModel(args: {
       // build reuses the snapshot we already computed (60s LRU), so the tools
       // that fire this turn share its reads.
       const inventory = await buildCoachDataInventory(userId, effectiveScope);
-      const toolRequest = buildCoachToolRequest({
-        systemPrompt: ctx.systemPrompt,
-        toolModeAddendum: appendBlocks(buildToolModeAddendum(locale), [
-          buildDialogAddenda(locale),
-          ...args.turnHints,
-        ]),
-        focusHint: renderFocusHint(effectiveScope?.sources),
-        workoutEvidence,
-        dataInventory: renderDataInventory(inventory),
-        priorResults: renderPriorResultRefs(args.priorResults ?? []),
-        guidedBlock: turnContext.guidedBlock,
-        transcript: turnContext.transcript,
-        languageName: LANGUAGE_NAMES[locale],
+      // Earlier tables whose metric the person has since excluded are
+      // neither named for the model nor reachable through show_result. The
+      // scope is the one every tool of the turn reads under.
+      const priorResults = await admittedPriorResults({
+        userId,
+        prefs: ctx.coachPrefs,
+        scope: inventory.probeScope,
+        prior: args.priorResults ?? [],
       });
+      const requestWith = (tableRules: boolean) =>
+        buildCoachToolRequest({
+          systemPrompt: ctx.systemPrompt,
+          toolModeAddendum: appendBlocks(buildToolModeAddendum(locale), [
+            buildDialogAddenda(locale, { tableRules }),
+            ...args.turnHints,
+          ]),
+          focusHint: renderFocusHint(effectiveScope?.sources),
+          workoutEvidence,
+          dataInventory: renderDataInventory(inventory),
+          priorResults: renderPriorResultRefs(priorResults),
+          guidedBlock: turnContext.guidedBlock,
+          transcript: turnContext.transcript,
+          languageName: LANGUAGE_NAMES[locale],
+        });
+      // The recheck and follow-up rules are about tables: they ride the
+      // prompt once the conversation holds one, or from the round after this
+      // turn produced its first.
+      const withTables = requestWith(true);
+      const toolRequest =
+        priorResults.length > 0 ? withTables : requestWith(false);
       // v1.39.4 — every call this turn settled, by its turn-wide index, for
       // the result tables. Only this turn's own calls ever reach them.
       const settled: SettledToolCall[] = [];
@@ -214,6 +255,7 @@ export async function runTurnModel(args: {
         userId,
         providers: chain,
         system: toolRequest.system,
+        systemOnceTableShown: withTables.system,
         messages: toolRequest.messages,
         tools: COACH_TOOL_DEFS,
         temperature: AI_BUDGETS.coach.temperature,
@@ -235,7 +277,7 @@ export async function runTurnModel(args: {
         turn: {
           conversationId,
           locale,
-          priorResults: args.priorResults ?? [],
+          priorResults,
           refs: createResultRefAllocator(),
         },
         // v1.39.4 — live steps: a `running` step as each call starts, its
@@ -305,10 +347,10 @@ export async function runTurnModel(args: {
         totalTokens: loop.totalTokens,
         cachedTokens: loop.cachedTokens,
         steps: steps.list(),
-        results: projectResults({
-          calls: settled.filter((call) => call !== undefined),
+        results: buildTurnResults(
+          settled.filter((call) => call !== undefined),
           locale,
-        }).map(withChart),
+        ),
         forcedFinal: loop.forcedFinal === true,
         inventory: inventory.entries,
         correlations: correlationPartners(

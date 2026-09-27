@@ -9572,6 +9572,7 @@
         "systolic": "Skurczowe",
         "diastolic": "Rozkurczowe",
         "mean": "Średnia",
+        "total": "Suma",
         "min": "Najniższa",
         "max": "Najwyższa",
         "readings": "Pomiary",
@@ -9594,13 +9595,15 @@
       "viewTable": "Tabela",
       "chartSummary": "{title} w formie wykresu. Widok tabeli pokazuje każdą wartość.",
       "dataUsed": "Użyte dane ({count})",
-      "truncated": "Pierwsze {shown} z {total} wierszy",
+      "truncated": "Ostatnie {shown} z {total} wierszy",
       "withheld": {
         "moduleDisabled": "Ta tabela jest ukryta, bo jej moduł jest wyłączony.",
         "unavailable": "Nie udało się wczytać tej tabeli."
       },
       "loading": "Wczytywanie tabeli…",
       "loadFailed": "Nie udało się wczytać tabel.",
+      "reusedFrom": "Z wcześniejszej odpowiedzi ({date})",
+      "reusedFromUndated": "Z wcześniejszej odpowiedzi",
       "histogramBin": "{from}–{to} {unit}"
     },
     "method": {

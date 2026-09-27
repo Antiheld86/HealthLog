@@ -6,8 +6,9 @@
  * and persists an assistant message with `providerType: "reuse"`.
  *
  * The table is copied as it was stored: the same rows, the same columns,
- * marked with where it came from. Only the view changes: "as a chart" keeps
- * the stored chart, "as a table" drops it so the table is what shows.
+ * marked with where it came from. Only the view changes: "as a chart" shows
+ * the stored chart, "as a table" shows the table first and keeps the chart
+ * for the toggle and the chip back to it.
  *
  * Answers null, before anything is written, when the stored table cannot be
  * served (withheld, unreadable, or no chart to show). The pipeline then runs
@@ -59,14 +60,17 @@ async function copyStoredTable(args: {
   );
   const entry = entries?.find((candidate) => candidate.ref === ref);
   if (!entry || "withheld" in entry) return null;
-  const chart = followUp.kind === "as_chart" ? entry.chart : null;
-  if (followUp.kind === "as_chart" && chart === null) return null;
+  if (followUp.kind === "as_chart" && entry.chart === null) return null;
+  // Only the view changes. "As a table" keeps the chart beside the table, so
+  // the reply can offer the chart again.
+  const { view: _view, ...stored } = entry;
   return {
-    ...entry,
+    ...stored,
     ref: "r1",
     displayed: true,
-    chart,
-    chartKind: chart?.kind ?? null,
+    ...(followUp.kind === "as_table" && entry.chart !== null
+      ? { view: "table" as const }
+      : {}),
     reusedFrom: { messageId: sourceMessageId, ref },
   };
 }

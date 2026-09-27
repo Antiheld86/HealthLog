@@ -24,7 +24,11 @@
  * `clarification: { messageId, choiceId? }`, which `resolveClarificationAnswer`
  * turns into one server-written line for the next turn's context.
  */
-import { prisma } from "@/lib/db";
+import {
+  readLatestMessages,
+  type LatestMessage,
+  type LatestMessagesLoader,
+} from "@/lib/ai/coach/latest-messages";
 import { annotate } from "@/lib/logging/context";
 import type { Locale } from "@/lib/i18n/config";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
@@ -291,21 +295,6 @@ export function parseClarifySentinel(args: {
   };
 }
 
-/** The newest few messages of an owned conversation, newest first. */
-async function latestMessages(userId: string, conversationId: string) {
-  return prisma.coachMessage.findMany({
-    where: { conversationId, conversation: { userId } },
-    orderBy: { createdAt: "desc" },
-    take: 4,
-    select: {
-      id: true,
-      role: true,
-      providerType: true,
-      metricSourceJson: true,
-    },
-  });
-}
-
 function storedClarification(
   metricSourceJson: string | null,
 ): CoachClarification | null {
@@ -331,11 +320,14 @@ export async function dropRepeatClarification(args: {
   userId: string;
   conversationId: string;
   clarification: CoachClarification | null;
+  /** The turn's shared read of the latest messages, when it has one. */
+  latest?: LatestMessagesLoader;
 }): Promise<CoachClarification | null> {
   const { clarification } = args;
   if (!clarification) return null;
   try {
-    const rows = await latestMessages(args.userId, args.conversationId);
+    const rows = await (args.latest?.() ??
+      readLatestMessages(args.userId, args.conversationId));
     const previous = rows.find(
       (m) => m.role === "assistant" && m.providerType !== "cancelled",
     );
@@ -375,12 +367,15 @@ export async function resolveClarificationAnswer(args: {
   userId: string;
   conversationId: string | undefined;
   clarification: { messageId: string; choiceId?: string } | undefined;
+  /** The turn's shared read of the latest messages, when it has one. */
+  latest?: LatestMessagesLoader;
 }): Promise<string | null> {
   const { userId, conversationId, clarification } = args;
   if (!clarification || !conversationId) return null;
-  let rows: Awaited<ReturnType<typeof latestMessages>>;
+  let rows: LatestMessage[];
   try {
-    rows = await latestMessages(userId, conversationId);
+    rows = await (args.latest?.() ??
+      readLatestMessages(userId, conversationId));
   } catch {
     return null;
   }

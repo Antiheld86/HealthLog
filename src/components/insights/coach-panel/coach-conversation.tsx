@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
+import { COACH_CLARIFY_UI_KEYS } from "@/lib/ai/coach/dialog-keys";
 import { randomId } from "@/lib/random-id";
 import { apiDelete, apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
 import type {
@@ -861,6 +862,17 @@ export function CoachConversation({
           {t("insights.coach.attach.indexingHint")}
         </p>
       ) : null}
+      {/* v1.39.4 — mounted empty before any question, so the question is
+          announced when it arrives (a live region that mounts with its
+          content is not heard). Visually hidden, so it takes no room in the
+          stack; the card below carries the choices. */}
+      <div
+        data-slot="coach-clarification-live"
+        aria-live="polite"
+        className="sr-only"
+      >
+        {openClarification ? t(COACH_CLARIFY_UI_KEYS.cardLabel) : ""}
+      </div>
       {openClarification ? (
         <CoachClarificationCard
           clarification={openClarification.clarification}

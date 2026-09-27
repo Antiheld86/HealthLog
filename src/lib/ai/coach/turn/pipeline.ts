@@ -59,6 +59,7 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
     conversationId: input.conversationId,
     followUp: input.followUp,
     priorResults: conversation.priorResults,
+    latest: conversation.latestMessages,
   });
   if (resolvedFollowUp?.followUp.reuse) {
     const reused = await runReuseTurn({
@@ -72,6 +73,7 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
     userId,
     conversationId: input.conversationId,
     clarification: input.clarification,
+    latest: conversation.latestMessages,
   });
   // v1.39.4 — "keep looking": the unfinished question and what the forced
   // turn already read, so the continued turn does not fetch it again.
@@ -80,6 +82,7 @@ export async function runCoachTurn(input: TurnInput): Promise<Response> {
     conversationId: input.conversationId,
     followUp: input.followUp,
     priorResults: conversation.priorResults ?? [],
+    latest: conversation.latestMessages,
   });
   const turnHints = [
     ...(resolvedFollowUp?.contextHint ? [resolvedFollowUp.contextHint] : []),

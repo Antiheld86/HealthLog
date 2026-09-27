@@ -11,7 +11,8 @@ import type { CoachResultTable } from "@/lib/ai/coach/types";
 
 const buildCoachSnapshot =
   vi.fn<(userId: string, scope?: unknown) => Promise<CoachSnapshotResult>>();
-vi.mock("@/lib/ai/coach/snapshot", () => ({
+vi.mock("@/lib/ai/coach/snapshot", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   buildCoachSnapshot: (userId: string, scope?: unknown) =>
     buildCoachSnapshot(userId, scope),
 }));
@@ -43,10 +44,12 @@ vi.mock("@/lib/modules/gate", () => ({
 }));
 
 import {
+  admittedPriorResults,
   executeCoachTool,
   type CoachToolTurnContext,
 } from "@/lib/ai/coach/tools/executor";
 import { createResultRefAllocator } from "../refs";
+import { findUnverifiedCoachNumbers } from "@/lib/ai/coach/coach-prose-grounding";
 
 const NOW = new Date("2026-09-27T10:00:00Z");
 
@@ -224,6 +227,67 @@ describe("get_metric_table", () => {
     expect(result.table).toBeUndefined();
   });
 
+  it("hands an earlier period the current one and the change, so a correct delta grounds and a wrong one does not", async () => {
+    // BP: 20–26 September average 128/82 (the week before), 27 September
+    // onwards 132/80 — the current week reads higher systolic.
+    readDailySeries.mockImplementation(
+      async ({ type, from }: { type: string; from: Date }) => {
+        const earlier = from.getTime() < Date.parse("2026-09-21T00:00:00Z");
+        const [sys, dia] = earlier ? [128, 82] : [132, 80];
+        const day = earlier ? "2026-09-18" : "2026-09-25";
+        return [
+          {
+            type,
+            value: type === "BLOOD_PRESSURE_SYS" ? sys : dia,
+            measuredAt: `${day}T00:00:00.000Z`,
+            count: 1,
+          },
+        ];
+      },
+    );
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "get_metric_table",
+      rawArguments: JSON.stringify({
+        metric: "bp",
+        window: "last7days",
+        period: "previous",
+      }),
+      turn: turn(),
+    });
+    const data = result.data as Record<string, unknown>;
+    expect(data.comparison).toMatchObject({
+      with: { window: "last7days", period: "current" },
+      current: { stats: { systolic: { mean: 132 }, diastolic: { mean: 80 } } },
+      change: {
+        systolic: { mean: { delta: 4, pctChange: 3.1 } },
+        diastolic: { mean: { delta: -2, pctChange: -2.4 } },
+      },
+    });
+    expect(
+      findUnverifiedCoachNumbers(
+        "Your systolic is up 4 mmHg on the week before, about 3.1%.",
+        [data],
+      ),
+    ).toEqual([]);
+    const wrong = findUnverifiedCoachNumbers(
+      "Your systolic is up 9 mmHg on the week before.",
+      [data],
+    );
+    expect(wrong.map((f) => f.value)).toContain(9);
+  });
+
+  it("adds no comparison to a current read", async () => {
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "get_metric_table",
+      rawArguments: JSON.stringify({ metric: "pulse", window: "last7days" }),
+      turn: turn(),
+    });
+    expect(result.data).not.toHaveProperty("comparison");
+    expect(readDailySeries).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses arguments outside the schema", async () => {
     const result = await executeCoachTool({
       userId: "u1",
@@ -249,6 +313,28 @@ describe("get_metric_table", () => {
 });
 
 describe("show_result", () => {
+  it("sends nothing of a metric the person has since excluded", async () => {
+    // The snapshot gate no longer admits pulse: the stored table is not
+    // even decrypted.
+    buildCoachSnapshot.mockResolvedValue(snapshot({ scope: { sources: [] } }));
+    readMessageResults.mockResolvedValue([STORED]);
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "show_result",
+      rawArguments: JSON.stringify({ ref: "m2.r1" }),
+      turn: turn(),
+    });
+    expect(result).toEqual({
+      present: false,
+      reason: "unavailable_in_scope",
+    });
+    expect(buildCoachSnapshot).toHaveBeenCalledWith("u1", {
+      sources: ["pulse"],
+      window: "last7days",
+    });
+    expect(readMessageResults).not.toHaveBeenCalled();
+  });
+
   it("copies a stored table of this conversation under a new name", async () => {
     readMessageResults.mockResolvedValue([STORED]);
     const result = await executeCoachTool({
@@ -290,7 +376,7 @@ describe("show_result", () => {
     });
   });
 
-  it("shows the table without a chart for view table", async () => {
+  it("shows the table first for view table, the chart kept beside it", async () => {
     readMessageResults.mockResolvedValue([STORED]);
     const result = await executeCoachTool({
       userId: "u1",
@@ -298,10 +384,12 @@ describe("show_result", () => {
       rawArguments: JSON.stringify({ ref: "m2.r1", view: "table" }),
       turn: turn(),
     });
+    // The table shows first; the chart the server picks stays beside it.
     expect(result.table).toMatchObject({
       rows: STORED.rows,
-      chart: null,
-      chartKind: null,
+      view: "table",
+      chart: { kind: "line", x: "day", series: ["value"] },
+      chartKind: "line",
     });
   });
 
@@ -433,5 +521,67 @@ describe("projections of the older tools", () => {
     ]);
     // What the model reads is the tool's own payload, unchanged.
     expect((result.data as { totalInWindow: number }).totalInWindow).toBe(6);
+  });
+});
+
+describe("admittedPriorResults", () => {
+  const meta = (ref: string, domain: string) => ({
+    ...turn().priorResults[0].results[0],
+    ref,
+    source: { ...STORED.source, domain } as CoachResultTable["source"],
+  });
+  const prior = [
+    {
+      messageId: "m-a2",
+      turnIndex: 2,
+      results: [meta("r1", "pulse"), meta("r2", "steps"), meta("r3", "labs")],
+    },
+    { messageId: "m-a4", turnIndex: 4, results: [meta("r1", "steps")] },
+  ];
+
+  it("drops a metric the person excluded and keeps what no exclusion names", async () => {
+    const out = await admittedPriorResults({
+      userId: "u1",
+      prefs: { excludeMetrics: ["steps"] },
+      scope: undefined,
+      prior,
+    });
+    expect(
+      out.map((t) => [t.turnIndex, t.results.map((r) => r.source.domain)]),
+    ).toEqual([[2, ["pulse", "labs"]]]);
+  });
+
+  it("keeps to the conversation's scope", async () => {
+    const out = await admittedPriorResults({
+      userId: "u1",
+      prefs: { excludeMetrics: [] },
+      scope: { sources: ["steps"] },
+      prior,
+    });
+    expect(
+      out.map((t) => [t.turnIndex, t.results.map((r) => r.source.domain)]),
+    ).toEqual([
+      [2, ["steps", "labs"]],
+      [4, ["steps"]],
+    ]);
+  });
+
+  it("drops a metric whose module is switched off", async () => {
+    resolveModuleMap.mockResolvedValue({ mood: false });
+    const out = await admittedPriorResults({
+      userId: "u1",
+      prefs: { excludeMetrics: [] },
+      scope: undefined,
+      prior: [
+        {
+          messageId: "m-a2",
+          turnIndex: 2,
+          results: [meta("r1", "mood"), meta("r2", "pulse")],
+        },
+      ],
+    });
+    expect(out.flatMap((t) => t.results.map((r) => r.source.domain))).toEqual([
+      "pulse",
+    ]);
   });
 });

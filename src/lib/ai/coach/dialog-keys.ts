@@ -137,6 +137,7 @@ export const COACH_RESULT_COLUMN_KEYS = {
   systolic: "coach.result.column.systolic",
   diastolic: "coach.result.column.diastolic",
   mean: "coach.result.column.mean",
+  total: "coach.result.column.total",
   min: "coach.result.column.min",
   max: "coach.result.column.max",
   readings: "coach.result.column.readings",
@@ -165,6 +166,8 @@ export const COACH_RESULT_UI_KEYS = {
   truncated: "coach.result.truncated",
   loading: "coach.result.loading",
   loadFailed: "coach.result.loadFailed",
+  reusedFrom: "coach.result.reusedFrom",
+  reusedFromUndated: "coach.result.reusedFromUndated",
   histogramBin: "coach.result.histogramBin",
 } as const;
 

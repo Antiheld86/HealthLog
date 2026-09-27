@@ -92,13 +92,20 @@ vi.mock("@/lib/db", () => {
   return {
     prisma: {
       ...delegates,
+      // Nothing to clear or scrub in this in-memory store; the real-Postgres
+      // test covers both.
+      measurementReminder: { updateMany: async () => ({ count: 0 }) },
+      auditLog: { findMany: async () => [] },
       $transaction: async (fn: (tx: typeof delegates) => unknown) =>
         fn(delegates),
     },
   };
 });
 
-import { runFreeTextEncryptionBackfillForUser } from "@/lib/jobs/free-text-encryption-backfill";
+import {
+  runFreeTextEncryptionBackfillForUser,
+  scrubContactAuditDetails,
+} from "@/lib/jobs/free-text-encryption-backfill";
 
 const KEY = "a".repeat(64);
 const TRACK = {
@@ -202,6 +209,8 @@ describe("runFreeTextEncryptionBackfillForUser", () => {
       metricNotesMigrated: 2,
       practitionerContactsMigrated: 2,
       routeGeometriesMigrated: 1,
+      appointmentAddressesCleared: 0,
+      contactAuditRowsScrubbed: 0,
     });
 
     const c1 = store.conversations.find((r) => r.id === "c1")!;
@@ -300,6 +309,8 @@ describe("runFreeTextEncryptionBackfillForUser", () => {
       metricNotesMigrated: 0,
       practitionerContactsMigrated: 0,
       routeGeometriesMigrated: 0,
+      appointmentAddressesCleared: 0,
+      contactAuditRowsScrubbed: 0,
     });
     expect(store.conversations.find((r) => r.id === "c1")!.titleEncrypted).toBe(
       sealed,
@@ -314,5 +325,32 @@ describe("runFreeTextEncryptionBackfillForUser", () => {
       title: "Why is my pressure up after the new tablets?",
       titleEncrypted: null,
     });
+  });
+});
+
+describe("scrubContactAuditDetails", () => {
+  it("removes the phone number and address from previous and keeps them named", () => {
+    const out = scrubContactAuditDetails(
+      JSON.stringify({
+        practitionerId: "p1",
+        fields: ["location", "name"],
+        previous: { location: "Hauptstr. 1", name: "Alt", phone: "+49 30 1" },
+      }),
+    );
+    expect(JSON.parse(out!)).toEqual({
+      practitionerId: "p1",
+      fields: ["location", "name", "phone"],
+      previous: { name: "Alt" },
+    });
+  });
+
+  it("leaves a row without contact values, or that is not this JSON, alone", () => {
+    expect(
+      scrubContactAuditDetails(
+        JSON.stringify({ fields: ["location"], previous: {} }),
+      ),
+    ).toBeNull();
+    expect(scrubContactAuditDetails("not json")).toBeNull();
+    expect(scrubContactAuditDetails(null)).toBeNull();
   });
 });

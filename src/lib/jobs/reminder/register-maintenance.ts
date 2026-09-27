@@ -1249,6 +1249,8 @@ export async function registerMaintenanceQueues(
       let notes = 0;
       let contacts = 0;
       let routes = 0;
+      let appointmentAddresses = 0;
+      let contactAudits = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         if (!userId) {
@@ -1268,15 +1270,19 @@ export async function registerMaintenanceQueues(
             metricNotesMigrated,
             practitionerContactsMigrated,
             routeGeometriesMigrated,
+            appointmentAddressesCleared,
+            contactAuditRowsScrubbed,
           } = await runFreeTextEncryptionBackfillForUser(userId);
           users++;
           titles += conversationTitlesMigrated;
           notes += metricNotesMigrated;
           contacts += practitionerContactsMigrated;
           routes += routeGeometriesMigrated;
+          appointmentAddresses += appointmentAddressesCleared;
+          contactAudits += contactAuditRowsScrubbed;
           workerLog(
             "info",
-            `[free-text-encryption-backfill] user=${userId} titles=${conversationTitlesMigrated} notes=${metricNotesMigrated} contacts=${practitionerContactsMigrated} routes=${routeGeometriesMigrated}`,
+            `[free-text-encryption-backfill] user=${userId} titles=${conversationTitlesMigrated} notes=${metricNotesMigrated} contacts=${practitionerContactsMigrated} routes=${routeGeometriesMigrated} appointment_addresses=${appointmentAddressesCleared} contact_audits=${contactAuditRowsScrubbed}`,
           );
         } catch (err) {
           recordError();
@@ -1298,6 +1304,8 @@ export async function registerMaintenanceQueues(
         metric_notes_migrated: notes,
         practitioner_contacts_migrated: contacts,
         route_geometries_migrated: routes,
+        appointment_addresses_cleared: appointmentAddresses,
+        contact_audit_rows_scrubbed: contactAudits,
       });
     },
   );

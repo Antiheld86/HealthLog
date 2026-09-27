@@ -651,3 +651,55 @@ describe("backupPayloadSchema — unitsPerDose", () => {
     expect(withMedication(schedule("x")).success).toBe(false);
   });
 });
+
+describe("a Coach turn's stored tables are bounded on restore", () => {
+  function parseWithResults(results: Record<string, unknown>) {
+    return backupPayloadSchema.safeParse({
+      schemaVersion: "1",
+      exportedAt: "2026-09-27T07:00:00.000Z",
+      userId: "u1",
+      measurements: [],
+      medications: [],
+      intakeEvents: [],
+      moodEntries: [],
+      coachConversations: [
+        {
+          id: "conv-1",
+          title: "Sleep",
+          documentScoped: false,
+          createdAt: "2026-09-27T07:00:00.000Z",
+          updatedAt: "2026-09-27T07:00:00.000Z",
+          messages: [
+            {
+              id: "msg-1",
+              role: "assistant",
+              content: "Here is the table.",
+              createdAt: "2026-09-27T07:00:00.000Z",
+              ...results,
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  it("accepts tables the size a turn can store", () => {
+    const json = JSON.stringify([{ rows: "x".repeat(100 * 1024) }]);
+    expect(parseWithResults({ resultsJson: json }).success).toBe(true);
+    const sealed = "A".repeat(200 * 1024);
+    expect(parseWithResults({ resultsEncrypted: sealed }).success).toBe(true);
+  });
+
+  it("refuses readable tables larger than a turn can store", () => {
+    const json = JSON.stringify([{ rows: "x".repeat(129 * 1024) }]);
+    expect(parseWithResults({ resultsJson: json }).success).toBe(false);
+    // The cap is in bytes: multi-byte text that fits by length still counts.
+    const wide = JSON.stringify([{ rows: "é".repeat(70 * 1024) }]);
+    expect(parseWithResults({ resultsJson: wide }).success).toBe(false);
+  });
+
+  it("refuses sealed tables larger than a turn can store", () => {
+    const sealed = "A".repeat(300 * 1024);
+    expect(parseWithResults({ resultsEncrypted: sealed }).success).toBe(false);
+  });
+});

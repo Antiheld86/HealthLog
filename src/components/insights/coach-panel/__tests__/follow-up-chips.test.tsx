@@ -12,6 +12,11 @@ vi.mock("@/lib/i18n/context", () => ({
   }),
 }));
 
+const focusComposer = vi.fn();
+vi.mock("../composer-focus", () => ({
+  focusCoachComposer: () => focusComposer(),
+}));
+
 import { CoachFollowUpChips } from "../follow-up-chips";
 import type { CoachFollowUp } from "@/lib/ai/coach/types";
 
@@ -28,7 +33,7 @@ function chip(id: string, label: string): CoachFollowUp {
 
 const CHIPS = [
   chip("f1", "Compare with the period before"),
-  chip("f2", "Look at Sleep too"),
+  chip("f2", "See also: Sleep"),
   chip("f3", "Show as a chart"),
   chip("f4", "A fourth one"),
 ];
@@ -57,7 +62,7 @@ describe("<CoachFollowUpChips>", () => {
     const { html, tree } = render(CHIPS);
     expect(html).toContain('role="group"');
     expect(html).toContain('aria-label="Suggested follow-ups"');
-    expect(html).toContain(">Look at Sleep too</button>");
+    expect(html).toContain(">See also: Sleep</button>");
     expect(html).not.toContain("A fourth one");
     const rendered = buttons(tree);
     expect(rendered).toHaveLength(3);
@@ -71,6 +76,14 @@ describe("<CoachFollowUpChips>", () => {
     const { tree, onSelect } = render(CHIPS);
     (buttons(tree)[1].props.onClick as () => void)();
     expect(onSelect).toHaveBeenCalledWith(CHIPS[1], "m1");
+  });
+
+  it("hands focus to the composer, since the tapped chip goes away", () => {
+    focusComposer.mockClear();
+    const { tree, onSelect } = render(CHIPS);
+    (buttons(tree)[0].props.onClick as () => void)();
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(focusComposer).toHaveBeenCalledTimes(1);
   });
 
   it("is hidden while a turn is in flight, and when there is nothing to offer", () => {
