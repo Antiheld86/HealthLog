@@ -1,4 +1,8 @@
 import type { AiMessage } from "@/lib/ai/types";
+import {
+  formatPriorResultRef,
+  type PriorResultTurn,
+} from "@/lib/ai/coach/results/refs";
 
 import {
   HEALTH_DATA_FENCE_END,
@@ -121,6 +125,12 @@ export function buildCoachToolRequest(args: {
   focusHint: string;
   workoutEvidence: Record<string, unknown> | null;
   dataInventory: string;
+  /**
+   * v1.39.4 — the EARLIER TABLES block (`renderPriorResultRefs`); empty when
+   * the conversation holds none, and then the request is byte for byte what
+   * it was before.
+   */
+  priorResults?: string;
   guidedBlock: string;
   transcript: string;
   languageName: string;
@@ -136,7 +146,7 @@ ${fenceHealthData(JSON.stringify({ thisWorkout: args.workoutEvidence }))}
   const messages: AiMessage[] = [
     {
       role: "user",
-      content: `${focusBlock}${workoutDataBlock}${args.dataInventory}${args.guidedBlock}
+      content: `${focusBlock}${workoutDataBlock}${args.dataInventory}${args.priorResults ? `\n\n${args.priorResults}` : ""}${args.guidedBlock}
 
 CONVERSATION
 ${args.transcript}
@@ -149,6 +159,55 @@ Reply now as the assistant, in ${args.languageName}. The selected-workout block 
     system: `${args.systemPrompt}\n\n${args.toolModeAddendum}`,
     messages,
   };
+}
+
+/** v1.39.4 — how many earlier replies' tables the context lists. */
+const PRIOR_RESULT_TURNS = 5;
+/** v1.39.4 — how many tables of one earlier reply it lists. */
+const PRIOR_RESULTS_PER_TURN = 3;
+/** v1.39.4 — the EARLIER TABLES block never grows past this. */
+const PRIOR_RESULTS_MAX_CHARS = 4_000;
+
+const PRIOR_RESULTS_HEADER = `EARLIER TABLES
+Tables earlier answers in this conversation fetched. Their values stay on the server; you see only what each one is. To show one again, or as a chart or table, call show_result with its name instead of fetching it again. Fetch anew when the metric, window, period or granularity changes, or when the person asks for fresh figures.`;
+
+/**
+ * v1.39.4 — the context lines naming the tables earlier replies of this
+ * conversation fetched: the latest five replies with tables, three tables
+ * each, metadata only. A line carries the table's name (`m<k>.r<n>`) and
+ * the server's own description of it — domain, window, period, granularity,
+ * row count — never a title, a value or anything the person or a document
+ * wrote, so nothing in it can be read as an instruction. Oldest lines drop
+ * first when the block would pass its character cap.
+ */
+export function renderPriorResultRefs(
+  prior: ReadonlyArray<PriorResultTurn>,
+): string {
+  const lines: string[] = [];
+  for (const turn of prior.slice(-PRIOR_RESULT_TURNS)) {
+    for (const meta of turn.results.slice(0, PRIOR_RESULTS_PER_TURN)) {
+      const parts = [
+        meta.source.domain,
+        meta.source.window,
+        meta.source.period,
+        ...(meta.source.granularity ? [`by ${meta.source.granularity}`] : []),
+        `${meta.rowCount} rows`,
+        meta.shape,
+      ];
+      lines.push(
+        `- ${formatPriorResultRef(turn.turnIndex, meta.ref)}: ${parts.join(", ")}`,
+      );
+    }
+  }
+  if (lines.length === 0) return "";
+  while (
+    lines.length > 0 &&
+    PRIOR_RESULTS_HEADER.length + lines.join("\n").length + 1 >
+      PRIOR_RESULTS_MAX_CHARS
+  ) {
+    lines.shift();
+  }
+  return lines.length > 0 ? `${PRIOR_RESULTS_HEADER}\n${lines.join("\n")}` : "";
 }
 
 function safeParseSnapshotJson(json: string): Record<string, unknown> {

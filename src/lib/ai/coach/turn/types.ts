@@ -13,6 +13,7 @@
  */
 import type { Locale } from "@/lib/i18n/config";
 import type { CoachTurn } from "@/lib/ai/coach/chat-request-builder";
+import type { PriorResultTurn } from "@/lib/ai/coach/results/refs";
 import type { CoachSuggestedAction } from "@/lib/ai/coach/suggest-action";
 import type {
   CoachClarification,
@@ -66,6 +67,12 @@ export interface TurnConversation {
    * revalidate; null for a fresh conversation or when none is on file.
    */
   priorSummary: string | null;
+  /**
+   * v1.39.4 — the earlier assistant messages that hold tables, with the
+   * names the turn's context gives them. Absent or empty on a new
+   * conversation.
+   */
+  priorResults?: PriorResultTurn[];
 }
 
 /**

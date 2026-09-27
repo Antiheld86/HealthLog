@@ -16,7 +16,10 @@ import { singleUserTurn, type CompletionResult } from "@/lib/ai/types";
 import { PROMPT_VERSION } from "@/lib/ai/prompts/insight-generator";
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
 import { appendMessage } from "@/lib/ai/coach/persistence";
-import { buildCoachToolRequest } from "@/lib/ai/coach/chat-request-builder";
+import {
+  buildCoachToolRequest,
+  renderPriorResultRefs,
+} from "@/lib/ai/coach/chat-request-builder";
 import {
   COACH_TOOL_DEFS,
   buildCoachDataInventory,
@@ -34,6 +37,10 @@ import {
   type SettledToolCall,
 } from "@/lib/ai/coach/results/project";
 import { deriveChartSpec } from "@/lib/ai/coach/results/chart-spec";
+import {
+  createResultRefAllocator,
+  type PriorResultTurn,
+} from "@/lib/ai/coach/results/refs";
 
 import { buildDialogAddenda } from "./addenda";
 import { refundReservation, type TurnReservation } from "./budget";
@@ -154,6 +161,11 @@ export async function runTurnModel(args: {
    * which then sends its prompt unchanged.
    */
   turnHints: string[];
+  /**
+   * v1.39.4 — the tables earlier replies of this conversation hold, named
+   * for the context and for `show_result`. Empty on a new conversation.
+   */
+  priorResults?: PriorResultTurn[];
 }): Promise<ModelOutcome> {
   const { userId, locale, signal, conversationId, ctx, chain, toolMode } = args;
   const { effectiveScope, workoutEvidence, turnContext, snapshot } = ctx;
@@ -176,6 +188,7 @@ export async function runTurnModel(args: {
         focusHint: renderFocusHint(effectiveScope?.sources),
         workoutEvidence,
         dataInventory: renderDataInventory(inventory),
+        priorResults: renderPriorResultRefs(args.priorResults ?? []),
         guidedBlock: turnContext.guidedBlock,
         transcript: turnContext.transcript,
         languageName: LANGUAGE_NAMES[locale],
@@ -202,6 +215,15 @@ export async function runTurnModel(args: {
         signal,
         // v1.22 (#89) — per-user response timeout for each tool-round call.
         timeoutMs: ctx.aiResponseTimeoutMs,
+        // v1.39.4 — result tables: each call may produce one, named `r1`..
+        // in the order they settle; `show_result` resolves only against this
+        // conversation's own earlier tables.
+        turn: {
+          conversationId,
+          locale,
+          priorResults: args.priorResults ?? [],
+          refs: createResultRefAllocator(),
+        },
         // v1.39.4 — live steps: a `running` step as each call starts, its
         // final status as it settles.
         onCallStart: (call, index) =>

@@ -39,6 +39,7 @@ import {
   executeCoachTool,
   type CoachToolResult,
   type CoachToolTrace,
+  type CoachToolTurnContext,
 } from "./executor";
 
 /**
@@ -146,6 +147,11 @@ export async function runCoachToolLoop(args: {
    * assistant-call and tool-result serialisation. Accepted, not read yet.
    */
   seedCalls?: ReadonlyArray<CoachSeedCall>;
+  /**
+   * v1.39.4 — the chat turn the loop runs in: lets a call produce a named
+   * result table and `show_result` find an earlier one of the conversation.
+   */
+  turn?: CoachToolTurnContext;
 }): Promise<CoachToolLoopResult> {
   const {
     userId,
@@ -161,6 +167,7 @@ export async function runCoachToolLoop(args: {
     timeoutMs,
     onCallStart,
     onCallSettled,
+    turn,
   } = args;
 
   const messages: AiMessage[] = [...args.messages];
@@ -242,14 +249,19 @@ export async function runCoachToolLoop(args: {
         const index = callCount;
         callCount += 1;
         notify(() => onCallStart?.(call, index));
-        const toolResult = await executeCoachTool({
+        const settled = await executeCoachTool({
           userId,
           name: call.name,
           rawArguments: call.arguments,
           fallbackWindow,
           sharedScope,
+          ...(turn ? { turn } : {}),
         });
-        notify(() => onCallSettled?.(call, toolResult, index));
+        // v1.39.4 — the settled callback gets the table; the model never
+        // does. It reads the compact summary in `data`, and the verifier
+        // grades the prose against that same summary.
+        notify(() => onCallSettled?.(call, settled, index));
+        const { table: _table, ...toolResult } = settled;
         const validArgs = parseCoachToolArgs(call.name, call.arguments);
         toolTrace.push({
           name: call.name,

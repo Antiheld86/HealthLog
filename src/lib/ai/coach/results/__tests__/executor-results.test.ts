@@ -1,0 +1,373 @@
+/**
+ * v1.39.4 — the executor's result tables: `get_metric_table` behind the
+ * same gate as every read, `show_result` bounded to the conversation the
+ * turn belongs to, the older tools' projections, and the table never in
+ * what the model reads.
+ */
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { CoachSnapshotResult } from "@/lib/ai/coach/snapshot";
+import type { CoachResultTable } from "@/lib/ai/coach/types";
+
+const buildCoachSnapshot =
+  vi.fn<(userId: string, scope?: unknown) => Promise<CoachSnapshotResult>>();
+vi.mock("@/lib/ai/coach/snapshot", () => ({
+  buildCoachSnapshot: (userId: string, scope?: unknown) =>
+    buildCoachSnapshot(userId, scope),
+}));
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    measurement: {
+      groupBy: () => Promise.resolve([]),
+      findMany: () => Promise.resolve([]),
+    },
+  },
+}));
+vi.mock("@/lib/tz/resolver", () => ({
+  resolveUserTimezone: () => Promise.resolve("UTC"),
+}));
+const readDailySeries = vi.fn();
+vi.mock("@/lib/measurements/daily-series-read", () => ({
+  readDailySeries: (...a: unknown[]) => readDailySeries(...a),
+}));
+vi.mock("@/lib/rollups/measurement-read", () => ({
+  loadUserSourcePriority: vi.fn(async () => null),
+}));
+const readMessageResults = vi.fn();
+vi.mock("@/lib/ai/coach/persistence", () => ({
+  readMessageResults: (...a: unknown[]) => readMessageResults(...a),
+}));
+const resolveModuleMap = vi.fn();
+vi.mock("@/lib/modules/gate", () => ({
+  resolveModuleMap: (...a: unknown[]) => resolveModuleMap(...a),
+}));
+
+import {
+  executeCoachTool,
+  type CoachToolTurnContext,
+} from "@/lib/ai/coach/tools/executor";
+import { createResultRefAllocator } from "../refs";
+
+const NOW = new Date("2026-09-27T10:00:00Z");
+
+function snapshot(sections: Record<string, unknown>): CoachSnapshotResult {
+  return {
+    snapshotJson: JSON.stringify(sections),
+    sections,
+    provenance: { windows: [], metrics: [] },
+    referenceGrounding: null,
+  };
+}
+
+const STORED: CoachResultTable = {
+  ref: "r1",
+  source: {
+    tool: "get_metric_table",
+    domain: "pulse",
+    window: "last7days",
+    period: "current",
+    granularity: "day",
+  },
+  shape: "timeSeries",
+  titleKey: "coach.result.title.byDay",
+  title: "Pulse by day",
+  rowCount: 2,
+  chartKind: null,
+  displayed: true,
+  columns: [
+    {
+      key: "day",
+      kind: "period",
+      labelKey: "coach.result.column.day",
+      label: "Day",
+    },
+    {
+      key: "value",
+      kind: "number",
+      labelKey: "coach.result.column.value",
+      label: "Value",
+      unit: "bpm",
+      decimals: 0,
+    },
+  ],
+  rows: [
+    ["2026-09-26", 61],
+    ["2026-09-27", 63],
+  ],
+  truncated: false,
+  chart: null,
+};
+
+function turn(
+  overrides: Partial<CoachToolTurnContext> = {},
+): CoachToolTurnContext {
+  return {
+    conversationId: "c1",
+    locale: "en",
+    priorResults: [
+      {
+        messageId: "m-a2",
+        turnIndex: 2,
+        results: [
+          {
+            ref: STORED.ref,
+            source: STORED.source,
+            shape: STORED.shape,
+            titleKey: STORED.titleKey,
+            title: STORED.title,
+            rowCount: STORED.rowCount,
+            chartKind: null,
+            displayed: true,
+          },
+        ],
+      },
+    ],
+    refs: createResultRefAllocator(),
+    now: NOW,
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  buildCoachSnapshot.mockReset();
+  readDailySeries.mockReset();
+  readMessageResults.mockReset();
+  resolveModuleMap.mockReset();
+  resolveModuleMap.mockResolvedValue({});
+  buildCoachSnapshot.mockResolvedValue(
+    snapshot({ scope: { sources: ["pulse", "bp", "weight", "workouts"] } }),
+  );
+  readDailySeries.mockResolvedValue([
+    {
+      type: "PULSE",
+      value: 62.4,
+      measuredAt: "2026-09-26T00:00:00.000Z",
+      count: 3,
+    },
+  ]);
+});
+
+describe("get_metric_table", () => {
+  it("names the table and keeps the rows out of what the model reads", async () => {
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "get_metric_table",
+      rawArguments: JSON.stringify({ metric: "pulse", window: "last7days" }),
+      turn: turn(),
+    });
+    expect(result.present).toBe(true);
+    expect(result.resultRef).toBe("r1");
+    expect(result.table?.ref).toBe("r1");
+    expect(result.table?.rows).toHaveLength(7);
+    const data = result.data as Record<string, unknown>;
+    expect(data).not.toHaveProperty("table");
+    expect(data.periods).toBe(7);
+    expect(data.periodsWithReadings).toBe(1);
+    expect(data.rows).toEqual([["2026-09-26", 62, 3]]);
+  });
+
+  it("outside a chat turn answers the summary alone", async () => {
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "get_metric_table",
+      rawArguments: JSON.stringify({ metric: "pulse" }),
+    });
+    expect(result.present).toBe(true);
+    expect(result.table).toBeUndefined();
+    expect(result.resultRef).toBeUndefined();
+  });
+
+  it("points glucose, adherence and workouts at their own tools", async () => {
+    for (const [metric, reason] of [
+      ["glucose", "use_get_glucose_panel"],
+      ["compliance", "use_get_medication_compliance"],
+      ["workouts", "use_get_workouts"],
+    ]) {
+      const result = await executeCoachTool({
+        userId: "u1",
+        name: "get_metric_table",
+        rawArguments: JSON.stringify({ metric }),
+        turn: turn(),
+      });
+      expect(result).toEqual({ present: false, reason });
+    }
+    expect(readDailySeries).not.toHaveBeenCalled();
+  });
+
+  it("reads nothing for a metric the snapshot gate leaves out", async () => {
+    buildCoachSnapshot.mockResolvedValue(
+      snapshot({ scope: { sources: ["bp"] } }),
+    );
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "get_metric_table",
+      rawArguments: JSON.stringify({ metric: "pulse", window: "last30days" }),
+      turn: turn(),
+    });
+    expect(result).toMatchObject({
+      present: false,
+      reason: "unavailable_in_scope",
+    });
+    expect(readDailySeries).not.toHaveBeenCalled();
+  });
+
+  it("reports an empty range as absence, never as an empty table", async () => {
+    readDailySeries.mockResolvedValue([]);
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "get_metric_table",
+      rawArguments: JSON.stringify({ metric: "weight", period: "yearAgo" }),
+      turn: turn(),
+    });
+    expect(result.present).toBe(false);
+    expect(result.reason).toBe("no_data");
+    expect(result.table).toBeUndefined();
+  });
+
+  it("refuses arguments outside the schema", async () => {
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "get_metric_table",
+      rawArguments: JSON.stringify({ metric: "pulse", userId: "u2" }),
+      turn: turn(),
+    });
+    expect(result).toEqual({ present: false, reason: "invalid_arguments" });
+  });
+
+  it("stops naming tables after the sixth", async () => {
+    const refs = createResultRefAllocator();
+    for (let i = 0; i < 6; i += 1) refs.next();
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "get_metric_table",
+      rawArguments: JSON.stringify({ metric: "pulse" }),
+      turn: turn({ refs }),
+    });
+    expect(result.present).toBe(true);
+    expect(result.table).toBeUndefined();
+  });
+});
+
+describe("show_result", () => {
+  it("copies a stored table of this conversation under a new name", async () => {
+    readMessageResults.mockResolvedValue([STORED]);
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "show_result",
+      rawArguments: JSON.stringify({ ref: "m2.r1", view: "chart" }),
+      turn: turn(),
+    });
+    expect(readMessageResults).toHaveBeenCalledWith(
+      "u1",
+      "c1",
+      "m-a2",
+      expect.any(Function),
+    );
+    expect(result.present).toBe(true);
+    expect(result.resultRef).toBe("r1");
+    expect(result.table).toMatchObject({
+      ref: "r1",
+      rows: STORED.rows,
+      displayed: false,
+      reusedFrom: { messageId: "m-a2", ref: "r1" },
+    });
+    expect(result.data).toMatchObject({ shownAgain: "m2.r1", periods: 2 });
+    expect(readDailySeries).not.toHaveBeenCalled();
+  });
+
+  it("answers unknown_result for a name this conversation does not hold", async () => {
+    // A name that another conversation of the same account might hold.
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "show_result",
+      rawArguments: JSON.stringify({ ref: "m5.r1" }),
+      turn: turn(),
+    });
+    expect(result).toEqual({ present: false, reason: "unknown_result" });
+    expect(readMessageResults).not.toHaveBeenCalled();
+  });
+
+  it("answers unknown_result when the owner-narrowed read finds nothing", async () => {
+    readMessageResults.mockResolvedValue(null);
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "show_result",
+      rawArguments: JSON.stringify({ ref: "m2.r1" }),
+      turn: turn(),
+    });
+    expect(result).toEqual({ present: false, reason: "unknown_result" });
+  });
+
+  it("answers unknown_result outside a chat turn", async () => {
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "show_result",
+      rawArguments: JSON.stringify({ ref: "m2.r1" }),
+    });
+    expect(result).toEqual({ present: false, reason: "unknown_result" });
+  });
+
+  it("passes a withheld table on as withheld", async () => {
+    resolveModuleMap.mockResolvedValue({ recovery: false });
+    readMessageResults.mockImplementation(
+      async (
+        _u: string,
+        _c: string,
+        _m: string,
+        withhold: (domain: string) => boolean,
+      ) =>
+        withhold("hrv")
+          ? [{ ref: "r1", withheld: "module_disabled" }]
+          : [STORED],
+    );
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "show_result",
+      rawArguments: JSON.stringify({ ref: "m2.r1" }),
+      turn: turn(),
+    });
+    expect(result).toEqual({ present: false, reason: "module_disabled" });
+  });
+});
+
+describe("projections of the older tools", () => {
+  it("gives a present get_workouts result a sport table and a name", async () => {
+    buildCoachSnapshot.mockResolvedValue(
+      snapshot({
+        scope: { sources: ["workouts"] },
+        workouts: {
+          recent: [],
+          perSport: [
+            {
+              sport: "RUNNING",
+              count: 4,
+              totalDurationMin: 180,
+              totalEnergyKcal: 900,
+            },
+            {
+              sport: "YOGA",
+              count: 2,
+              totalDurationMin: 90,
+              totalEnergyKcal: 200,
+            },
+          ],
+          totalInWindow: 6,
+        },
+      }),
+    );
+    const result = await executeCoachTool({
+      userId: "u1",
+      name: "get_workouts",
+      rawArguments: "{}",
+      turn: turn(),
+    });
+    expect(result.resultRef).toBe("r1");
+    expect(result.table?.shape).toBe("categoryCounts");
+    expect(result.table?.rows).toEqual([
+      [expect.any(String), 4, 180],
+      [expect.any(String), 2, 90],
+    ]);
+    // What the model reads is the tool's own payload, unchanged.
+    expect((result.data as { totalInWindow: number }).totalInWindow).toBe(6);
+  });
+});
